@@ -10,18 +10,14 @@ __host__ __device__ __forceinline__ float2 float2_vec_sum(float2 a, float2 b) {
 }
 
 __host__ __device__ __forceinline__ float2 float2_vec_sum_err(float2 a, float2 b, float2 sum) {
-  float2 err; // err = (a - (sum - (sum - a))) + (b - (sum - a));
+  float2 err; // err = (a + ((-sum) - (a + (-sum)))) + (b + (a + (-sum)));
 
-  err.x = sum.x - a.x;
-  err.y = sum.y - a.y;
-  b.x = b.x - err.x;
-  b.y = b.y - err.y;
-  err.x = sum.x - err.x;
-  err.y = sum.y - err.y;
-  a.x = a.x - err.x;
-  a.y = a.y - err.y;
-  err.x = a.x + b.x;
-  err.y = a.y + b.y;
+  sum = make_float2(-sum.x, -sum.y);
+  err = float2_vec_sum(a, sum);
+  b = float2_vec_sum(b, err);
+  err = float2_vec_sum(sum, make_float2(-err.x, -err.y));
+  a = float2_vec_sum(a, err);
+  err = float2_vec_sum(a, b);
 
   return err;
 }
@@ -148,13 +144,27 @@ __host__ __device__ __forceinline__ float4 float4_fma(float4 a, float4 b, float4
   return c;
 }
 
-__host__ __device__ __forceinline__ float4 float4_rsqrt(float4 a) {
-  float4 zero = make_float4(0.f, 0.f, 0.f, 0.f);
-  float4 c = make_float4(-0.5f, 0.f, 0.f, 0.f);
-  float4 res = make_float4(1.f / sqrtf(a.x), 0.f, 0.f, 0.f); // init
+__host__ __device__ __forceinline__ float4 float4_scalbnf(float4 a, int32_t exp) {
+#ifdef __CUDACC__
+  return make_float4(ldexpf(a.x, exp), ldexpf(a.y, exp), ldexpf(a.z, exp), ldexpf(a.w, exp));
+#else
+  return make_float4(scalbnf(a.x, exp), scalbnf(a.y, exp), scalbnf(a.z, exp), scalbnf(a.w, exp));
+#endif
+}
 
-  a = float4_fma(a, c, zero); // -0.5 * a
-  c = make_float4(1.5f, 0.f, 0.f, 0.f);
+__host__ __device__ __forceinline__ float4 float4_rsqrt(float4 a) {
+#ifdef __CUDACC__
+  int32_t p = int32_t(-0.5f * log2f(a.x));
+  float ax = ldexpf(rsqrt(a.x), -p);
+#else
+  int32_t p = int32_t(-0.5f * std::log2(a.x));
+  float ax = scalbnf(1.f / std::sqrt(a.x), -p);
+#endif
+
+  float4 res = make_float4(ax, 0.f, 0.f, 0.f); // init
+  float4 zero = make_float4(0.f, 0.f, 0.f, 0.f);
+  float4 c = make_float4(1.5f, 0.f, 0.f, 0.f);
+  a = float4_scalbnf(make_float4(-a.x, -a.y, -a.z, -a.w), 2 * p - 1);
 
   float4 res_sq = float4_fma(res, res, zero); // x * x
   float4 mul = float4_fma(a, res_sq, c); // 1.5 + (-0.5 * a) * (x * x)
@@ -168,5 +178,5 @@ __host__ __device__ __forceinline__ float4 float4_rsqrt(float4 a) {
   mul = float4_fma(a, res_sq, c);
   res = float4_fma(res, mul, zero);
 
-  return res;
+  return float4_scalbnf(res, p);
 }
