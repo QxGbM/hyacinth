@@ -3,102 +3,170 @@
 #include <cmath>
 #include <cuda_runtime.h>
 
-__host__ __device__ __forceinline__ void two_sum_f4(float4 a0, float4 a1, float4& sum, float4& err) {
-  sum.x = a0.x + a1.x;
-  sum.y = a0.y + a1.y;
-  sum.z = a0.z + a1.z;
-  sum.w = a0.w + a1.w;
-
-  err.x = sum.x - a0.x;
-  err.y = sum.y - a0.y;
-  err.z = sum.z - a0.z;
-  err.w = sum.w - a0.w;
-
-  a1.x = a1.x - err.x;
-  a1.y = a1.y - err.y;
-  a1.z = a1.z - err.z;
-  a1.w = a1.w - err.w;
-
-  err.x = sum.x - err.x;
-  err.y = sum.y - err.y;
-  err.z = sum.z - err.z;
-  err.w = sum.w - err.w;
-
-  a0.x = a0.x - err.x;
-  a0.y = a0.y - err.y;
-  a0.z = a0.z - err.z;
-  a0.w = a0.w - err.w;
-
-  err.x = a0.x + a1.x;
-  err.y = a0.y + a1.y;
-  err.z = a0.z + a1.z;
-  err.w = a0.w + a1.w;
-}
-
-__host__ __device__ __forceinline__ void two_prod_f4(float4 a0, float4 a1, float4& prod, float4& err) {
-  prod.x = a0.x * a1.x;
-  prod.y = a0.y * a1.y;
-  prod.z = a0.z * a1.z;
-  prod.w = a0.w * a1.w;
-
-  err.x = fmaf(a0.x, a1.x, -prod.x);
-  err.y = fmaf(a0.y, a1.y, -prod.y);
-  err.z = fmaf(a0.z, a1.z, -prod.z);
-  err.w = fmaf(a0.w, a1.w, -prod.w);
-}
-
-__host__ __device__ __forceinline__ float4 renormalize(float4 a) {
-  float sum;
-  sum = a.x + a.y;
-  a.y += a.x - sum;
-  a.x = sum;
-
-  sum = a.y + a.z;
-  a.z += a.y - sum;
-  a.y = sum;
-
-  sum = a.z + a.w;
-  a.w += a.z - sum;
-  a.z = sum;
-
+__host__ __device__ __forceinline__ float2 float2_vec_sum(float2 a, float2 b) {
+  a.x += b.x;
+  a.y += b.y;
   return a;
 }
 
-__host__ __device__ __forceinline__ float4 float4_add(float4 a, float4 b) {
-  two_sum_f4(a, b, a, b);
+__host__ __device__ __forceinline__ float2 float2_vec_sum_err(float2 a, float2 b, float2 sum) {
+  float2 err; // err = (a - (sum - (sum - a))) + (b - (sum - a));
 
-  b = make_float4(b.w, b.x, b.y, b.z);
-  two_sum_f4(a, b, a, b);
+  err.x = sum.x - a.x;
+  err.y = sum.y - a.y;
+  b.x = b.x - err.x;
+  b.y = b.y - err.y;
+  err.x = sum.x - err.x;
+  err.y = sum.y - err.y;
+  a.x = a.x - err.x;
+  a.y = a.y - err.y;
+  err.x = a.x + b.x;
+  err.y = a.y + b.y;
 
-  b = make_float4(b.w, b.x, b.y, b.z);
-  two_sum_f4(a, b, a, b);
+  return err;
+}
 
-  b = make_float4(b.w, b.x, b.y, b.z);
-  two_sum_f4(a, b, a, b);
+__host__ __device__ __forceinline__ float4 normalize(float4 a) {
+  float2 a0 = make_float2(a.x, a.z);
+  float2 a1 = make_float2(a.y, a.w);
+  float2 s = float2_vec_sum(a0, a1); // (x+y, z+w)
+  float2 e = float2_vec_sum_err(a0, a1, s); // a:(x=s0, y=e0, z=s1, w=e1)
 
-  return renormalize(a);
+  a0 = make_float2(s.x, e.x);
+  a1 = make_float2(s.y, e.y);
+  s = float2_vec_sum(a0, a1); // (x+z, y+w)
+  e = float2_vec_sum_err(a0, a1, s); // a:(x=s0, y=s1, z=e0, w=e1)
+
+  a0 = make_float2(s.x, s.y);
+  a1 = make_float2(e.y, e.x);
+  s = float2_vec_sum(a0, a1); // (x+w, y+z)
+  e = float2_vec_sum_err(a0, a1, s); // a:(x=s0, y=s1, z=e1, w=e0)
+
+  return make_float4(s.x, s.y, e.y, e.x);
+}
+
+__host__ __device__ __forceinline__ float4 float4_vec_sum(float4 a, float4 b) {
+  float2* a2 = reinterpret_cast<float2*>(&a);
+  float2* b2 = reinterpret_cast<float2*>(&b);
+  
+  a2[0] = float2_vec_sum(a2[0], b2[0]);
+  a2[1] = float2_vec_sum(a2[1], b2[1]);
+  return a;
+}
+
+__host__ __device__ __forceinline__ float4 float4_vec_sum_err(float4 a, float4 b, float4 sum) {
+  float2* a2 = reinterpret_cast<float2*>(&a);
+  float2* b2 = reinterpret_cast<float2*>(&b);
+  float2* s2 = reinterpret_cast<float2*>(&sum);
+  
+  a2[0] = float2_vec_sum_err(a2[0], b2[0], s2[0]);
+  a2[1] = float2_vec_sum_err(a2[1], b2[1], s2[1]);
+  return a;
+}
+
+__host__ __device__ __forceinline__ float4 float4_vec_fma(float4 a, float4 b, float4 c) {
+  float4 res;
+
+  res.x = fmaf(a.x, b.x, c.x);
+  res.y = fmaf(a.y, b.y, c.y);
+  res.z = fmaf(a.z, b.z, c.z);
+  res.w = fmaf(a.w, b.w, c.w);
+  return res;
+}
+
+__host__ __device__ __forceinline__ float4 float4_sum(float4 a, float4 b) {
+  float4 c = float4_vec_sum(a, b);
+  a = float4_vec_sum_err(a, b, c);
+
+  a = make_float4(a.w, a.x, a.y, a.z);
+  b = float4_vec_sum(a, c);
+  a = float4_vec_sum_err(a, c, b);
+
+  a = make_float4(a.w, a.x, a.y, a.z);
+  c = float4_vec_sum(a, b);
+  a = float4_vec_sum_err(a, b, c);
+
+  a = make_float4(a.w, a.x, a.y, a.z);
+  b = float4_vec_sum(a, c);
+
+  return normalize(b);
+}
+
+__host__ __device__ __forceinline__ float4 float4_sum_err(float4 a, float4 b, float4& err) {
+  float4 c = float4_vec_sum(a, b);
+  a = float4_vec_sum_err(a, b, c);
+
+  a = make_float4(a.w, a.x, a.y, a.z);
+  b = float4_vec_sum(a, c);
+  a = float4_vec_sum_err(a, c, b);
+
+  a = make_float4(a.w, a.x, a.y, a.z);
+  c = float4_vec_sum(a, b);
+  a = float4_vec_sum_err(a, b, c);
+
+  a = make_float4(a.w, a.x, a.y, a.z);
+  b = float4_vec_sum(a, c);
+  a = float4_vec_sum_err(a, c, b);
+
+  err = normalize(a);
+  return normalize(b);
 }
 
 __host__ __device__ __forceinline__ float4 float4_fma(float4 a, float4 b, float4 c) {
-  float4 prod, err;
-  two_prod_f4(a, b, prod, err);
-  c = float4_add(c, prod);
-  c = float4_add(c, err);
+  float4 zero = make_float4(0.f, 0.f, 0.f, 0.f);
+  float4 prod = float4_vec_fma(a, b, zero);
+  c = float4_sum(c, prod);
 
-  b = make_float4(b.w, b.x, b.y, b.z);
-  two_prod_f4(a, b, prod, err);
-  c = float4_add(c, prod);
-  c = float4_add(c, err);
+  prod = make_float4(-prod.x, -prod.y, -prod.z, -prod.w);
+  prod = float4_vec_fma(a, b, prod);
+  c = float4_sum(c, prod);
 
-  b = make_float4(b.w, b.x, b.y, b.z);
-  two_prod_f4(a, b, prod, err);
-  c = float4_add(c, prod);
-  c = float4_add(c, err);
+  a = make_float4(a.w, a.x, a.y, a.z);
+  prod = float4_vec_fma(a, b, zero);
+  c = float4_sum(c, prod);
 
-  b = make_float4(b.w, b.x, b.y, b.z);
-  two_prod_f4(a, b, prod, err);
-  c = float4_add(c, prod);
-  c = float4_add(c, err);
+  prod = make_float4(-prod.x, -prod.y, -prod.z, -prod.w);
+  prod = float4_vec_fma(a, b, prod);
+  c = float4_sum(c, prod);
+
+  a = make_float4(a.w, a.x, a.y, a.z);
+  prod = float4_vec_fma(a, b, zero);
+  c = float4_sum(c, prod);
+
+  prod = make_float4(-prod.x, -prod.y, -prod.z, -prod.w);
+  prod = float4_vec_fma(a, b, prod);
+  c = float4_sum(c, prod);
+
+  a = make_float4(a.w, a.x, a.y, a.z);
+  prod = float4_vec_fma(a, b, zero);
+  c = float4_sum(c, prod);
+
+  prod = make_float4(-prod.x, -prod.y, -prod.z, -prod.w);
+  prod = float4_vec_fma(a, b, prod);
+  c = float4_sum(c, prod);
 
   return c;
+}
+
+__host__ __device__ __forceinline__ float4 float4_rsqrt(float4 a) {
+  float4 zero = make_float4(0.f, 0.f, 0.f, 0.f);
+  float4 c = make_float4(-0.5f, 0.f, 0.f, 0.f);
+  float4 res = make_float4(1.f / sqrtf(a.x), 0.f, 0.f, 0.f); // init
+
+  a = float4_fma(a, c, zero); // -0.5 * a
+  c = make_float4(1.5f, 0.f, 0.f, 0.f);
+
+  float4 res_sq = float4_fma(res, res, zero); // x * x
+  float4 mul = float4_fma(a, res_sq, c); // 1.5 + (-0.5 * a) * (x * x)
+  res = float4_fma(res, mul, zero); // x *= (1.5 + (-0.5 * a) * (x * x))
+
+  res_sq = float4_fma(res, res, zero);
+  mul = float4_fma(a, res_sq, c);
+  res = float4_fma(res, mul, zero);
+
+  res_sq = float4_fma(res, res, zero);
+  mul = float4_fma(a, res_sq, c);
+  res = float4_fma(res, mul, zero);
+
+  return res;
 }
