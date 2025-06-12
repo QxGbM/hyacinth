@@ -42,32 +42,32 @@ __host__ __device__ __forceinline__ float4 normalize(float4 a) {
 }
 
 __host__ __device__ __forceinline__ float4 float4_vec_sum(float4 a, float4 b) {
-  float2* a2 = reinterpret_cast<float2*>(&a);
-  float2* b2 = reinterpret_cast<float2*>(&b);
-  
-  a2[0] = float2_vec_sum(a2[0], b2[0]);
-  a2[1] = float2_vec_sum(a2[1], b2[1]);
+  a.x += b.x;
+  a.y += b.y;
+  a.z += b.z;
+  a.w += b.w;
   return a;
 }
 
 __host__ __device__ __forceinline__ float4 float4_vec_sum_err(float4 a, float4 b, float4 sum) {
-  float2* a2 = reinterpret_cast<float2*>(&a);
-  float2* b2 = reinterpret_cast<float2*>(&b);
-  float2* s2 = reinterpret_cast<float2*>(&sum);
-  
-  a2[0] = float2_vec_sum_err(a2[0], b2[0], s2[0]);
-  a2[1] = float2_vec_sum_err(a2[1], b2[1], s2[1]);
-  return a;
+  float4 err; // err = (a + ((-sum) - (a + (-sum)))) + (b + (a + (-sum)));
+
+  sum = make_float4(-sum.x, -sum.y, -sum.z, -sum.w);
+  err = float4_vec_sum(a, sum);
+  b = float4_vec_sum(b, err);
+  err = float4_vec_sum(sum, make_float4(-err.x, -err.y, -err.z, -err.w));
+  a = float4_vec_sum(a, err);
+  err = float4_vec_sum(a, b);
+
+  return err;
 }
 
 __host__ __device__ __forceinline__ float4 float4_vec_fma(float4 a, float4 b, float4 c) {
-  float4 res;
-
-  res.x = fmaf(a.x, b.x, c.x);
-  res.y = fmaf(a.y, b.y, c.y);
-  res.z = fmaf(a.z, b.z, c.z);
-  res.w = fmaf(a.w, b.w, c.w);
-  return res;
+  c.x = fmaf(a.x, b.x, c.x);
+  c.y = fmaf(a.y, b.y, c.y);
+  c.z = fmaf(a.z, b.z, c.z);
+  c.w = fmaf(a.w, b.w, c.w);
+  return c;
 }
 
 __host__ __device__ __forceinline__ float4 float4_sum(float4 a, float4 b) {
@@ -152,31 +152,23 @@ __host__ __device__ __forceinline__ float4 float4_scalbnf(float4 a, int32_t exp)
 #endif
 }
 
-__host__ __device__ __forceinline__ float4 float4_rsqrt(float4 a) {
+__host__ __device__ __forceinline__ float4 float4_reciprocal(float4 a) {
 #ifdef __CUDACC__
-  int32_t p = int32_t(-0.5f * log2f(a.x));
-  float ax = ldexpf(rsqrt(a.x), -p);
+  int32_t p = int32_t(log2f(a.x));
+  float ax = ldexpf(1.f / a.x, -p);
 #else
-  int32_t p = int32_t(-0.5f * std::log2(a.x));
-  float ax = scalbnf(1.f / std::sqrt(a.x), -p);
+  int32_t p = int32_t(std::log2(a.x));
+  float ax = scalbnf(1.f / a.x, -p);
 #endif
 
   float4 res = make_float4(ax, 0.f, 0.f, 0.f); // init
   float4 zero = make_float4(0.f, 0.f, 0.f, 0.f);
-  float4 c = make_float4(1.5f, 0.f, 0.f, 0.f);
-  a = float4_scalbnf(make_float4(-a.x, -a.y, -a.z, -a.w), 2 * p - 1);
+  float4 c = make_float4(2.f, 0.f, 0.f, 0.f);
+  a = float4_scalbnf(make_float4(-a.x, -a.y, -a.z, -a.w), p);
 
-  float4 res_sq = float4_fma(res, res, zero); // x * x
-  float4 mul = float4_fma(a, res_sq, c); // 1.5 + (-0.5 * a) * (x * x)
-  res = float4_fma(res, mul, zero); // x *= (1.5 + (-0.5 * a) * (x * x))
-
-  res_sq = float4_fma(res, res, zero);
-  mul = float4_fma(a, res_sq, c);
-  res = float4_fma(res, mul, zero);
-
-  res_sq = float4_fma(res, res, zero);
-  mul = float4_fma(a, res_sq, c);
-  res = float4_fma(res, mul, zero);
+  res = float4_fma(res, float4_fma(a, res, c), zero); // x *= (2 + (-1 * a) * x)
+  res = float4_fma(res, float4_fma(a, res, c), zero);
+  res = float4_fma(res, float4_fma(a, res, c), zero);
 
   return float4_scalbnf(res, p);
 }
