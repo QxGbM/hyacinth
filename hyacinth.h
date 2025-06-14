@@ -14,6 +14,8 @@ int32_t align_c_fp32(int32_t ld);
 int32_t align_c_fp64(int32_t ld);
 int32_t align_c_i8(int32_t ld);
 
+std::pair<float, int32_t> Iamax_float(cudaStream_t stream, int32_t N, const float* x, int32_t incx);
+
 int32_t cpotrfp_gpu(
   cublasHandle_t handle,
   int32_t N,
