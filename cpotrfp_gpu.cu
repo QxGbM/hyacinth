@@ -6,7 +6,7 @@
 #include <complex>
 
 int32_t cpotrfp_gpu(cublasHandle_t handle, int32_t N, const cuComplex* A, int32_t lda, int32_t* ipiv, cuComplex* X, int32_t ldx, cuComplex* work) {
-  int32_t ld = align_up(N, 8);
+  int32_t ld = lda; //align_up(N, 8);
   if (work == nullptr)
     return ld * (N + 1);
 
@@ -18,26 +18,33 @@ int32_t cpotrfp_gpu(cublasHandle_t handle, int32_t N, const cuComplex* A, int32_
   cudaMemcpy2DAsync(work, ld * sizeof(std::complex<float>), A, lda * sizeof(std::complex<float>), N * sizeof(std::complex<float>), N, cudaMemcpyDefault, stream);
 
   std::vector<int32_t> piv(N);
+  std::vector<float> diags(N);
+  const std::complex<float> one(1.f, 0.f), minus_one(-1.f, 0.f);
   float s0 = 0.f;
-  const std::complex<float> zero(0.f, 0.f), minus_one(-1.f, 0.f);
   for (int32_t i = 0; i < rank; ++i) {
     std::pair<float, int32_t> max = Iamax_float(stream, N, (float*)work, 2 * (ld + 1));
-    std::complex<float> scale(1.f / max.first, 0.f);
+    float scale = 1.f / std::sqrt(max.first);
+    diags[i] = scale;
     piv[i] = max.second;
     
-    cublasCcopy(handle, N, &work[piv[i] * ld], 1, L, 1);
-    cublasCgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, N, 1, (const cuComplex*)&scale, &work[piv[i] * ld], ld, (const cuComplex*)&zero, &X[i * ldx], ldx, &X[i * ldx], ldx);
-    cublasCgerc(handle, N, N, (const cuComplex*)&minus_one, &X[i * ldx], 1, L, 1, work, ld);
+    scal_oop_incx1_float(stream, -scale, N * 2, (const float*)(&work[max.second * ld]), (float*)(L));
+    scal_oop_incx1_float(stream, scale, N * 2, (const float*)(&work[max.second * ld]), (float*)(&X[i * ldx]));
+    cublasCgerc(handle, N, N, (const cuComplex*)&one, &X[i * ldx], 1, L, 1, work, ld);
+    cudaMemsetAsync(&work[max.second * ld], 0, N * 2 * sizeof(float), stream);
+    cublasCcopy(handle, N, &work[max.second * ld], 1, &work[max.second], ld);
 
     if (0 == i)
-      s0 = scale.real() * 32768.f;
-    if (s0 < scale.real())
+      s0 = scale * 2048.f;
+    if (s0 < scale)
       rank = i;
   }
 
   cudaMemcpyAsync(ipiv, &piv[0], N * sizeof(int32_t), cudaMemcpyDefault, stream);
-  for (int32_t i = rank - 1; 0 < i; --i) {
+  for (int32_t i = rank - 1; 0 <= i; --i) {
     cublasCcopy(handle, i, &X[piv[i]], ldx, L, 1);
+    float scale = diags[i];
+    printf("%d %d %e\n", i, piv[i], scale);
+    scal_oop_incx1_float(stream, scale, N * 2, (const float*)(&X[i * ldx]), (float*)(&X[i * ldx]));
     cublasCgeru(handle, N, i, (const cuComplex*)&minus_one, &X[i * ldx], 1, L, 1, X, ldx);
   }
 
