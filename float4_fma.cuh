@@ -5,6 +5,14 @@
 #include <cuda_runtime.h>
 
 namespace device::f4 {
+  __device__ __forceinline__ float2 fneg2(float2 a) {
+    return make_float2(-a.x, -a.y);
+  }
+
+  __device__ __forceinline__ float4 negate(float4 a) {
+    return make_float4(-a.x, -a.y, -a.z, -a.w);
+  }
+
   __device__ __forceinline__ float2 fadd2_rn(float2 a, float2 b) {
     return make_float2(__fadd_rn(a.x, b.x), __fadd_rn(a.y, b.y));
   }
@@ -18,15 +26,15 @@ namespace device::f4 {
   }
 
   __device__ __forceinline__ float2 fadd2_err(float2 a, float2 b, float2 sum) {
-    sum = make_float2(-sum.x, -sum.y);
+    sum = fneg2(sum);
     float2 err = fadd2_rn(a, sum);
-    return fadd2_rn(fadd2_rn(a, fadd2_rn(sum, make_float2(-err.x, -err.y))), fadd2_rn(b, err));
+    return fadd2_rn(fadd2_rn(a, fadd2_rn(sum, fneg2(err))), fadd2_rn(b, err));
   }
 
   __device__ __forceinline__ float4 fadd4_err(float4 a, float4 b, float4 sum) {
-    sum = make_float4(-sum.x, -sum.y, -sum.z, -sum.w);
-    float4 err = fadd4_rn(a, sum);
-    return fadd4_rn(fadd4_rn(a, fadd4_rn(sum, make_float4(-err.x, -err.y, -err.z, -err.w))), fadd4_rn(b, err));
+    sum = negate(sum);
+    float4 err = fadd4_rn(a, sum); // err = a + (-sum);
+    return fadd4_rn(fadd4_rn(a, fadd4_rn(sum, negate(err))), fadd4_rn(b, err)); // (a + ((-sum) + (-err))) + (b + err);
   }
 
   __device__ __forceinline__ float4 normalize(float4 a) {
@@ -69,19 +77,19 @@ namespace device::f4 {
   __device__ __forceinline__ float4 fma(float4 a, float4 b, float4 c) {
     float4 z = make_float4(0.f, 0.f, 0.f, 0.f);
     float4 p = ffma4_rn(a, b, z);
-    c = add(add(c, p), ffma4_rn(a, b, make_float4(-p.x, -p.y, -p.z, -p.w)));
+    c = add(add(c, p), ffma4_rn(a, b, negate(p)));
 
     a = make_float4(a.w, a.x, a.y, a.z);
     p = ffma4_rn(a, b, z);
-    c = add(add(c, p), ffma4_rn(a, b, make_float4(-p.x, -p.y, -p.z, -p.w)));
+    c = add(add(c, p), ffma4_rn(a, b, negate(p)));
 
     a = make_float4(a.w, a.x, a.y, a.z);
     p = ffma4_rn(a, b, z);
-    c = add(add(c, p), ffma4_rn(a, b, make_float4(-p.x, -p.y, -p.z, -p.w)));
+    c = add(add(c, p), ffma4_rn(a, b, negate(p)));
 
     a = make_float4(a.w, a.x, a.y, a.z);
     p = ffma4_rn(a, b, z);
-    c = add(add(c, p), ffma4_rn(a, b, make_float4(-p.x, -p.y, -p.z, -p.w)));
+    c = add(add(c, p), ffma4_rn(a, b, negate(p)));
 
     return c;
   }

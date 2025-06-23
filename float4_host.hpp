@@ -5,6 +5,14 @@
 #include <cuda_runtime.h>
 
 namespace host::f4 {
+  inline float2 fneg2(float2 a) {
+    return make_float2(-a.x, -a.y);
+  }
+
+  inline float4 negate(float4 a) {
+    return make_float4(-a.x, -a.y, -a.z, -a.w);
+  }
+
   inline float2 fadd2(float2 a, float2 b) {
     return make_float2(a.x + b.x, a.y + b.y);
   }
@@ -18,15 +26,15 @@ namespace host::f4 {
   }
 
   inline float2 fadd2_err(float2 a, float2 b, float2 sum) {
-    sum = make_float2(-sum.x, -sum.y);
+    sum = fneg2(sum);
     float2 err = fadd2(a, sum);
-    return fadd2(fadd2(a, fadd2(sum, make_float2(-err.x, -err.y))), fadd2(b, err));
+    return fadd2(fadd2(a, fadd2(sum, fneg2(err))), fadd2(b, err));
   }
 
   inline float4 fadd4_err(float4 a, float4 b, float4 sum) {
-    sum = make_float4(-sum.x, -sum.y, -sum.z, -sum.w);
-    float4 err = fadd4(a, sum);
-    return fadd4(fadd4(a, fadd4(sum, make_float4(-err.x, -err.y, -err.z, -err.w))), fadd4(b, err));
+    sum = negate(sum);
+    float4 err = fadd4(a, sum); // err = a + (-sum);
+    return fadd4(fadd4(a, fadd4(sum, negate(err))), fadd4(b, err)); // (a + ((-sum) + (-err))) + (b + err);
   }
 
   inline float4 normalize(float4 a) {
@@ -69,19 +77,19 @@ namespace host::f4 {
   inline float4 fma(float4 a, float4 b, float4 c) {
     float4 z = make_float4(0.f, 0.f, 0.f, 0.f);
     float4 p = ffma4(a, b, z);
-    c = add(add(c, p), ffma4(a, b, make_float4(-p.x, -p.y, -p.z, -p.w)));
+    c = add(add(c, p), ffma4(a, b, negate(p)));
 
     a = make_float4(a.w, a.x, a.y, a.z);
     p = ffma4(a, b, z);
-    c = add(add(c, p), ffma4(a, b, make_float4(-p.x, -p.y, -p.z, -p.w)));
+    c = add(add(c, p), ffma4(a, b, negate(p)));
 
     a = make_float4(a.w, a.x, a.y, a.z);
     p = ffma4(a, b, z);
-    c = add(add(c, p), ffma4(a, b, make_float4(-p.x, -p.y, -p.z, -p.w)));
+    c = add(add(c, p), ffma4(a, b, negate(p)));
 
     a = make_float4(a.w, a.x, a.y, a.z);
     p = ffma4(a, b, z);
-    c = add(add(c, p), ffma4(a, b, make_float4(-p.x, -p.y, -p.z, -p.w)));
+    c = add(add(c, p), ffma4(a, b, negate(p)));
 
     return c;
   }
@@ -96,7 +104,7 @@ namespace host::f4 {
     float4 x = make_float4(scalbnf(1.f / std::sqrt(a.x), -p), 0.f, 0.f, 0.f); // init
     float4 z = make_float4(0.f, 0.f, 0.f, 0.f);
     float4 c = make_float4(1.5f, 0.f, 0.f, 0.f);
-    a = fscalbnf4(make_float4(-a.x, -a.y, -a.z, -a.w), 2 * p - 1);
+    a = fscalbnf4(negate(a), 2 * p - 1);
 
     x = fma(x, fma(a, fma(x, x, z), c), z);
     x = fma(x, fma(a, fma(x, x, z), c), z);
