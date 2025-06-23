@@ -8,7 +8,7 @@ project ("hyacinth" LANGUAGES CXX CUDA)
 
 find_package(CUDAToolkit REQUIRED)
 set(CPP_SOURCES align_ld.cpp)
-set(CU_SOURCES iamax.cu scal_oop_incx1.cu cpotrfp_gpu.cu complex_fp_i8.cu)
+set(CU_SOURCES iamax.cu scal_incx1.cu cpotrfp_gpu.cu complex_fp_i8.cu)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 link_libraries(CUDA::cudart CUDA::cublas)
@@ -19,5 +19,5 @@ set_source_files_properties(${CU_SOURCES} PROPERTIES COMPILE_OPTIONS
   "-Xcompiler=-Wall;-Xcompiler=-Wextra;-Xcompiler=-fexceptions")
 
 add_library(hyacinth SHARED ${CPP_SOURCES} ${CU_SOURCES})
-set_target_properties(hyacinth PROPERTIES CUDA_ARCHITECTURES all-major)
+set_target_properties(hyacinth PROPERTIES CUDA_ARCHITECTURES native)
 

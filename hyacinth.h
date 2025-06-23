@@ -16,7 +16,7 @@ int32_t align_c_i8(int32_t ld);
 
 std::pair<float, int32_t> Iamax_float(cudaStream_t stream, int32_t N, const float* x, int32_t incx);
 
-void scal_oop_incx1_float(cudaStream_t stream, float scale, int32_t N, const float* x, float* y);
+void scal_incx1_float(cudaStream_t stream, float scale, int32_t N, float* x);
 
 int32_t cpotrfp_gpu(
   cublasHandle_t handle,

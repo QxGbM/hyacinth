@@ -27,8 +27,8 @@ int32_t cpotrfp_gpu(cublasHandle_t handle, int32_t N, const cuComplex* A, int32_
     diags[i] = scale;
     piv[i] = max.second;
     
-    scal_oop_incx1_float(stream, -scale, N * 2, (const float*)(&work[max.second * ld]), (float*)(L));
-    scal_oop_incx1_float(stream, scale, N * 2, (const float*)(&work[max.second * ld]), (float*)(&X[i * ldx]));
+    scal_incx1_float(stream, -scale, N * 2, (float*)(&work[max.second * ld]));
+    scal_incx1_float(stream, scale, N * 2, (float*)(&work[max.second * ld]));
     cublasCgerc(handle, N, N, (const cuComplex*)&one, &X[i * ldx], 1, L, 1, work, ld);
     cudaMemsetAsync(&work[max.second * ld], 0, N * 2 * sizeof(float), stream);
     cublasCcopy(handle, N, &work[max.second * ld], 1, &work[max.second], ld);
@@ -44,7 +44,7 @@ int32_t cpotrfp_gpu(cublasHandle_t handle, int32_t N, const cuComplex* A, int32_
     cublasCcopy(handle, i, &X[piv[i]], ldx, L, 1);
     float scale = diags[i];
     printf("%d %d %e\n", i, piv[i], scale);
-    scal_oop_incx1_float(stream, scale, N * 2, (const float*)(&X[i * ldx]), (float*)(&X[i * ldx]));
+    scal_incx1_float(stream, scale, N * 2, (float*)(&X[i * ldx]));
     cublasCgeru(handle, N, i, (const cuComplex*)&minus_one, &X[i * ldx], 1, L, 1, X, ldx);
   }
 
