@@ -22,7 +22,7 @@ int32_t cpotrfp_gpu(cublasHandle_t handle, int32_t N, const cuComplex* A, int32_
   const std::complex<float> one(1.f, 0.f), minus_one(-1.f, 0.f);
   float s0 = 0.f;
   for (int32_t i = 0; i < rank; ++i) {
-    std::pair<float, int32_t> max = Iamax_float(stream, N, (float*)work, 2 * (ld + 1));
+    std::pair<float, int32_t> max = real_imax_float(stream, N, (float*)work, 2 * (ld + 1));
     float scale = 1.f / std::sqrt(max.first);
     diags[i] = scale;
     piv[i] = max.second;
