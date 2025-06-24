@@ -2,7 +2,7 @@
 #include <hyacinth.h>
 #include <thrust/device_ptr.h>
 #include <thrust/transform.h>
-#include <float4_fma.cuh>
+#include <float4.hpp>
 
 struct negate {
   __device__ double operator()(double f) { return -f; }
