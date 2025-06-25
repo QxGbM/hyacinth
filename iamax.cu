@@ -1,5 +1,5 @@
 
-#include <hyacinth.h>
+#include <hyacinth.hpp>
 #include <limits>
 #include <thrust/pair.h>
 #include <thrust/reduce.h>

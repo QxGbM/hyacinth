@@ -1,5 +1,5 @@
 
-#include <hyacinth.h>
+#include <hyacinth.hpp>
 #include <cuda_runtime_api.h>
 
 #include <vector>

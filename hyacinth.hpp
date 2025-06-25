@@ -1,7 +1,8 @@
 
 #pragma once
 
-#include <stdint.h>
+#include <cstdint>
+#include <complex>
 #include <cuComplex.h>
 #include <cublas_v2.h>
 
@@ -17,6 +18,10 @@ int32_t align_c_i8(int32_t ld);
 std::pair<float, int32_t> real_imax_float(cudaStream_t stream, int32_t N, const float* x, int32_t incx);
 
 std::pair<double, int32_t> real_imax_double(cudaStream_t stream, int32_t N, const double* x, int32_t incx);
+
+void minus_transAx_plusB_scale_double(cudaStream_t stream, double scale, int32_t M, int32_t N, const double* A, int32_t lda, const double* X, double* B);
+
+void minus_adjAx_plusB_scale_double_complex(cudaStream_t stream, double scale, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, const std::complex<double>* X, std::complex<double>* B);
 
 void scal_incx1_float(cudaStream_t stream, float scale, int32_t N, float* x);
 

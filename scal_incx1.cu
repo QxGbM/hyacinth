@@ -1,5 +1,5 @@
 
-#include <hyacinth.h>
+#include <hyacinth.hpp>
 #include <thrust/device_ptr.h>
 #include <thrust/transform.h>
 #include <float4.hpp>
