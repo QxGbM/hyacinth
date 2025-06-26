@@ -41,7 +41,6 @@ __global__ void minus_adjAx_plusB_scale_real(real_const_ptr scale, int32_t M, in
   add_real add_func;
   minus_a_fma_real fma_func;
   init_real init_func;
-  scal_real scal_func;
 
   real_t thread_A[ITEMS_PER_THREAD], thread_X[ITEMS_PER_THREAD], thread_B[ITEMS_PER_THREAD];
   int32_t row = blockIdx.x * BLOCK_WARPS + threadIdx.y;
@@ -71,8 +70,11 @@ __global__ void minus_adjAx_plusB_scale_real(real_const_ptr scale, int32_t M, in
     real_t warp_res = WarpReduce(temp_reduce[threadIdx.y]).Reduce(thread_res, add_func);
 
     if (threadIdx.x == 0) {
+      scal_real scal_func;
+
       real_t res = scal_func(add_func(warp_res, B[row]), *scale);
       B[row] = res;
+      B[row * lda] = res;
       C[row] = fma_func(res, res, C[row]);
     }
   }

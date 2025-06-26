@@ -45,7 +45,6 @@ int32_t zpotrfp_gpu(cudaStream_t stream, int32_t N, std::complex<double>* A, int
       swap_cols_double_complex(stream, i, pivots[i] - 1, N, A, lda);
   
     minus_adjAx_plusB_scale_double_complex(stream, scale, N - i, i, &A[i * lda], lda, &A[i * (lda + 1)], &diag[i]);
-    copy_col_to_row_double_complex(stream, i, N, A, lda);
   }
 
   cudaStreamSynchronize(stream);

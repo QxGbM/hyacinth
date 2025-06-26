@@ -43,6 +43,12 @@ struct scal_complex {
     return complex_float4(device::f4::fma(a.real, b, make_float4(0.f, 0.f, 0.f, 0.f)), device::f4::fma(a.imag, b, make_float4(0.f, 0.f, 0.f, 0.f))); }
 };
 
+struct conj {
+  __device__ __forceinline__ cuDoubleComplex operator()(cuDoubleComplex f) { return make_cuDoubleComplex(f.x, -f.y); }
+  __device__ __forceinline__ cuComplex operator()(cuComplex f) { return make_cuComplex(f.x, -f.y); }
+  __device__ __forceinline__ complex_float4 operator()(complex_float4 f) { return device::f4::conj(f); }
+};
+
 template <class real_t, class real_ptr, class real_const_ptr, class complex_t, class complex_ptr, class complex_const_ptr, int32_t BLOCK_WARPS, int32_t ITEMS_PER_THREAD>
 __global__ void minus_adjAx_plusB_scale_complex(real_const_ptr scale, int32_t M, int32_t N, complex_const_ptr A, int32_t lda, complex_ptr B, real_ptr C) {
   using WarpLoad = cub::WarpLoad<complex_t, ITEMS_PER_THREAD>;
@@ -54,9 +60,7 @@ __global__ void minus_adjAx_plusB_scale_complex(real_const_ptr scale, int32_t M,
 
   add_complex add_func;
   minus_conj_a_fma_complex fma_func;
-  minus_complex_norm fnrm_func;
   init_complex init_func;
-  scal_complex scal_func;
 
   complex_t thread_A[ITEMS_PER_THREAD], thread_X[ITEMS_PER_THREAD], thread_B[ITEMS_PER_THREAD];
   int32_t row = blockIdx.x * BLOCK_WARPS + threadIdx.y;
@@ -86,8 +90,13 @@ __global__ void minus_adjAx_plusB_scale_complex(real_const_ptr scale, int32_t M,
     complex_t warp_res = WarpReduce(temp_reduce[threadIdx.y]).Reduce(thread_res, add_func);
 
     if (threadIdx.x == 0) {
+      scal_complex scal_func;
+      minus_complex_norm fnrm_func;
+      conj conj_func;
+
       complex_t res = scal_func(add_func(warp_res, B[row]), *scale);
       B[row] = res;
+      B[row * lda] = conj_func(res);
       C[row] = fnrm_func(C[row], res);
     }
   }
