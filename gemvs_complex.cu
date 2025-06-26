@@ -44,7 +44,7 @@ struct scal_complex {
 };
 
 template <class real_t, class real_ptr, class real_const_ptr, class complex_t, class complex_ptr, class complex_const_ptr, int32_t BLOCK_WARPS, int32_t ITEMS_PER_THREAD>
-__global__ void minus_adjAx_plusB_scale_complex(real_const_ptr scale, int32_t M, int32_t N, complex_const_ptr A, int32_t lda, complex_const_ptr X, complex_ptr B, real_ptr C) {
+__global__ void minus_adjAx_plusB_scale_complex(real_const_ptr scale, int32_t M, int32_t N, complex_const_ptr A, int32_t lda, complex_ptr B, real_ptr C) {
   using WarpLoad = cub::WarpLoad<complex_t, ITEMS_PER_THREAD>;
   using WarpReduce = cub::WarpReduce<complex_t>;
   constexpr int32_t elements = ITEMS_PER_THREAD << 5;
@@ -62,7 +62,7 @@ __global__ void minus_adjAx_plusB_scale_complex(real_const_ptr scale, int32_t M,
   int32_t row = blockIdx.x * BLOCK_WARPS + threadIdx.y;
 
   if (row < M) {
-    A += row * lda;
+    complex_const_ptr A_i = &A[row * lda];
 
     #pragma unroll
     for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
@@ -70,8 +70,8 @@ __global__ void minus_adjAx_plusB_scale_complex(real_const_ptr scale, int32_t M,
 
     for (int32_t i = 0; i < N; i += elements) {
       int32_t num_items = min(elements, N - i);
-      WarpLoad(temp_loadA[threadIdx.y]).Load(&A[i], thread_A, num_items, init_func);
-      WarpLoad(temp_loadX[threadIdx.y]).Load(&X[i], thread_X, num_items, init_func);
+      WarpLoad(temp_loadA[threadIdx.y]).Load(&A_i[i], thread_A, num_items, init_func);
+      WarpLoad(temp_loadX[threadIdx.y]).Load(&A[i], thread_X, num_items, init_func);
 
       #pragma unroll
       for (int32_t j = 0; j < ITEMS_PER_THREAD; ++j)
@@ -88,13 +88,13 @@ __global__ void minus_adjAx_plusB_scale_complex(real_const_ptr scale, int32_t M,
   }
 }
 
-void minus_adjAx_plusB_scale_double_complex(cudaStream_t stream, const double* scale, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, const std::complex<double>* X, std::complex<double>* B, double* C) {
+void minus_adjAx_plusB_scale_double_complex(cudaStream_t stream, const double* scale, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, std::complex<double>* B, double* C) {
   constexpr int32_t block_warps = 4;
   constexpr int32_t items_per_thread = 4;
 
   int32_t grid_size = (M + block_warps - 1) / block_warps;
   minus_adjAx_plusB_scale_complex <double, double* __restrict__, const double* __restrict__,
     cuDoubleComplex, cuDoubleComplex* __restrict__, const cuDoubleComplex* __restrict__, block_warps, items_per_thread>
-    <<< grid_size, dim3(32, block_warps, 1), 0, stream >>> (scale, M, N, (const cuDoubleComplex*)A, lda, (const cuDoubleComplex*)X, (cuDoubleComplex*)B, C);
+    <<< grid_size, dim3(32, block_warps, 1), 0, stream >>> (scale, M, N, (const cuDoubleComplex*)A, lda, (cuDoubleComplex*)B, C);
 }
 

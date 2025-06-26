@@ -16,9 +16,9 @@ int32_t align_c_i8(int32_t ld);
 
 void imax_double(cudaStream_t stream, int32_t N, double* X, int32_t* piv, double* rsq);
 
-void minus_transAx_plusB_scale_double(cudaStream_t stream, const double* scale, int32_t M, int32_t N, const double* A, int32_t lda, const double* X, double* B, double* C);
+void minus_transAx_plusB_scale_double(cudaStream_t stream, const double* scale, int32_t M, int32_t N, const double* A, int32_t lda, double* B, double* C);
 
-void minus_adjAx_plusB_scale_double_complex(cudaStream_t stream, const double* scale, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, const std::complex<double>* X, std::complex<double>* B, double* C);
+void minus_adjAx_plusB_scale_double_complex(cudaStream_t stream, const double* scale, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, std::complex<double>* B, double* C);
 
 void copy_col_to_row_double(cudaStream_t stream, int32_t i, int32_t N, double* A, int32_t lda);
 
@@ -28,6 +28,6 @@ void swap_cols_double(cudaStream_t stream, int32_t i, int32_t j, int32_t N, doub
 
 void swap_cols_double_complex(cudaStream_t stream, int32_t i, int32_t j, int32_t N, std::complex<double>* A, int32_t lda);
 
-void zpotrfp_gpu(cudaStream_t stream, int32_t N, std::complex<double>* A, int32_t lda, int32_t* ipiv);
+int32_t zpotrfp_gpu(cudaStream_t stream, int32_t N, std::complex<double>* A, int32_t lda, int32_t* ipiv);
 
 

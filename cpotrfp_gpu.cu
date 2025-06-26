@@ -2,7 +2,6 @@
 #include <hyacinth.hpp>
 
 #include <thrust/universal_vector.h>
-#include <thrust/device_vector.h>
 #include <thrust/device_ptr.h>
 #include <thrust/copy.h>
 #include <thrust/iterator/counting_iterator.h>
@@ -16,9 +15,9 @@ struct stride {
   __device__ int32_t operator()(int32_t i) { return i * ld; }
 };
 
-void zpotrfp_gpu(cudaStream_t stream, int32_t N, std::complex<double>* A, int32_t lda, int32_t* ipiv) {
+int32_t zpotrfp_gpu(cudaStream_t stream, int32_t N, std::complex<double>* A, int32_t lda, int32_t* ipiv) {
   thrust::universal_host_pinned_vector<int32_t> pivots(N);
-  thrust::device_vector<double> diag_scale(1);
+  thrust::universal_host_pinned_vector<double> diag_scale(1);
   double* scale = thrust::raw_pointer_cast(diag_scale.data());
 
   double* diag = (double*)(&A[N * lda]);
@@ -31,13 +30,18 @@ void zpotrfp_gpu(cudaStream_t stream, int32_t N, std::complex<double>* A, int32_
     cudaStreamSynchronize(stream);
     pivots[i] += 1 + i;
 
+    if (std::isnan(*scale)) {
+      cudaMemcpy(ipiv, thrust::raw_pointer_cast(pivots.data()), i * sizeof(int32_t), cudaMemcpyDefault);
+      return i + 1;
+    }
     if ((pivots[i] - 1) != i)
       swap_cols_double_complex(stream, i, pivots[i] - 1, N, A, lda);
   
-    minus_adjAx_plusB_scale_double_complex(stream, scale, N - i, i, &A[i * lda], lda, &A[i * lda], &A[i * (lda + 1)], &diag[i]);
+    minus_adjAx_plusB_scale_double_complex(stream, scale, N - i, i, &A[i * lda], lda, &A[i * (lda + 1)], &diag[i]);
     copy_col_to_row_double_complex(stream, i, N, A, lda);
   }
 
   cudaStreamSynchronize(stream);
   cudaMemcpy(ipiv, thrust::raw_pointer_cast(pivots.data()), N * sizeof(int32_t), cudaMemcpyDefault);
+  return 0;
 }
