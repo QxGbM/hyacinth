@@ -1,52 +1,39 @@
 
 #include <hyacinth.hpp>
-#include <cuda_runtime_api.h>
 
-#include <vector>
-#include <complex>
+#include <thrust/host_vector.h>
+#include <thrust/device_ptr.h>
+#include <thrust/copy.h>
+#include <thrust/iterator/counting_iterator.h>
+#include <thrust/iterator/transform_iterator.h>
+#include <thrust/iterator/permutation_iterator.h>
+#include <cuComplex.h>
 
-int32_t cpotrfp_gpu(cublasHandle_t handle, int32_t N, const cuComplex* A, int32_t lda, int32_t* ipiv, cuComplex* X, int32_t ldx, cuComplex* work) {
-  int32_t ld = lda; //align_up(N, 8);
-  if (work == nullptr)
-    return ld * (N + 1);
+struct stride {
+  int32_t ld;
+  stride(int32_t ld) : ld(ld) {}
+  __device__ int32_t operator()(int32_t i) { return i * ld; }
+};
 
-  int32_t rank = N;
-  cuComplex* L = &work[N * ld];
+void zpotrfp_gpu(cudaStream_t stream, int32_t N, std::complex<double>* A, int32_t lda, int32_t* ipiv) {
+  thrust::host_vector<int32_t> pivots(N);
 
-  cudaStream_t stream;
-  cublasGetStream(handle, &stream);
-  cudaMemcpy2DAsync(work, ld * sizeof(std::complex<float>), A, lda * sizeof(std::complex<float>), N * sizeof(std::complex<float>), N, cudaMemcpyDefault, stream);
+  double* diag = (double*)(&A[N * lda]);
+  thrust::device_ptr<double> devA((double*)A), devD(diag);
+  auto Adiag_idx = thrust::make_permutation_iterator(devA, thrust::make_transform_iterator(thrust::make_counting_iterator(0), stride(2 * lda + 2)));
+  thrust::copy(thrust::cuda::par_nosync.on(stream), Adiag_idx, Adiag_idx + N, devD);
 
-  std::vector<int32_t> piv(N);
-  std::vector<float> diags(N);
-  const std::complex<float> one(1.f, 0.f), minus_one(-1.f, 0.f);
-  float s0 = 0.f;
-  for (int32_t i = 0; i < rank; ++i) {
-    std::pair<float, int32_t> max = real_imax_float(stream, N, (float*)work, 2 * (ld + 1));
-    float scale = 1.f / std::sqrt(max.first);
-    diags[i] = scale;
-    piv[i] = max.second;
-    
-    scal_incx1_float(stream, -scale, N * 2, (float*)(&work[max.second * ld]));
-    scal_incx1_float(stream, scale, N * 2, (float*)(&work[max.second * ld]));
-    cublasCgerc(handle, N, N, (const cuComplex*)&one, &X[i * ldx], 1, L, 1, work, ld);
-    cudaMemsetAsync(&work[max.second * ld], 0, N * 2 * sizeof(float), stream);
-    cublasCcopy(handle, N, &work[max.second * ld], 1, &work[max.second], ld);
+  for (int32_t i = 0; i < 2; ++i) {
+    std::pair<double, int32_t> p = imax_double(stream, N - i, &diag[i]);
+    double s = 1. / std::sqrt(p.first);
+    pivots[i] = p.second + 1 + i;
 
-    if (0 == i)
-      s0 = scale * 2048.f;
-    if (s0 < scale)
-      rank = i;
+    if (p.second != 0)
+      swap_cols_double_complex(stream, i, i + p.second, N, A, lda);
+  
+    minus_adjAx_plusB_scale_double_complex(stream, s, N - i, i, &A[i * lda], lda, &A[i * lda], &A[i * (lda + 1)], &diag[i]);
+    copy_col_to_row_double_complex(stream, i, N, A, lda);
   }
 
-  cudaMemcpyAsync(ipiv, &piv[0], N * sizeof(int32_t), cudaMemcpyDefault, stream);
-  for (int32_t i = rank - 1; 0 <= i; --i) {
-    cublasCcopy(handle, i, &X[piv[i]], ldx, L, 1);
-    float scale = diags[i];
-    printf("%d %d %e\n", i, piv[i], scale);
-    scal_incx1_float(stream, scale, N * 2, (float*)(&X[i * ldx]));
-    cublasCgeru(handle, N, i, (const cuComplex*)&minus_one, &X[i * ldx], 1, L, 1, X, ldx);
-  }
-
-  return rank;
+  thrust::copy(pivots.begin(), pivots.end(), ipiv);
 }

@@ -30,7 +30,7 @@ struct scal_real {
 };
 
 template <class real_t, class real_ptr, class real_const_ptr, int32_t BLOCK_WARPS, int32_t ITEMS_PER_THREAD>
-__global__ void minus_adjAx_plusB_scale_real(double scale, int32_t M, int32_t N, real_const_ptr A, int32_t lda, real_const_ptr X, real_ptr B) {
+__global__ void minus_adjAx_plusB_scale_real(double scale, int32_t M, int32_t N, real_const_ptr A, int32_t lda, real_const_ptr X, real_ptr B, real_ptr C) {
   using WarpLoad = cub::WarpLoad<real_t, ITEMS_PER_THREAD>;
   using WarpReduce = cub::WarpReduce<real_t>;
   constexpr int32_t elements = ITEMS_PER_THREAD << 5;
@@ -65,17 +65,20 @@ __global__ void minus_adjAx_plusB_scale_real(double scale, int32_t M, int32_t N,
 
     real_t res = WarpReduce(temp_reduce[threadIdx.y]).Reduce(cub::ThreadReduce(thread_B, add_func, init_func), add_func);
 
-    if (threadIdx.x == 0)
-      B[row] = scal_func(add_func(res, B[row]), scale);
+    if (threadIdx.x == 0) {
+      res = scal_func(add_func(res, B[row]), scale);
+      B[row] = res;
+      C[row] = fma_func(res, res, C[row]);
+    }
   }
 }
 
-void minus_transAx_plusB_scale_double(cudaStream_t stream, double scale, int32_t M, int32_t N, const double* A, int32_t lda, const double* X, double* B) {
+void minus_transAx_plusB_scale_double(cudaStream_t stream, double scale, int32_t M, int32_t N, const double* A, int32_t lda, const double* X, double* B, double* C) {
   constexpr int32_t block_warps = 4;
   constexpr int32_t items_per_thread = 8;
 
   int32_t grid_size = (M + block_warps - 1) / block_warps;
   minus_adjAx_plusB_scale_real <double, double* __restrict__, const double* __restrict__, block_warps, items_per_thread>
-    <<< grid_size, dim3(32, block_warps, 1), 0, stream >>> (scale, M, N, A, lda, X, B);
+    <<< grid_size, dim3(32, block_warps, 1), 0, stream >>> (scale, M, N, A, lda, X, B, C);
 }
 

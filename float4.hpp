@@ -132,7 +132,7 @@ namespace host::f4 {
   }
 
   inline complex_float4 fma(complex_float4 a, complex_float4 b, complex_float4 c) {
-    return complex_float4(fma(a.real, b.real, fma(a.imag, negate(b.imag), c.real)),
+    return complex_float4(fma(a.real, b.real, fma(negate(a.imag), b.imag, c.real)),
       fma(a.real, b.imag, fma(a.imag, b.real, c.imag)));
   }
 
@@ -229,6 +229,15 @@ namespace device::f4 {
     return c;
   }
 
+  __device__ __forceinline__ bool a_less_than_b(float4 a, float4 b) {
+    b = add(negate(a), b);
+    return 0.f < b.x;
+  }
+
+  __device__ __forceinline__ bool a_eq_to_b(float4 a, float4 b) {
+    return (a.x == b.x) && (a.y == b.y) && (a.z == b.z) && (a.w == b.w);
+  }
+
   __device__ __forceinline__ complex_float4 negate(complex_float4 a) {
     return complex_float4(negate(a.real), negate(a.imag));
   }
@@ -242,7 +251,7 @@ namespace device::f4 {
   }
 
   __device__ __forceinline__ complex_float4 fma(complex_float4 a, complex_float4 b, complex_float4 c) {
-    return complex_float4(fma(a.real, b.real, fma(a.imag, negate(b.imag), c.real)),
+    return complex_float4(fma(a.real, b.real, fma(negate(a.imag), b.imag, c.real)),
       fma(a.real, b.imag, fma(a.imag, b.real, c.imag)));
   }
 

@@ -3,8 +3,7 @@
 
 #include <cstdint>
 #include <complex>
-#include <cuComplex.h>
-#include <cublas_v2.h>
+#include <cuda_runtime_api.h>
 
 int32_t align_up(
   int32_t ld,
@@ -15,47 +14,22 @@ int32_t align_c_fp32(int32_t ld);
 int32_t align_c_fp64(int32_t ld);
 int32_t align_c_i8(int32_t ld);
 
-std::pair<float, int32_t> real_imax_float(cudaStream_t stream, int32_t N, const float* x, int32_t incx);
+std::pair<double, int32_t> imax_double(cudaStream_t stream, int32_t N, const double* X);
 
-std::pair<double, int32_t> real_imax_double(cudaStream_t stream, int32_t N, const double* x, int32_t incx);
+std::pair<double, int32_t> imax_double_complex(cudaStream_t stream, int32_t N, const std::complex<double>* X);
 
-void minus_transAx_plusB_scale_double(cudaStream_t stream, double scale, int32_t M, int32_t N, const double* A, int32_t lda, const double* X, double* B);
+void minus_transAx_plusB_scale_double(cudaStream_t stream, double scale, int32_t M, int32_t N, const double* A, int32_t lda, const double* X, double* B, double* C);
 
-void minus_adjAx_plusB_scale_double_complex(cudaStream_t stream, double scale, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, const std::complex<double>* X, std::complex<double>* B);
+void minus_adjAx_plusB_scale_double_complex(cudaStream_t stream, double scale, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, const std::complex<double>* X, std::complex<double>* B, double* C);
 
-void scal_incx1_float(cudaStream_t stream, float scale, int32_t N, float* x);
+void copy_col_to_row_double(cudaStream_t stream, int32_t i, int32_t N, double* A, int32_t lda);
 
-void scal_incx1_double(cudaStream_t stream, double scale, int32_t N, double* x);
+void copy_col_to_row_double_complex(cudaStream_t stream, int32_t i, int32_t N, std::complex<double>* A, int32_t lda);
 
-void scal_incx1_float4(cudaStream_t stream, float4 scale, int32_t N, float4* x);
+void swap_cols_double(cudaStream_t stream, int32_t i, int32_t j, int32_t N, double* A, int32_t lda);
 
-int32_t cpotrfp_gpu(
-  cublasHandle_t handle,
-  int32_t N,
-  const cuComplex* A,
-  int32_t lda,
-  int32_t* ipiv,
-  cuComplex* X,
-  int32_t ldx,
-  cuComplex* work
-);
+void swap_cols_double_complex(cudaStream_t stream, int32_t i, int32_t j, int32_t N, std::complex<double>* A, int32_t lda);
 
-float c_f32_i8(
-  cudaStream_t stream,
-  int32_t M,
-  int32_t N,
-  const cuComplex* A,
-  int32_t lda,
-  int8_t* Ai8,
-  int32_t ldi
-);
+void zpotrfp_gpu(cudaStream_t stream, int32_t N, std::complex<double>* A, int32_t lda, int32_t* ipiv);
 
-double c_f64_i8(
-  cudaStream_t stream,
-  int32_t M,
-  int32_t N,
-  const cuDoubleComplex* A,
-  int32_t lda,
-  int8_t* Ai8,
-  int32_t ldi
-);
+

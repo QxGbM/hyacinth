@@ -7,6 +7,7 @@
 #include <thrust/for_each.h>
 #include <thrust/iterator/transform_iterator.h>
 #include <thrust/iterator/counting_iterator.h>
+#include <cuComplex.h>
 
 struct convert_idx2 {
   float N, rN, lda, ldb;
