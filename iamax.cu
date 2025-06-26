@@ -17,6 +17,12 @@ struct eq_real {
   __device__ bool operator()(float4 a, float4 b) { return device::f4::a_eq_to_b(a, b); }
 };
 
+struct rsqrt_real {
+  __device__ double operator()(double f) { return rsqrt(f); }
+  __device__ float operator()(float f) { return rsqrtf(f); }
+  __device__ float4 operator()(float4 f) { return device::f4::rsqrt(f); }
+};
+
 struct get_real {
   __device__ double operator()(cuDoubleComplex f) { return f.x; }
   __device__ float operator()(cuComplex f) { return f.x; }
@@ -43,8 +49,8 @@ template <class real_t> struct real_pair_max {
   }
 };
 
-template <class real_t, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD>
-__global__ void reduce_real(int32_t N, const real_t* A, int32_t* i_out, real_t* val_out) {
+template <class real_t, class real_ptr, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD>
+__global__ void reduce_real(int32_t N, real_ptr A, int32_t* i_out, real_ptr rsq_out) {
   using BlockLoad = cub::BlockLoad<real_t, BLOCK_THREADS, ITEMS_PER_THREAD>;
   using BlockReduce = cub::WarpReduce<real_pair<real_t>, BLOCK_THREADS>;
   constexpr int32_t elements = BLOCK_THREADS * ITEMS_PER_THREAD;
@@ -62,40 +68,29 @@ __global__ void reduce_real(int32_t N, const real_t* A, int32_t* i_out, real_t* 
 
   for (int32_t i = 0; i < N; i += elements) {
     int32_t num_items = min(elements, N - i);
+    int32_t thread_loc = threadIdx.x * ITEMS_PER_THREAD + i;
     BlockLoad(temp_load).Load(&A[i], thread_data, num_items, init);
 
     #pragma unroll
     for (int32_t j = 0; j < ITEMS_PER_THREAD; ++j)
-      thread_pair[j] = cmp_max(thread_pair[j], real_pair<real_t>({ thread_data[j], int32_t(threadIdx.x * ITEMS_PER_THREAD + i + j) }));
+      thread_pair[j] = cmp_max(thread_pair[j], real_pair<real_t>({ thread_data[j], thread_loc + j }));
   }
 
   real_pair<real_t> thread_res = cub::ThreadReduce(thread_pair, cmp_max, real_pair<real_t>({ init, -1 }));
   real_pair<real_t> block_res = BlockReduce(temp_reduce).Reduce(thread_res, cmp_max);
+
   if (threadIdx.x == 0) {
+    rsqrt_real rsqrt_func;
     *i_out = block_res.second;
-    *val_out = block_res.first;
+    *rsq_out = rsqrt_func(block_res.first);
+    A[block_res.second] = A[0];
   }
 }
 
-std::pair<double, int32_t> imax_double(cudaStream_t stream, int32_t N, const double* X) {
+void imax_double(cudaStream_t stream, int32_t N, double* X, int32_t* piv, double* rsq) {
   constexpr int32_t block_threads = 8 * 32;
   constexpr int32_t items_per_thread = 4;
-  int32_t* d_i;
-  double* d_v;
-
-  cudaMallocManaged(reinterpret_cast<void**>(&d_i), sizeof(int32_t), cudaMemAttachGlobal);
-  cudaMallocManaged(reinterpret_cast<void**>(&d_v), sizeof(double), cudaMemAttachGlobal);
-
-  reduce_real <double, block_threads, items_per_thread> <<< 1, block_threads, 0, stream >>> (N, X, d_i, d_v);
-
-  cudaStreamSynchronize(stream);
-  int32_t id;
-  double val;
-  cudaMemcpy(&id, d_i, sizeof(int32_t), cudaMemcpyDefault);
-  cudaMemcpy(&val, d_v, sizeof(double), cudaMemcpyDefault);
-  printf("%d %f\n", id, val);
-  cudaFree(d_i);
-  cudaFree(d_v);
-  return std::make_pair(val, id);
+  reduce_real <double, double* __restrict__, block_threads, items_per_thread>
+    <<< 1, block_threads, 0, stream >>> (N, X, piv, rsq);
 }
 

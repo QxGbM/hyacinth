@@ -238,6 +238,25 @@ namespace device::f4 {
     return (a.x == b.x) && (a.y == b.y) && (a.z == b.z) && (a.w == b.w);
   }
 
+  __device__ __forceinline__ float4 fscalbnf4(float4 a, int32_t exp) {
+    return make_float4(scalbnf(a.x, exp), scalbnf(a.y, exp), scalbnf(a.z, exp), scalbnf(a.w, exp));
+  }
+
+  __device__ __forceinline__ float4 rsqrt(float4 a) {
+    int32_t p = int32_t(-0.5f * log2f(a.x));
+
+    float4 x = make_float4(scalbnf(rsqrtf(a.x), -p), 0.f, 0.f, 0.f); // init
+    float4 z = make_float4(0.f, 0.f, 0.f, 0.f);
+    float4 c = make_float4(1.5f, 0.f, 0.f, 0.f);
+    a = fscalbnf4(negate(a), 2 * p - 1);
+
+    x = fma(x, fma(a, fma(x, x, z), c), z);
+    x = fma(x, fma(a, fma(x, x, z), c), z);
+    x = fma(x, fma(a, fma(x, x, z), c), z); // x *= (1.5 + (-0.5 * a) * (x * x))
+
+    return fscalbnf4(x, p);
+  }
+
   __device__ __forceinline__ complex_float4 negate(complex_float4 a) {
     return complex_float4(negate(a.real), negate(a.imag));
   }

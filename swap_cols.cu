@@ -9,17 +9,17 @@
 #include <cuComplex.h>
 #include <float4.hpp>
 
-struct swap_3row {
-  int32_t locs[6];
+struct swap_rows {
+  int32_t locs[4];
   __device__ int32_t operator()(int32_t i) { return locs[i]; }
 };
 
 template<class T>
 inline void swap_cols(cudaStream_t stream, int32_t i, int32_t j, int32_t N, T* A, int32_t lda) {
-  swap_3row swap({ i * (lda + 1), j * lda + i, N * lda + i, i * lda + j, j * (lda + 1), N * lda + j });
+  swap_rows swap({ i * (lda + 1), j * lda + i, i * lda + j, j * (lda + 1) });
   thrust::device_ptr<T> devA(A);
   auto row_iter = thrust::make_permutation_iterator(devA, thrust::make_transform_iterator(thrust::make_counting_iterator(0), swap));
-  thrust::swap_ranges(thrust::cuda::par_nosync.on(stream), row_iter, row_iter + 3, row_iter + 3);
+  thrust::swap_ranges(thrust::cuda::par_nosync.on(stream), row_iter, row_iter + 2, row_iter + 2);
   thrust::swap_ranges(thrust::cuda::par_nosync.on(stream), devA + (i * lda), devA + (i * lda + N), devA + (j * lda));
 }
 
