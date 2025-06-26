@@ -19,5 +19,5 @@ set_source_files_properties(${CU_SOURCES} PROPERTIES COMPILE_OPTIONS
   "-Xcompiler=-Wall;-Xcompiler=-Wextra;-Xcompiler=-fexceptions")
 
 add_library(hyacinth SHARED ${CPP_SOURCES} ${CU_SOURCES})
-set_target_properties(hyacinth PROPERTIES CUDA_ARCHITECTURES native)
+set_target_properties(hyacinth PROPERTIES CUDA_ARCHITECTURES all-major)
 

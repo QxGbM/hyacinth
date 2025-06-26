@@ -11,15 +11,15 @@
 #include <float4.hpp>
 
 struct conj {
-  __device__ cuDoubleComplex operator()(cuDoubleComplex f) { return make_cuDoubleComplex(f.x, -f.y); }
-  __device__ cuComplex operator()(cuComplex f) { return make_cuComplex(f.x, -f.y); }
-  __device__ complex_float4 operator()(complex_float4 f) { return device::f4::conj(f); }
+  __device__ __forceinline__ cuDoubleComplex operator()(cuDoubleComplex f) { return make_cuDoubleComplex(f.x, -f.y); }
+  __device__ __forceinline__ cuComplex operator()(cuComplex f) { return make_cuComplex(f.x, -f.y); }
+  __device__ __forceinline__ complex_float4 operator()(complex_float4 f) { return device::f4::conj(f); }
 };
 
 struct stride {
   int32_t ld;
   stride(int32_t ld) : ld(ld) {}
-  __device__ int32_t operator()(int32_t i) { return i * ld; }
+  __device__ __forceinline__ int32_t operator()(int32_t i) { return i * ld; }
 };
 
 template<class T>

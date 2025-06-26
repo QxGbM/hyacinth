@@ -6,27 +6,27 @@
 #include <float4.hpp>
 
 struct add_real {
-  __device__ double operator()(double a, double b) { return a + b; }
-  __device__ float operator()(float a, float b) { return a + b; }
-  __device__ float4 operator()(float4 a, float4 b) { return device::f4::add(a, b); }
+  __device__ __forceinline__ double operator()(double a, double b) { return a + b; }
+  __device__ __forceinline__ float operator()(float a, float b) { return a + b; }
+  __device__ __forceinline__ float4 operator()(float4 a, float4 b) { return device::f4::add(a, b); }
 };
 
 struct minus_a_fma_real {
-  __device__ double operator()(double a, double b, double c) { return fma(-a, b, c); }
-  __device__ float operator()(float a, float b, float c) { return fmaf(-a, b, c); }
-  __device__ float4 operator()(float4 a, float4 b, float4 c) { return device::f4::fma(device::f4::negate(a), b, c); }
+  __device__ __forceinline__ double operator()(double a, double b, double c) { return fma(-a, b, c); }
+  __device__ __forceinline__ float operator()(float a, float b, float c) { return fmaf(-a, b, c); }
+  __device__ __forceinline__ float4 operator()(float4 a, float4 b, float4 c) { return device::f4::fma(device::f4::negate(a), b, c); }
 };
 
 struct init_real {
-  __device__ operator double() { return 0.; }
-  __device__ operator float() { return 0.f; }
-  __device__ operator float4() { return make_float4(0.f, 0.f, 0.f, 0.f); }
+  __device__ __forceinline__ operator double() { return 0.; }
+  __device__ __forceinline__ operator float() { return 0.f; }
+  __device__ __forceinline__ operator float4() { return make_float4(0.f, 0.f, 0.f, 0.f); }
 };
 
 struct scal_real {
-  __device__ double operator()(double a, double b) { return a * b; }
-  __device__ float operator()(float a, float b) { return a * b; }
-  __device__ float4 operator()(float4 a, float4 b) { return device::f4::fma(a, b, make_float4(0.f, 0.f, 0.f, 0.f)); }
+  __device__ __forceinline__ double operator()(double a, double b) { return a * b; }
+  __device__ __forceinline__ float operator()(float a, float b) { return a * b; }
+  __device__ __forceinline__ float4 operator()(float4 a, float4 b) { return device::f4::fma(a, b, make_float4(0.f, 0.f, 0.f, 0.f)); }
 };
 
 template <class real_t, class real_ptr, class real_const_ptr, int32_t BLOCK_WARPS, int32_t ITEMS_PER_THREAD>
@@ -63,10 +63,15 @@ __global__ void minus_adjAx_plusB_scale_real(real_const_ptr scale, int32_t M, in
         thread_B[j] = fma_func(thread_A[j], thread_X[j], thread_B[j]);
     }
 
-    real_t res = WarpReduce(temp_reduce[threadIdx.y]).Reduce(cub::ThreadReduce(thread_B, add_func, init_func), add_func);
+    real_t thread_res = thread_B[0];
+    #pragma unroll
+    for (int32_t i = 1; i < ITEMS_PER_THREAD; ++i)
+      thread_res = add_func(thread_res, thread_B[i]);
+
+    real_t warp_res = WarpReduce(temp_reduce[threadIdx.y]).Reduce(thread_res, add_func);
 
     if (threadIdx.x == 0) {
-      res = scal_func(add_func(res, B[row]), *scale);
+      real_t res = scal_func(add_func(warp_res, B[row]), *scale);
       B[row] = res;
       C[row] = fma_func(res, res, C[row]);
     }

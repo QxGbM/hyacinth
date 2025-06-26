@@ -11,7 +11,7 @@
 
 struct swap_rows {
   int32_t locs[4];
-  __device__ int32_t operator()(int32_t i) { return locs[i]; }
+  __device__ __forceinline__ int32_t operator()(int32_t i) { return locs[i]; }
 };
 
 template<class T>
