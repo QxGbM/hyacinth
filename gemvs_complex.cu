@@ -49,8 +49,7 @@ __global__ void minus_adjAx_plusB_scale_complex(double scale, int32_t M, int32_t
   scal_complex scal_func;
 
   complex_t thread_A[ITEMS_PER_THREAD], thread_X[ITEMS_PER_THREAD], thread_B[ITEMS_PER_THREAD];
-  int32_t warpId = int32_t(threadIdx.x) / 32;
-  int32_t row = int32_t(blockIdx.x) * BLOCK_WARPS + warpId;
+  int32_t row = blockIdx.x * BLOCK_WARPS + threadIdx.y;
 
   if (row < M) {
     A += row * lda;
@@ -61,23 +60,27 @@ __global__ void minus_adjAx_plusB_scale_complex(double scale, int32_t M, int32_t
 
     for (int32_t i = 0; i < N; i += elements) {
       int32_t num_items = min(elements, N - i);
-      WarpLoad(temp_loadA[warpId]).Load(&A[i], thread_A, num_items, init_func);
-      WarpLoad(temp_loadX[warpId]).Load(&X[i], thread_X, num_items, init_func);
+      WarpLoad(temp_loadA[threadIdx.y]).Load(&A[i], thread_A, num_items, init_func);
+      WarpLoad(temp_loadX[threadIdx.y]).Load(&X[i], thread_X, num_items, init_func);
 
       #pragma unroll
       for (int32_t j = 0; j < ITEMS_PER_THREAD; ++j)
         thread_B[j] = fma_func(thread_A[j], thread_X[j], thread_B[j]);
     }
 
-    complex_t res = WarpReduce(temp_reduce[warpId]).Reduce(cub::ThreadReduce(thread_B, add_func, init_func), add_func);
+    complex_t res = WarpReduce(temp_reduce[threadIdx.y]).Reduce(cub::ThreadReduce(thread_B, add_func, init_func), add_func);
 
-    if ((int32_t(threadIdx.x) & 31) == 0)
+    if (threadIdx.x == 0)
       B[row] = scal_func(add_func(res, B[row]), scale);
   }
 }
 
 void minus_adjAx_plusB_scale_double_complex(cudaStream_t stream, double scale, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, const std::complex<double>* X, std::complex<double>* B) {
-  minus_adjAx_plusB_scale_complex <double, cuDoubleComplex, cuDoubleComplex* __restrict__, const cuDoubleComplex* __restrict__, 4, 4>
-    <<< (M + 3) / 4, 128, 0, stream >>> (scale, M, N, (const cuDoubleComplex*)A, lda, (const cuDoubleComplex*)X, (cuDoubleComplex*)B);
+  constexpr int32_t block_warps = 4;
+  constexpr int32_t items_per_thread = 4;
+
+  int32_t grid_size = (M + block_warps - 1) / block_warps;
+  minus_adjAx_plusB_scale_complex <double, cuDoubleComplex, cuDoubleComplex* __restrict__, const cuDoubleComplex* __restrict__, block_warps, items_per_thread>
+    <<< grid_size, dim3(32, block_warps, 1), 0, stream >>> (scale, M, N, (const cuDoubleComplex*)A, lda, (const cuDoubleComplex*)X, (cuDoubleComplex*)B);
 }
 

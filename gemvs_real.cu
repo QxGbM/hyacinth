@@ -29,13 +29,14 @@ struct scal_real {
   __device__ float4 operator()(float4 a, float4 b) { return device::f4::fma(a, b, make_float4(0.f, 0.f, 0.f, 0.f)); }
 };
 
-template <class real_t, class real_ptr, class real_const_ptr, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD>
-__global__ void minus_transAx_plusB_scale_real(double scale, int32_t N, real_const_ptr A, int32_t lda, real_const_ptr X, real_ptr B) {
-  using BlockLoad = cub::BlockLoad<real_t, BLOCK_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_DIRECT>;
-  using BlockReduce = cub::BlockReduce<real_t, BLOCK_THREADS>;
+template <class real_t, class real_ptr, class real_const_ptr, int32_t BLOCK_WARPS, int32_t ITEMS_PER_THREAD>
+__global__ void minus_adjAx_plusB_scale_real(double scale, int32_t M, int32_t N, real_const_ptr A, int32_t lda, real_const_ptr X, real_ptr B) {
+  using WarpLoad = cub::WarpLoad<real_t, ITEMS_PER_THREAD>;
+  using WarpReduce = cub::WarpReduce<real_t>;
+  constexpr int32_t elements = ITEMS_PER_THREAD << 5;
 
-  __shared__ typename BlockLoad::TempStorage temp_load;
-  __shared__ typename BlockReduce::TempStorage temp_reduce;
+  __shared__ typename WarpLoad::TempStorage temp_loadA[BLOCK_WARPS], temp_loadX[BLOCK_WARPS];
+  __shared__ typename WarpReduce::TempStorage temp_reduce[BLOCK_WARPS];
 
   add_real add_func;
   minus_a_fma_real fma_func;
@@ -43,30 +44,38 @@ __global__ void minus_transAx_plusB_scale_real(double scale, int32_t N, real_con
   scal_real scal_func;
 
   real_t thread_A[ITEMS_PER_THREAD], thread_X[ITEMS_PER_THREAD], thread_B[ITEMS_PER_THREAD];
-  int32_t elements = BLOCK_THREADS * ITEMS_PER_THREAD;
-  A += blockIdx.x * lda;
+  int32_t row = blockIdx.x * BLOCK_WARPS + threadIdx.y;
 
-  #pragma unroll
-  for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
-    thread_B[i] = init_func;
-
-  for (int32_t i = 0; i < N; i += elements) {
-    int32_t num_items = min(elements, N - i);
-    BlockLoad(temp_load).Load(&A[i], thread_A, num_items, init_func);
-    BlockLoad(temp_load).Load(&X[i], thread_X, num_items, init_func);
+  if (row < M) {
+    A += row * lda;
 
     #pragma unroll
-    for (int32_t j = 0; j < ITEMS_PER_THREAD; ++j)
-      thread_B[j] = fma_func(thread_A[j], thread_X[j], thread_B[j]);
-  }
+    for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
+      thread_B[i] = init_func;
 
-  real_t res = BlockReduce(temp_reduce).Reduce(thread_B, add_func);
-  if (threadIdx.x == 0)
-    B[blockIdx.x] = scal_func(add_func(B[blockIdx.x], res), scale);
+    for (int32_t i = 0; i < N; i += elements) {
+      int32_t num_items = min(elements, N - i);
+      WarpLoad(temp_loadA[threadIdx.y]).Load(&A[i], thread_A, num_items, init_func);
+      WarpLoad(temp_loadX[threadIdx.y]).Load(&X[i], thread_X, num_items, init_func);
+
+      #pragma unroll
+      for (int32_t j = 0; j < ITEMS_PER_THREAD; ++j)
+        thread_B[j] = fma_func(thread_A[j], thread_X[j], thread_B[j]);
+    }
+
+    real_t res = WarpReduce(temp_reduce[threadIdx.y]).Reduce(cub::ThreadReduce(thread_B, add_func, init_func), add_func);
+
+    if (threadIdx.x == 0)
+      B[row] = scal_func(add_func(res, B[row]), scale);
+  }
 }
 
 void minus_transAx_plusB_scale_double(cudaStream_t stream, double scale, int32_t M, int32_t N, const double* A, int32_t lda, const double* X, double* B) {
-  minus_transAx_plusB_scale_real <double, double* __restrict__, const double* __restrict__, 32, 4>
-    <<< M, 32, 0, stream >>> (scale, N, A, lda, X, B);
+  constexpr int32_t block_warps = 4;
+  constexpr int32_t items_per_thread = 8;
+
+  int32_t grid_size = (M + block_warps - 1) / block_warps;
+  minus_adjAx_plusB_scale_real <double, double* __restrict__, const double* __restrict__, block_warps, items_per_thread>
+    <<< grid_size, dim3(32, block_warps, 1), 0, stream >>> (scale, M, N, A, lda, X, B);
 }
 
