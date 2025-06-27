@@ -28,8 +28,8 @@ int32_t zpotrfp_gpu(cudaStream_t stream, int32_t N, std::complex<double>* A, int
       return i + 1;
     }
 
-    if (i < (pivots[i] - 1))
-      swap_cols_double_complex(stream, i, pivots[i] - 1, N, A, lda);
+    if (0 < *pivot)
+      swap_cols_double_complex(stream, i, *pivot + i, N, A, lda);
     minus_adjAx_plusB_scale_double_complex(stream, scale, N - i, i, &A[i * lda], lda, &A[i * (lda + 1)], &diag[i]);
   }
 

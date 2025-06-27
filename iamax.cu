@@ -52,7 +52,7 @@ template <class real_t> struct real_pair_max {
 template <class real_t, class real_ptr, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD>
 __global__ void reduce_real(int32_t N, real_ptr A, int32_t* i_out, real_ptr rsq_out) {
   using BlockLoad = cub::BlockLoad<real_t, BLOCK_THREADS, ITEMS_PER_THREAD>;
-  using BlockReduce = cub::WarpReduce<real_pair<real_t>, BLOCK_THREADS>;
+  using BlockReduce = cub::BlockReduce<real_pair<real_t>, BLOCK_THREADS>;
   constexpr int32_t elements = BLOCK_THREADS * ITEMS_PER_THREAD;
 
   __shared__ typename BlockLoad::TempStorage temp_load;
@@ -92,7 +92,7 @@ __global__ void reduce_real(int32_t N, real_ptr A, int32_t* i_out, real_ptr rsq_
 }
 
 void imax_double(cudaStream_t stream, int32_t N, double* X, int32_t* piv, double* rsq) {
-  constexpr int32_t block_threads = 8 * 32;
+  constexpr int32_t block_threads = 4 * 32;
   constexpr int32_t items_per_thread = 4;
   reduce_real <double, double* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (N, X, piv, rsq);
