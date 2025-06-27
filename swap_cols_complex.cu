@@ -46,12 +46,11 @@ __global__ void swap_cols_complex(int32_t i, int32_t j, int32_t N, complex_ptr A
     complex_t A_ii = A_col_i[i];
     complex_t A_ji = A_col_i[j]; 
     complex_t A_ij = A_col_j[i];
-    complex_t A_jj = A_col_j[j];
 
-    A_col_i[j] = A_ii;
     A_col_i[i] = A_ji;
+    A_col_i[j] = A_ii;
+    A_col_j[i] = conj_func(A_ii);
     A_col_j[j] = A_ij;
-    A_col_j[i] = A_jj;
   }
 }
 

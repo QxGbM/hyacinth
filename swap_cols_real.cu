@@ -37,12 +37,11 @@ __global__ void swap_cols_real(int32_t i, int32_t j, int32_t N, real_ptr A, int3
     real_t A_ii = A_col_i[i];
     real_t A_ji = A_col_i[j]; 
     real_t A_ij = A_col_j[i];
-    real_t A_jj = A_col_j[j];
 
-    A_col_i[j] = A_ii;
     A_col_i[i] = A_ji;
+    A_col_i[j] = A_ii;
+    A_col_j[i] = A_ii;
     A_col_j[j] = A_ij;
-    A_col_j[i] = A_jj;
   }
 }
 
