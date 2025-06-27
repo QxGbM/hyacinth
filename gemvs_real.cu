@@ -40,9 +40,8 @@ __global__ void minus_adjAx_plusB_scale_real(real_const_ptr scale, int32_t M, in
 
   add_real add_func;
   minus_a_fma_real fma_func;
-  init_real init_func;
 
-  real_t thread_A[ITEMS_PER_THREAD], thread_X[ITEMS_PER_THREAD], thread_B[ITEMS_PER_THREAD];
+  real_t thread_A[ITEMS_PER_THREAD], thread_X[ITEMS_PER_THREAD], thread_B[ITEMS_PER_THREAD], init = init_real();
   int32_t row = blockIdx.x * BLOCK_WARPS + threadIdx.y;
 
   if (row < M) {
@@ -50,12 +49,12 @@ __global__ void minus_adjAx_plusB_scale_real(real_const_ptr scale, int32_t M, in
 
     #pragma unroll
     for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
-      thread_B[i] = init_func;
+      thread_B[i] = init;
 
     for (int32_t i = 0; i < N; i += elements) {
       int32_t num_items = min(elements, N - i);
-      WarpLoad(temp_loadA[threadIdx.y]).Load(&A_i[i], thread_A, num_items, init_func);
-      WarpLoad(temp_loadX[threadIdx.y]).Load(&A[i], thread_X, num_items, init_func);
+      WarpLoad(temp_loadA[threadIdx.y]).Load(&A_i[i], thread_A, num_items, init);
+      WarpLoad(temp_loadX[threadIdx.y]).Load(&A[i], thread_X, num_items, init);
 
       #pragma unroll
       for (int32_t j = 0; j < ITEMS_PER_THREAD; ++j)
