@@ -1,7 +1,6 @@
 
 #include <hyacinth.hpp>
 
-#include <complex>
 #include <cuComplex.h>
 #include <cub/cub.cuh>
 #include <float4.hpp>
@@ -53,7 +52,7 @@ template <class real_t, class real_ptr, class real_const_ptr, class complex_t, c
 __global__ void minus_adjAx_plusB_scale_complex(real_const_ptr scale, int32_t M, int32_t N, complex_const_ptr A, int32_t lda, complex_ptr B, real_ptr C) {
   using WarpLoad = cub::WarpLoad<complex_t, ITEMS_PER_THREAD>;
   using WarpReduce = cub::WarpReduce<complex_t>;
-  constexpr int32_t elements = ITEMS_PER_THREAD << 5;
+  constexpr int32_t elements = ITEMS_PER_THREAD * 32;
 
   __shared__ typename WarpLoad::TempStorage temp_loadA[BLOCK_WARPS], temp_loadX[BLOCK_WARPS];
   __shared__ typename WarpReduce::TempStorage temp_reduce[BLOCK_WARPS];
