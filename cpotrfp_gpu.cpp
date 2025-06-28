@@ -19,7 +19,10 @@ int32_t zpotrfp_gpu(cudaStream_t stream, int32_t N, std::complex<double>* A, int
   cudaMemcpy2DAsync(diag, sizeof(double), A, (2 * lda + 2) * sizeof(double), sizeof(double), N, cudaMemcpyDeviceToDevice, stream);
 
   for (int32_t i = 0; i < N; ++i) {
-    imax_double(stream, N - i, &diag[i], pivot, scale);
+    if (0 < i)
+      imax_update_double_complex(stream, N - i, &A[i + (i - 1) * lda], &diag[i], pivot, scale);
+    else
+      imax_double(stream, N - i, &diag[i], pivot, scale);
     cudaStreamSynchronize(stream);
     pivots[i] = *pivot + 1 + i;
 
@@ -30,7 +33,7 @@ int32_t zpotrfp_gpu(cudaStream_t stream, int32_t N, std::complex<double>* A, int
 
     if (0 < *pivot)
       swap_cols_double_complex(stream, i, *pivot + i, N, A, lda);
-    minus_adjAx_plusB_scale_double_complex(stream, scale, N - i, i, &A[i * lda], lda, &A[i * (lda + 1)], &diag[i]);
+    minus_adjAx_plusB_scale_double_complex(stream, scale, N - i, i, &A[i * lda], lda, &A[i * (lda + 1)]);
   }
 
   cudaStreamSynchronize(stream);

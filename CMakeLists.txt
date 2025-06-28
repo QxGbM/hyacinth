@@ -8,7 +8,7 @@ project ("hyacinth" LANGUAGES CXX CUDA)
 
 find_package(CUDAToolkit REQUIRED)
 set(CPP_SOURCES align_ld.cpp cpotrfp_gpu.cpp)
-set(CU_SOURCES iamax.cu gemvs_complex.cu gemvs_real.cu swap_cols_complex.cu swap_cols_real.cu complex_fp_i8.cu)
+set(CU_SOURCES imax.cu imax_update.cu gemvs_complex.cu gemvs_real.cu swap_cols_complex.cu swap_cols_real.cu complex_fp_i8.cu)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 link_libraries(CUDA::cudart)

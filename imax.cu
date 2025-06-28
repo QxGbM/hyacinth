@@ -2,32 +2,7 @@
 #include <hyacinth.hpp>
 
 #include <cub/cub.cuh>
-#include <cuComplex.h>
 #include <float4.hpp>
-
-struct less_real {
-  __device__ __forceinline__ bool operator()(double a, double b) { return a < b; }
-  __device__ __forceinline__ bool operator()(float a, float b) { return a < b; }
-  __device__ __forceinline__ bool operator()(float4 a, float4 b) { return device::f4::a_less_than_b(a, b); }
-};
-
-struct eq_real {
-  __device__ __forceinline__ bool operator()(double a, double b) { return a == b; }
-  __device__ __forceinline__ bool operator()(float a, float b) { return a == b; }
-  __device__ __forceinline__ bool operator()(float4 a, float4 b) { return device::f4::a_eq_to_b(a, b); }
-};
-
-struct rsqrt_real {
-  __device__ __forceinline__ double operator()(double f) { return rsqrt(f); }
-  __device__ __forceinline__ float operator()(float f) { return rsqrtf(f); }
-  __device__ __forceinline__ float4 operator()(float4 f) { return device::f4::rsqrt(f); }
-};
-
-struct get_real {
-  __device__ __forceinline__ double operator()(cuDoubleComplex f) { return f.x; }
-  __device__ __forceinline__ float operator()(cuComplex f) { return f.x; }
-  __device__ __forceinline__ float4 operator()(complex_float4 f) { return f.real; }
-};
 
 struct init_real {
   __device__ __forceinline__ operator double() { return 0.; }
@@ -41,6 +16,18 @@ template <class real_t> struct real_pair {
 };
 
 template <class real_t> struct real_pair_max {
+  struct less_real {
+    __device__ __forceinline__ bool operator()(double a, double b) { return a < b; }
+    __device__ __forceinline__ bool operator()(float a, float b) { return a < b; }
+    __device__ __forceinline__ bool operator()(float4 a, float4 b) { return device::f4::a_less_than_b(a, b); }
+  };
+
+  struct eq_real {
+    __device__ __forceinline__ bool operator()(double a, double b) { return a == b; }
+    __device__ __forceinline__ bool operator()(float a, float b) { return a == b; }
+    __device__ __forceinline__ bool operator()(float4 a, float4 b) { return device::f4::a_eq_to_b(a, b); }
+  };
+
   __device__ __forceinline__ real_pair<real_t> operator()(real_pair<real_t> e1, real_pair<real_t> e2) const {
     less_real cmp_less; eq_real cmp_eq;
     real_pair<real_t> val = cmp_less(e1.first, e2.first) ? e2 : e1;
@@ -49,8 +36,14 @@ template <class real_t> struct real_pair_max {
   }
 };
 
+struct rsqrt_real {
+  __device__ __forceinline__ double operator()(double f) { return rsqrt(f); }
+  __device__ __forceinline__ float operator()(float f) { return rsqrtf(f); }
+  __device__ __forceinline__ float4 operator()(float4 f) { return device::f4::rsqrt(f); }
+};
+
 template <class real_t, class real_ptr, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD>
-__global__ void reduce_real(int32_t N, real_ptr A, int32_t* i_out, real_ptr rsq_out) {
+__global__ void reduce_real(int32_t N, real_ptr X, int32_t* i_out, real_ptr rsq_out) {
   using BlockLoad = cub::BlockLoad<real_t, BLOCK_THREADS, ITEMS_PER_THREAD>;
   using BlockReduce = cub::BlockReduce<real_pair<real_t>, BLOCK_THREADS>;
   constexpr int32_t elements = BLOCK_THREADS * ITEMS_PER_THREAD;
@@ -69,7 +62,7 @@ __global__ void reduce_real(int32_t N, real_ptr A, int32_t* i_out, real_ptr rsq_
   for (int32_t i = 0; i < N; i += elements) {
     int32_t num_items = min(elements, N - i);
     int32_t thread_loc = threadIdx.x * ITEMS_PER_THREAD + i;
-    BlockLoad(temp_load).Load(&A[i], thread_data, num_items, init);
+    BlockLoad(temp_load).Load(&X[i], thread_data, num_items, init);
 
     #pragma unroll
     for (int32_t j = 0; j < ITEMS_PER_THREAD; ++j)
@@ -87,7 +80,7 @@ __global__ void reduce_real(int32_t N, real_ptr A, int32_t* i_out, real_ptr rsq_
     rsqrt_real rsqrt_func;
     *i_out = block_res.second;
     *rsq_out = rsqrt_func(block_res.first);
-    A[block_res.second] = A[0];
+    X[block_res.second] = X[0];
   }
 }
 

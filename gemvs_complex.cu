@@ -20,15 +20,6 @@ struct minus_conj_a_fma_complex {
     return device::f4::fma(complex_float4(device::f4::negate(a.real), a.imag), b, c); }
 };
 
-struct minus_complex_norm {
-  __device__ __forceinline__ double operator()(double a, cuDoubleComplex b) {
-    return fma(-b.x, b.x, fma(-b.y, b.y, a)); }
-  __device__ __forceinline__ float operator()(float a, cuComplex b) {
-    return fmaf(-b.x, b.x, fmaf(-b.y, b.y, a)); }
-  __device__ __forceinline__ float4 operator()(float4 a, complex_float4 b) { 
-    return device::f4::fma(device::f4::negate(b.real), b.real, device::f4::fma(device::f4::negate(b.imag), b.imag, a)); }
-};
-
 struct init_complex {
   __device__ __forceinline__ operator cuDoubleComplex() { return make_cuDoubleComplex(0., 0.); }
   __device__ __forceinline__ operator cuComplex() { return make_cuComplex(0.f, 0.f); }
@@ -49,7 +40,7 @@ struct conj {
 };
 
 template <class real_t, class real_ptr, class real_const_ptr, class complex_t, class complex_ptr, class complex_const_ptr, int32_t BLOCK_WARPS, int32_t ITEMS_PER_THREAD>
-__global__ void minus_adjAx_plusB_scale_complex(real_const_ptr scale, int32_t M, int32_t N, complex_const_ptr A, int32_t lda, complex_ptr B, real_ptr C) {
+__global__ void minus_adjAx_plusB_scale_complex(real_const_ptr scale, int32_t M, int32_t N, complex_const_ptr A, int32_t lda, complex_ptr B) {
   using WarpLoad = cub::WarpLoad<complex_t, ITEMS_PER_THREAD>;
   using WarpReduce = cub::WarpReduce<complex_t>;
   constexpr int32_t elements = ITEMS_PER_THREAD * 32;
@@ -89,24 +80,22 @@ __global__ void minus_adjAx_plusB_scale_complex(real_const_ptr scale, int32_t M,
 
     if (threadIdx.x == 0) {
       scal_complex scal_func;
-      minus_complex_norm fnrm_func;
       conj conj_func;
 
       complex_t res = scal_func(add_func(warp_res, B[row]), *scale);
       B[row] = res;
       B[row * lda] = conj_func(res);
-      C[row] = fnrm_func(C[row], res);
     }
   }
 }
 
-void minus_adjAx_plusB_scale_double_complex(cudaStream_t stream, const double* scale, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, std::complex<double>* B, double* C) {
+void minus_adjAx_plusB_scale_double_complex(cudaStream_t stream, const double* scale, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, std::complex<double>* B) {
   constexpr int32_t block_warps = 4;
   constexpr int32_t items_per_thread = 4;
 
   int32_t grid_size = (M + block_warps - 1) / block_warps;
   minus_adjAx_plusB_scale_complex <double, double* __restrict__, const double* __restrict__,
     cuDoubleComplex, cuDoubleComplex* __restrict__, const cuDoubleComplex* __restrict__, block_warps, items_per_thread>
-    <<< grid_size, dim3(32, block_warps, 1), 0, stream >>> (scale, M, N, (const cuDoubleComplex*)A, lda, (cuDoubleComplex*)B, C);
+    <<< grid_size, dim3(32, block_warps, 1), 0, stream >>> (scale, M, N, (const cuDoubleComplex*)A, lda, (cuDoubleComplex*)B);
 }
 
