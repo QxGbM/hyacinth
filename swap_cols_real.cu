@@ -2,7 +2,6 @@
 #include <hyacinth.hpp>
 
 #include <cub/cub.cuh>
-#include <float4.hpp>
 
 template <class real_t, class real_ptr, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD>
 __global__ void swap_cols_real(int32_t i, int32_t j, int32_t N, real_ptr A, int32_t lda) {

@@ -2,7 +2,6 @@
 #include <hyacinth.hpp>
 
 #include <cub/cub.cuh>
-#include <float4.hpp>
 
 struct add_real {
   __device__ __forceinline__ double operator()(double a, double b) { return a + b; }
@@ -81,3 +80,20 @@ void minus_transAx_plusB_scale_double(cudaStream_t stream, const double* scale, 
     <<< grid_size, dim3(32, block_warps, 1), 0, stream >>> (scale, M, N, A, lda, B);
 }
 
+void minus_transAx_plusB_scale_float(cudaStream_t stream, const float* scale, int32_t M, int32_t N, const float* A, int32_t lda, float* B) {
+  constexpr int32_t block_warps = 4;
+  constexpr int32_t items_per_thread = 16;
+
+  int32_t grid_size = (M + block_warps - 1) / block_warps;
+  minus_adjAx_plusB_scale_real <float, float* __restrict__, const float* __restrict__, block_warps, items_per_thread>
+    <<< grid_size, dim3(32, block_warps, 1), 0, stream >>> (scale, M, N, A, lda, B);
+}
+
+void minus_transAx_plusB_scale_float4(cudaStream_t stream, const float4* scale, int32_t M, int32_t N, const float4* A, int32_t lda, float4* B) {
+  constexpr int32_t block_warps = 4;
+  constexpr int32_t items_per_thread = 4;
+
+  int32_t grid_size = (M + block_warps - 1) / block_warps;
+  minus_adjAx_plusB_scale_real <float4, float4* __restrict__, const float4* __restrict__, block_warps, items_per_thread>
+    <<< grid_size, dim3(32, block_warps, 1), 0, stream >>> (scale, M, N, A, lda, B);
+}

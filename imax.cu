@@ -2,7 +2,6 @@
 #include <hyacinth.hpp>
 
 #include <cub/cub.cuh>
-#include <float4.hpp>
 
 struct init_real {
   __device__ __forceinline__ operator double() { return 0.; }

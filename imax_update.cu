@@ -3,7 +3,6 @@
 
 #include <cub/cub.cuh>
 #include <cuComplex.h>
-#include <float4.hpp>
 
 struct minus_norm {
   __device__ __forceinline__ double operator()(double a, double c) { return fma(-a, a, c); }
@@ -25,7 +24,7 @@ struct init_load {
 
   __device__ __forceinline__ operator cuDoubleComplex() { return make_cuDoubleComplex(0., 0.); }
   __device__ __forceinline__ operator cuComplex() { return make_cuComplex(0.f, 0.f); }
-  __device__ __forceinline__ operator complex_float4() { return complex_float4(make_float4(0.f, 0.f, 0.f, 0.f), make_float4(0.f, 0.f, 0.f, 0.f)); }
+  __device__ __forceinline__ operator complex_float4() { return device::f4::make_complex_float4(make_float4(0.f, 0.f, 0.f, 0.f), make_float4(0.f, 0.f, 0.f, 0.f)); }
 };
 
 template <class real_t> struct real_pair {

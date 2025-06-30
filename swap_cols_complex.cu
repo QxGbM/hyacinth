@@ -3,7 +3,6 @@
 
 #include <cub/cub.cuh>
 #include <cuComplex.h>
-#include <float4.hpp>
 
 struct conj {
   __device__ __forceinline__ cuDoubleComplex operator()(cuDoubleComplex f) { return make_cuDoubleComplex(f.x, -f.y); }
