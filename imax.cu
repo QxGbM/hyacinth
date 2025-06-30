@@ -69,12 +69,7 @@ __global__ void reduce_real(int32_t N, real_ptr X, int32_t* i_out, real_ptr rsq_
       thread_pair[j] = cmp_max(thread_pair[j], real_pair<real_t>({ thread_data[j], thread_loc + j }));
   }
 
-  real_pair<real_t> thread_res = thread_pair[0];
-  #pragma unroll
-  for (int32_t i = 1; i < ITEMS_PER_THREAD; ++i)
-    thread_res = cmp_max(thread_res, thread_pair[i]);
-
-  real_pair<real_t> block_res = BlockReduce(temp_reduce).Reduce(thread_res, cmp_max);
+  real_pair<real_t> block_res = BlockReduce(temp_reduce).Reduce(thread_pair, cmp_max);
 
   if (threadIdx.x == 0) {
     rsqrt_real rsqrt_func;

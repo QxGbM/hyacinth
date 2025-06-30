@@ -42,7 +42,7 @@ struct conj {
 template <class real_t, class real_ptr, class real_const_ptr, class complex_t, class complex_ptr, class complex_const_ptr, int32_t BLOCK_WARPS, int32_t ITEMS_PER_THREAD>
 __global__ void minus_adjAx_plusB_scale_complex(real_const_ptr scale, int32_t M, int32_t N, complex_const_ptr A, int32_t lda, complex_ptr B) {
   using WarpLoad = cub::WarpLoad<complex_t, ITEMS_PER_THREAD>;
-  using WarpReduce = cub::WarpReduce<complex_t>;
+  using WarpReduce = cub::BlockReduce<complex_t, 32>;
   constexpr int32_t elements = ITEMS_PER_THREAD * 32;
 
   __shared__ typename WarpLoad::TempStorage temp_loadA[BLOCK_WARPS], temp_loadX[BLOCK_WARPS];
@@ -71,12 +71,7 @@ __global__ void minus_adjAx_plusB_scale_complex(real_const_ptr scale, int32_t M,
         thread_B[j] = fma_func(thread_A[j], thread_X[j], thread_B[j]);
     }
 
-    complex_t thread_res = thread_B[0];
-    #pragma unroll
-    for (int32_t i = 1; i < ITEMS_PER_THREAD; ++i)
-      thread_res = add_func(thread_res, thread_B[i]);
-
-    complex_t warp_res = WarpReduce(temp_reduce[threadIdx.y]).Reduce(thread_res, add_func);
+    complex_t warp_res = WarpReduce(temp_reduce[threadIdx.y]).Reduce(thread_B, add_func);
 
     if (threadIdx.x == 0) {
       scal_complex scal_func;

@@ -99,12 +99,7 @@ __global__ void update_reduce_real(int32_t N, complex_const_ptr A, real_ptr X, i
     BlockStore(temp_store).Store(&X[i], thread_X, num_items);
   }
 
-  real_pair<real_t> thread_res = thread_pair[0];
-  #pragma unroll
-  for (int32_t i = 1; i < ITEMS_PER_THREAD; ++i)
-    thread_res = cmp_max(thread_res, thread_pair[i]);
-
-  real_pair<real_t> block_res = BlockReduce(temp_reduce).Reduce(thread_res, cmp_max);
+  real_pair<real_t> block_res = BlockReduce(temp_reduce).Reduce(thread_pair, cmp_max);
 
   __syncthreads();
   if (threadIdx.x == 0) {
