@@ -265,8 +265,8 @@ namespace host::f4 {
     return fscalbnf4(x, p);
   }
 
-  inline bool isnan(float4 a) {
-    return std::isnan(a.x) || std::isnan(a.y) || std::isnan(a.z) || std::isnan(a.w);
+  inline bool isnormal(float4 a) {
+    return std::isnormal(a.x) && std::isfinite(a.y) && std::isfinite(a.z) && std::isfinite(a.w);
   }
 
   inline complex_float4 negate(complex_float4 a) {
