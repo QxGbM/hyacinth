@@ -1,5 +1,6 @@
 
-#include <hyacinth.hpp>
+#include <internal.hpp>
+#include <float4.hpp>
 
 #include <cuComplex.h>
 #include <cub/cub.cuh>
