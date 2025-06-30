@@ -84,9 +84,10 @@ __global__ void minus_adjAx_plusB_scale_complex(real_const_ptr scale, int32_t M,
   }
 }
 
+constexpr int32_t block_warps = 8;
+
 void minus_adjAx_plusB_scale_double_complex(cudaStream_t stream, const double* scale, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, std::complex<double>* B) {
-  constexpr int32_t block_warps = 4;
-  constexpr int32_t items_per_thread = 4;
+  constexpr int32_t items_per_thread = 2;
 
   int32_t grid_size = (M + block_warps - 1) / block_warps;
   minus_adjAx_plusB_scale_complex <double, double* __restrict__, const double* __restrict__,
@@ -95,8 +96,7 @@ void minus_adjAx_plusB_scale_double_complex(cudaStream_t stream, const double* s
 }
 
 void minus_adjAx_plusB_scale_float_complex(cudaStream_t stream, const float* scale, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, std::complex<float>* B) {
-  constexpr int32_t block_warps = 4;
-  constexpr int32_t items_per_thread = 8;
+  constexpr int32_t items_per_thread = 4;
 
   int32_t grid_size = (M + block_warps - 1) / block_warps;
   minus_adjAx_plusB_scale_complex <float, float* __restrict__, const float* __restrict__,
@@ -105,8 +105,7 @@ void minus_adjAx_plusB_scale_float_complex(cudaStream_t stream, const float* sca
 }
 
 void minus_adjAx_plusB_scale_float4_complex(cudaStream_t stream, const float4* scale, int32_t M, int32_t N, const complex_float4* A, int32_t lda, complex_float4* B) {
-  constexpr int32_t block_warps = 4;
-  constexpr int32_t items_per_thread = 2;
+  constexpr int32_t items_per_thread = 1;
 
   int32_t grid_size = (M + block_warps - 1) / block_warps;
   minus_adjAx_plusB_scale_complex <float4, float4* __restrict__, const float4* __restrict__,

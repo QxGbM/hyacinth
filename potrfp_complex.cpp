@@ -29,7 +29,8 @@ int32_t zpotrfp_gpu(cudaStream_t stream, int32_t N, std::complex<double>* A, int
     cudaStreamSynchronize(stream);
 
     if (!std::isnormal(*scale)) {
-      cudaMemcpy(ipiv, pivots.data(), i * sizeof(int32_t), cudaMemcpyDefault);
+      cudaMemcpy(ipiv, pivots.data(), N * sizeof(int32_t), cudaMemcpyDefault);
+      cudaFreeHost(work);
       return i + 1;
     }
 
@@ -66,7 +67,8 @@ int32_t cpotrfp_gpu(cudaStream_t stream, int32_t N, std::complex<float>* A, int3
     cudaStreamSynchronize(stream);
 
     if (!std::isnormal(*scale)) {
-      cudaMemcpy(ipiv, pivots.data(), i * sizeof(int32_t), cudaMemcpyDefault);
+      cudaMemcpy(ipiv, pivots.data(), N * sizeof(int32_t), cudaMemcpyDefault);
+      cudaFreeHost(work);
       return i + 1;
     }
 
@@ -103,7 +105,8 @@ int32_t complex_float4_potrfp_gpu(cudaStream_t stream, int32_t N, complex_float4
     cudaStreamSynchronize(stream);
 
     if (!host::f4::isnormal(*scale)) {
-      cudaMemcpy(ipiv, pivots.data(), i * sizeof(int32_t), cudaMemcpyDefault);
+      cudaMemcpy(ipiv, pivots.data(), N * sizeof(int32_t), cudaMemcpyDefault);
+      cudaFreeHost(work);
       return i + 1;
     }
 

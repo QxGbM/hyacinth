@@ -79,23 +79,22 @@ __global__ void reduce_real(int32_t N, real_ptr X, int32_t* i_out, real_ptr rsq_
   }
 }
 
+constexpr int32_t block_threads = 8 * 32;
+
 void imax_double(cudaStream_t stream, int32_t N, double* X, int32_t* piv, double* rsq) {
-  constexpr int32_t block_threads = 4 * 32;
-  constexpr int32_t items_per_thread = 8;
+  constexpr int32_t items_per_thread = 4;
   reduce_real <double, double* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (N, X, piv, rsq);
 }
 
 void imax_float(cudaStream_t stream, int32_t N, float* X, int32_t* piv, float* rsq) {
-  constexpr int32_t block_threads = 4 * 32;
-  constexpr int32_t items_per_thread = 16;
+  constexpr int32_t items_per_thread = 8;
   reduce_real <float, float* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (N, X, piv, rsq);
 }
 
 void imax_float4(cudaStream_t stream, int32_t N, float4* X, int32_t* piv, float4* rsq) {
-  constexpr int32_t block_threads = 4 * 32;
-  constexpr int32_t items_per_thread = 4;
+  constexpr int32_t items_per_thread = 2;
   reduce_real <float4, float4* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (N, X, piv, rsq);
 }

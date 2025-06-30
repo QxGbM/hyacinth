@@ -54,23 +54,22 @@ __global__ void swap_cols_complex(int32_t i, int32_t j, int32_t N, complex_ptr A
   }
 }
 
+constexpr int32_t block_threads = 8 * 32;
+
 void swap_cols_double_complex(cudaStream_t stream, int32_t i, int32_t j, int32_t N, std::complex<double>* A, int32_t lda) {
-  constexpr int32_t block_threads = 8 * 32;
-  constexpr int32_t items_per_thread = 4;
+  constexpr int32_t items_per_thread = 2;
   swap_cols_complex <cuDoubleComplex, cuDoubleComplex* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (i, j, N, (cuDoubleComplex*)A, lda);
 }
 
 void swap_cols_float_complex(cudaStream_t stream, int32_t i, int32_t j, int32_t N, std::complex<float>* A, int32_t lda) {
-  constexpr int32_t block_threads = 8 * 32;
-  constexpr int32_t items_per_thread = 8;
+  constexpr int32_t items_per_thread = 4;
   swap_cols_complex <cuComplex, cuComplex* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (i, j, N, (cuComplex*)A, lda);
 }
 
 void swap_cols_float4_complex(cudaStream_t stream, int32_t i, int32_t j, int32_t N, complex_float4* A, int32_t lda) {
-  constexpr int32_t block_threads = 8 * 32;
-  constexpr int32_t items_per_thread = 2;
+  constexpr int32_t items_per_thread = 1;
   swap_cols_complex <complex_float4, complex_float4* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (i, j, N, A, lda);
 }

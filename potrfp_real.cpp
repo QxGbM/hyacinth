@@ -29,7 +29,8 @@ int32_t dpotrfp_gpu(cudaStream_t stream, int32_t N, double* A, int32_t lda, int3
     cudaStreamSynchronize(stream);
 
     if (!std::isnormal(*scale)) {
-      cudaMemcpy(ipiv, pivots.data(), i * sizeof(int32_t), cudaMemcpyDefault);
+      cudaMemcpy(ipiv, pivots.data(), N * sizeof(int32_t), cudaMemcpyDefault);
+      cudaFreeHost(work);
       return i + 1;
     }
 
@@ -66,7 +67,8 @@ int32_t spotrfp_gpu(cudaStream_t stream, int32_t N, float* A, int32_t lda, int32
     cudaStreamSynchronize(stream);
 
     if (!std::isnormal(*scale)) {
-      cudaMemcpy(ipiv, pivots.data(), i * sizeof(int32_t), cudaMemcpyDefault);
+      cudaMemcpy(ipiv, pivots.data(), N * sizeof(int32_t), cudaMemcpyDefault);
+      cudaFreeHost(work);
       return i + 1;
     }
 
@@ -103,7 +105,8 @@ int32_t float4_potrfp_gpu(cudaStream_t stream, int32_t N, float4* A, int32_t lda
     cudaStreamSynchronize(stream);
 
     if (!host::f4::isnormal(*scale)) {
-      cudaMemcpy(ipiv, pivots.data(), i * sizeof(int32_t), cudaMemcpyDefault);
+      cudaMemcpy(ipiv, pivots.data(), N * sizeof(int32_t), cudaMemcpyDefault);
+      cudaFreeHost(work);
       return i + 1;
     }
 

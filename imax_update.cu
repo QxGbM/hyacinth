@@ -110,44 +110,40 @@ __global__ void update_reduce_general(int32_t N, complex_const_ptr A, real_ptr X
   }
 }
 
+constexpr int32_t block_threads = 8 * 32;
+
 void imax_update_double(cudaStream_t stream, int32_t N, const double* A, double* X, int32_t* piv, double* rsq) {
-  constexpr int32_t block_threads = 4 * 32;
-  constexpr int32_t items_per_thread = 8;
+  constexpr int32_t items_per_thread = 4;
   update_reduce_general <double, double* __restrict__, double, const double* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (N, A, X, piv, rsq);
 }
 
 void imax_update_float(cudaStream_t stream, int32_t N, const float* A, float* X, int32_t* piv, float* rsq) {
-  constexpr int32_t block_threads = 4 * 32;
-  constexpr int32_t items_per_thread = 16;
+  constexpr int32_t items_per_thread = 8;
   update_reduce_general <float, float* __restrict__, float, const float* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (N, A, X, piv, rsq);
 }
 
 void imax_update_float4(cudaStream_t stream, int32_t N, const float4* A, float4* X, int32_t* piv, float4* rsq) {
-  constexpr int32_t block_threads = 4 * 32;
-  constexpr int32_t items_per_thread = 8;
+  constexpr int32_t items_per_thread = 4;
   update_reduce_general <float4, float4* __restrict__, float4, const float4* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (N, A, X, piv, rsq);
 }
 
 void imax_update_double_complex(cudaStream_t stream, int32_t N, const std::complex<double>* A, double* X, int32_t* piv, double* rsq) {
-  constexpr int32_t block_threads = 4 * 32;
-  constexpr int32_t items_per_thread = 4;
+  constexpr int32_t items_per_thread = 2;
   update_reduce_general <double, double* __restrict__, cuDoubleComplex, const cuDoubleComplex* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (N, (const cuDoubleComplex*)A, X, piv, rsq);
 }
 
 void imax_update_float_complex(cudaStream_t stream, int32_t N, const std::complex<float>* A, float* X, int32_t* piv, float* rsq) {
-  constexpr int32_t block_threads = 4 * 32;
-  constexpr int32_t items_per_thread = 8;
+  constexpr int32_t items_per_thread = 4;
   update_reduce_general <float, float* __restrict__, cuComplex, const cuComplex* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (N, (const cuComplex*)A, X, piv, rsq);
 }
 
 void imax_update_float4_complex(cudaStream_t stream, int32_t N, const complex_float4* A, float4* X, int32_t* piv, float4* rsq) {
-  constexpr int32_t block_threads = 4 * 32;
-  constexpr int32_t items_per_thread = 2;
+  constexpr int32_t items_per_thread = 1;
   update_reduce_general <float4, float4* __restrict__, complex_float4, const complex_float4* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (N, A, X, piv, rsq);
 }
