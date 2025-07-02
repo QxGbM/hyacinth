@@ -23,9 +23,9 @@ int32_t dpotrfp_gpu(cudaStream_t stream, int32_t N, double* A, int32_t lda, int3
 
   for (int32_t i = 0; i < N; ++i) {
     if (0 < i)
-      imax_update_double(stream, N - i, &A[i + (i - 1) * lda], &diag[i], pivot, scale);
+      internal::Cholesky::imax_update_double(stream, N - i, &A[i + (i - 1) * lda], &diag[i], pivot, scale);
     else
-      imax_double(stream, N - i, &diag[i], pivot, scale);
+      internal::Cholesky::imax_double(stream, N - i, &diag[i], pivot, scale);
     cudaStreamSynchronize(stream);
 
     if (!std::isnormal(*scale)) {
@@ -37,9 +37,9 @@ int32_t dpotrfp_gpu(cudaStream_t stream, int32_t N, double* A, int32_t lda, int3
     if (0 < *pivot) {
       int32_t j = *pivot + i;
       std::iter_swap(&pivots[i], &pivots[j]);
-      swap_cols_double(stream, i, j, N, A, lda);
+      internal::Cholesky::swap_cols_double(stream, i, j, N, A, lda);
     }
-    minus_transAx_plusB_scale_double(stream, scale, N - i, i, &A[i * lda], lda, &A[i * (lda + 1)]);
+    internal::Cholesky::minus_transAx_plusB_scale_double(stream, scale, N - i, i, &A[i * lda], lda, &A[i * (lda + 1)]);
   }
 
   cudaStreamSynchronize(stream);
@@ -61,9 +61,9 @@ int32_t spotrfp_gpu(cudaStream_t stream, int32_t N, float* A, int32_t lda, int32
 
   for (int32_t i = 0; i < N; ++i) {
     if (0 < i)
-      imax_update_float(stream, N - i, &A[i + (i - 1) * lda], &diag[i], pivot, scale);
+      internal::Cholesky::imax_update_float(stream, N - i, &A[i + (i - 1) * lda], &diag[i], pivot, scale);
     else
-      imax_float(stream, N - i, &diag[i], pivot, scale);
+      internal::Cholesky::imax_float(stream, N - i, &diag[i], pivot, scale);
     cudaStreamSynchronize(stream);
 
     if (!std::isnormal(*scale)) {
@@ -75,9 +75,9 @@ int32_t spotrfp_gpu(cudaStream_t stream, int32_t N, float* A, int32_t lda, int32
     if (0 < *pivot) {
       int32_t j = *pivot + i;
       std::iter_swap(&pivots[i], &pivots[j]);
-      swap_cols_float(stream, i, j, N, A, lda);
+      internal::Cholesky::swap_cols_float(stream, i, j, N, A, lda);
     }
-    minus_transAx_plusB_scale_float(stream, scale, N - i, i, &A[i * lda], lda, &A[i * (lda + 1)]);
+    internal::Cholesky::minus_transAx_plusB_scale_float(stream, scale, N - i, i, &A[i * lda], lda, &A[i * (lda + 1)]);
   }
 
   cudaStreamSynchronize(stream);
@@ -99,9 +99,9 @@ int32_t float4_potrfp_gpu(cudaStream_t stream, int32_t N, float4* A, int32_t lda
 
   for (int32_t i = 0; i < N; ++i) {
     if (0 < i)
-      imax_update_float4(stream, N - i, &A[i + (i - 1) * lda], &diag[i], pivot, scale);
+      internal::Cholesky::imax_update_float4(stream, N - i, &A[i + (i - 1) * lda], &diag[i], pivot, scale);
     else
-      imax_float4(stream, N - i, &diag[i], pivot, scale);
+      internal::Cholesky::imax_float4(stream, N - i, &diag[i], pivot, scale);
     cudaStreamSynchronize(stream);
 
     if (!host::f4::isnormal(*scale)) {
@@ -113,9 +113,9 @@ int32_t float4_potrfp_gpu(cudaStream_t stream, int32_t N, float4* A, int32_t lda
     if (0 < *pivot) {
       int32_t j = *pivot + i;
       std::iter_swap(&pivots[i], &pivots[j]);
-      swap_cols_float4(stream, i, j, N, A, lda);
+      internal::Cholesky::swap_cols_float4(stream, i, j, N, A, lda);
     }
-    minus_transAx_plusB_scale_float4(stream, scale, N - i, i, &A[i * lda], lda, &A[i * (lda + 1)]);
+    internal::Cholesky::minus_transAx_plusB_scale_float4(stream, scale, N - i, i, &A[i * lda], lda, &A[i * (lda + 1)]);
   }
 
   cudaStreamSynchronize(stream);

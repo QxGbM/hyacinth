@@ -1,6 +1,7 @@
 
 #include <internal.hpp>
 #include <float4.hpp>
+#include <double_double.hpp>
 
 #include <cub/cub.cuh>
 #include <cuComplex.h>
@@ -8,24 +9,17 @@
 struct minus_norm {
   __device__ __forceinline__ double operator()(double a, double c) { return fma(-a, a, c); }
   __device__ __forceinline__ float operator()(float a, float c) { return fmaf(-a, a, c); }
+  __device__ __forceinline__ double2 operator()(double2 a, double2 c) { return device::dd::fma(device::dd::negate(a), a, c); }
   __device__ __forceinline__ float4 operator()(float4 a, float4 c) { return device::f4::fma(device::f4::negate(a), a, c); }
 
   __device__ __forceinline__ double operator()(cuDoubleComplex a, double c) {
     return fma(-a.x, a.x, fma(-a.y, a.y, c)); }
   __device__ __forceinline__ float operator()(cuComplex a, float c) {
     return fmaf(-a.x, a.x, fmaf(-a.y, a.y, c)); }
+  __device__ __forceinline__ double2 operator()(complex_double2 a, double2 c) { 
+    return device::dd::fma(device::dd::negate(a.real), a.real, device::dd::fma(device::dd::negate(a.imag), a.imag, c)); }
   __device__ __forceinline__ float4 operator()(complex_float4 a, float4 c) { 
     return device::f4::fma(device::f4::negate(a.real), a.real, device::f4::fma(device::f4::negate(a.imag), a.imag, c)); }
-};
-
-struct init_load {
-  __device__ __forceinline__ operator double() { return 0.; }
-  __device__ __forceinline__ operator float() { return 0.f; }
-  __device__ __forceinline__ operator float4() { return make_float4(0.f, 0.f, 0.f, 0.f); }
-
-  __device__ __forceinline__ operator cuDoubleComplex() { return make_cuDoubleComplex(0., 0.); }
-  __device__ __forceinline__ operator cuComplex() { return make_cuComplex(0.f, 0.f); }
-  __device__ __forceinline__ operator complex_float4() { return device::f4::make_complex_float4(make_float4(0.f, 0.f, 0.f, 0.f), make_float4(0.f, 0.f, 0.f, 0.f)); }
 };
 
 template <class real_t> struct real_pair {
@@ -37,12 +31,14 @@ template <class real_t> struct real_pair_max {
   struct less_real {
     __device__ __forceinline__ bool operator()(double a, double b) { return a < b; }
     __device__ __forceinline__ bool operator()(float a, float b) { return a < b; }
+    __device__ __forceinline__ bool operator()(double2 a, double2 b) { return device::dd::a_less_than_b(a, b); }
     __device__ __forceinline__ bool operator()(float4 a, float4 b) { return device::f4::a_less_than_b(a, b); }
   };
 
   struct eq_real {
     __device__ __forceinline__ bool operator()(double a, double b) { return a == b; }
     __device__ __forceinline__ bool operator()(float a, float b) { return a == b; }
+    __device__ __forceinline__ bool operator()(double2 a, double2 b) { return device::dd::a_eq_to_b(a, b); }
     __device__ __forceinline__ bool operator()(float4 a, float4 b) { return device::f4::a_eq_to_b(a, b); }
   };
 
@@ -57,6 +53,7 @@ template <class real_t> struct real_pair_max {
 struct rsqrt_real {
   __device__ __forceinline__ double operator()(double f) { return rsqrt(f); }
   __device__ __forceinline__ float operator()(float f) { return rsqrtf(f); }
+  __device__ __forceinline__ double2 operator()(double2 f) { return device::dd::frsqrt(f); }
   __device__ __forceinline__ float4 operator()(float4 f) { return device::f4::frsqrt(f); }
 };
 
@@ -73,21 +70,21 @@ __global__ void update_reduce_general(int32_t N, complex_const_ptr A, real_ptr X
   __shared__ typename BlockStore::TempStorage temp_store;
   __shared__ typename BlockReduce::TempStorage temp_reduce;
 
-  complex_t thread_A[ITEMS_PER_THREAD], init_complex = init_load();
-  real_t thread_X[ITEMS_PER_THREAD], init_real = init_load();
+  complex_t thread_A[ITEMS_PER_THREAD];
+  real_t thread_X[ITEMS_PER_THREAD];
   real_pair<real_t> thread_pair[ITEMS_PER_THREAD];
   real_pair_max<real_t> cmp_max;
   minus_norm fma_func;
 
   #pragma unroll
   for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
-    thread_pair[i] = real_pair<real_t>({ init_real, -1 });
+    thread_pair[i] = real_pair<real_t>({ real_t(), -1 });
 
   for (int32_t i = 0; i < N; i += elements) {
     int32_t num_items = min(elements, N - i);
     int32_t thread_loc = threadIdx.x * ITEMS_PER_THREAD + i;
-    BlockLoadA(temp_loadA).Load(&A[i], thread_A, num_items, init_complex);
-    BlockLoadX(temp_loadX).Load(&X[i], thread_X, num_items, init_real);
+    BlockLoadA(temp_loadA).Load(&A[i], thread_A, num_items, complex_t());
+    BlockLoadX(temp_loadX).Load(&X[i], thread_X, num_items, real_t());
 
     #pragma unroll
     for (int32_t j = 0; j < ITEMS_PER_THREAD; ++j) {
@@ -111,39 +108,52 @@ __global__ void update_reduce_general(int32_t N, complex_const_ptr A, real_ptr X
 }
 
 constexpr int32_t block_threads = 8 * 32;
+constexpr int32_t thread_bytes = 32;
 
-void imax_update_double(cudaStream_t stream, int32_t N, const double* A, double* X, int32_t* piv, double* rsq) {
-  constexpr int32_t items_per_thread = 4;
+void internal::Cholesky::imax_update_double(cudaStream_t stream, int32_t N, const double* A, double* X, int32_t* piv, double* rsq) {
+  constexpr int32_t items_per_thread = thread_bytes / sizeof(double);
   update_reduce_general <double, double* __restrict__, double, const double* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (N, A, X, piv, rsq);
 }
 
-void imax_update_float(cudaStream_t stream, int32_t N, const float* A, float* X, int32_t* piv, float* rsq) {
-  constexpr int32_t items_per_thread = 8;
+void internal::Cholesky::imax_update_float(cudaStream_t stream, int32_t N, const float* A, float* X, int32_t* piv, float* rsq) {
+  constexpr int32_t items_per_thread = thread_bytes / sizeof(float);
   update_reduce_general <float, float* __restrict__, float, const float* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (N, A, X, piv, rsq);
 }
 
-void imax_update_float4(cudaStream_t stream, int32_t N, const float4* A, float4* X, int32_t* piv, float4* rsq) {
-  constexpr int32_t items_per_thread = 4;
+void internal::Cholesky::imax_update_double2(cudaStream_t stream, int32_t N, const double2* A, double2* X, int32_t* piv, double2* rsq) {
+  constexpr int32_t items_per_thread = thread_bytes / sizeof(double2);
+  update_reduce_general <double2, double2* __restrict__, double2, const double2* __restrict__, block_threads, items_per_thread>
+    <<< 1, block_threads, 0, stream >>> (N, A, X, piv, rsq);
+}
+
+void internal::Cholesky::imax_update_float4(cudaStream_t stream, int32_t N, const float4* A, float4* X, int32_t* piv, float4* rsq) {
+  constexpr int32_t items_per_thread = thread_bytes / sizeof(float4);
   update_reduce_general <float4, float4* __restrict__, float4, const float4* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (N, A, X, piv, rsq);
 }
 
-void imax_update_double_complex(cudaStream_t stream, int32_t N, const std::complex<double>* A, double* X, int32_t* piv, double* rsq) {
-  constexpr int32_t items_per_thread = 2;
+void internal::Cholesky::imax_update_double_complex(cudaStream_t stream, int32_t N, const std::complex<double>* A, double* X, int32_t* piv, double* rsq) {
+  constexpr int32_t items_per_thread = thread_bytes / sizeof(std::complex<double>);
   update_reduce_general <double, double* __restrict__, cuDoubleComplex, const cuDoubleComplex* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (N, (const cuDoubleComplex*)A, X, piv, rsq);
 }
 
-void imax_update_float_complex(cudaStream_t stream, int32_t N, const std::complex<float>* A, float* X, int32_t* piv, float* rsq) {
-  constexpr int32_t items_per_thread = 4;
+void internal::Cholesky::imax_update_float_complex(cudaStream_t stream, int32_t N, const std::complex<float>* A, float* X, int32_t* piv, float* rsq) {
+  constexpr int32_t items_per_thread = thread_bytes / sizeof(std::complex<float>);
   update_reduce_general <float, float* __restrict__, cuComplex, const cuComplex* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (N, (const cuComplex*)A, X, piv, rsq);
 }
 
-void imax_update_float4_complex(cudaStream_t stream, int32_t N, const complex_float4* A, float4* X, int32_t* piv, float4* rsq) {
-  constexpr int32_t items_per_thread = 1;
+void internal::Cholesky::imax_update_double2_complex(cudaStream_t stream, int32_t N, const complex_double2* A, double2* X, int32_t* piv, double2* rsq) {
+  constexpr int32_t items_per_thread = thread_bytes / sizeof(complex_double2);
+  update_reduce_general <double2, double2* __restrict__, complex_double2, const complex_double2* __restrict__, block_threads, items_per_thread>
+    <<< 1, block_threads, 0, stream >>> (N, A, X, piv, rsq);
+}
+
+void internal::Cholesky::imax_update_float4_complex(cudaStream_t stream, int32_t N, const complex_float4* A, float4* X, int32_t* piv, float4* rsq) {
+  constexpr int32_t items_per_thread = thread_bytes / sizeof(complex_float4);
   update_reduce_general <float4, float4* __restrict__, complex_float4, const complex_float4* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (N, A, X, piv, rsq);
 }

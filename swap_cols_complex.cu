@@ -1,6 +1,7 @@
 
 #include <internal.hpp>
 #include <float4.hpp>
+#include <double_double.hpp>
 
 #include <cub/cub.cuh>
 #include <cuComplex.h>
@@ -8,6 +9,7 @@
 struct conj {
   __device__ __forceinline__ cuDoubleComplex operator()(cuDoubleComplex f) { return make_cuDoubleComplex(f.x, -f.y); }
   __device__ __forceinline__ cuComplex operator()(cuComplex f) { return make_cuComplex(f.x, -f.y); }
+  __device__ __forceinline__ complex_double2 operator()(complex_double2 f) { return device::dd::conj(f); }
   __device__ __forceinline__ complex_float4 operator()(complex_float4 f) { return device::f4::conj(f); }
 };
 
@@ -55,21 +57,28 @@ __global__ void swap_cols_complex(int32_t i, int32_t j, int32_t N, complex_ptr A
 }
 
 constexpr int32_t block_threads = 8 * 32;
+constexpr int32_t thread_bytes = 32;
 
-void swap_cols_double_complex(cudaStream_t stream, int32_t i, int32_t j, int32_t N, std::complex<double>* A, int32_t lda) {
-  constexpr int32_t items_per_thread = 2;
+void internal::Cholesky::swap_cols_double_complex(cudaStream_t stream, int32_t i, int32_t j, int32_t N, std::complex<double>* A, int32_t lda) {
+  constexpr int32_t items_per_thread = thread_bytes / sizeof(std::complex<double>);
   swap_cols_complex <cuDoubleComplex, cuDoubleComplex* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (i, j, N, (cuDoubleComplex*)A, lda);
 }
 
-void swap_cols_float_complex(cudaStream_t stream, int32_t i, int32_t j, int32_t N, std::complex<float>* A, int32_t lda) {
-  constexpr int32_t items_per_thread = 4;
+void internal::Cholesky::swap_cols_float_complex(cudaStream_t stream, int32_t i, int32_t j, int32_t N, std::complex<float>* A, int32_t lda) {
+  constexpr int32_t items_per_thread = thread_bytes / sizeof(std::complex<float>);
   swap_cols_complex <cuComplex, cuComplex* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (i, j, N, (cuComplex*)A, lda);
 }
 
-void swap_cols_float4_complex(cudaStream_t stream, int32_t i, int32_t j, int32_t N, complex_float4* A, int32_t lda) {
-  constexpr int32_t items_per_thread = 1;
+void internal::Cholesky::swap_cols_double2_complex(cudaStream_t stream, int32_t i, int32_t j, int32_t N, complex_double2* A, int32_t lda) {
+  constexpr int32_t items_per_thread = thread_bytes / sizeof(complex_double2);
+  swap_cols_complex <complex_double2, complex_double2* __restrict__, block_threads, items_per_thread>
+    <<< 1, block_threads, 0, stream >>> (i, j, N, A, lda);
+}
+
+void internal::Cholesky::swap_cols_float4_complex(cudaStream_t stream, int32_t i, int32_t j, int32_t N, complex_float4* A, int32_t lda) {
+  constexpr int32_t items_per_thread = thread_bytes / sizeof(complex_float4);
   swap_cols_complex <complex_float4, complex_float4* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (i, j, N, A, lda);
 }

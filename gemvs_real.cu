@@ -1,36 +1,35 @@
 
 #include <internal.hpp>
 #include <float4.hpp>
+#include <double_double.hpp>
 
 #include <cub/cub.cuh>
 
 struct add_real {
   __device__ __forceinline__ double operator()(double a, double b) { return a + b; }
   __device__ __forceinline__ float operator()(float a, float b) { return a + b; }
+  __device__ __forceinline__ double2 operator()(double2 a, double2 b) { return device::dd::add(a, b); }
   __device__ __forceinline__ float4 operator()(float4 a, float4 b) { return device::f4::add(a, b); }
 };
 
 struct minus_a_fma_real {
   __device__ __forceinline__ double operator()(double a, double b, double c) { return fma(-a, b, c); }
   __device__ __forceinline__ float operator()(float a, float b, float c) { return fmaf(-a, b, c); }
+  __device__ __forceinline__ double2 operator()(double2 a, double2 b, double2 c) { return device::dd::fma(device::dd::negate(a), b, c); }
   __device__ __forceinline__ float4 operator()(float4 a, float4 b, float4 c) { return device::f4::fma(device::f4::negate(a), b, c); }
-};
-
-struct init_real {
-  __device__ __forceinline__ operator double() { return 0.; }
-  __device__ __forceinline__ operator float() { return 0.f; }
-  __device__ __forceinline__ operator float4() { return make_float4(0.f, 0.f, 0.f, 0.f); }
 };
 
 struct scal_add_real {
   __device__ __forceinline__ double operator()(double a, double b, double s) { return s * (a + b); }
   __device__ __forceinline__ float operator()(float a, float b, float s) { return s * (a + b); }
+  __device__ __forceinline__ double2 operator()(double2 a, double2 b, double2 s) { 
+    return device::dd::fma(s, device::dd::add(a, b), make_double2(0., 0.)); }
   __device__ __forceinline__ float4 operator()(float4 a, float4 b, float4 s) { 
     return device::f4::fma(s, device::f4::add(a, b), make_float4(0.f, 0.f, 0.f, 0.f)); }
 };
 
-template <class real_t, class real_ptr, class real_const_ptr, int32_t BLOCK_WARPS, int32_t ITEMS_PER_THREAD>
-__global__ void minus_adjAx_plusB_scale_real(real_const_ptr scale, int32_t M, int32_t N, real_const_ptr A, int32_t lda, real_ptr B) {
+template <class real_t, class real_ptr, class real_const_ptr, int32_t GRID_WARPS, int32_t BLOCK_WARPS, int32_t ITEMS_PER_THREAD>
+__global__ void minus_transAx_plusB_scale_real(real_const_ptr scale, int32_t M, int32_t N, real_const_ptr A, int32_t lda, real_ptr B) {
   using WarpLoad = cub::WarpLoad<real_t, ITEMS_PER_THREAD>;
   using WarpReduce = cub::BlockReduce<real_t, 32>;
   constexpr int32_t elements = ITEMS_PER_THREAD * 32;
@@ -41,29 +40,29 @@ __global__ void minus_adjAx_plusB_scale_real(real_const_ptr scale, int32_t M, in
   add_real add_func;
   minus_a_fma_real fma_func;
 
-  real_t thread_A[ITEMS_PER_THREAD], thread_X[ITEMS_PER_THREAD], thread_B[ITEMS_PER_THREAD], init = init_real();
-  int32_t row = blockIdx.x * BLOCK_WARPS + threadIdx.y;
+  real_t threadA[ITEMS_PER_THREAD], threadX[ITEMS_PER_THREAD], threadB[ITEMS_PER_THREAD];
+  int32_t warp_id = int32_t(threadIdx.x) >> 5;
 
-  if (row < M) {
+  for (int32_t row = blockIdx.x * BLOCK_WARPS + warp_id; row < M; row += GRID_WARPS) {
     real_const_ptr A_i = &A[row * lda];
 
     #pragma unroll
     for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
-      thread_B[i] = init;
+      threadB[i] = real_t();
 
     for (int32_t i = 0; i < N; i += elements) {
       int32_t num_items = min(elements, N - i);
-      WarpLoad(temp_loadA[threadIdx.y]).Load(&A_i[i], thread_A, num_items, init);
-      WarpLoad(temp_loadX[threadIdx.y]).Load(&A[i], thread_X, num_items, init);
+      WarpLoad(temp_loadA[warp_id]).Load(&A_i[i], threadA, num_items, real_t());
+      WarpLoad(temp_loadX[warp_id]).Load(&A[i], threadX, num_items, real_t());
 
       #pragma unroll
       for (int32_t j = 0; j < ITEMS_PER_THREAD; ++j)
-        thread_B[j] = fma_func(thread_A[j], thread_X[j], thread_B[j]);
+        threadB[j] = fma_func(threadA[j], threadX[j], threadB[j]);
     }
 
-    real_t warp_res = WarpReduce(temp_reduce[threadIdx.y]).Reduce(thread_B, add_func);
+    real_t warp_res = WarpReduce(temp_reduce[warp_id]).Reduce(threadB, add_func);
 
-    if (threadIdx.x == 0) {
+    if ((threadIdx.x & 31) == 0) {
       scal_add_real scal_func;
 
       real_t res = scal_func(warp_res, B[row], *scale);
@@ -73,28 +72,102 @@ __global__ void minus_adjAx_plusB_scale_real(real_const_ptr scale, int32_t M, in
   }
 }
 
-constexpr int32_t block_warps = 8;
+template <class real_t, class real_ptr, class real_const_ptr, int32_t GRID_WARPS, int32_t BLOCK_WARPS, int32_t ITEMS_PER_THREAD>
+__global__ void minus_transAx_plusB_scale_real_reduce(real_const_ptr scale, int32_t M, int32_t N, real_const_ptr A, int32_t lda, real_ptr B) {
+  constexpr int32_t BLOCK_THREADS = BLOCK_WARPS * 32;
+  constexpr int32_t THREAD_BLOCKS = GRID_WARPS / BLOCK_WARPS;
 
-void minus_transAx_plusB_scale_double(cudaStream_t stream, const double* scale, int32_t M, int32_t N, const double* A, int32_t lda, double* B) {
-  constexpr int32_t items_per_thread = 4;
+  using BlockLoad = cub::BlockLoad<real_t, BLOCK_THREADS, ITEMS_PER_THREAD>;
+  using BlockReduce = cub::BlockReduce<real_t, BLOCK_THREADS>;
+  constexpr int32_t elements = ITEMS_PER_THREAD * BLOCK_THREADS;
 
-  int32_t grid_size = (M + block_warps - 1) / block_warps;
-  minus_adjAx_plusB_scale_real <double, double* __restrict__, const double* __restrict__, block_warps, items_per_thread>
-    <<< grid_size, dim3(32, block_warps, 1), 0, stream >>> (scale, M, N, A, lda, B);
+  __shared__ typename BlockLoad::TempStorage temp_loadA, temp_loadX;
+  __shared__ typename BlockReduce::TempStorage temp_reduce;
+
+  add_real add_func;
+  minus_a_fma_real fma_func;
+
+  real_t threadA[ITEMS_PER_THREAD], threadX[ITEMS_PER_THREAD], threadB[ITEMS_PER_THREAD];
+
+  for (int32_t row = blockIdx.x; row < M; row += THREAD_BLOCKS) {
+    real_const_ptr A_i = &A[row * lda];
+
+    #pragma unroll
+    for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
+      threadB[i] = real_t();
+
+    for (int32_t i = 0; i < N; i += elements) {
+      int32_t num_items = min(elements, N - i);
+      BlockLoad(temp_loadA).Load(&A_i[i], threadA, num_items, real_t());
+      BlockLoad(temp_loadX).Load(&A[i], threadX, num_items, real_t());
+
+      #pragma unroll
+      for (int32_t j = 0; j < ITEMS_PER_THREAD; ++j)
+        threadB[j] = fma_func(threadA[j], threadX[j], threadB[j]);
+    }
+
+    real_t block_res = BlockReduce(temp_reduce).Reduce(threadB, add_func);
+
+    if (threadIdx.x == 0) {
+      scal_add_real scal_func;
+
+      real_t res = scal_func(block_res, B[row], *scale);
+      B[row] = res;
+      B[row * lda] = res;
+    }
+  }
 }
 
-void minus_transAx_plusB_scale_float(cudaStream_t stream, const float* scale, int32_t M, int32_t N, const float* A, int32_t lda, float* B) {
-  constexpr int32_t items_per_thread = 8;
+constexpr int32_t block_warps = 4;
+constexpr int32_t grid_size = 1024;
+constexpr int32_t grid_warps = grid_size * block_warps;
+constexpr int32_t thread_bytes = 32;
 
-  int32_t grid_size = (M + block_warps - 1) / block_warps;
-  minus_adjAx_plusB_scale_real <float, float* __restrict__, const float* __restrict__, block_warps, items_per_thread>
-    <<< grid_size, dim3(32, block_warps, 1), 0, stream >>> (scale, M, N, A, lda, B);
+void internal::Cholesky::minus_transAx_plusB_scale_double(cudaStream_t stream, const double* scale, int32_t M, int32_t N, const double* A, int32_t lda, double* B) {
+  constexpr int32_t items_per_thread = thread_bytes / sizeof(double);
+  constexpr int32_t call_reduce = 64 * block_warps * items_per_thread;
+
+  if (call_reduce <= N)
+    minus_transAx_plusB_scale_real_reduce <double, double* __restrict__, const double* __restrict__, grid_warps, block_warps, items_per_thread>
+      <<< grid_size, block_warps * 32, 0, stream >>> (scale, M, N, A, lda, B);
+  else
+    minus_transAx_plusB_scale_real <double, double* __restrict__, const double* __restrict__, grid_warps, block_warps, items_per_thread>
+      <<< grid_size, block_warps * 32, 0, stream >>> (scale, M, N, A, lda, B);
 }
 
-void minus_transAx_plusB_scale_float4(cudaStream_t stream, const float4* scale, int32_t M, int32_t N, const float4* A, int32_t lda, float4* B) {
-  constexpr int32_t items_per_thread = 2;
+void internal::Cholesky::minus_transAx_plusB_scale_float(cudaStream_t stream, const float* scale, int32_t M, int32_t N, const float* A, int32_t lda, float* B) {
+  constexpr int32_t items_per_thread = thread_bytes / sizeof(float);
+  constexpr int32_t call_reduce = 64 * block_warps * items_per_thread;
 
-  int32_t grid_size = (M + block_warps - 1) / block_warps;
-  minus_adjAx_plusB_scale_real <float4, float4* __restrict__, const float4* __restrict__, block_warps, items_per_thread>
-    <<< grid_size, dim3(32, block_warps, 1), 0, stream >>> (scale, M, N, A, lda, B);
+  if (call_reduce <= N)
+    minus_transAx_plusB_scale_real_reduce <float, float* __restrict__, const float* __restrict__, grid_warps, block_warps, items_per_thread>
+      <<< grid_size, block_warps * 32, 0, stream >>> (scale, M, N, A, lda, B);
+  else
+    minus_transAx_plusB_scale_real <float, float* __restrict__, const float* __restrict__, grid_warps, block_warps, items_per_thread>
+      <<< grid_size, block_warps * 32, 0, stream >>> (scale, M, N, A, lda, B);
 }
+
+void internal::Cholesky::minus_transAx_plusB_scale_double2(cudaStream_t stream, const double2* scale, int32_t M, int32_t N, const double2* A, int32_t lda, double2* B) {
+  constexpr int32_t items_per_thread = thread_bytes / sizeof(double2);
+  constexpr int32_t call_reduce = 64 * block_warps * items_per_thread;
+
+  if (call_reduce <= N)
+    minus_transAx_plusB_scale_real_reduce <double2, double2* __restrict__, const double2* __restrict__, grid_warps, block_warps, items_per_thread>
+      <<< grid_size, block_warps * 32, 0, stream >>> (scale, M, N, A, lda, B);
+  else
+    minus_transAx_plusB_scale_real <double2, double2* __restrict__, const double2* __restrict__, grid_warps, block_warps, items_per_thread>
+      <<< grid_size, block_warps * 32, 0, stream >>> (scale, M, N, A, lda, B);
+}
+
+void internal::Cholesky::minus_transAx_plusB_scale_float4(cudaStream_t stream, const float4* scale, int32_t M, int32_t N, const float4* A, int32_t lda, float4* B) {
+  constexpr int32_t items_per_thread = thread_bytes / sizeof(float4);
+  constexpr int32_t call_reduce = 64 * block_warps * items_per_thread;
+
+  if (call_reduce <= N)
+    minus_transAx_plusB_scale_real_reduce <float4, float4* __restrict__, const float4* __restrict__, grid_warps, block_warps, items_per_thread>
+      <<< grid_size, block_warps * 32, 0, stream >>> (scale, M, N, A, lda, B);
+  else
+    minus_transAx_plusB_scale_real <float4, float4* __restrict__, const float4* __restrict__, grid_warps, block_warps, items_per_thread>
+      <<< grid_size, block_warps * 32, 0, stream >>> (scale, M, N, A, lda, B);
+}
+

@@ -1,6 +1,7 @@
 
 #include <internal.hpp>
 #include <float4.hpp>
+#include <double_double.hpp>
 
 #include <cub/cub.cuh>
 
@@ -45,23 +46,29 @@ __global__ void swap_cols_real(int32_t i, int32_t j, int32_t N, real_ptr A, int3
   }
 }
 
-void swap_cols_double(cudaStream_t stream, int32_t i, int32_t j, int32_t N, double* A, int32_t lda) {
-  constexpr int32_t block_threads = 8 * 32;
-  constexpr int32_t items_per_thread = 4;
+constexpr int32_t block_threads = 8 * 32;
+constexpr int32_t thread_bytes = 32;
+
+void internal::Cholesky::swap_cols_double(cudaStream_t stream, int32_t i, int32_t j, int32_t N, double* A, int32_t lda) {
+  constexpr int32_t items_per_thread = thread_bytes / sizeof(double);
   swap_cols_real <double, double* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (i, j, N, A, lda);
 }
 
-void swap_cols_float(cudaStream_t stream, int32_t i, int32_t j, int32_t N, float* A, int32_t lda) {
-  constexpr int32_t block_threads = 8 * 32;
-  constexpr int32_t items_per_thread = 8;
+void internal::Cholesky::swap_cols_float(cudaStream_t stream, int32_t i, int32_t j, int32_t N, float* A, int32_t lda) {
+  constexpr int32_t items_per_thread = thread_bytes / sizeof(float);
   swap_cols_real <float, float* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (i, j, N, A, lda);
 }
 
-void swap_cols_float4(cudaStream_t stream, int32_t i, int32_t j, int32_t N, float4* A, int32_t lda) {
-  constexpr int32_t block_threads = 8 * 32;
-  constexpr int32_t items_per_thread = 2;
+void internal::Cholesky::swap_cols_double2(cudaStream_t stream, int32_t i, int32_t j, int32_t N, double2* A, int32_t lda) {
+  constexpr int32_t items_per_thread = thread_bytes / sizeof(double2);
+  swap_cols_real <double2, double2* __restrict__, block_threads, items_per_thread>
+    <<< 1, block_threads, 0, stream >>> (i, j, N, A, lda);
+}
+
+void internal::Cholesky::swap_cols_float4(cudaStream_t stream, int32_t i, int32_t j, int32_t N, float4* A, int32_t lda) {
+  constexpr int32_t items_per_thread = thread_bytes / sizeof(float4);
   swap_cols_real <float4, float4* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (i, j, N, A, lda);
 }
