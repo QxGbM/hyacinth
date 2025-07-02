@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <complex>
 #include <cuda_runtime_api.h>
+#include <double_double.hpp>
 #include <float4.hpp>
 
 int32_t align_up(

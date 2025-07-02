@@ -4,6 +4,7 @@
 #include <complex>
 #include <cuda_runtime_api.h>
 
+struct complex_double2;
 struct complex_float4;
 
 void imax_double(cudaStream_t stream, int32_t N, double* X, int32_t* piv, double* rsq);
@@ -33,6 +34,8 @@ void minus_transAx_plusB_scale_float4(cudaStream_t stream, const float4* scale, 
 void minus_adjAx_plusB_scale_double_complex(cudaStream_t stream, const double* scale, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, std::complex<double>* B);
 
 void minus_adjAx_plusB_scale_float_complex(cudaStream_t stream, const float* scale, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, std::complex<float>* B);
+
+void minus_adjAx_plusB_scale_double2_complex(cudaStream_t stream, const double2* scale, int32_t M, int32_t N, const complex_double2* A, int32_t lda, complex_double2* B);
 
 void minus_adjAx_plusB_scale_float4_complex(cudaStream_t stream, const float4* scale, int32_t M, int32_t N, const complex_float4* A, int32_t lda, complex_float4* B);
 

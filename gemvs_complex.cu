@@ -1,6 +1,7 @@
 
 #include <internal.hpp>
 #include <float4.hpp>
+#include <double_double.hpp>
 
 #include <cuComplex.h>
 #include <cub/cub.cuh>
@@ -8,6 +9,7 @@
 struct add_complex {
   __device__ __forceinline__ cuDoubleComplex operator()(cuDoubleComplex a, cuDoubleComplex b) { return make_cuDoubleComplex(a.x + b.x, a.y + b.y); }
   __device__ __forceinline__ cuComplex operator()(cuComplex a, cuComplex b) { return make_cuComplex(a.x + b.x, a.y + b.y); }
+  __device__ __forceinline__ complex_double2 operator()(complex_double2 a, complex_double2 b) { return device::dd::add(a, b); }
   __device__ __forceinline__ complex_float4 operator()(complex_float4 a, complex_float4 b) { return device::f4::add(a, b); }
 };
 
@@ -16,6 +18,8 @@ struct minus_conj_a_fma_complex {
     return make_cuDoubleComplex(fma(-a.x, b.x, fma(-a.y, b.y, c.x)), fma(-a.x, b.y, fma(a.y, b.x, c.y))); }
   __device__ __forceinline__ cuComplex operator()(cuComplex a, cuComplex b, cuComplex c) {
     return make_cuComplex(fmaf(-a.x, b.x, fmaf(-a.y, b.y, c.x)), fmaf(-a.x, b.y, fmaf(a.y, b.x, c.y))); }
+  __device__ __forceinline__ complex_double2 operator()(complex_double2 a, complex_double2 b, complex_double2 c) { 
+    return device::dd::fma(device::dd::make_complex_double2(device::dd::negate(a.real), a.imag), b, c); }
   __device__ __forceinline__ complex_float4 operator()(complex_float4 a, complex_float4 b, complex_float4 c) { 
     return device::f4::fma(device::f4::make_complex_float4(device::f4::negate(a.real), a.imag), b, c); }
 };
@@ -23,19 +27,25 @@ struct minus_conj_a_fma_complex {
 struct init_complex {
   __device__ __forceinline__ operator cuDoubleComplex() { return make_cuDoubleComplex(0., 0.); }
   __device__ __forceinline__ operator cuComplex() { return make_cuComplex(0.f, 0.f); }
+  __device__ __forceinline__ operator complex_double2() { return device::dd::make_complex_double2(make_double2(0., 0.), make_double2(0., 0.)); }
   __device__ __forceinline__ operator complex_float4() { return device::f4::make_complex_float4(make_float4(0.f, 0.f, 0.f, 0.f), make_float4(0.f, 0.f, 0.f, 0.f)); }
 };
 
-struct scal_complex {
-  __device__ __forceinline__ cuDoubleComplex operator()(cuDoubleComplex a, double b) { return make_cuDoubleComplex(a.x * b, a.y * b); }
-  __device__ __forceinline__ cuComplex operator()(cuComplex a, float b) { return make_cuComplex(a.x * b, a.y * b); }
-  __device__ __forceinline__ complex_float4 operator()(complex_float4 a, float4 b) {
-    return device::f4::make_complex_float4(device::f4::fma(a.real, b, make_float4(0.f, 0.f, 0.f, 0.f)), device::f4::fma(a.imag, b, make_float4(0.f, 0.f, 0.f, 0.f))); }
+struct scal_add_complex {
+  __device__ __forceinline__ cuDoubleComplex operator()(cuDoubleComplex a, cuDoubleComplex b, double s) { return make_cuDoubleComplex(s * (a.x + b.x), s * (a.y + b.y)); }
+  __device__ __forceinline__ cuComplex operator()(cuComplex a, cuComplex b, float s) { return make_cuComplex(s * (a.x + b.x), s * (a.y + b.y)); }
+  __device__ __forceinline__ complex_double2 operator()(complex_double2 a, complex_double2 b, double2 s) { 
+    return device::dd::make_complex_double2(device::dd::fma(s, device::dd::add(a.real, b.real), make_double2(0., 0.)), 
+      device::dd::fma(s, device::dd::add(a.imag, b.imag), make_double2(0., 0.))); }
+  __device__ __forceinline__ complex_float4 operator()(complex_float4 a, complex_float4 b, float4 s) { 
+    return device::f4::make_complex_float4(device::f4::fma(s, device::f4::add(a.real, b.real), make_float4(0.f, 0.f, 0.f, 0.f)), 
+      device::f4::fma(s, device::f4::add(a.imag, b.imag), make_float4(0.f, 0.f, 0.f, 0.f))); }
 };
 
 struct conj {
   __device__ __forceinline__ cuDoubleComplex operator()(cuDoubleComplex f) { return make_cuDoubleComplex(f.x, -f.y); }
   __device__ __forceinline__ cuComplex operator()(cuComplex f) { return make_cuComplex(f.x, -f.y); }
+  __device__ __forceinline__ complex_double2 operator()(complex_double2 f) { return device::dd::conj(f); }
   __device__ __forceinline__ complex_float4 operator()(complex_float4 f) { return device::f4::conj(f); }
 };
 
@@ -51,7 +61,7 @@ __global__ void minus_adjAx_plusB_scale_complex(real_const_ptr scale, int32_t M,
   add_complex add_func;
   minus_conj_a_fma_complex fma_func;
 
-  complex_t thread_A[ITEMS_PER_THREAD], thread_X[ITEMS_PER_THREAD], thread_B[ITEMS_PER_THREAD], init = init_complex();
+  complex_t threadA[ITEMS_PER_THREAD], threadX[ITEMS_PER_THREAD], threadB[ITEMS_PER_THREAD], init = init_complex();
   int32_t warp_id = int32_t(threadIdx.x) >> 5;
 
   for (int32_t row = blockIdx.x * BLOCK_WARPS + warp_id; row < M; row += GRID_WARPS) {
@@ -59,25 +69,25 @@ __global__ void minus_adjAx_plusB_scale_complex(real_const_ptr scale, int32_t M,
 
     #pragma unroll
     for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
-      thread_B[i] = init;
+      threadB[i] = init;
 
     for (int32_t i = 0; i < N; i += elements) {
       int32_t num_items = min(elements, N - i);
-      WarpLoad(temp_loadA[warp_id]).Load(&A_i[i], thread_A, num_items, init);
-      WarpLoad(temp_loadX[warp_id]).Load(&A[i], thread_X, num_items, init);
+      WarpLoad(temp_loadA[warp_id]).Load(&A_i[i], threadA, num_items, init);
+      WarpLoad(temp_loadX[warp_id]).Load(&A[i], threadX, num_items, init);
 
       #pragma unroll
       for (int32_t j = 0; j < ITEMS_PER_THREAD; ++j)
-        thread_B[j] = fma_func(thread_A[j], thread_X[j], thread_B[j]);
+        threadB[j] = fma_func(threadA[j], threadX[j], threadB[j]);
     }
 
-    complex_t warp_res = WarpReduce(temp_reduce[warp_id]).Reduce(thread_B, add_func);
+    complex_t warp_res = WarpReduce(temp_reduce[warp_id]).Reduce(threadB, add_func);
 
     if ((threadIdx.x & 31) == 0) {
-      scal_complex scal_func;
+      scal_add_complex scal_func;
       conj conj_func;
 
-      complex_t res = scal_func(add_func(warp_res, B[row]), *scale);
+      complex_t res = scal_func(warp_res, B[row], *scale);
       B[row] = res;
       B[row * lda] = conj_func(res);
     }
@@ -99,32 +109,32 @@ __global__ void minus_adjAx_plusB_scale_complex_reduce(real_const_ptr scale, int
   add_complex add_func;
   minus_conj_a_fma_complex fma_func;
 
-  complex_t thread_A[ITEMS_PER_THREAD], thread_X[ITEMS_PER_THREAD], thread_B[ITEMS_PER_THREAD], init = init_complex();
+  complex_t threadA[ITEMS_PER_THREAD], threadX[ITEMS_PER_THREAD], threadB[ITEMS_PER_THREAD], init = init_complex();
 
   for (int32_t row = blockIdx.x; row < M; row += THREAD_BLOCKS) {
     complex_const_ptr A_i = &A[row * lda];
 
     #pragma unroll
     for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
-      thread_B[i] = init;
+      threadB[i] = init;
 
     for (int32_t i = 0; i < N; i += elements) {
       int32_t num_items = min(elements, N - i);
-      BlockLoad(temp_loadA).Load(&A_i[i], thread_A, num_items, init);
-      BlockLoad(temp_loadX).Load(&A[i], thread_X, num_items, init);
+      BlockLoad(temp_loadA).Load(&A_i[i], threadA, num_items, init);
+      BlockLoad(temp_loadX).Load(&A[i], threadX, num_items, init);
 
       #pragma unroll
       for (int32_t j = 0; j < ITEMS_PER_THREAD; ++j)
-        thread_B[j] = fma_func(thread_A[j], thread_X[j], thread_B[j]);
+        threadB[j] = fma_func(threadA[j], threadX[j], threadB[j]);
     }
 
-    complex_t block_res = BlockReduce(temp_reduce).Reduce(thread_B, add_func);
+    complex_t block_res = BlockReduce(temp_reduce).Reduce(threadB, add_func);
 
     if (threadIdx.x == 0) {
-      scal_complex scal_func;
+      scal_add_complex scal_func;
       conj conj_func;
 
-      complex_t res = scal_func(add_func(block_res, B[row]), *scale);
+      complex_t res = scal_func(block_res, B[row], *scale);
       B[row] = res;
       B[row * lda] = conj_func(res);
     }
@@ -162,6 +172,20 @@ void minus_adjAx_plusB_scale_float_complex(cudaStream_t stream, const float* sca
     minus_adjAx_plusB_scale_complex <float, float* __restrict__, const float* __restrict__,
       cuComplex, cuComplex* __restrict__, const cuComplex* __restrict__, grid_warps, block_warps, items_per_thread>
       <<< grid_size, block_warps * 32, 0, stream >>> (scale, M, N, (const cuComplex*)A, lda, (cuComplex*)B);
+}
+
+void minus_adjAx_plusB_scale_double2_complex(cudaStream_t stream, const double2* scale, int32_t M, int32_t N, const complex_double2* A, int32_t lda, complex_double2* B) {
+  constexpr int32_t items_per_thread = thread_bytes / sizeof(complex_double2);
+  constexpr int32_t call_reduce = 64 * block_warps * items_per_thread;
+
+  if (call_reduce <= N)
+    minus_adjAx_plusB_scale_complex_reduce <double2, double2* __restrict__, const double2* __restrict__,
+      complex_double2, complex_double2* __restrict__, const complex_double2* __restrict__, grid_warps, block_warps, items_per_thread>
+      <<< grid_size, block_warps * 32, 0, stream >>> (scale, M, N, A, lda, B);
+  else
+    minus_adjAx_plusB_scale_complex <double2, double2* __restrict__, const double2* __restrict__,
+      complex_double2, complex_double2* __restrict__, const complex_double2* __restrict__, grid_warps, block_warps, items_per_thread>
+      <<< grid_size, block_warps * 32, 0, stream >>> (scale, M, N, A, lda, B);
 }
 
 void minus_adjAx_plusB_scale_float4_complex(cudaStream_t stream, const float4* scale, int32_t M, int32_t N, const complex_float4* A, int32_t lda, complex_float4* B) {

@@ -22,10 +22,11 @@ struct init_real {
   __device__ __forceinline__ operator float4() { return make_float4(0.f, 0.f, 0.f, 0.f); }
 };
 
-struct scal_real {
-  __device__ __forceinline__ double operator()(double a, double b) { return a * b; }
-  __device__ __forceinline__ float operator()(float a, float b) { return a * b; }
-  __device__ __forceinline__ float4 operator()(float4 a, float4 b) { return device::f4::fma(a, b, make_float4(0.f, 0.f, 0.f, 0.f)); }
+struct scal_add_real {
+  __device__ __forceinline__ double operator()(double a, double b, double s) { return s * (a + b); }
+  __device__ __forceinline__ float operator()(float a, float b, float s) { return s * (a + b); }
+  __device__ __forceinline__ float4 operator()(float4 a, float4 b, float4 s) { 
+    return device::f4::fma(s, device::f4::add(a, b), make_float4(0.f, 0.f, 0.f, 0.f)); }
 };
 
 template <class real_t, class real_ptr, class real_const_ptr, int32_t BLOCK_WARPS, int32_t ITEMS_PER_THREAD>
@@ -63,9 +64,9 @@ __global__ void minus_adjAx_plusB_scale_real(real_const_ptr scale, int32_t M, in
     real_t warp_res = WarpReduce(temp_reduce[threadIdx.y]).Reduce(thread_B, add_func);
 
     if (threadIdx.x == 0) {
-      scal_real scal_func;
+      scal_add_real scal_func;
 
-      real_t res = scal_func(add_func(warp_res, B[row]), *scale);
+      real_t res = scal_func(warp_res, B[row], *scale);
       B[row] = res;
       B[row * lda] = res;
     }

@@ -57,7 +57,7 @@ template <class real_t> struct real_pair_max {
 struct rsqrt_real {
   __device__ __forceinline__ double operator()(double f) { return rsqrt(f); }
   __device__ __forceinline__ float operator()(float f) { return rsqrtf(f); }
-  __device__ __forceinline__ float4 operator()(float4 f) { return device::f4::rsqrt(f); }
+  __device__ __forceinline__ float4 operator()(float4 f) { return device::f4::frsqrt(f); }
 };
 
 template <class real_t, class real_ptr, class complex_t, class complex_const_ptr, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD>
