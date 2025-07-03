@@ -1,6 +1,6 @@
 
 #include <internal.hpp>
-#include <float4.hpp>
+#include <quad_float.hpp>
 #include <double_double.hpp>
 
 #include <cub/cub.cuh>
@@ -9,14 +9,14 @@ struct add_real {
   __device__ __forceinline__ double operator()(double a, double b) { return a + b; }
   __device__ __forceinline__ float operator()(float a, float b) { return a + b; }
   __device__ __forceinline__ double2 operator()(double2 a, double2 b) { return device::dd::add(a, b); }
-  __device__ __forceinline__ float4 operator()(float4 a, float4 b) { return device::f4::add(a, b); }
+  __device__ __forceinline__ float4 operator()(float4 a, float4 b) { return device::qf::add(a, b); }
 };
 
 struct minus_a_fma_real {
   __device__ __forceinline__ double operator()(double a, double b, double c) { return fma(-a, b, c); }
   __device__ __forceinline__ float operator()(float a, float b, float c) { return fmaf(-a, b, c); }
   __device__ __forceinline__ double2 operator()(double2 a, double2 b, double2 c) { return device::dd::fma(device::dd::negate(a), b, c); }
-  __device__ __forceinline__ float4 operator()(float4 a, float4 b, float4 c) { return device::f4::fma(device::f4::negate(a), b, c); }
+  __device__ __forceinline__ float4 operator()(float4 a, float4 b, float4 c) { return device::qf::fma(device::qf::negate(a), b, c); }
 };
 
 struct scal_add_real {
@@ -25,7 +25,7 @@ struct scal_add_real {
   __device__ __forceinline__ double2 operator()(double2 a, double2 b, double2 s) { 
     return device::dd::fma(s, device::dd::add(a, b), make_double2(0., 0.)); }
   __device__ __forceinline__ float4 operator()(float4 a, float4 b, float4 s) { 
-    return device::f4::fma(s, device::f4::add(a, b), make_float4(0.f, 0.f, 0.f, 0.f)); }
+    return device::qf::fma(s, device::qf::add(a, b), make_float4(0.f, 0.f, 0.f, 0.f)); }
 };
 
 template <class real_t, class real_ptr, class real_const_ptr, int32_t GRID_WARPS, int32_t BLOCK_WARPS, int32_t ITEMS_PER_THREAD>

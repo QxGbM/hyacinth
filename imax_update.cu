@@ -1,6 +1,6 @@
 
 #include <internal.hpp>
-#include <float4.hpp>
+#include <quad_float.hpp>
 #include <double_double.hpp>
 
 #include <cub/cub.cuh>
@@ -10,7 +10,7 @@ struct minus_norm {
   __device__ __forceinline__ double operator()(double a, double c) { return fma(-a, a, c); }
   __device__ __forceinline__ float operator()(float a, float c) { return fmaf(-a, a, c); }
   __device__ __forceinline__ double2 operator()(double2 a, double2 c) { return device::dd::fma(device::dd::negate(a), a, c); }
-  __device__ __forceinline__ float4 operator()(float4 a, float4 c) { return device::f4::fma(device::f4::negate(a), a, c); }
+  __device__ __forceinline__ float4 operator()(float4 a, float4 c) { return device::qf::fma(device::qf::negate(a), a, c); }
 
   __device__ __forceinline__ double operator()(cuDoubleComplex a, double c) {
     return fma(-a.x, a.x, fma(-a.y, a.y, c)); }
@@ -19,7 +19,7 @@ struct minus_norm {
   __device__ __forceinline__ double2 operator()(complex_double2 a, double2 c) { 
     return device::dd::fma(device::dd::negate(a.real), a.real, device::dd::fma(device::dd::negate(a.imag), a.imag, c)); }
   __device__ __forceinline__ float4 operator()(complex_float4 a, float4 c) { 
-    return device::f4::fma(device::f4::negate(a.real), a.real, device::f4::fma(device::f4::negate(a.imag), a.imag, c)); }
+    return device::qf::fma(device::qf::negate(a.real), a.real, device::qf::fma(device::qf::negate(a.imag), a.imag, c)); }
 };
 
 template <class real_t> struct real_pair {
@@ -32,14 +32,14 @@ template <class real_t> struct real_pair_max {
     __device__ __forceinline__ bool operator()(double a, double b) { return a < b; }
     __device__ __forceinline__ bool operator()(float a, float b) { return a < b; }
     __device__ __forceinline__ bool operator()(double2 a, double2 b) { return device::dd::a_less_than_b(a, b); }
-    __device__ __forceinline__ bool operator()(float4 a, float4 b) { return device::f4::a_less_than_b(a, b); }
+    __device__ __forceinline__ bool operator()(float4 a, float4 b) { return device::qf::a_less_than_b(a, b); }
   };
 
   struct eq_real {
     __device__ __forceinline__ bool operator()(double a, double b) { return a == b; }
     __device__ __forceinline__ bool operator()(float a, float b) { return a == b; }
     __device__ __forceinline__ bool operator()(double2 a, double2 b) { return device::dd::a_eq_to_b(a, b); }
-    __device__ __forceinline__ bool operator()(float4 a, float4 b) { return device::f4::a_eq_to_b(a, b); }
+    __device__ __forceinline__ bool operator()(float4 a, float4 b) { return device::qf::a_eq_to_b(a, b); }
   };
 
   __device__ __forceinline__ real_pair<real_t> operator()(real_pair<real_t> e1, real_pair<real_t> e2) const {
@@ -54,7 +54,7 @@ struct rsqrt_real {
   __device__ __forceinline__ double operator()(double f) { return rsqrt(f); }
   __device__ __forceinline__ float operator()(float f) { return rsqrtf(f); }
   __device__ __forceinline__ double2 operator()(double2 f) { return device::dd::frsqrt(f); }
-  __device__ __forceinline__ float4 operator()(float4 f) { return device::f4::frsqrt(f); }
+  __device__ __forceinline__ float4 operator()(float4 f) { return device::qf::frsqrt(f); }
 };
 
 template <class real_t, class real_ptr, class complex_t, class complex_const_ptr, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD>

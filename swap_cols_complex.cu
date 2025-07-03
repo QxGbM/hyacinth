@@ -1,6 +1,6 @@
 
 #include <internal.hpp>
-#include <float4.hpp>
+#include <quad_float.hpp>
 #include <double_double.hpp>
 
 #include <cub/cub.cuh>
@@ -10,7 +10,7 @@ struct conj {
   __device__ __forceinline__ cuDoubleComplex operator()(cuDoubleComplex f) { return make_cuDoubleComplex(f.x, -f.y); }
   __device__ __forceinline__ cuComplex operator()(cuComplex f) { return make_cuComplex(f.x, -f.y); }
   __device__ __forceinline__ complex_double2 operator()(complex_double2 f) { return device::dd::conj(f); }
-  __device__ __forceinline__ complex_float4 operator()(complex_float4 f) { return device::f4::conj(f); }
+  __device__ __forceinline__ complex_float4 operator()(complex_float4 f) { return device::qf::conj(f); }
 };
 
 template <class complex_t, class complex_ptr, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD>

@@ -1,6 +1,6 @@
 
 #include <internal.hpp>
-#include <float4.hpp>
+#include <quad_float.hpp>
 #include <double_double.hpp>
 
 #include <cub/cub.cuh>

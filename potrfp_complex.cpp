@@ -86,7 +86,45 @@ int32_t cpotrfp_gpu(cudaStream_t stream, int32_t N, std::complex<float>* A, int3
   return 0;
 }
 
-int32_t complex_float4_potrfp_gpu(cudaStream_t stream, int32_t N, complex_float4* A, int32_t lda, int32_t* ipiv) {
+int32_t complex_double_double_potrfp_gpu(cudaStream_t stream, int32_t N, complex_double2* A, int32_t lda, int32_t* ipiv) {
+  std::vector<int32_t> pivots(N);
+  std::iota(pivots.begin(), pivots.end(), 1);
+  pinned_space<double2>* work;
+  cudaMallocHost((void**)&work, sizeof(pinned_space<double2>));
+  int32_t* pivot = &(work->pivot);
+  double2* scale = &(work->scale);
+
+  double2* diag = (double2*)(&A[N * lda]);
+  cudaMemcpy2DAsync(diag, sizeof(double2), A, (2 * lda + 2) * sizeof(double2), sizeof(double2), N, cudaMemcpyDeviceToDevice, stream);
+
+  for (int32_t i = 0; i < N; ++i) {
+    if (0 < i)
+      internal::Cholesky::imax_update_double2_complex(stream, N - i, &A[i + (i - 1) * lda], &diag[i], pivot, scale);
+    else
+      internal::Cholesky::imax_double2(stream, N - i, &diag[i], pivot, scale);
+    cudaStreamSynchronize(stream);
+
+    if (!host::dd::isnormal(*scale)) {
+      cudaMemcpy(ipiv, pivots.data(), N * sizeof(int32_t), cudaMemcpyDefault);
+      cudaFreeHost(work);
+      return i + 1;
+    }
+
+    if (0 < *pivot) {
+      int32_t j = *pivot + i;
+      std::iter_swap(&pivots[i], &pivots[j]);
+      internal::Cholesky::swap_cols_double2_complex(stream, i, j, N, A, lda);
+    }
+    internal::Cholesky::minus_adjAx_plusB_scale_double2_complex(stream, scale, N - i, i, &A[i * lda], lda, &A[i * (lda + 1)]);
+  }
+
+  cudaStreamSynchronize(stream);
+  cudaMemcpy(ipiv, pivots.data(), N * sizeof(int32_t), cudaMemcpyDefault);
+  cudaFreeHost(work);
+  return 0;
+}
+
+int32_t complex_quad_float_potrfp_gpu(cudaStream_t stream, int32_t N, complex_float4* A, int32_t lda, int32_t* ipiv) {
   std::vector<int32_t> pivots(N);
   std::iota(pivots.begin(), pivots.end(), 1);
   pinned_space<float4>* work;
@@ -104,7 +142,7 @@ int32_t complex_float4_potrfp_gpu(cudaStream_t stream, int32_t N, complex_float4
       internal::Cholesky::imax_float4(stream, N - i, &diag[i], pivot, scale);
     cudaStreamSynchronize(stream);
 
-    if (!host::f4::isnormal(*scale)) {
+    if (!host::qf::isnormal(*scale)) {
       cudaMemcpy(ipiv, pivots.data(), N * sizeof(int32_t), cudaMemcpyDefault);
       cudaFreeHost(work);
       return i + 1;

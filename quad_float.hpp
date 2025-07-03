@@ -10,7 +10,7 @@ struct complex_float4 {
 };
 
 #ifdef __CUDACC__
-namespace device::f4 {
+namespace device::qf {
   __device__ __forceinline__ complex_float4 make_complex_float4(float4 real, float4 imag) {
     return complex_float4({ real, imag });
   }
@@ -152,7 +152,7 @@ namespace device::f4 {
 };
 #endif
 
-namespace host::f4 {
+namespace host::qf {
   inline complex_float4 make_complex_float4(float4 real, float4 imag) {
     return complex_float4({ real, imag });
   }

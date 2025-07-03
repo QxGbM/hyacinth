@@ -1,6 +1,6 @@
 
 #include <internal.hpp>
-#include <float4.hpp>
+#include <quad_float.hpp>
 #include <double_double.hpp>
 
 #include <cuComplex.h>
@@ -10,7 +10,7 @@ struct add_complex {
   __device__ __forceinline__ cuDoubleComplex operator()(cuDoubleComplex a, cuDoubleComplex b) { return make_cuDoubleComplex(a.x + b.x, a.y + b.y); }
   __device__ __forceinline__ cuComplex operator()(cuComplex a, cuComplex b) { return make_cuComplex(a.x + b.x, a.y + b.y); }
   __device__ __forceinline__ complex_double2 operator()(complex_double2 a, complex_double2 b) { return device::dd::add(a, b); }
-  __device__ __forceinline__ complex_float4 operator()(complex_float4 a, complex_float4 b) { return device::f4::add(a, b); }
+  __device__ __forceinline__ complex_float4 operator()(complex_float4 a, complex_float4 b) { return device::qf::add(a, b); }
 };
 
 struct minus_conj_a_fma_complex {
@@ -21,7 +21,7 @@ struct minus_conj_a_fma_complex {
   __device__ __forceinline__ complex_double2 operator()(complex_double2 a, complex_double2 b, complex_double2 c) { 
     return device::dd::fma(device::dd::make_complex_double2(device::dd::negate(a.real), a.imag), b, c); }
   __device__ __forceinline__ complex_float4 operator()(complex_float4 a, complex_float4 b, complex_float4 c) { 
-    return device::f4::fma(device::f4::make_complex_float4(device::f4::negate(a.real), a.imag), b, c); }
+    return device::qf::fma(device::qf::make_complex_float4(device::qf::negate(a.real), a.imag), b, c); }
 };
 
 struct scal_add_complex {
@@ -31,15 +31,15 @@ struct scal_add_complex {
     return device::dd::make_complex_double2(device::dd::fma(s, device::dd::add(a.real, b.real), make_double2(0., 0.)), 
       device::dd::fma(s, device::dd::add(a.imag, b.imag), make_double2(0., 0.))); }
   __device__ __forceinline__ complex_float4 operator()(complex_float4 a, complex_float4 b, float4 s) { 
-    return device::f4::make_complex_float4(device::f4::fma(s, device::f4::add(a.real, b.real), make_float4(0.f, 0.f, 0.f, 0.f)), 
-      device::f4::fma(s, device::f4::add(a.imag, b.imag), make_float4(0.f, 0.f, 0.f, 0.f))); }
+    return device::qf::make_complex_float4(device::qf::fma(s, device::qf::add(a.real, b.real), make_float4(0.f, 0.f, 0.f, 0.f)), 
+      device::qf::fma(s, device::qf::add(a.imag, b.imag), make_float4(0.f, 0.f, 0.f, 0.f))); }
 };
 
 struct conj {
   __device__ __forceinline__ cuDoubleComplex operator()(cuDoubleComplex f) { return make_cuDoubleComplex(f.x, -f.y); }
   __device__ __forceinline__ cuComplex operator()(cuComplex f) { return make_cuComplex(f.x, -f.y); }
   __device__ __forceinline__ complex_double2 operator()(complex_double2 f) { return device::dd::conj(f); }
-  __device__ __forceinline__ complex_float4 operator()(complex_float4 f) { return device::f4::conj(f); }
+  __device__ __forceinline__ complex_float4 operator()(complex_float4 f) { return device::qf::conj(f); }
 };
 
 template <class real_t, class real_ptr, class real_const_ptr, class complex_t, class complex_ptr, class complex_const_ptr, int32_t GRID_WARPS, int32_t BLOCK_WARPS, int32_t ITEMS_PER_THREAD>
