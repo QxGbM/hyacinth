@@ -56,15 +56,6 @@ namespace device::dd {
     return add(add(c, p), ffma2(a, b, negate(p)));
   }
 
-  __device__ __forceinline__ bool a_less_than_b(double2 a, double2 b) {
-    b = add(negate(a), b);
-    return 0. < b.x;
-  }
-
-  __device__ __forceinline__ bool a_eq_to_b(double2 a, double2 b) {
-    return (a.x == b.x) && (a.y == b.y);
-  }
-
   __device__ __forceinline__ double2 fscalbn2(double2 a, int32_t exp) {
     return make_double2(scalbn(a.x, exp), scalbn(a.y, exp));
   }

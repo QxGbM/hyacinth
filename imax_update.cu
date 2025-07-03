@@ -6,6 +6,42 @@
 #include <cub/cub.cuh>
 #include <cuComplex.h>
 
+template <class real_t> struct real_pair { real_t real; int32_t idx; };
+
+template <class real_t> struct real_pair_max {
+  struct cmp_less_w_parity {
+    __device__ __forceinline__ void operator()(double a, double b, bool& less, bool& par) {
+      less = a < b; par = a == b; }
+    __device__ __forceinline__ void operator()(float a, float b, bool& less, bool& par) {
+      less = a < b; par = a == b; }
+    __device__ __forceinline__ void operator()(double2 a, double2 b, bool& less, bool& par) {
+      bool l1 = a.x < b.x, l2 = a.y < b.y;
+      bool p1 = a.x == b.x;
+      less = l1 || (p1 && l2); par = p1 && (a.y == b.y); 
+    }
+    __device__ __forceinline__ void operator()(float4 a, float4 b, bool& less, bool& par) {
+      bool l1 = a.x < b.x, l2 = a.y < b.y, l3 = a.z < b.z, l4 = a.w < b.w;
+      bool p1 = a.x == b.x, p2 = p1 && (a.y == b.y), p3 = p2 && (a.z == b.z);
+      less = l1 || (p1 && l2) || (p2 && l3) || (p3 && l4); par = p3 && (a.w == b.w);
+    }
+  };
+
+  __device__ __forceinline__ real_pair<real_t> operator()(real_pair<real_t> e1, real_pair<real_t> e2) const {
+    cmp_less_w_parity cmp_func; bool less, par;
+    cmp_func(e1.real, e2.real, less, par);
+    real_pair<real_t> val = less ? e2 : e1;
+    int32_t id_tie = min(e1.idx, e2.idx);
+    return real_pair<real_t>({ val.real, par ? id_tie : val.idx });
+  }
+};
+
+struct rsqrt_real {
+  __device__ __forceinline__ double operator()(double f) { return rsqrt(f); }
+  __device__ __forceinline__ float operator()(float f) { return rsqrtf(f); }
+  __device__ __forceinline__ double2 operator()(double2 f) { return device::dd::frsqrt(f); }
+  __device__ __forceinline__ float4 operator()(float4 f) { return device::qf::frsqrt(f); }
+};
+
 struct minus_norm {
   __device__ __forceinline__ double operator()(double a, double c) { return fma(-a, a, c); }
   __device__ __forceinline__ float operator()(float a, float c) { return fmaf(-a, a, c); }
@@ -20,41 +56,6 @@ struct minus_norm {
     return device::dd::fma(device::dd::negate(a.real), a.real, device::dd::fma(device::dd::negate(a.imag), a.imag, c)); }
   __device__ __forceinline__ float4 operator()(complex_float4 a, float4 c) { 
     return device::qf::fma(device::qf::negate(a.real), a.real, device::qf::fma(device::qf::negate(a.imag), a.imag, c)); }
-};
-
-template <class real_t> struct real_pair {
-  real_t first;
-  int32_t second;
-};
-
-template <class real_t> struct real_pair_max {
-  struct less_real {
-    __device__ __forceinline__ bool operator()(double a, double b) { return a < b; }
-    __device__ __forceinline__ bool operator()(float a, float b) { return a < b; }
-    __device__ __forceinline__ bool operator()(double2 a, double2 b) { return device::dd::a_less_than_b(a, b); }
-    __device__ __forceinline__ bool operator()(float4 a, float4 b) { return device::qf::a_less_than_b(a, b); }
-  };
-
-  struct eq_real {
-    __device__ __forceinline__ bool operator()(double a, double b) { return a == b; }
-    __device__ __forceinline__ bool operator()(float a, float b) { return a == b; }
-    __device__ __forceinline__ bool operator()(double2 a, double2 b) { return device::dd::a_eq_to_b(a, b); }
-    __device__ __forceinline__ bool operator()(float4 a, float4 b) { return device::qf::a_eq_to_b(a, b); }
-  };
-
-  __device__ __forceinline__ real_pair<real_t> operator()(real_pair<real_t> e1, real_pair<real_t> e2) const {
-    less_real cmp_less; eq_real cmp_eq;
-    real_pair<real_t> val = cmp_less(e1.first, e2.first) ? e2 : e1;
-    int32_t id_tie = min(e1.second, e2.second);
-    return real_pair<real_t>({ val.first, cmp_eq(e1.first, e2.first) ? id_tie : val.second });
-  }
-};
-
-struct rsqrt_real {
-  __device__ __forceinline__ double operator()(double f) { return rsqrt(f); }
-  __device__ __forceinline__ float operator()(float f) { return rsqrtf(f); }
-  __device__ __forceinline__ double2 operator()(double2 f) { return device::dd::frsqrt(f); }
-  __device__ __forceinline__ float4 operator()(float4 f) { return device::qf::frsqrt(f); }
 };
 
 template <class real_t, class real_ptr, class complex_t, class complex_const_ptr, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD>
@@ -101,9 +102,9 @@ __global__ void update_reduce_general(int32_t N, complex_const_ptr A, real_ptr X
   __syncthreads();
   if (threadIdx.x == 0) {
     rsqrt_real rsqrt_func;
-    *i_out = block_res.second;
-    *rsq_out = rsqrt_func(block_res.first);
-    X[block_res.second] = X[0];
+    *i_out = block_res.idx;
+    *rsq_out = rsqrt_func(block_res.real);
+    X[block_res.idx] = X[0];
   }
 }
 

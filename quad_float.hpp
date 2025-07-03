@@ -104,15 +104,6 @@ namespace device::qf {
     return c;
   }
 
-  __device__ __forceinline__ bool a_less_than_b(float4 a, float4 b) {
-    b = add(negate(a), b);
-    return 0.f < b.x;
-  }
-
-  __device__ __forceinline__ bool a_eq_to_b(float4 a, float4 b) {
-    return (a.x == b.x) && (a.y == b.y) && (a.z == b.z) && (a.w == b.w);
-  }
-
   __device__ __forceinline__ float4 fscalbn(float4 a, int32_t exp) {
     return make_float4(scalbnf(a.x, exp), scalbnf(a.y, exp), scalbnf(a.z, exp), scalbnf(a.w, exp));
   }
