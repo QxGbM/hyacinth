@@ -20,7 +20,7 @@ namespace device::dd {
   }
 
   __device__ __forceinline__ double2 fadd2(double2 a, double2 b) {
-    return make_double2(a.x + b.x, a.y + b.y);
+    return make_double2(__dadd_rn(a.x, b.x), __dadd_rn(a.y, b.y));
   }
 
   __device__ __forceinline__ double2 fadd2_err(double2 a, double2 b, double2 sum) {
@@ -30,7 +30,7 @@ namespace device::dd {
   }
 
   __device__ __forceinline__ double2 ffma2(double2 a, double2 b, double2 c) {
-    return make_double2(fma(a.x, b.x, c.x), fma(a.y, b.y, c.y));
+    return make_double2(__fma_rn(a.x, b.x, c.x), __fma_rn(a.y, b.y, c.y));
   }
 
   __device__ __forceinline__ double2 normalize(double2 a) {
@@ -47,13 +47,12 @@ namespace device::dd {
   }
 
   __device__ __forceinline__ double2 fma(double2 a, double2 b, double2 c) {
-    double2 z = make_double2(0., 0.);
-    double2 p = ffma2(a, b, z);
-    c = add(add(c, p), ffma2(a, b, negate(p)));
-
-    a = make_double2(a.y, a.x);
-    p = ffma2(a, b, z);
-    return add(add(c, p), ffma2(a, b, negate(p)));
+    double2 d;
+    d.x = a.x * b.x;
+    d.y = __fma_rn(a.x, b.x, -d.x);
+    d.y = __fma_rn(a.x, b.y, d.y);
+    d.y = __fma_rn(a.y, b.x, d.y);
+    return add(c, d);
   }
 
   __device__ __forceinline__ double2 fscalbn2(double2 a, int32_t exp) {
@@ -126,19 +125,18 @@ namespace host::dd {
   }
 
   inline double2 add(double2 a, double2 b) {
-    double2 c = fadd2(a, b);
-    double2 d = fadd2_err(a, b, c);
-    return normalize(fadd2(make_double2(c.y, c.x), d));
+    double2 c = fadd2(a, b); // 2 additions
+    double2 d = fadd2_err(a, b, c); // 10 additions
+    return normalize(fadd2(make_double2(c.y, c.x), d)); // total 20 additions
   }
 
   inline double2 fma(double2 a, double2 b, double2 c) {
-    double2 z = make_double2(0., 0.);
-    double2 p = ffma2(a, b, z);
-    c = add(add(c, p), ffma2(a, b, negate(p)));
-
-    a = make_double2(a.y, a.x);
-    p = ffma2(a, b, z);
-    return add(add(c, p), ffma2(a, b, negate(p)));
+    double2 d;
+    d.x = a.x * b.x;
+    d.y = std::fma(a.x, b.x, -d.x);
+    d.y = std::fma(a.x, b.y, d.y);
+    d.y = std::fma(a.y, b.x, d.y);
+    return add(c, d);
   }
 
   inline double2 fscalbn2(double2 a, int32_t exp) {
