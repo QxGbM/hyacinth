@@ -24,9 +24,8 @@ namespace device::dd {
   }
 
   __device__ __forceinline__ double2 fadd2_err(double2 a, double2 b, double2 sum) {
-    sum = negate(sum);
-    double2 err = fadd2(a, sum);
-    return fadd2(fadd2(a, fadd2(sum, negate(err))), fadd2(b, err));
+    double2 err = fadd2(a, negate(sum));
+    return fadd2(fadd2(a, negate(fadd2(sum, err))), fadd2(b, err));
   }
 
   __device__ __forceinline__ double2 ffma2(double2 a, double2 b, double2 c) {
@@ -34,10 +33,10 @@ namespace device::dd {
   }
 
   __device__ __forceinline__ double2 normalize(double2 a) {
-    double sum = -(a.x + a.y);
-    double delta = a.x + sum;
-    double err = (a.x + (sum - delta)) + (a.y + delta);
-    return make_double2(-sum, err);
+    double sum = __dadd_rn(a.x, a.y);
+    double delta = __dadd_rn(a.x, -sum);
+    double2 err = fadd2(a, make_double2(-(__dadd_rn(sum, delta)), delta));
+    return make_double2(sum, err.x + err.y);
   }
 
   __device__ __forceinline__ double2 add(double2 a, double2 b) {
@@ -108,9 +107,8 @@ namespace host::dd {
   }
 
   inline double2 fadd2_err(double2 a, double2 b, double2 sum) {
-    sum = negate(sum);
-    double2 err = fadd2(a, sum);
-    return fadd2(fadd2(a, fadd2(sum, negate(err))), fadd2(b, err));
+    double2 err = fadd2(a, negate(sum));
+    return fadd2(fadd2(a, negate(fadd2(sum, err))), fadd2(b, err));
   }
 
   inline double2 ffma2(double2 a, double2 b, double2 c) {
@@ -118,10 +116,10 @@ namespace host::dd {
   }
 
   inline double2 normalize(double2 a) {
-    double sum = -(a.x + a.y);
-    double delta = a.x + sum;
-    double err = (a.x + (sum - delta)) + (a.y + delta);
-    return make_double2(-sum, err);
+    double sum = a.x + a.y;
+    double delta = a.x - sum;
+    double2 err = fadd2(a, make_double2(-(sum + delta), delta));
+    return make_double2(sum, err.x + err.y);
   }
 
   inline double2 add(double2 a, double2 b) {
