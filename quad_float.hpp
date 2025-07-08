@@ -47,7 +47,13 @@ namespace device::qf {
     delta.vec2[1] = fadd2(s.vec2[0], fneg2(sum));
     delta.vec2[0] = fneg2(fadd2(sum, delta.vec2[1]));
     delta.vec4 = fadd4(s.vec4, delta.vec4);
+    delta.vec2[0] = fadd2(delta.vec2[0], delta.vec2[1]);
+    s.vec4 = make_float4(sum.x, delta.vec4.x, sum.y, delta.vec4.y);
+    sum = fadd2(s.vec2[0], s.vec2[1]);
 
+    delta.vec2[1] = fadd2(s.vec2[0], fneg2(sum));
+    delta.vec2[0] = fneg2(fadd2(sum, delta.vec2[1]));
+    delta.vec4 = fadd4(s.vec4, delta.vec4);
     s.vec2[0] = sum;
     s.vec2[1] = fadd2(delta.vec2[0], delta.vec2[1]);
     sum.x = __fadd_rn(s.vec4.x, s.vec4.y);
@@ -55,7 +61,6 @@ namespace device::qf {
     delta.vec4.y = __fadd_rn(s.vec4.x, -sum.x);
     delta.vec4.x = -(__fadd_rn(sum.x, delta.vec4.y));
     delta.vec2[0] = fadd2(s.vec2[0], delta.vec2[0]);
-
     s.vec2[0] = make_float2(sum.x, __fadd_rn(delta.vec4.x, delta.vec4.y));
     return s.vec4;
   }
@@ -98,7 +103,7 @@ namespace device::qf {
 
     float2 hi_term = make_float2(__fmul_rn(a.y, b.x), __fmul_rn(a.x, b.y));
     float2 hi_err = make_float2(__fmaf_rn(a.y, b.x, -hi_term.x), __fmaf_rn(a.x, b.y, -hi_term.y));
-    return add(tail, add(c, make_float4(hi_term.x, hi_err.x, hi_term.y, hi_err.y)));
+    return add(add(c, make_float4(hi_term.x, hi_err.x, hi_term.y, hi_err.y)), tail);
   }
 
   __device__ __forceinline__ float4 fscalbn(float4 a, int32_t exp) {
@@ -170,14 +175,20 @@ namespace host::qf {
     return fadd4(fadd4(a, negate(fadd4(sum, err))), fadd4(b, err));
   }
 
-  inline float4 collapse_float4(float4 a) { // 18 additions
+  inline float4 collapse_float4(float4 a) { // 30 additions
     union float_vec { float4 vec4; float2 vec2[2]; } s = {a}, delta;
     float2 sum = fadd2(s.vec2[0], s.vec2[1]);
 
     delta.vec2[1] = fadd2(s.vec2[0], fneg2(sum));
     delta.vec2[0] = fneg2(fadd2(sum, delta.vec2[1]));
     delta.vec4 = fadd4(s.vec4, delta.vec4);
+    delta.vec2[0] = fadd2(delta.vec2[0], delta.vec2[1]);
+    s.vec4 = make_float4(sum.x, delta.vec4.x, sum.y, delta.vec4.y);
+    sum = fadd2(s.vec2[0], s.vec2[1]);
 
+    delta.vec2[1] = fadd2(s.vec2[0], fneg2(sum));
+    delta.vec2[0] = fneg2(fadd2(sum, delta.vec2[1]));
+    delta.vec4 = fadd4(s.vec4, delta.vec4);
     s.vec2[0] = sum;
     s.vec2[1] = fadd2(delta.vec2[0], delta.vec2[1]);
     sum.x = s.vec4.x + s.vec4.y;
@@ -185,13 +196,12 @@ namespace host::qf {
     delta.vec4.y = s.vec4.x - sum.x;
     delta.vec4.x = -(sum.x + delta.vec4.y);
     delta.vec2[0] = fadd2(s.vec2[0], delta.vec2[0]);
-
     s.vec2[0] = make_float2(sum.x, delta.vec4.x + delta.vec4.y);
     return s.vec4;
   }
 
-  inline float4 normalize(float4 a) { // 42 additions
-    a = collapse_float4(a); // s12, s34, e1, e2 -> s1234, e3, e1, e2
+  inline float4 normalize(float4 a) { // 66 additions
+    a = collapse_float4(a); // s13, s24, e1, e2 -> s1234, e12, e3, e4 -> s_all, e_all, e3, e4
     float4 q = collapse_float4(make_float4(a.y, a.z, a.w, 0.f));
     
     float sum = q.y + q.z;
@@ -200,9 +210,10 @@ namespace host::qf {
     return make_float4(a.x, q.x, sum, err.x + err.y);
   }
 
-  inline float4 add(float4 a, float4 b) { // 130 additions
+  inline float4 add(float4 a, float4 b) { // 142 additions
     float4 c = fadd4(a, b);
     a = fadd4_err(a, b, c);
+    c = normalize(c);
 
     a = make_float4(a.w, a.x, a.y, a.z);
     b = fadd4(a, c);
@@ -214,11 +225,11 @@ namespace host::qf {
 
     a = make_float4(a.w, a.x, a.y, a.z);
     b = fadd4(a, c);
-
+  
     return normalize(b);
   }
 
-  inline float4 fma(float4 a, float4 b, float4 c) { // 16 fma, 520 additions
+  inline float4 fma(float4 a, float4 b, float4 c) { // 16 fma, 568 additions
     float4 z = make_float4(0.f, 0.f, 0.f, 0.f);
     float4 tail = ffma4(make_float4(a.w, a.z, a.y, a.x), b, z);
     a = make_float4(a.y, a.x, a.z, a.x);
@@ -228,7 +239,7 @@ namespace host::qf {
 
     float2 hi_term = make_float2(a.y * b.x, a.x * b.y);
     float2 hi_err = make_float2(std::fmaf(a.y, b.x, -hi_term.x), std::fmaf(a.x, b.y, -hi_term.y));
-    return add(tail, add(c, make_float4(hi_term.x, hi_err.x, hi_term.y, hi_err.y)));
+    return add(add(c, make_float4(hi_term.x, hi_err.x, hi_term.y, hi_err.y)), tail);
   }
 
   inline float4 fscalbn(float4 a, int32_t exp) {
