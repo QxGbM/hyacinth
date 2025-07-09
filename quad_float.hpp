@@ -31,15 +31,6 @@ namespace device::qf {
     return make_float4(__fadd_rn(a.x, b.x), __fadd_rn(a.y, b.y), __fadd_rn(a.z, b.z), __fadd_rn(a.w, b.w));
   }
 
-  __device__ __forceinline__ float4 ffma4(float4 a, float4 b, float4 c) {
-    return make_float4(__fmaf_rn(a.x, b.x, c.x), __fmaf_rn(a.y, b.y, c.y), __fmaf_rn(a.z, b.z, c.z), __fmaf_rn(a.w, b.w, c.w));
-  }
-
-  __device__ __forceinline__ float4 fadd4_err(float4 a, float4 b, float4 sum) {
-    float4 err = fadd4(a, negate(sum));
-    return fadd4(fadd4(a, negate(fadd4(sum, err))), fadd4(b, err));
-  }
-
   __device__ __forceinline__ float4 collapse_float4(float4 a) {
     union float_vec { float4 vec4; float2 vec2[2]; } s = {a}, delta;
     float2 sum = fadd2(s.vec2[0], s.vec2[1]);
@@ -75,35 +66,51 @@ namespace device::qf {
     return make_float4(a.x, q.x, sum, __fadd_rn(err.x, err.y));
   }
 
+  __device__ __forceinline__ void fadd4_err(float4 a, float4 b, float4& sum, float4& err) {
+    sum = fadd4(a, b);
+    float4 delta = fadd4(a, negate(sum));
+    err = fadd4(fadd4(a, negate(fadd4(sum, delta))), fadd4(b, delta));
+  }
+
   __device__ __forceinline__ float4 add(float4 a, float4 b) {
-    float4 c = fadd4(a, b);
-    a = fadd4_err(a, b, c);
+    fadd4_err(a, b, a, b);
+    b = make_float4(b.w, b.x, b.y, b.z);
+    fadd4_err(a, b, a, b);
+    b = make_float4(b.w, b.x, b.y, b.z);
+    fadd4_err(a, b, a, b);
+    return normalize(fadd4(a, make_float4(b.w, b.x, b.y, b.z)));
+  }
 
-    a = make_float4(a.w, a.x, a.y, a.z);
-    b = fadd4(a, c);
-    a = fadd4_err(a, c, b);
+  __device__ __forceinline__ float4 mul(float4 a, float4 b) {
+    float2 prod = make_float2(__fmul_rn(a.x, b.x), __fmul_rn(a.y, b.y));
+    float2 err = make_float2(__fmaf_rn(a.x, b.x, -prod.x), __fmaf_rn(a.y, b.y, -prod.y));
+    float4 c = make_float4(prod.x, err.x, prod.y, err.y);
 
-    a = make_float4(a.w, a.x, a.y, a.z);
-    c = fadd4(a, b);
-    a = fadd4_err(a, b, c);
+    prod = make_float2(__fmul_rn(a.y, b.x), __fmul_rn(a.z, b.x));
+    err = make_float2(__fmaf_rn(a.y, b.x, -prod.x), __fmaf_rn(a.z, b.x, -prod.y));
+    c = add(c, make_float4(prod.x, err.x, prod.y, err.y));
 
-    a = make_float4(a.w, a.x, a.y, a.z);
-    b = fadd4(a, c);
+    prod = make_float2(__fmul_rn(a.x, b.y), __fmul_rn(a.x, b.z));
+    err = make_float2(__fmaf_rn(a.x, b.y, -prod.x), __fmaf_rn(a.x, b.z, -prod.y));
+    c = add(c, make_float4(prod.x, err.x, prod.y, err.y));
 
-    return normalize(b);
+    return add(c, make_float4(__fmul_rn(a.w, b.x), __fmul_rn(a.z, b.y), __fmul_rn(a.y, b.z), __fmul_rn(a.x, b.w)));
   }
 
   __device__ __forceinline__ float4 fma(float4 a, float4 b, float4 c) {
-    float4 z = make_float4(0.f, 0.f, 0.f, 0.f);
-    float4 tail = ffma4(make_float4(a.w, a.z, a.y, a.x), b, z);
-    a = make_float4(a.y, a.x, a.z, a.x);
-    b = make_float4(b.x, b.y, b.x, b.z);
-    float4 p = ffma4(a, b, z);
-    c = add(add(c, p), ffma4(a, b, negate(p)));
+    float2 prod = make_float2(__fmul_rn(a.x, b.x), __fmul_rn(a.y, b.y));
+    float2 err = make_float2(__fmaf_rn(a.x, b.x, -prod.x), __fmaf_rn(a.y, b.y, -prod.y));
+    c = add(c, make_float4(prod.x, err.x, prod.y, err.y));
 
-    float2 hi_term = make_float2(__fmul_rn(a.y, b.x), __fmul_rn(a.x, b.y));
-    float2 hi_err = make_float2(__fmaf_rn(a.y, b.x, -hi_term.x), __fmaf_rn(a.x, b.y, -hi_term.y));
-    return add(add(c, make_float4(hi_term.x, hi_err.x, hi_term.y, hi_err.y)), tail);
+    prod = make_float2(__fmul_rn(a.y, b.x), __fmul_rn(a.z, b.x));
+    err = make_float2(__fmaf_rn(a.y, b.x, -prod.x), __fmaf_rn(a.z, b.x, -prod.y));
+    c = add(c, make_float4(prod.x, err.x, prod.y, err.y));
+
+    prod = make_float2(__fmul_rn(a.x, b.y), __fmul_rn(a.x, b.z));
+    err = make_float2(__fmaf_rn(a.x, b.y, -prod.x), __fmaf_rn(a.x, b.z, -prod.y));
+    c = add(c, make_float4(prod.x, err.x, prod.y, err.y));
+
+    return add(c, make_float4(__fmul_rn(a.w, b.x), __fmul_rn(a.z, b.y), __fmul_rn(a.y, b.z), __fmul_rn(a.x, b.w)));
   }
 
   __device__ __forceinline__ float4 fscalbn(float4 a, int32_t exp) {
@@ -111,16 +118,16 @@ namespace device::qf {
   }
 
   __device__ __forceinline__ float4 frsqrt(float4 a) {
-    int32_t p = int32_t(-0.5f * log2f(a.x));
+    int32_t p = int32_t(scalbnf(-log2f(a.x), -1));
 
-    float4 x = make_float4(scalbnf(rsqrtf(a.x), -p), 0.f, 0.f, 0.f); // init
+    float4 x = make_float4(scalbnf(rsqrtf(a.x), -p), 0.f, 0.f, 0.f);
     float4 z = make_float4(0.f, 0.f, 0.f, 0.f);
     float4 c = make_float4(1.5f, 0.f, 0.f, 0.f);
-    a = fscalbn(negate(a), 2 * p - 1);
+    a = fscalbn(negate(a), (p << 1) - 1);
 
-    x = fma(x, fma(a, fma(x, x, z), c), z);
-    x = fma(x, fma(a, fma(x, x, z), c), z);
-    x = fma(x, fma(a, fma(x, x, z), c), z); // x *= (1.5 + (-0.5 * a) * (x * x))
+    x = mul(x, fma(x, mul(a, x), c));
+    x = mul(x, fma(x, mul(a, x), c));
+    x = mul(x, fma(x, mul(a, x), c));
 
     return fscalbn(x, p);
   }
@@ -135,6 +142,11 @@ namespace device::qf {
 
   __device__ __forceinline__ complex_float4 add(complex_float4 a, complex_float4 b) {
     return make_complex_float4(add(a.real, b.real), add(a.imag, b.imag));
+  }
+
+  __device__ __forceinline__ complex_float4 mul(complex_float4 a, complex_float4 b) {
+    return make_complex_float4(fma(a.real, b.real, mul(negate(a.imag), b.imag)),
+      fma(a.real, b.imag, mul(a.imag, b.real)));
   }
 
   __device__ __forceinline__ complex_float4 fma(complex_float4 a, complex_float4 b, complex_float4 c) {
@@ -164,15 +176,6 @@ namespace host::qf {
 
   inline float4 fadd4(float4 a, float4 b) {
     return make_float4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w);
-  }
-
-  inline float4 ffma4(float4 a, float4 b, float4 c) {
-    return make_float4(std::fmaf(a.x, b.x, c.x), std::fmaf(a.y, b.y, c.y), std::fmaf(a.z, b.z, c.z), std::fmaf(a.w, b.w, c.w));
-  }
-
-  inline float4 fadd4_err(float4 a, float4 b, float4 sum) {
-    float4 err = fadd4(a, negate(sum));
-    return fadd4(fadd4(a, negate(fadd4(sum, err))), fadd4(b, err));
   }
 
   inline float4 collapse_float4(float4 a) { // 30 additions
@@ -210,36 +213,51 @@ namespace host::qf {
     return make_float4(a.x, q.x, sum, err.x + err.y);
   }
 
-  inline float4 add(float4 a, float4 b) { // 142 additions
-    float4 c = fadd4(a, b);
-    a = fadd4_err(a, b, c);
-    c = normalize(c);
-
-    a = make_float4(a.w, a.x, a.y, a.z);
-    b = fadd4(a, c);
-    a = fadd4_err(a, c, b);
-
-    a = make_float4(a.w, a.x, a.y, a.z);
-    c = fadd4(a, b);
-    a = fadd4_err(a, b, c);
-
-    a = make_float4(a.w, a.x, a.y, a.z);
-    b = fadd4(a, c);
-  
-    return normalize(b);
+  inline void fadd4_err(float4 a, float4 b, float4& sum, float4& err) { // 24 additions
+    sum = fadd4(a, b);
+    float4 delta = fadd4(a, negate(sum));
+    err = fadd4(fadd4(a, negate(fadd4(sum, delta))), fadd4(b, delta));
   }
 
-  inline float4 fma(float4 a, float4 b, float4 c) { // 16 fma, 568 additions
-    float4 z = make_float4(0.f, 0.f, 0.f, 0.f);
-    float4 tail = ffma4(make_float4(a.w, a.z, a.y, a.x), b, z);
-    a = make_float4(a.y, a.x, a.z, a.x);
-    b = make_float4(b.x, b.y, b.x, b.z);
-    float4 p = ffma4(a, b, z);
-    c = add(add(c, p), ffma4(a, b, negate(p)));
+  inline float4 add(float4 a, float4 b) { // 138 additions
+    fadd4_err(a, b, a, b);
+    b = make_float4(b.w, b.x, b.y, b.z);
+    fadd4_err(a, b, a, b);
+    b = make_float4(b.w, b.x, b.y, b.z);
+    fadd4_err(a, b, a, b);
+    return normalize(fadd4(a, make_float4(b.w, b.x, b.y, b.z)));
+  }
 
-    float2 hi_term = make_float2(a.y * b.x, a.x * b.y);
-    float2 hi_err = make_float2(std::fmaf(a.y, b.x, -hi_term.x), std::fmaf(a.x, b.y, -hi_term.y));
-    return add(add(c, make_float4(hi_term.x, hi_err.x, hi_term.y, hi_err.y)), tail);
+  inline float4 mul(float4 a, float4 b) { // 16 fma, 414 additions
+    float2 prod = make_float2(a.x * b.x, a.y * b.y);
+    float2 err = make_float2(std::fmaf(a.x, b.x, -prod.x), std::fmaf(a.y, b.y, -prod.y));
+    float4 c = make_float4(prod.x, err.x, prod.y, err.y);
+
+    prod = make_float2(a.y * b.x, a.z * b.x);
+    err = make_float2(std::fmaf(a.y, b.x, -prod.x), std::fmaf(a.z, b.x, -prod.y));
+    c = add(c, make_float4(prod.x, err.x, prod.y, err.y));
+
+    prod = make_float2(a.x * b.y, a.x * b.z);
+    err = make_float2(std::fmaf(a.x, b.y, -prod.x), std::fmaf(a.x, b.z, -prod.y));
+    c = add(c, make_float4(prod.x, err.x, prod.y, err.y));
+
+    return add(c, make_float4(a.w * b.x, a.z * b.y, a.y * b.z, a.x * b.w));
+  }
+
+  inline float4 fma(float4 a, float4 b, float4 c) { // 16 fma, 552 additions
+    float2 prod = make_float2(a.x * b.x, a.y * b.y);
+    float2 err = make_float2(std::fmaf(a.x, b.x, -prod.x), std::fmaf(a.y, b.y, -prod.y));
+    c = add(c, make_float4(prod.x, err.x, prod.y, err.y));
+
+    prod = make_float2(a.y * b.x, a.z * b.x);
+    err = make_float2(std::fmaf(a.y, b.x, -prod.x), std::fmaf(a.z, b.x, -prod.y));
+    c = add(c, make_float4(prod.x, err.x, prod.y, err.y));
+
+    prod = make_float2(a.x * b.y, a.x * b.z);
+    err = make_float2(std::fmaf(a.x, b.y, -prod.x), std::fmaf(a.x, b.z, -prod.y));
+    c = add(c, make_float4(prod.x, err.x, prod.y, err.y));
+
+    return add(c, make_float4(a.w * b.x, a.z * b.y, a.y * b.z, a.x * b.w));
   }
 
   inline float4 fscalbn(float4 a, int32_t exp) {
@@ -250,13 +268,12 @@ namespace host::qf {
     int32_t p = int32_t(-0.5f * std::log2f(a.x));
 
     float4 x = make_float4(std::scalbnf(1.f / std::sqrt(a.x), -p), 0.f, 0.f, 0.f); // init
-    float4 z = make_float4(0.f, 0.f, 0.f, 0.f);
     float4 c = make_float4(1.5f, 0.f, 0.f, 0.f);
     a = fscalbn(negate(a), 2 * p - 1);
 
-    x = fma(x, fma(a, fma(x, x, z), c), z);
-    x = fma(x, fma(a, fma(x, x, z), c), z);
-    x = fma(x, fma(a, fma(x, x, z), c), z); // x *= (1.5 + (-0.5 * a) * (x * x))
+    x = mul(x, fma(x, mul(a, x), c));
+    x = mul(x, fma(x, mul(a, x), c));
+    x = mul(x, fma(x, mul(a, x), c)); // x *= (1.5 + (-0.5 * a) * (x * x))
 
     return fscalbn(x, p);
   }
@@ -275,6 +292,11 @@ namespace host::qf {
 
   inline complex_float4 add(complex_float4 a, complex_float4 b) {
     return make_complex_float4(add(a.real, b.real), add(a.imag, b.imag));
+  }
+
+  inline complex_float4 mul(complex_float4 a, complex_float4 b) {
+    return make_complex_float4(fma(a.real, b.real, mul(negate(a.imag), b.imag)),
+      fma(a.real, b.imag, mul(a.imag, b.real)));
   }
 
   inline complex_float4 fma(complex_float4 a, complex_float4 b, complex_float4 c) {

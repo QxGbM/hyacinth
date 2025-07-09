@@ -23,31 +23,42 @@ namespace device::dd {
     return make_double2(__dadd_rn(a.x, b.x), __dadd_rn(a.y, b.y));
   }
 
-  __device__ __forceinline__ double2 fadd2_err(double2 a, double2 b, double2 sum) {
-    double2 err = fadd2(a, negate(sum));
-    return fadd2(fadd2(a, negate(fadd2(sum, err))), fadd2(b, err));
-  }
-
-  __device__ __forceinline__ double2 ffma2(double2 a, double2 b, double2 c) {
-    return make_double2(__fma_rn(a.x, b.x, c.x), __fma_rn(a.y, b.y, c.y));
+  __device__ __forceinline__ double4 fadd4(double4 a, double4 b) {
+    return make_double4(__dadd_rn(a.x, b.x), __dadd_rn(a.y, b.y), __dadd_rn(a.z, b.z), __dadd_rn(a.w, b.w));
   }
 
   __device__ __forceinline__ double2 normalize(double2 a) {
     double sum = __dadd_rn(a.x, a.y);
     double delta = __dadd_rn(a.x, -sum);
     double2 err = fadd2(a, make_double2(-(__dadd_rn(sum, delta)), delta));
-    return make_double2(sum, err.x + err.y);
+    return make_double2(sum, __dadd_rn(err.x, err.y));
   }
 
   __device__ __forceinline__ double2 add(double2 a, double2 b) {
-    double2 c = fadd2(a, b);
-    double2 d = fadd2_err(a, b, c);
-    return normalize(fadd2(make_double2(c.y, c.x), d));
+    union { double2 vec2[2]; double4 vec4; } s = { a, b }, delta;
+    double2 sum = fadd2(s.vec2[0], s.vec2[1]);
+
+    delta.vec2[1] = fadd2(s.vec2[0], negate(sum));
+    delta.vec2[0] = negate(fadd2(sum, delta.vec2[1]));
+    delta.vec4 = fadd4(s.vec4, delta.vec4);
+    delta.vec2[0] = fadd2(delta.vec2[0], delta.vec2[1]);
+
+    sum = normalize(sum);
+    return make_double2(sum.x, __dadd_rn(sum.y, __dadd_rn(delta.vec4.x, delta.vec4.y)));
+  }
+
+  __device__ __forceinline__ double2 mul(double2 a, double2 b) {
+    double2 d;
+    d.x = __dmul_rn(a.x, b.x);
+    d.y = __fma_rn(a.x, b.x, -d.x);
+    d.y = __fma_rn(a.x, b.y, d.y);
+    d.y = __fma_rn(a.y, b.x, d.y);
+    return normalize(d);
   }
 
   __device__ __forceinline__ double2 fma(double2 a, double2 b, double2 c) {
     double2 d;
-    d.x = a.x * b.x;
+    d.x = __dmul_rn(a.x, b.x);
     d.y = __fma_rn(a.x, b.x, -d.x);
     d.y = __fma_rn(a.x, b.y, d.y);
     d.y = __fma_rn(a.y, b.x, d.y);
@@ -59,16 +70,15 @@ namespace device::dd {
   }
 
   __device__ __forceinline__ double2 frsqrt(double2 a) {
-    int32_t p = int32_t(-0.5 * log2(a.x));
+    int32_t p = int32_t(scalbn(-log2(a.x), -1));
 
     double2 x = make_double2(scalbn(rsqrt(a.x), -p), 0.);
-    double2 z = make_double2(0., 0.);
     double2 c = make_double2(1.5, 0.);
-    a = fscalbn2(negate(a), 2 * p - 1);
+    a = fscalbn2(negate(a), (p << 1) - 1);
 
-    x = fma(x, fma(x, fma(a, x, z), c), z);
-    x = fma(x, fma(x, fma(a, x, z), c), z);
-    x = fma(x, fma(x, fma(a, x, z), c), z);
+    x = mul(x, fma(x, mul(a, x), c));
+    x = mul(x, fma(x, mul(a, x), c));
+    x = mul(x, fma(x, mul(a, x), c));
 
     return fscalbn2(x, p);
   }
@@ -83,6 +93,11 @@ namespace device::dd {
 
   __device__ __forceinline__ complex_double2 add(complex_double2 a, complex_double2 b) {
     return make_complex_double2(add(a.real, b.real), add(a.imag, b.imag));
+  }
+
+  __device__ __forceinline__ complex_double2 mul(complex_double2 a, complex_double2 b) {
+    return make_complex_double2(fma(a.real, b.real, mul(negate(a.imag), b.imag)),
+      fma(a.real, b.imag, mul(a.imag, b.real)));
   }
 
   __device__ __forceinline__ complex_double2 fma(complex_double2 a, complex_double2 b, complex_double2 c) {
@@ -106,13 +121,8 @@ namespace host::dd {
     return make_double2(a.x + b.x, a.y + b.y);
   }
 
-  inline double2 fadd2_err(double2 a, double2 b, double2 sum) {
-    double2 err = fadd2(a, negate(sum));
-    return fadd2(fadd2(a, negate(fadd2(sum, err))), fadd2(b, err));
-  }
-
-  inline double2 ffma2(double2 a, double2 b, double2 c) {
-    return make_double2(std::fma(a.x, b.x, c.x), std::fma(a.y, b.y, c.y));
+  inline double4 fadd4(double4 a, double4 b) {
+    return make_double4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w);
   }
 
   inline double2 normalize(double2 a) {
@@ -123,9 +133,25 @@ namespace host::dd {
   }
 
   inline double2 add(double2 a, double2 b) {
-    double2 c = fadd2(a, b); // 2 additions
-    double2 d = fadd2_err(a, b, c); // 10 additions
-    return normalize(fadd2(make_double2(c.y, c.x), d)); // total 20 additions
+    union { double2 vec2[2]; double4 vec4; } s = { a, b }, delta;
+    double2 sum = fadd2(s.vec2[0], s.vec2[1]);
+
+    delta.vec2[1] = fadd2(s.vec2[0], negate(sum));
+    delta.vec2[0] = negate(fadd2(sum, delta.vec2[1]));
+    delta.vec4 = fadd4(s.vec4, delta.vec4);
+    delta.vec2[0] = fadd2(delta.vec2[0], delta.vec2[1]);
+
+    sum = normalize(sum);
+    return make_double2(sum.x, sum.y + (delta.vec4.x + delta.vec4.y));
+  }
+
+  inline double2 mul(double2 a, double2 b) {
+    double2 d;
+    d.x = a.x * b.x;
+    d.y = std::fma(a.x, b.x, -d.x);
+    d.y = std::fma(a.x, b.y, d.y);
+    d.y = std::fma(a.y, b.x, d.y);
+    return normalize(d);
   }
 
   inline double2 fma(double2 a, double2 b, double2 c) {
@@ -145,13 +171,12 @@ namespace host::dd {
     int32_t p = int32_t(-0.5 * std::log2(a.x));
 
     double2 x = make_double2(std::scalbn(1. / std::sqrt(a.x), -p), 0.); // init
-    double2 z = make_double2(0., 0.);
     double2 c = make_double2(1.5, 0.);
     a = fscalbn2(negate(a), 2 * p - 1);
 
-    x = fma(x, fma(x, fma(a, x, z), c), z);
-    x = fma(x, fma(x, fma(a, x, z), c), z);
-    x = fma(x, fma(x, fma(a, x, z), c), z); // x *= (1.5 + (-0.5 * a) * (x * x))
+    x = mul(x, fma(x, mul(a, x), c));
+    x = mul(x, fma(x, mul(a, x), c));
+    x = mul(x, fma(x, mul(a, x), c)); // x *= (1.5 + (-0.5 * a) * (x * x))
 
     return fscalbn2(x, p);
   }
@@ -170,6 +195,11 @@ namespace host::dd {
 
   inline complex_double2 add(complex_double2 a, complex_double2 b) {
     return make_complex_double2(add(a.real, b.real), add(a.imag, b.imag));
+  }
+
+  inline complex_double2 mul(complex_double2 a, complex_double2 b) {
+    return make_complex_double2(fma(a.real, b.real, mul(negate(a.imag), b.imag)),
+      fma(a.real, b.imag, mul(a.imag, b.real)));
   }
 
   inline complex_double2 fma(complex_double2 a, complex_double2 b, complex_double2 c) {

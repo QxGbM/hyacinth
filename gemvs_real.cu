@@ -23,9 +23,9 @@ struct scal_add_real {
   __device__ __forceinline__ double operator()(double a, double b, double s) { return s * (a + b); }
   __device__ __forceinline__ float operator()(float a, float b, float s) { return s * (a + b); }
   __device__ __forceinline__ double2 operator()(double2 a, double2 b, double2 s) { 
-    return device::dd::fma(s, device::dd::add(a, b), make_double2(0., 0.)); }
+    return device::dd::mul(s, device::dd::add(a, b)); }
   __device__ __forceinline__ float4 operator()(float4 a, float4 b, float4 s) { 
-    return device::qf::fma(s, device::qf::add(a, b), make_float4(0.f, 0.f, 0.f, 0.f)); }
+    return device::qf::mul(s, device::qf::add(a, b)); }
 };
 
 template <class real_t, class real_ptr, class real_const_ptr, int32_t GRID_WARPS, int32_t BLOCK_WARPS, int32_t ITEMS_PER_THREAD>
