@@ -42,18 +42,17 @@ struct conj {
 
 template <class real_t, class real_ptr, class real_const_ptr, class complex_t, class complex_ptr, class complex_const_ptr, int32_t GRID_WARPS, int32_t BLOCK_WARPS, int32_t ITEMS_PER_THREAD>
 __global__ void minus_adjAx_plusB_scale_complex(real_const_ptr scale, int32_t M, int32_t N, complex_const_ptr A, int32_t lda, complex_ptr B) {
-  using WarpLoad = cub::WarpLoad<complex_t, ITEMS_PER_THREAD>;
-  using WarpReduce = cub::BlockReduce<complex_t, 32>;
+
+  __shared__ typename cub::WarpLoad<complex_t, ITEMS_PER_THREAD>::TempStorage temp_load[BLOCK_WARPS];
+  __shared__ typename cub::BlockReduce<complex_t, 32>::TempStorage temp_reduce[BLOCK_WARPS];
+  complex_t threadA[ITEMS_PER_THREAD], threadX[ITEMS_PER_THREAD], threadB[ITEMS_PER_THREAD];
+
   constexpr int32_t elements = ITEMS_PER_THREAD * 32;
-
-  __shared__ typename WarpLoad::TempStorage temp_loadA[BLOCK_WARPS], temp_loadX[BLOCK_WARPS];
-  __shared__ typename WarpReduce::TempStorage temp_reduce[BLOCK_WARPS];
-
+  int32_t warp_id = int32_t(threadIdx.x) >> 5;
+  cub::WarpLoad<complex_t, ITEMS_PER_THREAD> warp_load(temp_load[warp_id]);
+  cub::BlockReduce<complex_t, 32> warp_reduce(temp_reduce[warp_id]);
   add_complex add_func;
   minus_conj_a_fma_complex fma_func;
-
-  complex_t threadA[ITEMS_PER_THREAD], threadX[ITEMS_PER_THREAD], threadB[ITEMS_PER_THREAD];
-  int32_t warp_id = int32_t(threadIdx.x) >> 5;
 
   for (int32_t row = blockIdx.x * BLOCK_WARPS + warp_id; row < M; row += GRID_WARPS) {
     complex_const_ptr A_i = &A[row * lda];
@@ -64,15 +63,15 @@ __global__ void minus_adjAx_plusB_scale_complex(real_const_ptr scale, int32_t M,
 
     for (int32_t i = 0; i < N; i += elements) {
       int32_t num_items = min(elements, N - i);
-      WarpLoad(temp_loadA[warp_id]).Load(&A_i[i], threadA, num_items, complex_t());
-      WarpLoad(temp_loadX[warp_id]).Load(&A[i], threadX, num_items, complex_t());
+      warp_load.Load(&A_i[i], threadA, num_items, complex_t());
+      warp_load.Load(&A[i], threadX, num_items, complex_t());
 
       #pragma unroll
       for (int32_t j = 0; j < ITEMS_PER_THREAD; ++j)
         threadB[j] = fma_func(threadA[j], threadX[j], threadB[j]);
     }
 
-    complex_t warp_res = WarpReduce(temp_reduce[warp_id]).Reduce(threadB, add_func);
+    complex_t warp_res = warp_reduce.Reduce(threadB, add_func);
 
     if ((threadIdx.x & 31) == 0) {
       scal_add_complex scal_func;
@@ -89,18 +88,16 @@ template <class real_t, class real_ptr, class real_const_ptr, class complex_t, c
 __global__ void minus_adjAx_plusB_scale_complex_reduce(real_const_ptr scale, int32_t M, int32_t N, complex_const_ptr A, int32_t lda, complex_ptr B) {
   constexpr int32_t BLOCK_THREADS = BLOCK_WARPS * 32;
   constexpr int32_t THREAD_BLOCKS = GRID_WARPS / BLOCK_WARPS;
-
-  using BlockLoad = cub::BlockLoad<complex_t, BLOCK_THREADS, ITEMS_PER_THREAD>;
-  using BlockReduce = cub::BlockReduce<complex_t, BLOCK_THREADS>;
   constexpr int32_t elements = ITEMS_PER_THREAD * BLOCK_THREADS;
 
-  __shared__ typename BlockLoad::TempStorage temp_loadA, temp_loadX;
-  __shared__ typename BlockReduce::TempStorage temp_reduce;
+  __shared__ typename cub::BlockLoad<complex_t, BLOCK_THREADS, ITEMS_PER_THREAD>::TempStorage temp_load;
+  __shared__ typename cub::BlockReduce<complex_t, BLOCK_THREADS>::TempStorage temp_reduce;
+  complex_t threadA[ITEMS_PER_THREAD], threadX[ITEMS_PER_THREAD], threadB[ITEMS_PER_THREAD];
 
+  cub::BlockLoad<complex_t, BLOCK_THREADS, ITEMS_PER_THREAD> block_load(temp_load);
+  cub::BlockReduce<complex_t, BLOCK_THREADS> block_reduce(temp_reduce);
   add_complex add_func;
   minus_conj_a_fma_complex fma_func;
-
-  complex_t threadA[ITEMS_PER_THREAD], threadX[ITEMS_PER_THREAD], threadB[ITEMS_PER_THREAD];
 
   for (int32_t row = blockIdx.x; row < M; row += THREAD_BLOCKS) {
     complex_const_ptr A_i = &A[row * lda];
@@ -111,15 +108,15 @@ __global__ void minus_adjAx_plusB_scale_complex_reduce(real_const_ptr scale, int
 
     for (int32_t i = 0; i < N; i += elements) {
       int32_t num_items = min(elements, N - i);
-      BlockLoad(temp_loadA).Load(&A_i[i], threadA, num_items, complex_t());
-      BlockLoad(temp_loadX).Load(&A[i], threadX, num_items, complex_t());
+      block_load.Load(&A_i[i], threadA, num_items, complex_t());
+      block_load.Load(&A[i], threadX, num_items, complex_t());
 
       #pragma unroll
       for (int32_t j = 0; j < ITEMS_PER_THREAD; ++j)
         threadB[j] = fma_func(threadA[j], threadX[j], threadB[j]);
     }
 
-    complex_t block_res = BlockReduce(temp_reduce).Reduce(threadB, add_func);
+    complex_t block_res = block_reduce.Reduce(threadB, add_func);
 
     if (threadIdx.x == 0) {
       scal_add_complex scal_func;

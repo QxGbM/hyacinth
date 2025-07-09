@@ -65,4 +65,6 @@ namespace internal::Cholesky {
 
   void swap_cols_float4_complex(cudaStream_t stream, int32_t i, int32_t j, int32_t N, complex_float4* A, int32_t lda);
 
+  void minus_AHA_gemmk64_double_complex(cudaStream_t stream, int32_t N, const std::complex<double>* A, std::complex<double>* C, int32_t ld);
+
 };

@@ -43,15 +43,15 @@ struct rsqrt_real {
 
 template <class real_t, class real_ptr, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD>
 __global__ void reduce_real(int32_t N, real_ptr X, int32_t* i_out, real_ptr rsq_out) {
-  using BlockLoad = cub::BlockLoad<real_t, BLOCK_THREADS, ITEMS_PER_THREAD>;
-  using BlockReduce = cub::BlockReduce<real_pair<real_t>, BLOCK_THREADS>;
   constexpr int32_t elements = BLOCK_THREADS * ITEMS_PER_THREAD;
 
-  __shared__ typename BlockLoad::TempStorage temp_load;
-  __shared__ typename BlockReduce::TempStorage temp_reduce;
-
+  __shared__ typename cub::BlockLoad<real_t, BLOCK_THREADS, ITEMS_PER_THREAD>::TempStorage temp_load;
+  __shared__ typename cub::BlockReduce<real_pair<real_t>, BLOCK_THREADS>::TempStorage temp_reduce;
   real_t thread_data[ITEMS_PER_THREAD];
   real_pair<real_t> thread_pair[ITEMS_PER_THREAD];
+
+  cub::BlockLoad<real_t, BLOCK_THREADS, ITEMS_PER_THREAD> block_load(temp_load);
+  cub::BlockReduce<real_pair<real_t>, BLOCK_THREADS> block_reduce(temp_reduce);
   real_pair_max<real_t> cmp_max;
 
   #pragma unroll
@@ -61,14 +61,14 @@ __global__ void reduce_real(int32_t N, real_ptr X, int32_t* i_out, real_ptr rsq_
   for (int32_t i = 0; i < N; i += elements) {
     int32_t num_items = min(elements, N - i);
     int32_t thread_loc = threadIdx.x * ITEMS_PER_THREAD + i;
-    BlockLoad(temp_load).Load(&X[i], thread_data, num_items, real_t());
+    block_load.Load(&X[i], thread_data, num_items, real_t());
 
     #pragma unroll
     for (int32_t j = 0; j < ITEMS_PER_THREAD; ++j)
       thread_pair[j] = cmp_max(thread_pair[j], real_pair<real_t>({ thread_data[j], thread_loc + j }));
   }
 
-  real_pair<real_t> block_res = BlockReduce(temp_reduce).Reduce(thread_pair, cmp_max);
+  real_pair<real_t> block_res = block_reduce.Reduce(thread_pair, cmp_max);
 
   if (threadIdx.x == 0) {
     rsqrt_real rsqrt_func;

@@ -60,20 +60,21 @@ struct minus_norm {
 
 template <class real_t, class real_ptr, class complex_t, class complex_const_ptr, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD>
 __global__ void update_reduce_general(int32_t N, complex_const_ptr A, real_ptr X, int32_t* i_out, real_ptr rsq_out) {
-  using BlockLoadA = cub::BlockLoad<complex_t, BLOCK_THREADS, ITEMS_PER_THREAD>;
-  using BlockLoadX = cub::BlockLoad<real_t, BLOCK_THREADS, ITEMS_PER_THREAD>;
-  using BlockStore = cub::BlockStore<real_t, BLOCK_THREADS, ITEMS_PER_THREAD>;
-  using BlockReduce = cub::BlockReduce<real_pair<real_t>, BLOCK_THREADS>;
   constexpr int32_t elements = BLOCK_THREADS * ITEMS_PER_THREAD;
 
-  __shared__ typename BlockLoadA::TempStorage temp_loadA;
-  __shared__ typename BlockLoadX::TempStorage temp_loadX;
-  __shared__ typename BlockStore::TempStorage temp_store;
-  __shared__ typename BlockReduce::TempStorage temp_reduce;
-
+  __shared__ typename cub::BlockLoad<complex_t, BLOCK_THREADS, ITEMS_PER_THREAD>::TempStorage temp_loadA;
+  __shared__ typename cub::BlockLoad<real_t, BLOCK_THREADS, ITEMS_PER_THREAD>::TempStorage temp_loadX;
+  __shared__ typename cub::BlockStore<real_t, BLOCK_THREADS, ITEMS_PER_THREAD>::TempStorage temp_store;
+  __shared__ typename cub::BlockReduce<real_pair<real_t>, BLOCK_THREADS>::TempStorage temp_reduce;
   complex_t thread_A[ITEMS_PER_THREAD];
   real_t thread_X[ITEMS_PER_THREAD];
   real_pair<real_t> thread_pair[ITEMS_PER_THREAD];
+
+  cub::BlockLoad<complex_t, BLOCK_THREADS, ITEMS_PER_THREAD> block_load_a(temp_loadA);
+  cub::BlockLoad<real_t, BLOCK_THREADS, ITEMS_PER_THREAD> block_load_x(temp_loadX);
+  cub::BlockStore<real_t, BLOCK_THREADS, ITEMS_PER_THREAD> block_store(temp_store);
+  cub::BlockReduce<real_pair<real_t>, BLOCK_THREADS> block_reduce(temp_reduce);
+
   real_pair_max<real_t> cmp_max;
   minus_norm fma_func;
 
@@ -84,8 +85,8 @@ __global__ void update_reduce_general(int32_t N, complex_const_ptr A, real_ptr X
   for (int32_t i = 0; i < N; i += elements) {
     int32_t num_items = min(elements, N - i);
     int32_t thread_loc = threadIdx.x * ITEMS_PER_THREAD + i;
-    BlockLoadA(temp_loadA).Load(&A[i], thread_A, num_items, complex_t());
-    BlockLoadX(temp_loadX).Load(&X[i], thread_X, num_items, real_t());
+    block_load_a.Load(&A[i], thread_A, num_items, complex_t());
+    block_load_x.Load(&X[i], thread_X, num_items, real_t());
 
     #pragma unroll
     for (int32_t j = 0; j < ITEMS_PER_THREAD; ++j) {
@@ -94,10 +95,10 @@ __global__ void update_reduce_general(int32_t N, complex_const_ptr A, real_ptr X
       thread_X[j] = ax;
     }
 
-    BlockStore(temp_store).Store(&X[i], thread_X, num_items);
+    block_store.Store(&X[i], thread_X, num_items);
   }
 
-  real_pair<real_t> block_res = BlockReduce(temp_reduce).Reduce(thread_pair, cmp_max);
+  real_pair<real_t> block_res = block_reduce.Reduce(thread_pair, cmp_max);
 
   __syncthreads();
   if (threadIdx.x == 0) {

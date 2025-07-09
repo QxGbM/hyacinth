@@ -7,27 +7,27 @@
 
 template <class real_t, class real_ptr, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD>
 __global__ void swap_cols_real(int32_t i, int32_t j, int32_t N, real_ptr A, int32_t lda) {
-  using BlockLoad = cub::BlockLoad<real_t, BLOCK_THREADS, ITEMS_PER_THREAD>;
-  using BlockStore = cub::BlockStore<real_t, BLOCK_THREADS, ITEMS_PER_THREAD>;
   constexpr int32_t elements = BLOCK_THREADS * ITEMS_PER_THREAD;
 
-  __shared__ typename BlockLoad::TempStorage temp_load_i, temp_load_j;
-  __shared__ typename BlockStore::TempStorage temp_store_i, temp_store_j;
-
+  __shared__ typename cub::BlockLoad<real_t, BLOCK_THREADS, ITEMS_PER_THREAD>::TempStorage temp_load;
+  __shared__ typename cub::BlockStore<real_t, BLOCK_THREADS, ITEMS_PER_THREAD>::TempStorage temp_store;
   real_t thread_i[ITEMS_PER_THREAD], thread_j[ITEMS_PER_THREAD];
   real_ptr A_col_i = &A[i * lda], A_col_j = &A[j * lda], A_row_j = &A[j];
 
+  cub::BlockLoad<real_t, BLOCK_THREADS, ITEMS_PER_THREAD> block_load(temp_load);
+  cub::BlockStore<real_t, BLOCK_THREADS, ITEMS_PER_THREAD> block_store(temp_store);
+
   for (int32_t k = 0; k < N; k += elements) {
     int32_t num_items = min(elements, N - k);
-    BlockLoad(temp_load_i).Load(&A_col_i[k], thread_i, num_items);
-    BlockLoad(temp_load_j).Load(&A_col_j[k], thread_j, num_items);
+    block_load.Load(&A_col_i[k], thread_i, num_items);
+    block_load.Load(&A_col_j[k], thread_j, num_items);
 
     int32_t thread_loc = threadIdx.x * ITEMS_PER_THREAD + k;
     int32_t row_begin = max(thread_loc, i + 1);
     int32_t row_end = min(thread_loc + ITEMS_PER_THREAD, N);
 
-    BlockStore(temp_store_j).Store(&A_col_j[k], thread_i, num_items);
-    BlockStore(temp_store_i).Store(&A_col_i[k], thread_j, num_items);
+    block_store.Store(&A_col_j[k], thread_i, num_items);
+    block_store.Store(&A_col_i[k], thread_j, num_items);
 
     for (int32_t l = row_begin; l < row_end; ++l)
       A_row_j[l * lda] = thread_i[l - thread_loc];
