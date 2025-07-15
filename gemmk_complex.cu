@@ -24,81 +24,94 @@ struct minus_conj {
   __device__ __forceinline__ complex_float4 operator()(complex_float4 f) { return device::qf::conj(device::qf::negate(f)); }
 };
 
-template <class real_t, class real_ptr, class real_const_ptr, class complex_t, 
-  class complex_ptr, class complex_const_ptr, int32_t DIM_K, int32_t BLOCK_WARPS, int32_t TILE_ORDER>
-__global__ void minus_AHA_plusC_compile_time_k_complex(int32_t N, complex_const_ptr A, complex_ptr C, int32_t ld) {  
-  constexpr int32_t TILE_SIZE = 1 << TILE_ORDER;
-  constexpr int32_t TILE_SIZE_MASK = (1 << TILE_ORDER) - 1;
-  constexpr int32_t ITEM_K = DIM_K >> 5;
+struct minus_only {
+  __device__ __forceinline__ double operator()(double f) { return -f; }
+  __device__ __forceinline__ float operator()(float f) { return -f; }
+  __device__ __forceinline__ double2 operator()(double2 f) { return device::dd::negate(f); }
+  __device__ __forceinline__ float4 operator()(float4 f) { return device::qf::negate(f); }
+};
 
+template <class complex_t, class complex_ptr, class complex_const_ptr, int32_t ITER_K, int32_t BLOCK_WARPS, int32_t GRID_ORDER>
+__global__ void minus_AHA_plusC_k32_complex(int32_t N, complex_const_ptr A, complex_ptr C, int32_t ld) {  
   int32_t warp_id = (int32_t(threadIdx.x) >> 5);
   int32_t lane_id = int32_t(threadIdx.x) & 31;
-  int32_t tile_id = warp_id + (int32_t(blockIdx.x) * BLOCK_WARPS);
-  int32_t tile_y = (tile_id >> TILE_ORDER) << 5;
-  int32_t tile_x = tile_id & TILE_SIZE_MASK;
+  int32_t blocks_on_y_order = (N <= 32) ? 0 : min(GRID_ORDER, 32 - __clz((N >> 5) - 1));
+  int32_t blocks_on_x_order = GRID_ORDER - blocks_on_y_order;
+  int32_t warps_on_x = BLOCK_WARPS << blocks_on_x_order;
+  int32_t inc_y = 32 << blocks_on_y_order;
 
-  __shared__ typename cub::WarpLoad<complex_t, ITEM_K>::TempStorage temp_loadK[BLOCK_WARPS];
-  __shared__ typename cub::WarpStore<complex_t, ITEM_K>::TempStorage temp_storeK[BLOCK_WARPS];
-  __shared__ typename cub::WarpLoad<complex_t, 1>::TempStorage temp_load_one[BLOCK_WARPS];
-  __shared__ typename cub::WarpStore<complex_t, 1>::TempStorage temp_store_one[BLOCK_WARPS];
-  __shared__ complex_t spaceA[DIM_K * 33], spaceB[DIM_K * BLOCK_WARPS];
-  complex_t regA[ITEM_K], regB[ITEM_K];
-  complex_ptr spaceA_th = &spaceA[lane_id * 33 * ITEM_K], spaceB_warp = &spaceB[warp_id * DIM_K];
+  int32_t tile_y = (int32_t(blockIdx.x) >> blocks_on_x_order) << 5;
+  int32_t tile_x = (warp_id + (int32_t(blockIdx.x) * BLOCK_WARPS)) & (warps_on_x - 1);
 
-  cub::WarpLoad<complex_t, ITEM_K> warp_load_k(temp_loadK[warp_id]);
-  cub::WarpStore<complex_t, ITEM_K> warp_store_k(temp_storeK[warp_id]);
-  cub::WarpLoad<complex_t, 1> warp_load_one(temp_load_one[warp_id]);
-  cub::WarpStore<complex_t, 1> warp_store_one(temp_store_one[warp_id]);
+  __shared__ typename cub::WarpLoad<complex_t, 1>::TempStorage temp_load[BLOCK_WARPS];
+  __shared__ typename cub::WarpStore<complex_t, 1>::TempStorage temp_store[BLOCK_WARPS];
+  __shared__ complex_t spaceA[32 * 33], spaceB[32 * BLOCK_WARPS];
+  complex_ptr spaceA_th = &spaceA[lane_id * 33], spaceB_warp = &spaceB[warp_id * 32];
+
+  cub::WarpLoad<complex_t, 1> warp_load(temp_load[warp_id]);
+  cub::WarpStore<complex_t, 1> warp_store(temp_store[warp_id]);
   minus_conj conj_f;
   fma_complex fma_f;
 
-  // TILE_Y = tiles_on_y * 32 (all warps maps to the same row)
-  for (int32_t row = tile_y; row < N; row += TILE_SIZE) {
-    int32_t valid_rows = min(N - row, 32);
+  for (int32_t iter_k = 0; iter_k < ITER_K; ++iter_k) {
+    // TILE_Y = tiles_on_y * 32 (all warps maps to the same row)
+    for (int32_t row = tile_y; row < N; row += inc_y) {
+      int32_t valid_rows = min(N - row, 32);
 
-    for (int32_t i = warp_id; i < valid_rows; i += BLOCK_WARPS) {
-      warp_load_k.Load(&A[(row + i) * ld], regA);
-      __syncwarp();
-
-      #pragma unroll
-      for (int32_t k = 0; k < ITEM_K; ++k)
-        spaceA_th[(k << 5) + (i + k)] = conj_f(regA[k]);
-    }
-    __syncthreads(); // thread barrier to guarantee all A read is correct
-
-    // TILE_X = warps_on_x * block_warps (one warp writes to same column)
-    for (int32_t col = tile_x; col < N; col += TILE_SIZE) {
-      complex_t regC;
-      complex_ptr C_ij = &C[row + col * ld];
-      warp_load_one.Load(C_ij, *reinterpret_cast<complex_t(*)[1]>(&regC), valid_rows, complex_t());
-      warp_load_k.Load(&A[col * ld], regB);
-      warp_store_k.Store(spaceB_warp, regB);
-      __syncwarp(); // warp barrier to ensure shared-memory broadcast happen
-
-      #pragma unroll
-      for (int32_t i = 0; i < DIM_K; ++i) {
-        complex_t Ai = spaceB_warp[i], AHi;
-        warp_load_one.Load(&spaceA[(i << 5) + i], *reinterpret_cast<complex_t(*)[1]>(&AHi));
-        regC = fma_f(AHi, Ai, regC);
+      for (int32_t i = warp_id; i < valid_rows; i += BLOCK_WARPS) {
+        complex_t regA = A[(row + i) * ld + lane_id];
+        spaceA_th[i] = conj_f(regA);
       }
+      __syncthreads(); // thread barrier to guarantee all A read is correct
 
-      warp_store_one.Store(C_ij, *reinterpret_cast<complex_t(*)[1]>(&regC), valid_rows);
+      // TILE_X = warps_on_x * block_warps (one warp writes to same column)
+      for (int32_t col = tile_x; col < N; col += warps_on_x) {
+        complex_t regC;
+        int32_t col_loc = col * ld;
+        spaceB_warp[lane_id] = A[lane_id + col_loc];
+        complex_ptr C_ij = &C[row + col_loc];
+        warp_load.Load(C_ij, *reinterpret_cast<complex_t(*)[1]>(&regC), valid_rows, complex_t());
+        __syncwarp(); // warp barrier to ensure shared-memory broadcast happen
+
+        #pragma unroll
+        for (int32_t i = 0; i < 32; ++i) {
+          complex_t Ai = spaceB_warp[i];
+          complex_t AHi = spaceA[(i << 5) + (i + lane_id)];
+          regC = fma_f(AHi, Ai, regC);
+        }
+
+        warp_store.Store(C_ij, *reinterpret_cast<complex_t(*)[1]>(&regC), valid_rows);
+      }
+      __syncthreads(); // extra sync to prevent read overwritten A by other warps
     }
-    __syncthreads(); // extra sync to prevent read overwritten A by other warps
+
+    A = &A[32]; // Move to next series of k32;
   }
 }
 
 constexpr int32_t block_warps = 8;
-constexpr int32_t tile_order = 10; // 2^10 = 1024
-constexpr int32_t grid_y = 1 << (tile_order - 5);
-constexpr int32_t grid_x = (1 << tile_order) / block_warps;
-constexpr int32_t thread_bytes = 32;
+constexpr int32_t grid_order = 14; // 2^10 = 1024
+constexpr int32_t grid_blocks = 1 << grid_order;
+//constexpr int32_t grid_y = 1 << (grid_order - 5);
+//constexpr int32_t grid_x = (1 << grid_order) / block_warps;
+constexpr int32_t iter_k = 256 / 32;
 
-void internal::Cholesky::minus_AHA_gemmk64_double_complex(cudaStream_t stream, int32_t N, const std::complex<double>* A, std::complex<double>* C, int32_t ld) {
-  constexpr int32_t dim_k = 32 * (thread_bytes / sizeof(std::complex<double>));
-
-  minus_AHA_plusC_compile_time_k_complex <double, double* __restrict__, const double* __restrict__, cuDoubleComplex,
-    cuDoubleComplex* __restrict__, const cuDoubleComplex* __restrict__, dim_k, block_warps, tile_order> 
-    <<< grid_y * grid_x, block_warps * 32, 0, stream >>> (N, (const cuDoubleComplex*)A, (cuDoubleComplex*)C, ld);
+void internal::Cholesky::minus_AHA_gemmk_double_complex(cudaStream_t stream, int32_t N, const std::complex<double>* A, std::complex<double>* C, int32_t ld) {
+  minus_AHA_plusC_k32_complex <cuDoubleComplex, cuDoubleComplex* __restrict__, const cuDoubleComplex* __restrict__, iter_k, block_warps, grid_order> 
+    <<< grid_blocks, block_warps * 32, 0, stream >>> (N, (const cuDoubleComplex*)A, (cuDoubleComplex*)C, ld);
 }
 
+void internal::Cholesky::minus_AHA_gemmk_float_complex(cudaStream_t stream, int32_t N, const std::complex<float>* A, std::complex<float>* C, int32_t ld) {
+  minus_AHA_plusC_k32_complex <cuComplex, cuComplex* __restrict__, const cuComplex* __restrict__, iter_k, block_warps, grid_order> 
+    <<< grid_blocks, block_warps * 32, 0, stream >>> (N, (const cuComplex*)A, (cuComplex*)C, ld);
+}
+
+void internal::Cholesky::minus_AHA_gemmk_double2_complex(cudaStream_t stream, int32_t N, const complex_double2* A, complex_double2* C, int32_t ld) {
+  minus_AHA_plusC_k32_complex <complex_double2, complex_double2* __restrict__, const complex_double2* __restrict__, iter_k, block_warps, grid_order> 
+    <<< grid_blocks, block_warps * 32, 0, stream >>> (N, A, C, ld);
+}
+
+void internal::Cholesky::minus_AHA_gemmk_float4_complex(cudaStream_t stream, int32_t N, const complex_float4* A, complex_float4* C, int32_t ld) {
+  minus_AHA_plusC_k32_complex <complex_float4, complex_float4* __restrict__, const complex_float4* __restrict__, iter_k, block_warps, grid_order> 
+    <<< grid_blocks, block_warps * 32, 0, stream >>> (N, A, C, ld);
+}

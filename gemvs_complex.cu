@@ -13,6 +13,17 @@ struct add_complex {
   __device__ __forceinline__ complex_float4 operator()(complex_float4 a, complex_float4 b) { return device::qf::add(a, b); }
 };
 
+struct minus_conj_a_mul_complex {
+  __device__ __forceinline__ cuDoubleComplex operator()(cuDoubleComplex a, cuDoubleComplex b) {
+    return make_cuDoubleComplex(fma(-a.x, b.x, -a.y * b.y), fma(-a.x, b.y, a.y * b.x)); }
+  __device__ __forceinline__ cuComplex operator()(cuComplex a, cuComplex b) {
+    return make_cuComplex(fmaf(-a.x, b.x, -a.y * b.y), fmaf(-a.x, b.y, a.y * b.x)); }
+  __device__ __forceinline__ complex_double2 operator()(complex_double2 a, complex_double2 b) { 
+    return device::dd::mul(device::dd::make_complex_double2(device::dd::negate(a.real), a.imag), b); }
+  __device__ __forceinline__ complex_float4 operator()(complex_float4 a, complex_float4 b) { 
+    return device::qf::mul(device::qf::make_complex_float4(device::qf::negate(a.real), a.imag), b); }
+};
+
 struct minus_conj_a_fma_complex {
   __device__ __forceinline__ cuDoubleComplex operator()(cuDoubleComplex a, cuDoubleComplex b, cuDoubleComplex c) {
     return make_cuDoubleComplex(fma(-a.x, b.x, fma(-a.y, b.y, c.x)), fma(-a.x, b.y, fma(a.y, b.x, c.y))); }
@@ -52,16 +63,21 @@ __global__ void minus_adjAx_plusB_scale_complex(real_const_ptr scale, int32_t M,
   cub::WarpLoad<complex_t, ITEMS_PER_THREAD> warp_load(temp_load[warp_id]);
   cub::BlockReduce<complex_t, 32> warp_reduce(temp_reduce[warp_id]);
   add_complex add_func;
+  minus_conj_a_mul_complex mul_func;
   minus_conj_a_fma_complex fma_func;
 
   for (int32_t row = blockIdx.x * BLOCK_WARPS + warp_id; row < M; row += GRID_WARPS) {
     complex_const_ptr A_i = &A[row * lda];
 
+    int32_t num_items = min(elements, N);
+    warp_load.Load(A, threadX, num_items, complex_t());
+    warp_load.Load(A_i, threadA, num_items, complex_t());
+
     #pragma unroll
     for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
-      threadB[i] = complex_t();
+      threadB[i] = mul_func(threadA[i], threadX[i]);
 
-    for (int32_t i = 0; i < N; i += elements) {
+    for (int32_t i = elements; i < N; i += elements) {
       int32_t num_items = min(elements, N - i);
       warp_load.Load(&A_i[i], threadA, num_items, complex_t());
       warp_load.Load(&A[i], threadX, num_items, complex_t());
@@ -97,16 +113,21 @@ __global__ void minus_adjAx_plusB_scale_complex_reduce(real_const_ptr scale, int
   cub::BlockLoad<complex_t, BLOCK_THREADS, ITEMS_PER_THREAD> block_load(temp_load);
   cub::BlockReduce<complex_t, BLOCK_THREADS> block_reduce(temp_reduce);
   add_complex add_func;
+  minus_conj_a_mul_complex mul_func;
   minus_conj_a_fma_complex fma_func;
 
   for (int32_t row = blockIdx.x; row < M; row += THREAD_BLOCKS) {
     complex_const_ptr A_i = &A[row * lda];
 
+    int32_t num_items = min(elements, N);
+    block_load.Load(A_i, threadA, num_items, complex_t());
+    block_load.Load(A, threadX, num_items, complex_t());
+
     #pragma unroll
     for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
-      threadB[i] = complex_t();
+      threadB[i] = mul_func(threadA[i], threadX[i]);
 
-    for (int32_t i = 0; i < N; i += elements) {
+    for (int32_t i = elements; i < N; i += elements) {
       int32_t num_items = min(elements, N - i);
       block_load.Load(&A_i[i], threadA, num_items, complex_t());
       block_load.Load(&A[i], threadX, num_items, complex_t());
@@ -117,6 +138,7 @@ __global__ void minus_adjAx_plusB_scale_complex_reduce(real_const_ptr scale, int
     }
 
     complex_t block_res = block_reduce.Reduce(threadB, add_func);
+    __syncthreads();
 
     if (threadIdx.x == 0) {
       scal_add_complex scal_func;
@@ -130,7 +152,7 @@ __global__ void minus_adjAx_plusB_scale_complex_reduce(real_const_ptr scale, int
 }
 
 constexpr int32_t block_warps = 4;
-constexpr int32_t grid_size = 1024;
+constexpr int32_t grid_size = 2048;
 constexpr int32_t grid_warps = grid_size * block_warps;
 constexpr int32_t thread_bytes = 32;
 

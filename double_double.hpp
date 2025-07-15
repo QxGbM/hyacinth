@@ -43,8 +43,11 @@ namespace device::dd {
     delta.vec4 = fadd4(s.vec4, delta.vec4);
     delta.vec2[0] = fadd2(delta.vec2[0], delta.vec2[1]);
 
-    sum = normalize(sum);
-    return make_double2(sum.x, __dadd_rn(sum.y, __dadd_rn(delta.vec4.x, delta.vec4.y)));
+    s.vec4.x = __dadd_rn(sum.x, sum.y);
+    s.vec4.y = __dadd_rn(sum.x, -s.vec4.x);
+    s.vec4.z = __dadd_rn(sum.y, s.vec4.y);
+    s.vec4.w = __dadd_rn(delta.vec4.x, delta.vec4.y);
+    return make_double2(s.vec4.x, __dadd_rn(s.vec4.z, s.vec4.w));
   }
 
   __device__ __forceinline__ double2 mul(double2 a, double2 b) {
@@ -53,7 +56,10 @@ namespace device::dd {
     d.y = __fma_rn(a.x, b.x, -d.x);
     d.y = __fma_rn(a.x, b.y, d.y);
     d.y = __fma_rn(a.y, b.x, d.y);
-    return normalize(d);
+
+    double s = __dadd_rn(d.x, d.y);
+    double delta = __dadd_rn(d.x, -s);
+    return make_double2(s, __dadd_rn(d.y, delta));
   }
 
   __device__ __forceinline__ double2 fma(double2 a, double2 b, double2 c) {
@@ -141,8 +147,11 @@ namespace host::dd {
     delta.vec4 = fadd4(s.vec4, delta.vec4);
     delta.vec2[0] = fadd2(delta.vec2[0], delta.vec2[1]);
 
-    sum = normalize(sum);
-    return make_double2(sum.x, sum.y + (delta.vec4.x + delta.vec4.y));
+    s.vec4.x = sum.x + sum.y;
+    s.vec4.y = sum.x - s.vec4.x;
+    s.vec4.z = sum.y + s.vec4.y;
+    s.vec4.w = delta.vec4.x + delta.vec4.y;
+    return make_double2(s.vec4.x, s.vec4.z + s.vec4.w);
   }
 
   inline double2 mul(double2 a, double2 b) {
@@ -151,7 +160,10 @@ namespace host::dd {
     d.y = std::fma(a.x, b.x, -d.x);
     d.y = std::fma(a.x, b.y, d.y);
     d.y = std::fma(a.y, b.x, d.y);
-    return normalize(d);
+
+    double s = d.x + d.y;
+    double delta = d.x - s;
+    return make_double2(s, d.y + delta);
   }
 
   inline double2 fma(double2 a, double2 b, double2 c) {
