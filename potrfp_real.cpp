@@ -22,10 +22,8 @@ int32_t dpotrfp_gpu(cudaStream_t stream, int32_t N, double* A, int32_t lda, int3
   cudaMemcpy2DAsync(diag, sizeof(double), A, (lda + 1) * sizeof(double), sizeof(double), N, cudaMemcpyDeviceToDevice, stream);
 
   for (int32_t i = 0; i < N; ++i) {
-    if (0 < i)
-      internal::Cholesky::imax_update_double(stream, N - i, &A[i + (i - 1) * lda], &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
-    else
-      internal::Cholesky::imax_double(stream, N - i, &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
+    double* Aprev = (0 < i) ? &A[i + (i - 1) * lda] : nullptr;
+    internal::Cholesky::imax_double(stream, N - i, Aprev, &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
     cudaStreamSynchronize(stream);
 
     if (!std::isnormal(*scale)) {
@@ -60,10 +58,8 @@ int32_t spotrfp_gpu(cudaStream_t stream, int32_t N, float* A, int32_t lda, int32
   cudaMemcpy2DAsync(diag, sizeof(float), A, (lda + 1) * sizeof(float), sizeof(float), N, cudaMemcpyDeviceToDevice, stream);
 
   for (int32_t i = 0; i < N; ++i) {
-    if (0 < i)
-      internal::Cholesky::imax_update_float(stream, N - i, &A[i + (i - 1) * lda], &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
-    else
-      internal::Cholesky::imax_float(stream, N - i, &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
+    float* Aprev = (0 < i) ? &A[i + (i - 1) * lda] : nullptr;
+    internal::Cholesky::imax_float(stream, N - i, Aprev, &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
     cudaStreamSynchronize(stream);
 
     if (!std::isnormal(*scale)) {
@@ -98,10 +94,8 @@ int32_t double_double_potrfp_gpu(cudaStream_t stream, int32_t N, double2* A, int
   cudaMemcpy2DAsync(diag, sizeof(double2), A, (lda + 1) * sizeof(double2), sizeof(double2), N, cudaMemcpyDeviceToDevice, stream);
 
   for (int32_t i = 0; i < N; ++i) {
-    if (0 < i)
-      internal::Cholesky::imax_update_double2(stream, N - i, &A[i + (i - 1) * lda], &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
-    else
-      internal::Cholesky::imax_double2(stream, N - i, &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
+    double2* Aprev = (0 < i) ? &A[i + (i - 1) * lda] : nullptr;
+    internal::Cholesky::imax_double2(stream, N - i, Aprev, &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
     cudaStreamSynchronize(stream);
 
     if (!host::dd::isnormal(*scale)) {
@@ -136,10 +130,8 @@ int32_t quad_float_potrfp_gpu(cudaStream_t stream, int32_t N, float4* A, int32_t
   cudaMemcpy2DAsync(diag, sizeof(float4), A, (lda + 1) * sizeof(float4), sizeof(float4), N, cudaMemcpyDeviceToDevice, stream);
 
   for (int32_t i = 0; i < N; ++i) {
-    if (0 < i)
-      internal::Cholesky::imax_update_float4(stream, N - i, &A[i + (i - 1) * lda], &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
-    else
-      internal::Cholesky::imax_float4(stream, N - i, &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
+    float4* Aprev = (0 < i) ? &A[i + (i - 1) * lda] : nullptr;
+    internal::Cholesky::imax_float4(stream, N - i, Aprev, &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
     cudaStreamSynchronize(stream);
 
     if (!host::qf::isnormal(*scale)) {

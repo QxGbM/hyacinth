@@ -10,6 +10,8 @@ __global__ void swap_cols_real(int32_t i, int32_t j, int32_t N, real_ptr A, int3
   constexpr int32_t elements = GRID_THREADS * ITEMS_PER_THREAD;
   int32_t block_offset = blockIdx.x * BLOCK_THREADS * ITEMS_PER_THREAD;
   int32_t thread_offset = threadIdx.x * ITEMS_PER_THREAD;
+  int32_t rem = N & (elements - 1), div = N - rem;
+  int32_t N1 = max(div, rem), N2 = min(div, rem);
 
   __shared__ typename cub::BlockLoad<real_t, BLOCK_THREADS, ITEMS_PER_THREAD>::TempStorage temp_load;
   __shared__ typename cub::BlockStore<real_t, BLOCK_THREADS, ITEMS_PER_THREAD>::TempStorage temp_store;
@@ -19,15 +21,29 @@ __global__ void swap_cols_real(int32_t i, int32_t j, int32_t N, real_ptr A, int3
   cub::BlockLoad<real_t, BLOCK_THREADS, ITEMS_PER_THREAD> block_load(temp_load);
   cub::BlockStore<real_t, BLOCK_THREADS, ITEMS_PER_THREAD> block_store(temp_store);
 
-  for (int32_t k = block_offset; k < N; k += elements) {
-    int32_t num_items = min(elements, N - k);
-    block_load.Load(&A_col_i[k], thread_i, num_items);
-    block_load.Load(&A_col_j[k], thread_j, num_items);
+  for (int32_t k = block_offset; k < N1; k += elements) {
+    block_load.Load(&A_col_i[k], thread_i);
+    block_load.Load(&A_col_j[k], thread_j);
 
-    block_store.Store(&A_col_j[k], thread_i, num_items);
-    block_store.Store(&A_col_i[k], thread_j, num_items);
+    block_store.Store(&A_col_j[k], thread_i);
+    block_store.Store(&A_col_i[k], thread_j);
 
     int32_t thread_loc = thread_offset + k;
+    int32_t row_begin = max(thread_loc, i + 1);
+    int32_t row_end = min(thread_loc + ITEMS_PER_THREAD, N);
+
+    for (int32_t l = row_begin; l < row_end; ++l)
+      A_row_j[l * lda] = thread_i[l - thread_loc];
+  }
+
+  if (0 < N2) {
+    block_load.Load(&A_col_i[N1], thread_i, N2);
+    block_load.Load(&A_col_j[N1], thread_j, N2);
+
+    block_store.Store(&A_col_j[N1], thread_i, N2);
+    block_store.Store(&A_col_i[N1], thread_j, N2);
+
+    int32_t thread_loc = thread_offset + N1;
     int32_t row_begin = max(thread_loc, i + 1);
     int32_t row_end = min(thread_loc + ITEMS_PER_THREAD, N);
 

@@ -10,8 +10,6 @@ template<class real_t> struct pinned_space {
   int32_t pivot;
 };
 
-constexpr int32_t gemmk = 256;
-
 int32_t zpotrfp_gpu(cudaStream_t stream, int32_t N, std::complex<double>* A, int32_t lda, int32_t* ipiv) {
   std::vector<int32_t> pivots(N);
   std::iota(pivots.begin(), pivots.end(), 1);
@@ -23,12 +21,9 @@ int32_t zpotrfp_gpu(cudaStream_t stream, int32_t N, std::complex<double>* A, int
   double* diag = (double*)(&A[N * lda]);
   cudaMemcpy2DAsync(diag, sizeof(double), A, (2 * lda + 2) * sizeof(double), sizeof(double), N, cudaMemcpyDeviceToDevice, stream);
 
-  int32_t panel = 0;
   for (int32_t i = 0; i < N; ++i) {
-    if (0 < i)
-      internal::Cholesky::imax_update_double_complex(stream, N - i, &A[i + (i - 1) * lda], &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
-    else
-      internal::Cholesky::imax_double_complex(stream, N - i, &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
+    std::complex<double>* Aprev = (0 < i) ? &A[i + (i - 1) * lda] : nullptr;
+    internal::Cholesky::imax_double_complex(stream, N - i, Aprev, &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
     cudaStreamSynchronize(stream);
 
     if (!std::isnormal(*scale)) {
@@ -43,11 +38,7 @@ int32_t zpotrfp_gpu(cudaStream_t stream, int32_t N, std::complex<double>* A, int
       internal::Cholesky::swap_cols_double_complex(stream, i, j, N, A, lda);
     }
 
-    if (gemmk < i - panel) {
-      internal::Cholesky::minus_AHA_gemmk_double_complex(stream, N - i, &A[panel + i * lda], &A[i * (lda + 1)], lda);
-      panel += gemmk;
-    }
-    internal::Cholesky::minus_adjAx_plusB_scale_double_complex(stream, scale, N - i, i - panel, &A[panel + i * lda], lda, &A[i * (lda + 1)]);
+    internal::Cholesky::minus_adjAx_plusB_scale_double_complex(stream, scale, N - i, i, &A[i * lda], lda, &A[i * (lda + 1)]);
   }
 
   cudaStreamSynchronize(stream);
@@ -68,10 +59,8 @@ int32_t cpotrfp_gpu(cudaStream_t stream, int32_t N, std::complex<float>* A, int3
   cudaMemcpy2DAsync(diag, sizeof(float), A, (2 * lda + 2) * sizeof(float), sizeof(float), N, cudaMemcpyDeviceToDevice, stream);
 
   for (int32_t i = 0; i < N; ++i) {
-    if (0 < i)
-      internal::Cholesky::imax_update_float_complex(stream, N - i, &A[i + (i - 1) * lda], &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
-    else
-      internal::Cholesky::imax_float_complex(stream, N - i, &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
+    std::complex<float>* Aprev = (0 < i) ? &A[i + (i - 1) * lda] : nullptr;
+    internal::Cholesky::imax_float_complex(stream, N - i, Aprev, &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
     cudaStreamSynchronize(stream);
 
     if (!std::isnormal(*scale)) {
@@ -105,12 +94,9 @@ int32_t complex_double_double_potrfp_gpu(cudaStream_t stream, int32_t N, complex
   double2* diag = (double2*)(&A[N * lda]);
   cudaMemcpy2DAsync(diag, sizeof(double2), A, (2 * lda + 2) * sizeof(double2), sizeof(double2), N, cudaMemcpyDeviceToDevice, stream);
 
-  int32_t panel = 0;
   for (int32_t i = 0; i < N; ++i) {
-    if (0 < i)
-      internal::Cholesky::imax_update_double2_complex(stream, N - i, &A[i + (i - 1) * lda], &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
-    else
-      internal::Cholesky::imax_double2_complex(stream, N - i, &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
+    complex_double2* Aprev = (0 < i) ? &A[i + (i - 1) * lda] : nullptr;
+    internal::Cholesky::imax_double2_complex(stream, N - i, Aprev, &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
     cudaStreamSynchronize(stream);
 
     if (!host::dd::isnormal(*scale)) {
@@ -125,11 +111,7 @@ int32_t complex_double_double_potrfp_gpu(cudaStream_t stream, int32_t N, complex
       internal::Cholesky::swap_cols_double2_complex(stream, i, j, N, A, lda);
     }
 
-    if (gemmk < i - panel) {
-      internal::Cholesky::minus_AHA_gemmk_double2_complex(stream, N - i, &A[panel + i * lda], &A[i * (lda + 1)], lda);
-      panel += gemmk;
-    }
-    internal::Cholesky::minus_adjAx_plusB_scale_double2_complex(stream, scale, N - i, i - panel, &A[panel + i * lda], lda, &A[i * (lda + 1)]);
+    internal::Cholesky::minus_adjAx_plusB_scale_double2_complex(stream, scale, N - i, i, &A[i * lda], lda, &A[i * (lda + 1)]);
   }
 
   cudaStreamSynchronize(stream);
@@ -149,12 +131,9 @@ int32_t complex_quad_float_potrfp_gpu(cudaStream_t stream, int32_t N, complex_fl
   float4* diag = (float4*)(&A[N * lda]);
   cudaMemcpy2DAsync(diag, sizeof(float4), A, (2 * lda + 2) * sizeof(float4), sizeof(float4), N, cudaMemcpyDeviceToDevice, stream);
 
-  int32_t panel = 0;
   for (int32_t i = 0; i < N; ++i) {
-    if (0 < i)
-      internal::Cholesky::imax_update_float4_complex(stream, N - i, &A[i + (i - 1) * lda], &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
-    else
-      internal::Cholesky::imax_float4_complex(stream, N - i, &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
+    complex_float4* Aprev = (0 < i) ? &A[i + (i - 1) * lda] : nullptr;
+    internal::Cholesky::imax_float4_complex(stream, N - i, Aprev, &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
     cudaStreamSynchronize(stream);
 
     if (!host::qf::isnormal(*scale)) {
@@ -169,11 +148,7 @@ int32_t complex_quad_float_potrfp_gpu(cudaStream_t stream, int32_t N, complex_fl
       internal::Cholesky::swap_cols_float4_complex(stream, i, j, N, A, lda);
     }
 
-    if (gemmk < i - panel) {
-      internal::Cholesky::minus_AHA_gemmk_float4_complex(stream, N - i, &A[panel + i * lda], &A[i * (lda + 1)], lda);
-      panel += gemmk;
-    }
-    internal::Cholesky::minus_adjAx_plusB_scale_float4_complex(stream, scale, N - i, i - panel, &A[panel + i * lda], lda, &A[i * (lda + 1)]);
+    internal::Cholesky::minus_adjAx_plusB_scale_float4_complex(stream, scale, N - i, i, &A[i * lda], lda, &A[i * (lda + 1)]);
   }
 
   cudaStreamSynchronize(stream);

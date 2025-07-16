@@ -53,58 +53,11 @@ struct conj {
 
 template <class real_t, class real_ptr, class real_const_ptr, class complex_t, class complex_ptr, class complex_const_ptr, int32_t GRID_WARPS, int32_t BLOCK_WARPS, int32_t ITEMS_PER_THREAD>
 __global__ void minus_adjAx_plusB_scale_complex(real_const_ptr scale, int32_t M, int32_t N, complex_const_ptr A, int32_t lda, complex_ptr B) {
-
-  __shared__ typename cub::WarpLoad<complex_t, ITEMS_PER_THREAD>::TempStorage temp_load[BLOCK_WARPS];
-  __shared__ typename cub::BlockReduce<complex_t, 32>::TempStorage temp_reduce[BLOCK_WARPS];
-  complex_t threadA[ITEMS_PER_THREAD], threadX[ITEMS_PER_THREAD], threadB[ITEMS_PER_THREAD];
-
-  constexpr int32_t elements = ITEMS_PER_THREAD * 32;
-  int32_t warp_id = int32_t(threadIdx.x) >> 5;
-  cub::WarpLoad<complex_t, ITEMS_PER_THREAD> warp_load(temp_load[warp_id]);
-  cub::BlockReduce<complex_t, 32> warp_reduce(temp_reduce[warp_id]);
-  add_complex add_func;
-  minus_conj_a_mul_complex mul_func;
-  minus_conj_a_fma_complex fma_func;
-
-  for (int32_t row = blockIdx.x * BLOCK_WARPS + warp_id; row < M; row += GRID_WARPS) {
-    complex_const_ptr A_i = &A[row * lda];
-
-    int32_t num_items = min(elements, N);
-    warp_load.Load(A, threadX, num_items, complex_t());
-    warp_load.Load(A_i, threadA, num_items, complex_t());
-
-    #pragma unroll
-    for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
-      threadB[i] = mul_func(threadA[i], threadX[i]);
-
-    for (int32_t i = elements; i < N; i += elements) {
-      int32_t num_items = min(elements, N - i);
-      warp_load.Load(&A_i[i], threadA, num_items, complex_t());
-      warp_load.Load(&A[i], threadX, num_items, complex_t());
-
-      #pragma unroll
-      for (int32_t j = 0; j < ITEMS_PER_THREAD; ++j)
-        threadB[j] = fma_func(threadA[j], threadX[j], threadB[j]);
-    }
-
-    complex_t warp_res = warp_reduce.Reduce(threadB, add_func);
-
-    if ((threadIdx.x & 31) == 0) {
-      scal_add_complex scal_func;
-      conj conj_func;
-
-      complex_t res = scal_func(warp_res, B[row], *scale);
-      B[row] = res;
-      B[row * lda] = conj_func(res);
-    }
-  }
-}
-
-template <class real_t, class real_ptr, class real_const_ptr, class complex_t, class complex_ptr, class complex_const_ptr, int32_t GRID_WARPS, int32_t BLOCK_WARPS, int32_t ITEMS_PER_THREAD>
-__global__ void minus_adjAx_plusB_scale_complex_reduce(real_const_ptr scale, int32_t M, int32_t N, complex_const_ptr A, int32_t lda, complex_ptr B) {
   constexpr int32_t BLOCK_THREADS = BLOCK_WARPS * 32;
-  constexpr int32_t THREAD_BLOCKS = GRID_WARPS / BLOCK_WARPS;
+  constexpr int32_t GRID_BLOCKS = GRID_WARPS / BLOCK_WARPS;
   constexpr int32_t elements = ITEMS_PER_THREAD * BLOCK_THREADS;
+  int32_t rem = N & (elements - 1), div = N - rem;
+  int32_t N1 = max(div, rem), N2 = min(div, rem);
 
   __shared__ typename cub::BlockLoad<complex_t, BLOCK_THREADS, ITEMS_PER_THREAD>::TempStorage temp_load;
   __shared__ typename cub::BlockReduce<complex_t, BLOCK_THREADS>::TempStorage temp_reduce;
@@ -116,25 +69,32 @@ __global__ void minus_adjAx_plusB_scale_complex_reduce(real_const_ptr scale, int
   minus_conj_a_mul_complex mul_func;
   minus_conj_a_fma_complex fma_func;
 
-  for (int32_t row = blockIdx.x; row < M; row += THREAD_BLOCKS) {
+  for (int32_t row = blockIdx.x; row < M; row += GRID_BLOCKS) {
     complex_const_ptr A_i = &A[row * lda];
 
-    int32_t num_items = min(elements, N);
-    block_load.Load(A_i, threadA, num_items, complex_t());
-    block_load.Load(A, threadX, num_items, complex_t());
+    block_load.Load(A_i, threadA, N1, complex_t());
+    block_load.Load(A, threadX, N1, complex_t());
 
     #pragma unroll
     for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
       threadB[i] = mul_func(threadA[i], threadX[i]);
 
-    for (int32_t i = elements; i < N; i += elements) {
-      int32_t num_items = min(elements, N - i);
-      block_load.Load(&A_i[i], threadA, num_items, complex_t());
-      block_load.Load(&A[i], threadX, num_items, complex_t());
+    for (int32_t i = elements; i < N1; i += elements) {
+      block_load.Load(&A_i[i], threadA);
+      block_load.Load(&A[i], threadX);
 
       #pragma unroll
       for (int32_t j = 0; j < ITEMS_PER_THREAD; ++j)
         threadB[j] = fma_func(threadA[j], threadX[j], threadB[j]);
+    }
+
+    if (0 < N2) {
+      block_load.Load(&A_i[N1], threadA, N2, complex_t());
+      block_load.Load(&A[N1], threadX, N2, complex_t());
+
+      #pragma unroll
+      for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
+        threadB[i] = fma_func(threadA[i], threadX[i], threadB[i]);
     }
 
     complex_t block_res = block_reduce.Reduce(threadB, add_func);
@@ -160,54 +120,54 @@ void internal::Cholesky::minus_adjAx_plusB_scale_double_complex(cudaStream_t str
   constexpr int32_t items_per_thread = thread_bytes / sizeof(std::complex<double>);
   constexpr int32_t call_reduce = 64 * block_warps * items_per_thread;
 
-  if (call_reduce <= N)
-    minus_adjAx_plusB_scale_complex_reduce <double, double* __restrict__, const double* __restrict__,
+  if (call_reduce < N)
+    minus_adjAx_plusB_scale_complex <double, double* __restrict__, const double* __restrict__,
       cuDoubleComplex, cuDoubleComplex* __restrict__, const cuDoubleComplex* __restrict__, grid_warps, block_warps, items_per_thread>
       <<< grid_size, block_warps * 32, 0, stream >>> (scale, M, N, (const cuDoubleComplex*)A, lda, (cuDoubleComplex*)B);
   else
     minus_adjAx_plusB_scale_complex <double, double* __restrict__, const double* __restrict__,
-      cuDoubleComplex, cuDoubleComplex* __restrict__, const cuDoubleComplex* __restrict__, grid_warps, block_warps, items_per_thread>
-      <<< grid_size, block_warps * 32, 0, stream >>> (scale, M, N, (const cuDoubleComplex*)A, lda, (cuDoubleComplex*)B);
+      cuDoubleComplex, cuDoubleComplex* __restrict__, const cuDoubleComplex* __restrict__, grid_warps, 1, items_per_thread>
+      <<< grid_warps, 32, 0, stream >>> (scale, M, N, (const cuDoubleComplex*)A, lda, (cuDoubleComplex*)B);
 }
 
 void internal::Cholesky::minus_adjAx_plusB_scale_float_complex(cudaStream_t stream, const float* scale, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, std::complex<float>* B) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(std::complex<float>);
   constexpr int32_t call_reduce = 64 * block_warps * items_per_thread;
 
-  if (call_reduce <= N)
-    minus_adjAx_plusB_scale_complex_reduce <float, float* __restrict__, const float* __restrict__,
+  if (call_reduce < N)
+    minus_adjAx_plusB_scale_complex <float, float* __restrict__, const float* __restrict__,
       cuComplex, cuComplex* __restrict__, const cuComplex* __restrict__, grid_warps, block_warps, items_per_thread>
       <<< grid_size, block_warps * 32, 0, stream >>> (scale, M, N, (const cuComplex*)A, lda, (cuComplex*)B);
   else
     minus_adjAx_plusB_scale_complex <float, float* __restrict__, const float* __restrict__,
-      cuComplex, cuComplex* __restrict__, const cuComplex* __restrict__, grid_warps, block_warps, items_per_thread>
-      <<< grid_size, block_warps * 32, 0, stream >>> (scale, M, N, (const cuComplex*)A, lda, (cuComplex*)B);
+      cuComplex, cuComplex* __restrict__, const cuComplex* __restrict__, grid_warps, 1, items_per_thread>
+      <<< grid_warps, 32, 0, stream >>> (scale, M, N, (const cuComplex*)A, lda, (cuComplex*)B);
 }
 
 void internal::Cholesky::minus_adjAx_plusB_scale_double2_complex(cudaStream_t stream, const double2* scale, int32_t M, int32_t N, const complex_double2* A, int32_t lda, complex_double2* B) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(complex_double2);
   constexpr int32_t call_reduce = 64 * block_warps * items_per_thread;
 
-  if (call_reduce <= N)
-    minus_adjAx_plusB_scale_complex_reduce <double2, double2* __restrict__, const double2* __restrict__,
+  if (call_reduce < N)
+    minus_adjAx_plusB_scale_complex <double2, double2* __restrict__, const double2* __restrict__,
       complex_double2, complex_double2* __restrict__, const complex_double2* __restrict__, grid_warps, block_warps, items_per_thread>
       <<< grid_size, block_warps * 32, 0, stream >>> (scale, M, N, A, lda, B);
   else
     minus_adjAx_plusB_scale_complex <double2, double2* __restrict__, const double2* __restrict__,
-      complex_double2, complex_double2* __restrict__, const complex_double2* __restrict__, grid_warps, block_warps, items_per_thread>
-      <<< grid_size, block_warps * 32, 0, stream >>> (scale, M, N, A, lda, B);
+      complex_double2, complex_double2* __restrict__, const complex_double2* __restrict__, grid_warps, 1, items_per_thread>
+      <<< grid_warps, 32, 0, stream >>> (scale, M, N, A, lda, B);
 }
 
 void internal::Cholesky::minus_adjAx_plusB_scale_float4_complex(cudaStream_t stream, const float4* scale, int32_t M, int32_t N, const complex_float4* A, int32_t lda, complex_float4* B) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(complex_float4);
   constexpr int32_t call_reduce = 64 * block_warps * items_per_thread;
 
-  if (call_reduce <= N)
-    minus_adjAx_plusB_scale_complex_reduce <float4, float4* __restrict__, const float4* __restrict__,
+  if (call_reduce < N)
+    minus_adjAx_plusB_scale_complex <float4, float4* __restrict__, const float4* __restrict__,
       complex_float4, complex_float4* __restrict__, const complex_float4* __restrict__, grid_warps, block_warps, items_per_thread>
       <<< grid_size, block_warps * 32, 0, stream >>> (scale, M, N, A, lda, B);
   else
     minus_adjAx_plusB_scale_complex <float4, float4* __restrict__, const float4* __restrict__,
-      complex_float4, complex_float4* __restrict__, const complex_float4* __restrict__, grid_warps, block_warps, items_per_thread>
-      <<< grid_size, block_warps * 32, 0, stream >>> (scale, M, N, A, lda, B);
+      complex_float4, complex_float4* __restrict__, const complex_float4* __restrict__, grid_warps, 1, items_per_thread>
+      <<< grid_warps, 32, 0, stream >>> (scale, M, N, A, lda, B);
 }
