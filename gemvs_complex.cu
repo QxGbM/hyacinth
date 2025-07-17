@@ -51,8 +51,8 @@ struct conj {
   __device__ __forceinline__ complex_float4 operator()(complex_float4 f) { return device::qf::conj(f); }
 };
 
-template <class real_t, class real_ptr, class real_const_ptr, class complex_t, class complex_ptr, class complex_const_ptr, int32_t GRID_WARPS, int32_t BLOCK_WARPS, int32_t ITEMS_PER_THREAD>
-__global__ void minus_adjAx_plusB_scale_complex(real_const_ptr scale, int32_t M, int32_t N, complex_const_ptr A, int32_t lda, complex_ptr B) {
+template <class real_t, class complex_t, class complex_ptr, class complex_const_ptr, int32_t GRID_WARPS, int32_t BLOCK_WARPS, int32_t ITEMS_PER_THREAD>
+__global__ void minus_adjAx_plusB_scale_complex(real_t scale, int32_t M, int32_t N, complex_const_ptr A, int32_t lda, complex_ptr B) {
   constexpr int32_t BLOCK_THREADS = BLOCK_WARPS * 32;
   constexpr int32_t GRID_BLOCKS = GRID_WARPS / BLOCK_WARPS;
   constexpr int32_t elements = ITEMS_PER_THREAD * BLOCK_THREADS;
@@ -104,7 +104,7 @@ __global__ void minus_adjAx_plusB_scale_complex(real_const_ptr scale, int32_t M,
       scal_add_complex scal_func;
       conj conj_func;
 
-      complex_t res = scal_func(block_res, B[row], *scale);
+      complex_t res = scal_func(block_res, B[row], scale);
       B[row] = res;
       B[row * lda] = conj_func(res);
     }
@@ -116,58 +116,50 @@ constexpr int32_t grid_size = 2048;
 constexpr int32_t grid_warps = grid_size * block_warps;
 constexpr int32_t thread_bytes = 32;
 
-void internal::Cholesky::minus_adjAx_plusB_scale_double_complex(cudaStream_t stream, const double* scale, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, std::complex<double>* B) {
+void internal::Cholesky::minus_adjAx_plusB_scale_double_complex(cudaStream_t stream, const double scale, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, std::complex<double>* B) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(std::complex<double>);
   constexpr int32_t call_reduce = 64 * block_warps * items_per_thread;
 
   if (call_reduce < N)
-    minus_adjAx_plusB_scale_complex <double, double* __restrict__, const double* __restrict__,
-      cuDoubleComplex, cuDoubleComplex* __restrict__, const cuDoubleComplex* __restrict__, grid_warps, block_warps, items_per_thread>
+    minus_adjAx_plusB_scale_complex <double, cuDoubleComplex, cuDoubleComplex* __restrict__, const cuDoubleComplex* __restrict__, grid_warps, block_warps, items_per_thread>
       <<< grid_size, block_warps * 32, 0, stream >>> (scale, M, N, (const cuDoubleComplex*)A, lda, (cuDoubleComplex*)B);
   else
-    minus_adjAx_plusB_scale_complex <double, double* __restrict__, const double* __restrict__,
-      cuDoubleComplex, cuDoubleComplex* __restrict__, const cuDoubleComplex* __restrict__, grid_warps, 1, items_per_thread>
+    minus_adjAx_plusB_scale_complex <double, cuDoubleComplex, cuDoubleComplex* __restrict__, const cuDoubleComplex* __restrict__, grid_warps, 1, items_per_thread>
       <<< grid_warps, 32, 0, stream >>> (scale, M, N, (const cuDoubleComplex*)A, lda, (cuDoubleComplex*)B);
 }
 
-void internal::Cholesky::minus_adjAx_plusB_scale_float_complex(cudaStream_t stream, const float* scale, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, std::complex<float>* B) {
+void internal::Cholesky::minus_adjAx_plusB_scale_float_complex(cudaStream_t stream, const float scale, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, std::complex<float>* B) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(std::complex<float>);
   constexpr int32_t call_reduce = 64 * block_warps * items_per_thread;
 
   if (call_reduce < N)
-    minus_adjAx_plusB_scale_complex <float, float* __restrict__, const float* __restrict__,
-      cuComplex, cuComplex* __restrict__, const cuComplex* __restrict__, grid_warps, block_warps, items_per_thread>
+    minus_adjAx_plusB_scale_complex <float, cuComplex, cuComplex* __restrict__, const cuComplex* __restrict__, grid_warps, block_warps, items_per_thread>
       <<< grid_size, block_warps * 32, 0, stream >>> (scale, M, N, (const cuComplex*)A, lda, (cuComplex*)B);
   else
-    minus_adjAx_plusB_scale_complex <float, float* __restrict__, const float* __restrict__,
-      cuComplex, cuComplex* __restrict__, const cuComplex* __restrict__, grid_warps, 1, items_per_thread>
+    minus_adjAx_plusB_scale_complex <float, cuComplex, cuComplex* __restrict__, const cuComplex* __restrict__, grid_warps, 1, items_per_thread>
       <<< grid_warps, 32, 0, stream >>> (scale, M, N, (const cuComplex*)A, lda, (cuComplex*)B);
 }
 
-void internal::Cholesky::minus_adjAx_plusB_scale_double2_complex(cudaStream_t stream, const double2* scale, int32_t M, int32_t N, const complex_double2* A, int32_t lda, complex_double2* B) {
+void internal::Cholesky::minus_adjAx_plusB_scale_double2_complex(cudaStream_t stream, const double2 scale, int32_t M, int32_t N, const complex_double2* A, int32_t lda, complex_double2* B) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(complex_double2);
   constexpr int32_t call_reduce = 64 * block_warps * items_per_thread;
 
   if (call_reduce < N)
-    minus_adjAx_plusB_scale_complex <double2, double2* __restrict__, const double2* __restrict__,
-      complex_double2, complex_double2* __restrict__, const complex_double2* __restrict__, grid_warps, block_warps, items_per_thread>
+    minus_adjAx_plusB_scale_complex <double2, complex_double2, complex_double2* __restrict__, const complex_double2* __restrict__, grid_warps, block_warps, items_per_thread>
       <<< grid_size, block_warps * 32, 0, stream >>> (scale, M, N, A, lda, B);
   else
-    minus_adjAx_plusB_scale_complex <double2, double2* __restrict__, const double2* __restrict__,
-      complex_double2, complex_double2* __restrict__, const complex_double2* __restrict__, grid_warps, 1, items_per_thread>
+    minus_adjAx_plusB_scale_complex <double2, complex_double2, complex_double2* __restrict__, const complex_double2* __restrict__, grid_warps, 1, items_per_thread>
       <<< grid_warps, 32, 0, stream >>> (scale, M, N, A, lda, B);
 }
 
-void internal::Cholesky::minus_adjAx_plusB_scale_float4_complex(cudaStream_t stream, const float4* scale, int32_t M, int32_t N, const complex_float4* A, int32_t lda, complex_float4* B) {
+void internal::Cholesky::minus_adjAx_plusB_scale_float4_complex(cudaStream_t stream, const float4 scale, int32_t M, int32_t N, const complex_float4* A, int32_t lda, complex_float4* B) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(complex_float4);
   constexpr int32_t call_reduce = 64 * block_warps * items_per_thread;
 
   if (call_reduce < N)
-    minus_adjAx_plusB_scale_complex <float4, float4* __restrict__, const float4* __restrict__,
-      complex_float4, complex_float4* __restrict__, const complex_float4* __restrict__, grid_warps, block_warps, items_per_thread>
+    minus_adjAx_plusB_scale_complex <float4, complex_float4, complex_float4* __restrict__, const complex_float4* __restrict__, grid_warps, block_warps, items_per_thread>
       <<< grid_size, block_warps * 32, 0, stream >>> (scale, M, N, A, lda, B);
   else
-    minus_adjAx_plusB_scale_complex <float4, float4* __restrict__, const float4* __restrict__,
-      complex_float4, complex_float4* __restrict__, const complex_float4* __restrict__, grid_warps, 1, items_per_thread>
+    minus_adjAx_plusB_scale_complex <float4, complex_float4, complex_float4* __restrict__, const complex_float4* __restrict__, grid_warps, 1, items_per_thread>
       <<< grid_warps, 32, 0, stream >>> (scale, M, N, A, lda, B);
 }

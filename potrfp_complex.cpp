@@ -38,7 +38,7 @@ int32_t zpotrfp_gpu(cudaStream_t stream, int32_t N, std::complex<double>* A, int
       internal::Cholesky::swap_cols_double_complex(stream, i, j, N, A, lda);
     }
 
-    internal::Cholesky::minus_adjAx_plusB_scale_double_complex(stream, scale, N - i, i, &A[i * lda], lda, &A[i * (lda + 1)]);
+    internal::Cholesky::minus_adjAx_plusB_scale_double_complex(stream, *scale, N - i, i, &A[i * lda], lda, &A[i * (lda + 1)]);
   }
 
   cudaStreamSynchronize(stream);
@@ -74,7 +74,7 @@ int32_t cpotrfp_gpu(cudaStream_t stream, int32_t N, std::complex<float>* A, int3
       std::iter_swap(&pivots[i], &pivots[j]);
       internal::Cholesky::swap_cols_float_complex(stream, i, j, N, A, lda);
     }
-    internal::Cholesky::minus_adjAx_plusB_scale_float_complex(stream, scale, N - i, i, &A[i * lda], lda, &A[i * (lda + 1)]);
+    internal::Cholesky::minus_adjAx_plusB_scale_float_complex(stream, *scale, N - i, i, &A[i * lda], lda, &A[i * (lda + 1)]);
   }
 
   cudaStreamSynchronize(stream);
@@ -111,7 +111,7 @@ int32_t complex_double_double_potrfp_gpu(cudaStream_t stream, int32_t N, complex
       internal::Cholesky::swap_cols_double2_complex(stream, i, j, N, A, lda);
     }
 
-    internal::Cholesky::minus_adjAx_plusB_scale_double2_complex(stream, scale, N - i, i, &A[i * lda], lda, &A[i * (lda + 1)]);
+    internal::Cholesky::minus_adjAx_plusB_scale_double2_complex(stream, *scale, N - i, i, &A[i * lda], lda, &A[i * (lda + 1)]);
   }
 
   cudaStreamSynchronize(stream);
@@ -148,7 +148,7 @@ int32_t complex_quad_float_potrfp_gpu(cudaStream_t stream, int32_t N, complex_fl
       internal::Cholesky::swap_cols_float4_complex(stream, i, j, N, A, lda);
     }
 
-    internal::Cholesky::minus_adjAx_plusB_scale_float4_complex(stream, scale, N - i, i, &A[i * lda], lda, &A[i * (lda + 1)]);
+    internal::Cholesky::minus_adjAx_plusB_scale_float4_complex(stream, *scale, N - i, i, &A[i * lda], lda, &A[i * (lda + 1)]);
   }
 
   cudaStreamSynchronize(stream);

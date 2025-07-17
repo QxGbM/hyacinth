@@ -38,7 +38,7 @@ struct scal_add_real {
 };
 
 template <class real_t, class real_ptr, class real_const_ptr, int32_t GRID_WARPS, int32_t BLOCK_WARPS, int32_t ITEMS_PER_THREAD>
-__global__ void minus_transAx_plusB_scale_real(real_const_ptr scale, int32_t M, int32_t N, real_const_ptr A, int32_t lda, real_ptr B) {
+__global__ void minus_transAx_plusB_scale_real(real_t scale, int32_t M, int32_t N, real_const_ptr A, int32_t lda, real_ptr B) {
   constexpr int32_t BLOCK_THREADS = BLOCK_WARPS * 32;
   constexpr int32_t GRID_BLOCKS = GRID_WARPS / BLOCK_WARPS;
   constexpr int32_t elements = ITEMS_PER_THREAD * BLOCK_THREADS;
@@ -89,7 +89,7 @@ __global__ void minus_transAx_plusB_scale_real(real_const_ptr scale, int32_t M, 
     if (threadIdx.x == 0) {
       scal_add_real scal_func;
 
-      real_t res = scal_func(block_res, B[row], *scale);
+      real_t res = scal_func(block_res, B[row], scale);
       B[row] = res;
       B[row * lda] = res;
     }
@@ -101,7 +101,7 @@ constexpr int32_t grid_size = 2048;
 constexpr int32_t grid_warps = grid_size * block_warps;
 constexpr int32_t thread_bytes = 32;
 
-void internal::Cholesky::minus_transAx_plusB_scale_double(cudaStream_t stream, const double* scale, int32_t M, int32_t N, const double* A, int32_t lda, double* B) {
+void internal::Cholesky::minus_transAx_plusB_scale_double(cudaStream_t stream, const double scale, int32_t M, int32_t N, const double* A, int32_t lda, double* B) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(double);
   constexpr int32_t call_reduce = 64 * block_warps * items_per_thread;
 
@@ -113,7 +113,7 @@ void internal::Cholesky::minus_transAx_plusB_scale_double(cudaStream_t stream, c
       <<< grid_size, 32, 0, stream >>> (scale, M, N, A, lda, B);
 }
 
-void internal::Cholesky::minus_transAx_plusB_scale_float(cudaStream_t stream, const float* scale, int32_t M, int32_t N, const float* A, int32_t lda, float* B) {
+void internal::Cholesky::minus_transAx_plusB_scale_float(cudaStream_t stream, const float scale, int32_t M, int32_t N, const float* A, int32_t lda, float* B) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(float);
   constexpr int32_t call_reduce = 64 * block_warps * items_per_thread;
 
@@ -125,7 +125,7 @@ void internal::Cholesky::minus_transAx_plusB_scale_float(cudaStream_t stream, co
       <<< grid_warps, 32, 0, stream >>> (scale, M, N, A, lda, B);
 }
 
-void internal::Cholesky::minus_transAx_plusB_scale_double2(cudaStream_t stream, const double2* scale, int32_t M, int32_t N, const double2* A, int32_t lda, double2* B) {
+void internal::Cholesky::minus_transAx_plusB_scale_double2(cudaStream_t stream, const double2 scale, int32_t M, int32_t N, const double2* A, int32_t lda, double2* B) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(double2);
   constexpr int32_t call_reduce = 64 * block_warps * items_per_thread;
 
@@ -137,7 +137,7 @@ void internal::Cholesky::minus_transAx_plusB_scale_double2(cudaStream_t stream, 
       <<< grid_warps, 32, 0, stream >>> (scale, M, N, A, lda, B);
 }
 
-void internal::Cholesky::minus_transAx_plusB_scale_float4(cudaStream_t stream, const float4* scale, int32_t M, int32_t N, const float4* A, int32_t lda, float4* B) {
+void internal::Cholesky::minus_transAx_plusB_scale_float4(cudaStream_t stream, const float4 scale, int32_t M, int32_t N, const float4* A, int32_t lda, float4* B) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(float4);
   constexpr int32_t call_reduce = 64 * block_warps * items_per_thread;
 
