@@ -7,11 +7,7 @@
 #include <double_double.hpp>
 #include <quad_float.hpp>
 
-int32_t align_up(
-  int32_t ld,
-  int32_t align
-);
-
+int32_t align_up(int32_t ld, int32_t align);
 int32_t align_c_fp32(int32_t ld);
 int32_t align_c_fp64(int32_t ld);
 int32_t align_c_i8(int32_t ld);

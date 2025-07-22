@@ -74,3 +74,15 @@ namespace internal::Cholesky {
   void minus_AHA_gemmk_float4_complex(cudaStream_t stream, int32_t N, const complex_float4* A, complex_float4* C, int32_t ld);
 
 };
+
+namespace internal::int8 {
+  
+  void vexp_f64(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int32_t* vec_expon);
+
+  void vexp_f32(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, int32_t* vec_expon);
+
+  void vexp_cf64(cudaStream_t stream, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int32_t* vec_expon);
+
+  void vexp_cf32(cudaStream_t stream, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int32_t* vec_expon);
+
+};
