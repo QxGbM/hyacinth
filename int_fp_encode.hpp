@@ -28,28 +28,38 @@ namespace device::int8 {
     return (int32_t(v.u >> 23) & i8) - 150;  // bias127 + frac23
   }
 
+  __host__ __device__ __forceinline__ void fast_div7_i32x(int32_t x, int32_t& quo, int32_t& rem) {
+    int32_t m_num = 0x24924924 + (uint32_t(~x) >> 31); // x-:floor(2^32 / 7) x+: ceil(2^32 / 7)
+#ifdef __CUDA_ARCH__
+    quo = __mulhi(x, m_num);
+#else
+    quo = int32_t((int64_t(x) * int64_t(m_num)) >> 32);
+#endif
+    rem = x - quo * 7;
+  }
+
   __host__ __device__ __forceinline__ void encode_double_exp7_9xi8(double value, int32_t& e, int3& code) {
     union { double d; uint64_t u; } v {value};
 
     int32_t sign = int32_t(v.u >> 63);
-    int32_t exp = (int32_t(v.u >> 52) & i11) - 1075;
-    e = exp / 7 - int32_t(exp < 0);
+    int32_t exp = (int32_t(v.u >> 52) & i11) - 1075, rem;
+    fast_div7_i32x(exp, e, rem);
 
-    v.u = ((v.u & i52) | (i52 + 1)) << (exp - e * 7);
+    v.u = ((v.u & i52) | (i52 + 1)) << rem;
     int64_t frac = (-1075 < exp ? (sign ? -int64_t(v.u) : int64_t(v.u)) : int64_t(0));
 
     int32_t f32 = int32_t(frac);
     int32_t a0 = f32 & i7;
-    int32_t a1 = (f32 & (i7 << 7)) << 1;
-    int32_t a2 = (f32 & (i7 << 14)) << 2;
-    int32_t a3 = (f32 & (i7 << 21)) << 3;
+    int32_t a1 = (f32 << 1) & (i7 << 8);
+    int32_t a2 = (f32 << 2) & (i7 << 16);
+    int32_t a3 = (f32 << 3) & (i7 << 24);
     
     int32_t lo = a0 | a1 | a2 | a3;
     f32 = int32_t(frac >> 28);
     a0 = f32 & i7;
-    a1 = (f32 & (i7 << 7)) << 1;
-    a2 = (f32 & (i7 << 14)) << 2;
-    a3 = (f32 & (i7 << 21)) << 3;
+    a1 = (f32 << 1) & (i7 << 8);
+    a2 = (f32 << 2) & (i7 << 16);
+    a3 = (f32 << 3) & (i7 << 24);
     code = make_int3(lo, a0 | a1 | a2 | a3, int32_t(frac >> 56) & i8);
   }
 
@@ -57,16 +67,16 @@ namespace device::int8 {
     union { float d; uint32_t u; } v {value};
 
     int32_t sign = int32_t(v.u >> 31);
-    int32_t exp = (int32_t(v.u >> 23) & i8) - 150;
-    e = exp / 7 - int32_t(exp < 0);
+    int32_t exp = (int32_t(v.u >> 23) & i8) - 150, rem;
+    fast_div7_i32x(exp, e, rem);
 
-    v.u = ((v.u & i23) | (i23 + 1)) << (exp - e * 7);
+    v.u = ((v.u & i23) | (i23 + 1)) << rem;
     int32_t frac = (-150 < exp ? (sign ? -int32_t(v.u) : int32_t(v.u)) : int32_t(0));
 
     int32_t a0 = frac & i7;
-    int32_t a1 = (frac & (i7 << 7)) << 1;
-    int32_t a2 = (frac & (i7 << 14)) << 2;
-    int32_t a3 = (frac & (i7 << 21)) << 3;
+    int32_t a1 = (frac << 1) & (i7 << 8);
+    int32_t a2 = (frac << 2) & (i7 << 16);
+    int32_t a3 = (frac << 3) & (i7 << 24);
     code = make_int2(a0 | a1 | a2 | a3, (frac >> 28) & i8);
   }
 

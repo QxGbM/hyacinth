@@ -26,7 +26,7 @@ int32_t zpotrfp_gpu(cudaStream_t stream, int32_t N, std::complex<double>* A, int
     internal::Cholesky::imax_double_complex(stream, N - i, Aprev, &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
     cudaStreamSynchronize(stream);
 
-    if (!std::isnormal(*scale)) {
+    if (!std::isfinite(*scale)) {
       cudaMemcpy(ipiv, pivots.data(), N * sizeof(int32_t), cudaMemcpyDefault);
       cudaFreeHost(work);
       return i + 1;
@@ -63,7 +63,7 @@ int32_t cpotrfp_gpu(cudaStream_t stream, int32_t N, std::complex<float>* A, int3
     internal::Cholesky::imax_float_complex(stream, N - i, Aprev, &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
     cudaStreamSynchronize(stream);
 
-    if (!std::isnormal(*scale)) {
+    if (!std::isfinite(*scale)) {
       cudaMemcpy(ipiv, pivots.data(), N * sizeof(int32_t), cudaMemcpyDefault);
       cudaFreeHost(work);
       return i + 1;
@@ -99,7 +99,7 @@ int32_t complex_double_double_potrfp_gpu(cudaStream_t stream, int32_t N, complex
     internal::Cholesky::imax_double2_complex(stream, N - i, Aprev, &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
     cudaStreamSynchronize(stream);
 
-    if (!host::dd::isnormal(*scale)) {
+    if (!device::dd::fisfinite(*scale)) {
       cudaMemcpy(ipiv, pivots.data(), N * sizeof(int32_t), cudaMemcpyDefault);
       cudaFreeHost(work);
       return i + 1;
@@ -136,7 +136,7 @@ int32_t complex_quad_float_potrfp_gpu(cudaStream_t stream, int32_t N, complex_fl
     internal::Cholesky::imax_float4_complex(stream, N - i, Aprev, &diag[i], &A[i * (lda + 1)], lda, pivot, scale);
     cudaStreamSynchronize(stream);
 
-    if (!host::qf::isnormal(*scale)) {
+    if (!device::qf::fisfinite(*scale)) {
       cudaMemcpy(ipiv, pivots.data(), N * sizeof(int32_t), cudaMemcpyDefault);
       cudaFreeHost(work);
       return i + 1;

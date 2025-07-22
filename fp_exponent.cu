@@ -52,7 +52,7 @@ __global__ void vector_exponent(int32_t M, int32_t N, real_const_ptr A, int32_t 
     __syncthreads();
 
     if (threadIdx.x == 0)
-      vec_expon[col] = block_res / 7 - int32_t(block_res < 0);
+      device::int8::fast_div7_i32x(block_res, vec_expon[col], block_res);
   }
 }
 
