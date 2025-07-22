@@ -59,7 +59,7 @@ namespace device::int8 {
 #endif
   }
 
-  __host__ __device__ __forceinline__ void encode_double_exp7_9xi8(double value, int32_t& e, int32_t (&code)[3]) {
+  __host__ __device__ __forceinline__ void encode_double_exp7_9xi8(double value, int32_t& e, uint32_t (&code)[3], int32_t em4 = 0) {
     union { double d; int64_t u; } v {value};
 
     int32_t sign = int32_t(v.u >> 63);
@@ -83,9 +83,17 @@ namespace device::int8 {
     a3 = (f32 << 3) & (i7 << 24);
     code[1] = vcond_negate4(a0 | a1 | a2 | a3, sign);
     code[2] = vcond_negate4(uint32_t(frac >> 56) & i7, sign);
+
+    rem = (e - em4) & 3;
+    e += -rem; // e = em4 mod 4, right shift code to align
+
+    int32_t rsft = 32 - (rem << 3);
+    code[2] = uint32_t(((uint64_t(code[2]) << 32) | uint64_t(code[1])) >> rsft);
+    code[1] = uint32_t(((uint64_t(code[1]) << 32) | uint64_t(code[0])) >> rsft);
+    code[0] = code[0] << (32 - rsft);
   }
 
-  __host__ __device__ __forceinline__ void encode_float_exp7_5xi8(float value, int32_t& e, int32_t (&code)[2]) {
+  __host__ __device__ __forceinline__ void encode_float_exp7_5xi8(float value, int32_t& e, uint32_t (&code)[2], int32_t em4 = 0) {
     union { float d; int32_t u; } v {value};
 
     int32_t sign = int32_t(v.u >> 31);
@@ -101,6 +109,13 @@ namespace device::int8 {
     uint32_t a3 = (frac << 3) & (i7 << 24);
     code[0] = vcond_negate4(a0 | a1 | a2 | a3, sign);
     code[1] = vcond_negate4((frac >> 28) & i7, sign);
+
+    rem = (e - em4) & 3;
+    e += -rem;
+
+    int32_t rsft = 32 - (rem << 3);
+    code[1] = uint32_t(((uint64_t(code[1]) << 32) | uint64_t(code[0])) >> rsft);
+    code[0] = code[0] << (32 - rsft);
   }
 
   __host__ __device__ __forceinline__ void decode_scaled_int4_double(int32_t const (&code)[4], double& value) {

@@ -61,7 +61,7 @@ struct conj {
 };
 
 template <class real_t, class real_ptr, class complex_t, class complex_ptr, class complex_const_ptr, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD>
-__global__ void update_reduce_complex(int32_t N, complex_const_ptr A, real_ptr X, complex_ptr C, int32_t ldc, int32_t* i_out, real_ptr rsq_out) {
+__global__ void update_reduce_complex(int32_t N, complex_const_ptr A, real_ptr X, complex_ptr C, int32_t ldc, int32_t* __restrict__ i_out, real_ptr rsq_out) {
   constexpr int32_t elements = BLOCK_THREADS * ITEMS_PER_THREAD;
   int32_t rem = N & (elements - 1), div = N - rem;
   int32_t N1 = max(div, rem), N2 = min(div, rem);
