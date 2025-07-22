@@ -128,7 +128,7 @@ __global__ void update_reduce_real(int32_t N, real_const_ptr A, real_ptr X, real
 }
 
 template <class real_t, class real_ptr, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD>
-__global__ void reduce_real(int32_t N, real_ptr X, real_ptr C, int32_t ldc, int32_t* i_out, real_ptr rsq_out) {
+__global__ void reduce_real(int32_t N, real_ptr X, real_ptr C, int32_t ldc, int32_t* __restrict__ i_out, real_ptr rsq_out) {
   constexpr int32_t elements = BLOCK_THREADS * ITEMS_PER_THREAD;
   int32_t rem = N & (elements - 1), div = N - rem;
   int32_t N1 = max(div, rem), N2 = min(div, rem);

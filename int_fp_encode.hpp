@@ -18,14 +18,14 @@ namespace device::int8 {
   constexpr uint32_t i11 = (uint32_t(1) << 11) - 1;
   constexpr uint64_t i52 = (uint64_t(1) << 52) - 1;
 
-  __host__ __device__ __forceinline__ int32_t get_double_exp(double value) {
+  __host__ __device__ __forceinline__ int32_t get_double_top_exp(double value) {
     union { double d; uint64_t u; } v {value};
-    return (int32_t(v.u >> 52) & i11) - 1075; // bias1023 + frac52
+    return (int32_t(v.u >> 52) & i11) - 1023;
   }
 
-  __host__ __device__ __forceinline__ int32_t get_float_exp(float value) {
+  __host__ __device__ __forceinline__ int32_t get_float_top_exp(float value) {
     union { float d; uint32_t u; } v {value};
-    return (int32_t(v.u >> 23) & i8) - 150;  // bias127 + frac23
+    return (int32_t(v.u >> 23) & i8) - 127;
   }
 
   __host__ __device__ __forceinline__ void fast_div7_i32x(int32_t x, int32_t& quo, int32_t& rem) {
@@ -38,60 +38,84 @@ namespace device::int8 {
     rem = x - quo * 7;
   }
 
-  __host__ __device__ __forceinline__ void encode_double_exp7_9xi8(double value, int32_t& e, int3& code) {
-    union { double d; uint64_t u; } v {value};
+  __host__ __device__ __forceinline__ uint32_t vcond_negate4(uint32_t a, int32_t pred) {
+#ifdef __CUDA_ARCH__
+    return pred ? __vneg4(a) : a;
+#else
+    if (pred) {
+      int8_t a0 = int8_t(a & i8);
+      int8_t a1 = int8_t((a >> 8) & i8);
+      int8_t a2 = int8_t((a >> 16) & i8);
+      int8_t a3 = int8_t((a >> 24) & i8);
+
+      uint32_t r0 = uint8_t(-a0);
+      uint32_t r1 = uint8_t(-a1);
+      uint32_t r2 = uint8_t(-a2);
+      uint32_t r3 = uint8_t(-a3);
+
+      return r0 | (r1 << 8) | (r2 << 16) | (r3 << 24);
+    }
+    return a;
+#endif
+  }
+
+  __host__ __device__ __forceinline__ void encode_double_exp7_9xi8(double value, int32_t& e, int32_t (&code)[3]) {
+    union { double d; int64_t u; } v {value};
 
     int32_t sign = int32_t(v.u >> 63);
-    int32_t exp = (int32_t(v.u >> 52) & i11) - 1075, rem;
+    int32_t exp = (int32_t(v.u >> 52) & i11) - 1075, rem; // bias1023 + frac52
     fast_div7_i32x(exp, e, rem);
 
-    v.u = ((v.u & i52) | (i52 + 1)) << rem;
-    int64_t frac = (-1075 < exp ? (sign ? -int64_t(v.u) : int64_t(v.u)) : int64_t(0));
+    uint64_t frac = ((v.u & i52) | (i52 + 1)) << rem;
+    frac = -1075 < exp ? frac : int64_t(0);
 
-    int32_t f32 = int32_t(frac);
-    int32_t a0 = f32 & i7;
-    int32_t a1 = (f32 << 1) & (i7 << 8);
-    int32_t a2 = (f32 << 2) & (i7 << 16);
-    int32_t a3 = (f32 << 3) & (i7 << 24);
-    
-    int32_t lo = a0 | a1 | a2 | a3;
-    f32 = int32_t(frac >> 28);
+    uint32_t f32 = uint32_t(frac);
+    uint32_t a0 = f32 & i7;
+    uint32_t a1 = (f32 << 1) & (i7 << 8);
+    uint32_t a2 = (f32 << 2) & (i7 << 16);
+    uint32_t a3 = (f32 << 3) & (i7 << 24);
+    code[0] = vcond_negate4(a0 | a1 | a2 | a3, sign);
+
+    f32 = uint32_t(frac >> 28);
     a0 = f32 & i7;
     a1 = (f32 << 1) & (i7 << 8);
     a2 = (f32 << 2) & (i7 << 16);
     a3 = (f32 << 3) & (i7 << 24);
-    code = make_int3(lo, a0 | a1 | a2 | a3, int32_t(frac >> 56) & i8);
+    code[1] = vcond_negate4(a0 | a1 | a2 | a3, sign);
+    code[2] = vcond_negate4(uint32_t(frac >> 56) & i7, sign);
   }
 
-  __host__ __device__ __forceinline__ void encode_float_exp7_5xi8(float value, int32_t& e, int2& code) {
-    union { float d; uint32_t u; } v {value};
+  __host__ __device__ __forceinline__ void encode_float_exp7_5xi8(float value, int32_t& e, int32_t (&code)[2]) {
+    union { float d; int32_t u; } v {value};
 
     int32_t sign = int32_t(v.u >> 31);
-    int32_t exp = (int32_t(v.u >> 23) & i8) - 150, rem;
+    int32_t exp = (int32_t(v.u >> 23) & i8) - 150, rem; // bias127 + frac23
     fast_div7_i32x(exp, e, rem);
 
-    v.u = ((v.u & i23) | (i23 + 1)) << rem;
-    int32_t frac = (-150 < exp ? (sign ? -int32_t(v.u) : int32_t(v.u)) : int32_t(0));
+    uint32_t frac = ((v.u & i23) | (i23 + 1)) << rem;
+    frac = -150 < exp ? frac : int32_t(0);
 
-    int32_t a0 = frac & i7;
-    int32_t a1 = (frac << 1) & (i7 << 8);
-    int32_t a2 = (frac << 2) & (i7 << 16);
-    int32_t a3 = (frac << 3) & (i7 << 24);
-    code = make_int2(a0 | a1 | a2 | a3, (frac >> 28) & i8);
+    uint32_t a0 = frac & i7;
+    uint32_t a1 = (frac << 1) & (i7 << 8);
+    uint32_t a2 = (frac << 2) & (i7 << 16);
+    uint32_t a3 = (frac << 3) & (i7 << 24);
+    code[0] = vcond_negate4(a0 | a1 | a2 | a3, sign);
+    code[1] = vcond_negate4((frac >> 28) & i7, sign);
   }
 
-  __host__ __device__ __forceinline__ double decode_scaled_int4_double(int4 code) {
-    uint4 code_lo = make_uint4(uint32_t(code.x) & i28, uint32_t(code.y) & i21, uint32_t(code.z) & i14, uint32_t(code.w) & i7);
+  __host__ __device__ __forceinline__ void decode_scaled_int4_double(int32_t const (&code)[4], double& value) {
+    uint4 code_lo = make_uint4(uint32_t(code[0]) & i28, uint32_t(code[1]) & i21, uint32_t(code[2]) & i14, uint32_t(code[3]) & i7);
     uint32_t lo = code_lo.x + (code_lo.y << 7) + (code_lo.z << 14) + (code_lo.w << 21);
-    int32_t hi = (code.x >> 28) + (code.y >> 21) + (code.z >> 14) + (code.w >> 7);
-    return (double)(((int64_t)hi << 28) + lo);
+    int32_t hi = (code[0] >> 28) + (code[1] >> 21) + (code[2] >> 14) + (code[3] >> 7);
+    value = (double)(((int64_t)hi << 28) + lo);
   }
 
-  __host__ __device__ __forceinline__ float2 decode_scaled_int3_float2(int3 code) {
-    uint3 code_lo = make_uint3(uint32_t(code.x) & i23, uint32_t(code.y) & i16, uint32_t(code.z) & i9);
+  __host__ __device__ __forceinline__ void decode_scaled_int3_float2(int32_t const (&code)[3], float (&value)[2]) {
+    uint3 code_lo = make_uint3(uint32_t(code[0]) & i23, uint32_t(code[1]) & i16, uint32_t(code[2]) & i9);
     uint32_t lo = code_lo.x + (code_lo.y << 7) + (code_lo.z << 14);
-    int32_t hi = (lo >> 23) + (code.x >> 23) + (code.y >> 16) + (code.z >> 9);
-    return make_float2((float)((int64_t)hi << 23), (float)(lo & i23));
+    int32_t hi = (lo >> 23) + (code[0] >> 23) + (code[1] >> 16) + (code[2] >> 9);
+    value[0] = (float)((int64_t)hi << 23);
+    value[1] = (float)(lo & i23);
   }
 
 };

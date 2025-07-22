@@ -4,13 +4,13 @@
 #include <cub/cub.cuh>
 
 struct expon_imax {
-  __device__ __forceinline__ int32_t operator()(double f) { return device::int8::get_double_exp(f); }
-  __device__ __forceinline__ int32_t operator()(float f) { return device::int8::get_float_exp(f); }
+  __device__ __forceinline__ int32_t operator()(double f) { return device::int8::get_double_top_exp(f); }
+  __device__ __forceinline__ int32_t operator()(float f) { return device::int8::get_float_top_exp(f); }
   __device__ __forceinline__ int32_t operator()(int32_t a, int32_t b) { return max(a, b); }
 };
 
 template <class real_t, class real_const_ptr, int32_t GRID_BLOCKS, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD>
-__global__ void vector_exponent(int32_t M, int32_t N, real_const_ptr A, int32_t lda, int32_t* vec_expon) {
+__global__ void vector_exponent(int32_t M, int32_t N, real_const_ptr A, int32_t lda, int32_t* __restrict__ vec_expon) {
   constexpr int32_t elements = ITEMS_PER_THREAD * BLOCK_THREADS;
   int32_t rem = M & (elements - 1), div = M - rem;
   int32_t M1 = max(div, rem), M2 = min(div, rem);
