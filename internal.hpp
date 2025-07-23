@@ -77,12 +77,20 @@ namespace internal::Cholesky {
 
 namespace internal::int8 {
   
-  void vexp_f64(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int32_t* vec_expon);
+  void vexp_f64(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const double* A, int32_t lda, int32_t* vec_expon);
 
-  void vexp_f32(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, int32_t* vec_expon);
+  void vexp_f32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const float* A, int32_t lda, int32_t* vec_expon);
 
-  void vexp_cf64(cudaStream_t stream, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int32_t* vec_expon);
+  void vexp_cf64(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int32_t* vec_expon);
 
-  void vexp_cf32(cudaStream_t stream, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int32_t* vec_expon);
+  void vexp_cf32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int32_t* vec_expon);
+
+  void encode_f64_order20(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const double* A, int32_t lda, const int32_t* vec_expon, int8_t* inA, int32_t ldi, int32_t stride);
+
+  void encode_f32_order20(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const float* A, int32_t lda, const int32_t* vec_expon, int8_t* inA, int32_t ldi, int32_t stride);
+
+  void encode_cf64_order20(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, const int32_t* vec_expon, int8_t* inA, int32_t ldi, int32_t stride);
+
+  void encode_cf32_order20(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, const int32_t* vec_expon, int8_t* inA, int32_t ldi, int32_t stride);
 
 };

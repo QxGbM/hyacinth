@@ -43,23 +43,17 @@ namespace device::int8 {
     return pred ? __vneg4(a) : a;
 #else
     if (pred) {
-      int8_t a0 = int8_t(a & i8);
-      int8_t a1 = int8_t((a >> 8) & i8);
-      int8_t a2 = int8_t((a >> 16) & i8);
-      int8_t a3 = int8_t((a >> 24) & i8);
-
-      uint32_t r0 = uint8_t(-a0);
-      uint32_t r1 = uint8_t(-a1);
-      uint32_t r2 = uint8_t(-a2);
-      uint32_t r3 = uint8_t(-a3);
-
-      return r0 | (r1 << 8) | (r2 << 16) | (r3 << 24);
+      uint8_t a0 = uint8_t(-int8_t(a & i8));
+      uint8_t a1 = uint8_t(-int8_t((a >> 8) & i8));
+      uint8_t a2 = uint8_t(-int8_t((a >> 16) & i8));
+      uint8_t a3 = uint8_t(-int8_t((a >> 24) & i8));
+      return uint32_t(a0) | (uint32_t(a1) << 8) | (uint32_t(a2) << 16) | (uint32_t(a3) << 24);
     }
     return a;
 #endif
   }
 
-  __host__ __device__ __forceinline__ void encode_double_exp7_9xi8(double value, int32_t& e, uint32_t (&code)[3], int32_t em4 = 0) {
+  __host__ __device__ __forceinline__ void encode_double_exp7_9xi8(double value, int32_t& e, uint32_t (&code)[3]) {
     union { double d; int64_t u; } v {value};
 
     int32_t sign = int32_t(v.u >> 63);
@@ -83,17 +77,9 @@ namespace device::int8 {
     a3 = (f32 << 3) & (i7 << 24);
     code[1] = vcond_negate4(a0 | a1 | a2 | a3, sign);
     code[2] = vcond_negate4(uint32_t(frac >> 56) & i7, sign);
-
-    rem = (e - em4) & 3;
-    e += -rem; // e = em4 mod 4, right shift code to align
-
-    int32_t rsft = 32 - (rem << 3);
-    code[2] = uint32_t(((uint64_t(code[2]) << 32) | uint64_t(code[1])) >> rsft);
-    code[1] = uint32_t(((uint64_t(code[1]) << 32) | uint64_t(code[0])) >> rsft);
-    code[0] = code[0] << (32 - rsft);
   }
 
-  __host__ __device__ __forceinline__ void encode_float_exp7_5xi8(float value, int32_t& e, uint32_t (&code)[2], int32_t em4 = 0) {
+  __host__ __device__ __forceinline__ void encode_float_exp7_5xi8(float value, int32_t& e, uint32_t (&code)[2]) {
     union { float d; int32_t u; } v {value};
 
     int32_t sign = int32_t(v.u >> 31);
@@ -109,13 +95,29 @@ namespace device::int8 {
     uint32_t a3 = (frac << 3) & (i7 << 24);
     code[0] = vcond_negate4(a0 | a1 | a2 | a3, sign);
     code[1] = vcond_negate4((frac >> 28) & i7, sign);
+  }
 
-    rem = (e - em4) & 3;
-    e += -rem;
+  template <int32_t order>
+  __host__ __device__ __forceinline__ void align_expon(uint32_t (&a)[order], int32_t exp7_diff) {
+    uint32_t rsft = 32 - ((exp7_diff & 3) << 3);
+    int32_t psft = (exp7_diff - (exp7_diff & 3)) >> 2;
+    uint32_t b[order + 1];
+    b[0] = a[0] << (32 - rsft);
+    b[order] = a[order - 1] >> rsft;
 
-    int32_t rsft = 32 - (rem << 3);
-    code[1] = uint32_t(((uint64_t(code[1]) << 32) | uint64_t(code[0])) >> rsft);
-    code[0] = code[0] << (32 - rsft);
+#ifdef __CUDA_ARCH__
+    #pragma unroll
+#endif
+    for (int32_t i = 1; i < order; ++i)
+      b[i] = uint32_t(((uint64_t(a[i]) << 32) | uint64_t(a[i - 1])) >> rsft);
+
+#ifdef __CUDA_ARCH__
+    #pragma unroll
+#endif
+    for (int32_t i = 0; i < order; ++i) {
+      int32_t j = i - psft;
+      a[i] = (0 <= j && j <= order) ? b[j] : 0;
+    }
   }
 
   __host__ __device__ __forceinline__ void decode_scaled_int4_double(int32_t const (&code)[4], double& value) {

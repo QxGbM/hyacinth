@@ -8,7 +8,7 @@ project ("hyacinth" LANGUAGES CXX CUDA)
 
 find_package(CUDAToolkit REQUIRED)
 set(CPP_SOURCES align_ld.cpp potrfp_real.cpp potrfp_complex.cpp)
-set(CU_SOURCES imax_real.cu imax_complex.cu gemvs_complex.cu gemvs_real.cu swap_cols_complex.cu swap_cols_real.cu fp_exponent.cu)
+set(CU_SOURCES imax_real.cu imax_complex.cu gemvs_complex.cu gemvs_real.cu swap_cols_complex.cu swap_cols_real.cu fp_exponent.cu encode_fp_int_strided.cu)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 link_libraries(CUDA::cudart CUDA::cublas)
