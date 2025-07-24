@@ -6,16 +6,11 @@
 
 namespace device::int8 {
   constexpr uint32_t i7 = (uint32_t(1) << 7) - 1;
-  constexpr uint32_t i14 = (uint32_t(1) << 14) - 1;
-  constexpr uint32_t i21 = (uint32_t(1) << 21) - 1;
   constexpr uint32_t i28 = (uint32_t(1) << 28) - 1;
-
-  constexpr uint32_t i9 = (uint32_t(1) << 9) - 1;
-  constexpr uint32_t i16 = (uint32_t(1) << 16) - 1;
-  constexpr uint32_t i23 = (uint32_t(1) << 23) - 1;
 
   constexpr uint32_t i8 = (uint32_t(1) << 8) - 1;
   constexpr uint32_t i11 = (uint32_t(1) << 11) - 1;
+  constexpr uint32_t i23 = (uint32_t(1) << 23) - 1;
   constexpr uint64_t i52 = (uint64_t(1) << 52) - 1;
 
   __host__ __device__ __forceinline__ int32_t get_double_top_exp(double value) {
@@ -120,19 +115,13 @@ namespace device::int8 {
     }
   }
 
-  __host__ __device__ __forceinline__ void decode_scaled_int4_double(int32_t const (&code)[4], double& value) {
-    uint4 code_lo = make_uint4(uint32_t(code[0]) & i28, uint32_t(code[1]) & i21, uint32_t(code[2]) & i14, uint32_t(code[3]) & i7);
-    uint32_t lo = code_lo.x + (code_lo.y << 7) + (code_lo.z << 14) + (code_lo.w << 21);
-    int32_t hi = (code[0] >> 28) + (code[1] >> 21) + (code[2] >> 14) + (code[3] >> 7);
-    value = (double)(((int64_t)hi << 28) + lo);
-  }
+  __host__ __device__ __forceinline__ int32_t decode_scaled_4xi32(int32_t const (&a)[4], int32_t& c) {
+    int32_t lo = c + (uint32_t(a[0]) & i28) + (uint32_t(a[1] << 7) & i28) + (uint32_t(a[2] << 14) & i28) + (uint32_t(a[3] << 21) & i28);
+    int32_t hi = (a[0] >> 28) + (a[1] >> 21) + (a[2] >> 14) + (a[3] >> 7) + (lo >> 28);
+    int32_t sign = hi >> 31;
 
-  __host__ __device__ __forceinline__ void decode_scaled_int3_float2(int32_t const (&code)[3], float (&value)[2]) {
-    uint3 code_lo = make_uint3(uint32_t(code[0]) & i23, uint32_t(code[1]) & i16, uint32_t(code[2]) & i9);
-    uint32_t lo = code_lo.x + (code_lo.y << 7) + (code_lo.z << 14);
-    int32_t hi = (lo >> 23) + (code[0] >> 23) + (code[1] >> 16) + (code[2] >> 9);
-    value[0] = (float)((int64_t)hi << 23);
-    value[1] = (float)(lo & i23);
+    c = hi - sign;
+    return (lo & i28) | (sign & ~i28);
   }
 
 };
