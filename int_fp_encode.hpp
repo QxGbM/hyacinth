@@ -5,20 +5,15 @@
 #include <cuda_runtime.h>
 
 namespace device::int8 {
-  constexpr uint32_t i7 = (uint32_t(1) << 7) - 1;
-  constexpr uint32_t i28 = (uint32_t(1) << 28) - 1;
-
-  constexpr uint32_t i8 = (uint32_t(1) << 8) - 1;
-  constexpr uint32_t i11 = (uint32_t(1) << 11) - 1;
-  constexpr uint32_t i23 = (uint32_t(1) << 23) - 1;
-  constexpr uint64_t i52 = (uint64_t(1) << 52) - 1;
 
   __host__ __device__ __forceinline__ int32_t get_double_top_exp(double value) {
+    constexpr uint32_t i11 = (uint32_t(1) << 11) - 1;
     union { double d; uint64_t u; } v {value};
     return (int32_t(v.u >> 52) & i11) - 1023;
   }
 
   __host__ __device__ __forceinline__ int32_t get_float_top_exp(float value) {
+    constexpr uint32_t i8 = (uint32_t(1) << 8) - 1;
     union { float d; uint32_t u; } v {value};
     return (int32_t(v.u >> 23) & i8) - 127;
   }
@@ -38,6 +33,7 @@ namespace device::int8 {
     return pred ? __vneg4(a) : a;
 #else
     if (pred) {
+      constexpr uint32_t i8 = (uint32_t(1) << 8) - 1;
       uint8_t a0 = uint8_t(-int8_t(a & i8));
       uint8_t a1 = uint8_t(-int8_t((a >> 8) & i8));
       uint8_t a2 = uint8_t(-int8_t((a >> 16) & i8));
@@ -49,6 +45,10 @@ namespace device::int8 {
   }
 
   __host__ __device__ __forceinline__ void encode_double_exp7_9xi8(double value, int32_t& e, uint32_t (&code)[3]) {
+    constexpr uint32_t i7 = (uint32_t(1) << 7) - 1;
+    constexpr uint32_t i11 = (uint32_t(1) << 11) - 1;
+    constexpr uint64_t i52 = (uint64_t(1) << 52) - 1;
+
     union { double d; int64_t u; } v {value};
 
     int32_t sign = int32_t(v.u >> 63);
@@ -75,6 +75,10 @@ namespace device::int8 {
   }
 
   __host__ __device__ __forceinline__ void encode_float_exp7_5xi8(float value, int32_t& e, uint32_t (&code)[2]) {
+    constexpr uint32_t i7 = (uint32_t(1) << 7) - 1;
+    constexpr uint32_t i8 = (uint32_t(1) << 8) - 1;
+    constexpr uint32_t i23 = (uint32_t(1) << 23) - 1;
+
     union { float d; int32_t u; } v {value};
 
     int32_t sign = int32_t(v.u >> 31);
@@ -115,13 +119,31 @@ namespace device::int8 {
     }
   }
 
-  __host__ __device__ __forceinline__ int32_t decode_scaled_4xi32(int32_t const (&a)[4], int32_t& c) {
-    int32_t lo = c + (uint32_t(a[0]) & i28) + (uint32_t(a[1] << 7) & i28) + (uint32_t(a[2] << 14) & i28) + (uint32_t(a[3] << 21) & i28);
-    int32_t hi = (a[0] >> 28) + (a[1] >> 21) + (a[2] >> 14) + (a[3] >> 7) + (lo >> 28);
+  __host__ __device__ __forceinline__ int32_t decode_scaled_3xi32(int32_t const (&a)[3], int32_t& c) {
+    constexpr uint32_t i21 = (uint32_t(1) << 21) - 1;
+
+    int32_t lo = (uint32_t(c) & i21) + (uint32_t(a[0]) & i21) + (uint32_t(a[1] << 7) & i21) + (uint32_t(a[2] << 14) & i21);
+    int32_t hi = (c >> 21) + (a[0] >> 21) + (a[1] >> 14) + (a[2] >> 7) + (lo >> 21);
     int32_t sign = hi >> 31;
 
     c = hi - sign;
-    return (lo & i28) | (sign & ~i28);
+    return (lo & i21) | (sign & ~i21);
+  }
+
+  __host__ __device__ __forceinline__ int64_t decode_scaled_7xi32(int32_t const (&a)[7], int32_t& c) {
+    constexpr uint32_t i21 = (uint32_t(1) << 21) - 1;
+    constexpr uint32_t i28 = (uint32_t(1) << 28) - 1;
+    constexpr uint64_t i49 = (uint64_t(1) << 49) - 1;
+
+    int32_t lo4 = (uint32_t(c) & i28) + (uint32_t(a[0]) & i28) + (uint32_t(a[1] << 7) & i28) + (uint32_t(a[2] << 14) & i28) + (uint32_t(a[3] << 21) & i28);
+    int32_t hi4 = (c >> 28) + (a[0] >> 28) + (a[1] >> 21) + (a[2] >> 14) + (a[3] >> 7) + (lo4 >> 28);
+
+    int32_t lo3 = (uint32_t(hi4) & i21) + (uint32_t(a[4]) & i21) + (uint32_t(a[5] << 7) & i21) + (uint32_t(a[6] << 14) & i21);
+    int32_t hi3 = (hi4 >> 21) + (a[4] >> 21) + (a[5] >> 14) + (a[6] >> 7) + (lo3 >> 21);
+    int32_t sign = hi3 >> 31;
+
+    c = hi3 - sign;
+    return int64_t(lo4 & i28) | (int64_t(lo3 & i21) << 28) | (int64_t(sign) & ~i49);
   }
 
 };
