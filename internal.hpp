@@ -94,4 +94,8 @@ namespace internal::int8 {
 
   void encode_cf32_order20(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, const int32_t* vec_expon, int8_t* inA, int32_t ldi, int32_t stride);
 
+  void strided_r8i_ATA_gemm(cublasHandle_t handle, int32_t order, int32_t M, int32_t N, const int8_t* A, int32_t* C);
+
+  void strided_c8i_AHA_gemm(cublasHandle_t handle, int32_t order, int32_t M, int32_t N, const int8_t* A, int32_t* C);
+
 };
