@@ -28,19 +28,16 @@ namespace device::int8 {
     rem = x - quo * 7;
   }
 
-  __host__ __device__ __forceinline__ uint32_t vcond_negate4(uint32_t a, int32_t pred) {
+  __host__ __device__ __forceinline__ uint32_t vadd4(uint32_t a, uint32_t b) {
 #ifdef __CUDA_ARCH__
-    return pred ? __vneg4(a) : a;
+    return __vadd4(a, b);
 #else
-    if (pred) {
-      constexpr uint32_t i8 = (uint32_t(1) << 8) - 1;
-      uint8_t a0 = uint8_t(-int8_t(a & i8));
-      uint8_t a1 = uint8_t(-int8_t((a >> 8) & i8));
-      uint8_t a2 = uint8_t(-int8_t((a >> 16) & i8));
-      uint8_t a3 = uint8_t(-int8_t((a >> 24) & i8));
-      return uint32_t(a0) | (uint32_t(a1) << 8) | (uint32_t(a2) << 16) | (uint32_t(a3) << 24);
-    }
-    return a;
+    union { uint8_t bytes[4]; uint32_t i; } v;
+    v.bytes[0] = uint8_t(a) + uint8_t(b);
+    v.bytes[1] = uint8_t(a >> 8) + uint8_t(b >> 8);
+    v.bytes[2] = uint8_t(a >> 16) + uint8_t(b >> 16);
+    v.bytes[3] = uint8_t(a >> 24) + uint8_t(b >> 24);
+    return v.i;
 #endif
   }
 
@@ -55,23 +52,26 @@ namespace device::int8 {
     int32_t exp = (int32_t(v.u >> 52) & i11) - 1075, rem; // bias1023 + frac52
     fast_div7_i32x(exp, e, rem);
 
-    uint64_t frac = ((v.u & i52) | (i52 + 1)) << rem;
-    frac = -1075 < exp ? frac : int64_t(0);
+    int64_t impl_one = -int64_t(-1075 < exp) & (i52 + 1);
+    uint64_t frac = ((v.u & i52) | impl_one) << rem;
+    uint64_t sign_frac = sign ? ~frac : frac;
 
-    uint32_t f32 = uint32_t(frac);
+    uint32_t cmpl_i8 = sign & 0x81818181;
+    uint32_t f32 = uint32_t(sign_frac);
+
     uint32_t a0 = f32 & i7;
     uint32_t a1 = (f32 << 1) & (i7 << 8);
     uint32_t a2 = (f32 << 2) & (i7 << 16);
     uint32_t a3 = (f32 << 3) & (i7 << 24);
-    code[0] = vcond_negate4(a0 | a1 | a2 | a3, sign);
+    code[0] = vadd4(a0 | a1 | a2 | a3, cmpl_i8);
 
-    f32 = uint32_t(frac >> 28);
+    f32 = uint32_t(sign_frac >> 28);
     a0 = f32 & i7;
     a1 = (f32 << 1) & (i7 << 8);
     a2 = (f32 << 2) & (i7 << 16);
     a3 = (f32 << 3) & (i7 << 24);
-    code[1] = vcond_negate4(a0 | a1 | a2 | a3, sign);
-    code[2] = vcond_negate4(uint32_t(frac >> 56) & i7, sign);
+    code[1] = vadd4(a0 | a1 | a2 | a3, cmpl_i8);
+    code[2] = uint8_t((uint32_t(sign_frac >> 56) & i7) + cmpl_i8);
   }
 
   __host__ __device__ __forceinline__ void encode_float_exp7_5xi8(float value, int32_t& e, uint32_t (&code)[2]) {
@@ -81,19 +81,22 @@ namespace device::int8 {
 
     union { float d; int32_t u; } v {value};
 
-    int32_t sign = int32_t(v.u >> 31);
-    int32_t exp = (int32_t(v.u >> 23) & i8) - 150, rem; // bias127 + frac23
+    int32_t sign = v.u >> 31;
+    int32_t exp = ((v.u >> 23) & i8) - 150, rem; // bias127 + frac23
     fast_div7_i32x(exp, e, rem);
 
-    uint32_t frac = ((v.u & i23) | (i23 + 1)) << rem;
-    frac = -150 < exp ? frac : int32_t(0);
+    int32_t impl_one = -int32_t(-150 < exp) & (i23 + 1);
+    uint32_t frac = ((v.u & i23) | impl_one) << rem;
+    uint32_t sign_frac = sign ? ~frac : frac;
 
-    uint32_t a0 = frac & i7;
-    uint32_t a1 = (frac << 1) & (i7 << 8);
-    uint32_t a2 = (frac << 2) & (i7 << 16);
-    uint32_t a3 = (frac << 3) & (i7 << 24);
-    code[0] = vcond_negate4(a0 | a1 | a2 | a3, sign);
-    code[1] = vcond_negate4((frac >> 28) & i7, sign);
+    uint32_t cmpl_i8 = sign & 0x81818181;
+
+    uint32_t a0 = sign_frac & i7;
+    uint32_t a1 = (sign_frac << 1) & (i7 << 8);
+    uint32_t a2 = (sign_frac << 2) & (i7 << 16);
+    uint32_t a3 = (sign_frac << 3) & (i7 << 24);
+    code[0] = vadd4(a0 | a1 | a2 | a3, cmpl_i8);
+    code[1] = uint8_t((uint32_t(sign_frac >> 28) & i7) + cmpl_i8);
   }
 
   template <int32_t order>

@@ -18,58 +18,33 @@ namespace device::dd {
     return make_double2(-a.x, -a.y);
   }
 
-  __host__ __device__ __forceinline__ double2 fadd2(double2 a, double2 b) {
-#ifdef __CUDA_ARCH__
-    return make_double2(__dadd_rn(a.x, b.x), __dadd_rn(a.y, b.y));
-#else
-    return make_double2(a.x + b.x, a.y + b.y);
-#endif
-  }
+  __host__ __device__ __forceinline__ void fadd2_err(double2 a, double2 b, double2& sum, double2& err) {
+    constexpr uint64_t i63 = ~(uint64_t(1) << 63);
+    union { double2 fp; uint64_t in[2]; } va{a}, vb{b};
+    sum = make_double2(a.x + b.x, a.y + b.y);
+    int32_t pred_x = (va.in[0] & i63) < (vb.in[0] & i63);
+    int32_t pred_y = (va.in[1] & i63) < (vb.in[1] & i63);
 
-  __host__ __device__ __forceinline__ double4 fadd4(double4 a, double4 b) {
-#ifdef __CUDA_ARCH__
-    return make_double4(__dadd_rn(a.x, b.x), __dadd_rn(a.y, b.y), __dadd_rn(a.z, b.z), __dadd_rn(a.w, b.w));
-#else
-    return make_double4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w);
-#endif
+    a = make_double2(pred_x ? vb.fp.x : va.fp.x, pred_y ? vb.fp.y : va.fp.y);
+    b = make_double2(pred_x ? va.fp.x : vb.fp.x, pred_y ? va.fp.y : vb.fp.y);
+    err = make_double2(b.x + (a.x - sum.x), b.y + (a.y - sum.y));
   }
 
   __host__ __device__ __forceinline__ double2 normalize(double2 a) {
-#ifdef __CUDA_ARCH__
-    double sum = __dadd_rn(a.x, a.y);
-    double delta = __dadd_rn(a.x, -sum);
-    double2 err = fadd2(a, make_double2(-(__dadd_rn(sum, delta)), delta));
-    return make_double2(sum, __dadd_rn(err.x, err.y));
-#else
+    constexpr uint64_t i63 = ~(uint64_t(1) << 63);
+    union { double2 fp; uint64_t in[2]; } va{a};
     double sum = a.x + a.y;
-    double delta = a.x - sum;
-    double2 err = fadd2(a, make_double2(-(sum + delta), delta));
-    return make_double2(sum, err.x + err.y);
-#endif
+
+    int32_t pred = (va.in[0] & i63) < (va.in[1] & i63);
+    a = make_double2(pred ? va.fp.y : va.fp.x, pred ? va.fp.x : va.fp.y);
+    return make_double2(sum, a.y + (a.x - sum));
   }
 
   __host__ __device__ __forceinline__ double2 add(double2 a, double2 b) {
-    union { double2 vec2[2]; double4 vec4; } s = { a, b }, delta;
-    double2 sum = fadd2(s.vec2[0], s.vec2[1]);
-
-    delta.vec2[1] = fadd2(s.vec2[0], negate(sum));
-    delta.vec2[0] = negate(fadd2(sum, delta.vec2[1]));
-    delta.vec4 = fadd4(s.vec4, delta.vec4);
-    delta.vec2[0] = fadd2(delta.vec2[0], delta.vec2[1]);
-
-#ifdef __CUDA_ARCH__
-    s.vec4.x = __dadd_rn(sum.x, sum.y);
-    s.vec4.y = __dadd_rn(sum.x, -s.vec4.x);
-    s.vec4.z = __dadd_rn(sum.y, s.vec4.y);
-    s.vec4.w = __dadd_rn(delta.vec4.x, delta.vec4.y);
-    return make_double2(s.vec4.x, __dadd_rn(s.vec4.z, s.vec4.w));
-#else
-    s.vec4.x = sum.x + sum.y;
-    s.vec4.y = sum.x - s.vec4.x;
-    s.vec4.z = sum.y + s.vec4.y;
-    s.vec4.w = delta.vec4.x + delta.vec4.y;
-    return make_double2(s.vec4.x, s.vec4.z + s.vec4.w);
-#endif
+    fadd2_err(a, b, a, b);
+    a = normalize(a);
+    b.x = b.x + b.y;
+    return make_double2(a.x, a.y + b.x);
   }
 
   __host__ __device__ __forceinline__ double2 mul(double2 a, double2 b) {

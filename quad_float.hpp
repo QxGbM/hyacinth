@@ -14,157 +14,91 @@ namespace device::qf {
     return complex_float4({ real, imag });
   }
 
-  __host__ __device__ __forceinline__ float2 fneg2(float2 a) {
-    return make_float2(-a.x, -a.y);
-  }
-
   __host__ __device__ __forceinline__ float4 negate(float4 a) {
     return make_float4(-a.x, -a.y, -a.z, -a.w);
   }
 
-  __host__ __device__ __forceinline__ float2 fadd2(float2 a, float2 b) {
-#ifdef __CUDA_ARCH__
-    return make_float2(__fadd_rn(a.x, b.x), __fadd_rn(a.y, b.y));
-#else
-    return make_float2(a.x + b.x, a.y + b.y);
-#endif
+  __host__ __device__ __forceinline__ void fadd_err(float a, float b, float& sum, float& err) {
+    constexpr uint32_t i31 = ~(uint32_t(1) << 31);
+    union { float fp; uint32_t in; } va{a}, vb{b};
+    sum = a + b;
+    int32_t pred = (va.in & i31) < (vb.in & i31);
+
+    a = pred ? vb.fp : va.fp;
+    b = pred ? va.fp : vb.fp;
+    err = b + (a - sum);
   }
 
-  __host__ __device__ __forceinline__ float4 fadd4(float4 a, float4 b) {
-#ifdef __CUDA_ARCH__
-    return make_float4(__fadd_rn(a.x, b.x), __fadd_rn(a.y, b.y), __fadd_rn(a.z, b.z), __fadd_rn(a.w, b.w));
-#else
-    return make_float4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w);
-#endif
-  }
+  __host__ __device__ __forceinline__ void fadd2_err(float2 a, float2 b, float2& sum, float2& err) {
+    constexpr uint32_t i31 = ~(uint32_t(1) << 31);
+    union { float2 fp; uint32_t in[2]; } va{a}, vb{b};
+    sum = make_float2(a.x + b.x, a.y + b.y);
+    int32_t pred_x = (va.in[0] & i31) < (vb.in[0] & i31);
+    int32_t pred_y = (va.in[1] & i31) < (vb.in[1] & i31);
 
-  __host__ __device__ __forceinline__ float4 collapse_float4(float4 a) {
-    union float_vec { float4 vec4; float2 vec2[2]; } s = {a}, delta;
-    float2 sum = fadd2(s.vec2[0], s.vec2[1]);
-
-    delta.vec2[1] = fadd2(s.vec2[0], fneg2(sum));
-    delta.vec2[0] = fneg2(fadd2(sum, delta.vec2[1]));
-    delta.vec4 = fadd4(s.vec4, delta.vec4);
-    delta.vec2[0] = fadd2(delta.vec2[0], delta.vec2[1]);
-    s.vec4 = make_float4(sum.x, delta.vec4.x, sum.y, delta.vec4.y);
-    sum = fadd2(s.vec2[0], s.vec2[1]);
-
-    delta.vec2[1] = fadd2(s.vec2[0], fneg2(sum));
-    delta.vec2[0] = fneg2(fadd2(sum, delta.vec2[1]));
-    delta.vec4 = fadd4(s.vec4, delta.vec4);
-    s.vec2[0] = sum;
-    s.vec2[1] = fadd2(delta.vec2[0], delta.vec2[1]);
-
-#ifdef __CUDA_ARCH__
-    sum.x = __fadd_rn(s.vec4.x, s.vec4.y);
-    delta.vec4.y = __fadd_rn(s.vec4.x, -sum.x);
-    delta.vec4.x = -(__fadd_rn(sum.x, delta.vec4.y));
-    delta.vec2[0] = fadd2(s.vec2[0], delta.vec2[0]);
-    s.vec2[0] = make_float2(sum.x, __fadd_rn(delta.vec4.x, delta.vec4.y));
-#else
-    sum.x = s.vec4.x + s.vec4.y;
-    delta.vec4.y = s.vec4.x - sum.x;
-    delta.vec4.x = -(sum.x + delta.vec4.y);
-    delta.vec2[0] = fadd2(s.vec2[0], delta.vec2[0]);
-    s.vec2[0] = make_float2(sum.x, delta.vec4.x + delta.vec4.y);
-#endif
-    return s.vec4;
+    a = make_float2(pred_x ? vb.fp.x : va.fp.x, pred_y ? vb.fp.y : va.fp.y);
+    b = make_float2(pred_x ? va.fp.x : vb.fp.x, pred_y ? va.fp.y : vb.fp.y);
+    err = make_float2(b.x + (a.x - sum.x), b.y + (a.y - sum.y));
   }
 
   __host__ __device__ __forceinline__ float4 normalize(float4 a) {
-    a = collapse_float4(a);
-    float4 q = collapse_float4(make_float4(a.y, a.z, a.w, 0.f));
-
-#ifdef __CUDA_ARCH__
-    float sum = __fadd_rn(q.y, q.z);
-    float delta = __fadd_rn(q.y, -sum);
-    float2 err = fadd2(make_float2(q.y, q.z), make_float2(-(__fadd_rn(sum, delta)), delta));
-    return make_float4(a.x, q.x, sum, __fadd_rn(err.x, err.y));
-#else
-    float sum = q.y + q.z;
-    float delta = q.y - sum;
-    float2 err = fadd2(make_float2(q.y, q.z), make_float2(-(sum + delta), delta));
-    return make_float4(a.x, q.x, sum, err.x + err.y);
-#endif
-  }
-
-  __host__ __device__ __forceinline__ void fadd4_err(float4 a, float4 b, float4& sum, float4& err) {
-    sum = fadd4(a, b);
-    float4 delta = fadd4(a, negate(sum));
-    err = fadd4(fadd4(a, negate(fadd4(sum, delta))), fadd4(b, delta));
+    float2 a0, a1;
+    fadd2_err(make_float2(a.x, a.y), make_float2(a.z, a.w), a0, a1);
+    fadd2_err(make_float2(a0.x, a1.x), make_float2(a0.y, a1.y), a0, a1);
+    fadd_err(a0.y, a1.x, a0.y, a1.x);
+    fadd_err(a1.x, a1.y, a1.x, a1.y);
+    return make_float4(a0.x, a0.y, a1.x, a1.y);
   }
 
   __host__ __device__ __forceinline__ float4 add(float4 a, float4 b) {
-    fadd4_err(a, b, a, b);
-    b = make_float4(b.w, b.x, b.y, b.z);
-    fadd4_err(a, b, a, b);
-    b = make_float4(b.w, b.x, b.y, b.z);
-    fadd4_err(a, b, a, b);
-    return normalize(fadd4(a, make_float4(b.w, b.x, b.y, b.z)));
+    float2 a0, a1;
+    fadd2_err(make_float2(a.x, a.y), make_float2(b.x, b.y), a0, a1); // 1122 - 1223
+    fadd_err(a.z, b.z, a.z, b.z); // 33 - 34, 4@b.z
+
+    float r0 = a0.x;
+    fadd2_err(make_float2(a0.y, a.z), a1, a0, a1); // 2233 - 2334, 4@a1.y
+    fadd_err(a0.y, a1.x, a0.y, a1.x); // 33 - 34, 4@a1.x
+    return normalize(make_float4(r0, a0.x, a0.y, a.w + b.w + b.z + a1.y + a1.x));
+  }
+
+  __host__ __device__ __forceinline__ void fmul2_err(float2 a, float2 b, float2& prod, float2& err) {
+#ifdef __CUDA_ARCH__
+    prod = make_float2(__fmul_rn(a.x, b.x), __fmul_rn(a.y, b.y));
+    err = make_float2(__fmaf_rn(a.x, b.x, -prod.x), __fmaf_rn(a.y, b.y, -prod.y));
+#else
+    prod = make_float2(a.x * b.x, a.y * b.y);
+    err = make_float2(std::fmaf(a.x, b.x, -prod.x), std::fmaf(a.y, b.y, -prod.y));
+#endif
   }
 
   __host__ __device__ __forceinline__ float4 mul(float4 a, float4 b) {
-#ifdef __CUDA_ARCH__
-    float2 prod = make_float2(__fmul_rn(a.x, b.x), __fmul_rn(a.y, b.y));
-    float2 err = make_float2(__fmaf_rn(a.x, b.x, -prod.x), __fmaf_rn(a.y, b.y, -prod.y));
-    float4 c = make_float4(prod.x, err.x, prod.y, err.y);
+    float2 prod, err;
+    float4 la = make_float4(a.w * b.x, a.z * b.y, a.y * b.z, a.x * b.w);
+    fmul2_err(make_float2(a.x, a.y), make_float2(b.x, b.y), prod, err);
+    float4 c = make_float4(prod.x, err.x, prod.y, la.y + la.z + err.y);
 
-    prod = make_float2(__fmul_rn(a.y, b.x), __fmul_rn(a.z, b.x));
-    err = make_float2(__fmaf_rn(a.y, b.x, -prod.x), __fmaf_rn(a.z, b.x, -prod.y));
-    c = add(c, make_float4(prod.x, err.x, prod.y, err.y));
+    fmul2_err(make_float2(a.y, a.z), make_float2(b.x, b.x), prod, err);
+    fadd_err(prod.y, err.x, prod.y, err.x);
+    c = add(c, make_float4(prod.x, prod.y, la.x + (err.x + err.y), 0.f));
 
-    prod = make_float2(__fmul_rn(a.x, b.y), __fmul_rn(a.x, b.z));
-    err = make_float2(__fmaf_rn(a.x, b.y, -prod.x), __fmaf_rn(a.x, b.z, -prod.y));
-    c = add(c, make_float4(prod.x, err.x, prod.y, err.y));
-
-    return add(c, make_float4(__fmul_rn(a.w, b.x), __fmul_rn(a.z, b.y), __fmul_rn(a.y, b.z), __fmul_rn(a.x, b.w)));
-#else
-    float2 prod = make_float2(a.x * b.x, a.y * b.y);
-    float2 err = make_float2(std::fmaf(a.x, b.x, -prod.x), std::fmaf(a.y, b.y, -prod.y));
-    float4 c = make_float4(prod.x, err.x, prod.y, err.y);
-
-    prod = make_float2(a.y * b.x, a.z * b.x);
-    err = make_float2(std::fmaf(a.y, b.x, -prod.x), std::fmaf(a.z, b.x, -prod.y));
-    c = add(c, make_float4(prod.x, err.x, prod.y, err.y));
-
-    prod = make_float2(a.x * b.y, a.x * b.z);
-    err = make_float2(std::fmaf(a.x, b.y, -prod.x), std::fmaf(a.x, b.z, -prod.y));
-    c = add(c, make_float4(prod.x, err.x, prod.y, err.y));
-
-    return add(c, make_float4(a.w * b.x, a.z * b.y, a.y * b.z, a.x * b.w));
-#endif
+    fmul2_err(make_float2(a.x, a.x), make_float2(b.y, b.z), prod, err);
+    fadd_err(prod.y, err.x, prod.y, err.x);
+    return add(c, make_float4(prod.x, prod.y, la.w + (err.x + err.y), 0.f));
   }
 
   __host__ __device__ __forceinline__ float4 fma(float4 a, float4 b, float4 c) {
-#ifdef __CUDA_ARCH__
-    float2 prod = make_float2(__fmul_rn(a.x, b.x), __fmul_rn(a.y, b.y));
-    float2 err = make_float2(__fmaf_rn(a.x, b.x, -prod.x), __fmaf_rn(a.y, b.y, -prod.y));
-    c = add(c, make_float4(prod.x, err.x, prod.y, err.y));
+    float2 prod, err;
+    float4 la = make_float4(a.w * b.x, a.z * b.y, a.y * b.z, a.x * b.w);
+    fmul2_err(make_float2(a.x, a.y), make_float2(b.x, b.y), prod, err);
+    c = add(c, make_float4(prod.x, err.x, prod.y, la.y + la.z + err.y));
 
-    prod = make_float2(__fmul_rn(a.y, b.x), __fmul_rn(a.z, b.x));
-    err = make_float2(__fmaf_rn(a.y, b.x, -prod.x), __fmaf_rn(a.z, b.x, -prod.y));
-    c = add(c, make_float4(prod.x, err.x, prod.y, err.y));
+    fmul2_err(make_float2(a.y, a.z), make_float2(b.x, b.x), prod, err);
+    fadd_err(prod.y, err.x, prod.y, err.x);
+    c = add(c, make_float4(prod.x, prod.y, la.x + (err.x + err.y), 0.f));
 
-    prod = make_float2(__fmul_rn(a.x, b.y), __fmul_rn(a.x, b.z));
-    err = make_float2(__fmaf_rn(a.x, b.y, -prod.x), __fmaf_rn(a.x, b.z, -prod.y));
-    c = add(c, make_float4(prod.x, err.x, prod.y, err.y));
-
-    return add(c, make_float4(__fmul_rn(a.w, b.x), __fmul_rn(a.z, b.y), __fmul_rn(a.y, b.z), __fmul_rn(a.x, b.w)));
-#else
-    float2 prod = make_float2(a.x * b.x, a.y * b.y);
-    float2 err = make_float2(std::fmaf(a.x, b.x, -prod.x), std::fmaf(a.y, b.y, -prod.y));
-    c = add(c, make_float4(prod.x, err.x, prod.y, err.y));
-
-    prod = make_float2(a.y * b.x, a.z * b.x);
-    err = make_float2(std::fmaf(a.y, b.x, -prod.x), std::fmaf(a.z, b.x, -prod.y));
-    c = add(c, make_float4(prod.x, err.x, prod.y, err.y));
-
-    prod = make_float2(a.x * b.y, a.x * b.z);
-    err = make_float2(std::fmaf(a.x, b.y, -prod.x), std::fmaf(a.x, b.z, -prod.y));
-    c = add(c, make_float4(prod.x, err.x, prod.y, err.y));
-
-    return add(c, make_float4(a.w * b.x, a.z * b.y, a.y * b.z, a.x * b.w));
-#endif
+    fmul2_err(make_float2(a.x, a.x), make_float2(b.y, b.z), prod, err);
+    fadd_err(prod.y, err.x, prod.y, err.x);
+    return add(c, make_float4(prod.x, prod.y, la.w + (err.x + err.y), 0.f));
   }
 
   __host__ __device__ __forceinline__ float4 fscalbn(float4 a, int32_t exp) {

@@ -58,22 +58,6 @@ namespace internal::Cholesky {
 
   void swap_cols_float4_complex(cudaStream_t stream, int32_t i, int32_t j, int32_t N, complex_float4* A, int32_t lda);
 
-  void minus_ATA_gemmk_double(cudaStream_t stream, int32_t N, const double* A, double* C, int32_t ld);
-
-  void minus_ATA_gemmk_float(cudaStream_t stream, int32_t N, const float* A, float* C, int32_t ld);
-
-  void minus_ATA_gemmk_double2(cudaStream_t stream, int32_t N, const double2* A, double2* C, int32_t ld);
-
-  void minus_ATA_gemmk_float4(cudaStream_t stream, int32_t N, const float4* A, float4* C, int32_t ld);
-
-  void minus_AHA_gemmk_double_complex(cudaStream_t stream, int32_t N, const std::complex<double>* A, std::complex<double>* C, int32_t ld);
-
-  void minus_AHA_gemmk_float_complex(cudaStream_t stream, int32_t N, const std::complex<float>* A, std::complex<float>* C, int32_t ld);
-
-  void minus_AHA_gemmk_double2_complex(cudaStream_t stream, int32_t N, const complex_double2* A, complex_double2* C, int32_t ld);
-
-  void minus_AHA_gemmk_float4_complex(cudaStream_t stream, int32_t N, const complex_float4* A, complex_float4* C, int32_t ld);
-
 };
 
 namespace internal::int8 {
