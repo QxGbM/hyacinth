@@ -71,19 +71,7 @@ namespace device::dd {
   }
 
   __host__ __device__ __forceinline__ double2 fma(double2 a, double2 b, double2 c) {
-    double2 d;
-#ifdef __CUDA_ARCH__
-    d.x = __dmul_rn(a.x, b.x);
-    d.y = __fma_rn(a.x, b.x, -d.x);
-    d.y = __fma_rn(a.x, b.y, d.y);
-    d.y = __fma_rn(a.y, b.x, d.y);
-#else
-    d.x = a.x * b.x;
-    d.y = std::fma(a.x, b.x, -d.x);
-    d.y = std::fma(a.x, b.y, d.y);
-    d.y = std::fma(a.y, b.x, d.y);
-#endif
-    return add(c, d);
+    return add(c, mul(a, b));
   }
 
   __host__ __device__ __forceinline__ double2 fscalbn2(double2 a, int32_t exp) {

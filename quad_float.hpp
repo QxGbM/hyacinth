@@ -73,32 +73,28 @@ namespace device::qf {
 
   __host__ __device__ __forceinline__ float4 mul(float4 a, float4 b) {
     float2 prod, err;
-    float4 la = make_float4(a.w * b.x, a.z * b.y, a.y * b.z, a.x * b.w);
     fmul2_err(make_float2(a.x, a.y), make_float2(b.x, b.y), prod, err);
-    float4 c = make_float4(prod.x, err.x, prod.y, la.y + la.z + err.y);
+    float c1 = prod.x;
+    float c4 = err.y + (a.w * b.x + a.z * b.y) + (a.y * b.z + a.x * b.w);
+    float2 c23 = make_float2(err.x, prod.y);
 
     fmul2_err(make_float2(a.y, a.z), make_float2(b.x, b.x), prod, err);
-    fadd_err(prod.y, err.x, prod.y, err.x);
-    c = add(c, make_float4(prod.x, prod.y, la.x + (err.x + err.y), 0.f));
+    fadd2_err(c23, prod, c23, prod);
+    fadd_err(prod.x, err.x, prod.x, err.x);
+    fadd_err(c23.y, prod.x, c23.y, prod.x);
+    c4 += (prod.x + prod.y) + (err.x + err.y);
 
     fmul2_err(make_float2(a.x, a.x), make_float2(b.y, b.z), prod, err);
-    fadd_err(prod.y, err.x, prod.y, err.x);
-    return add(c, make_float4(prod.x, prod.y, la.w + (err.x + err.y), 0.f));
+    fadd2_err(c23, prod, c23, prod);
+    fadd_err(prod.x, err.x, prod.x, err.x);
+    fadd_err(c23.y, prod.x, c23.y, prod.x);
+    c4 += (prod.x + prod.y) + (err.x + err.y);
+
+    return normalize(make_float4(c1, c23.x, c23.y, c4));
   }
 
   __host__ __device__ __forceinline__ float4 fma(float4 a, float4 b, float4 c) {
-    float2 prod, err;
-    float4 la = make_float4(a.w * b.x, a.z * b.y, a.y * b.z, a.x * b.w);
-    fmul2_err(make_float2(a.x, a.y), make_float2(b.x, b.y), prod, err);
-    c = add(c, make_float4(prod.x, err.x, prod.y, la.y + la.z + err.y));
-
-    fmul2_err(make_float2(a.y, a.z), make_float2(b.x, b.x), prod, err);
-    fadd_err(prod.y, err.x, prod.y, err.x);
-    c = add(c, make_float4(prod.x, prod.y, la.x + (err.x + err.y), 0.f));
-
-    fmul2_err(make_float2(a.x, a.x), make_float2(b.y, b.z), prod, err);
-    fadd_err(prod.y, err.x, prod.y, err.x);
-    return add(c, make_float4(prod.x, prod.y, la.w + (err.x + err.y), 0.f));
+    return add(c, mul(a, b));
   }
 
   __host__ __device__ __forceinline__ float4 fscalbn(float4 a, int32_t exp) {
