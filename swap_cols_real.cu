@@ -5,10 +5,11 @@
 
 #include <cub/cub.cuh>
 
-template <class real_t, class real_ptr, int32_t GRID_THREADS, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD>
+template <class real_t, class real_ptr, int32_t GRID_BLOCKS, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD>
 __global__ void swap_cols_real(int32_t i, int32_t j, int32_t N, real_ptr A, int32_t lda) {
-  constexpr int32_t elements = GRID_THREADS * ITEMS_PER_THREAD;
-  int32_t block_offset = blockIdx.x * BLOCK_THREADS * ITEMS_PER_THREAD;
+  constexpr int32_t elements_block = BLOCK_THREADS * ITEMS_PER_THREAD;
+  constexpr int32_t elements = GRID_BLOCKS * elements_block;
+  int32_t block_offset = blockIdx.x * elements_block;
   int32_t thread_offset = threadIdx.x * ITEMS_PER_THREAD;
   int32_t rem = N & (elements - 1), div = N - rem;
   int32_t N1 = max(div, rem), N2 = min(div, rem);
@@ -36,7 +37,7 @@ __global__ void swap_cols_real(int32_t i, int32_t j, int32_t N, real_ptr A, int3
       A_row_j[l * lda] = thread_i[l - thread_loc];
   }
 
-  if (0 < N2) {
+  if (0 < N2 && blockIdx.x == 0) {
     block_load.Load(&A_col_i[N1], thread_i, N2);
     block_load.Load(&A_col_j[N1], thread_j, N2);
 
@@ -58,24 +59,24 @@ constexpr int32_t thread_bytes = 32;
 
 void internal::Cholesky::swap_cols_double(cudaStream_t stream, int32_t i, int32_t j, int32_t N, double* A, int32_t lda) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(double);
-  swap_cols_real <double, double* __restrict__, grid_blocks * block_threads, block_threads, items_per_thread>
+  swap_cols_real <double, double* __restrict__, grid_blocks, block_threads, items_per_thread>
     <<< grid_blocks, block_threads, 0, stream >>> (i, j, N, A, lda);
 }
 
 void internal::Cholesky::swap_cols_float(cudaStream_t stream, int32_t i, int32_t j, int32_t N, float* A, int32_t lda) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(float);
-  swap_cols_real <float, float* __restrict__, grid_blocks * block_threads, block_threads, items_per_thread>
+  swap_cols_real <float, float* __restrict__, grid_blocks, block_threads, items_per_thread>
     <<< grid_blocks, block_threads, 0, stream >>> (i, j, N, A, lda);
 }
 
 void internal::Cholesky::swap_cols_double2(cudaStream_t stream, int32_t i, int32_t j, int32_t N, double2* A, int32_t lda) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(double2);
-  swap_cols_real <double2, double2* __restrict__, grid_blocks * block_threads, block_threads, items_per_thread>
+  swap_cols_real <double2, double2* __restrict__, grid_blocks, block_threads, items_per_thread>
     <<< grid_blocks, block_threads, 0, stream >>> (i, j, N, A, lda);
 }
 
 void internal::Cholesky::swap_cols_float4(cudaStream_t stream, int32_t i, int32_t j, int32_t N, float4* A, int32_t lda) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(float4);
-  swap_cols_real <float4, float4* __restrict__, grid_blocks * block_threads, block_threads, items_per_thread>
+  swap_cols_real <float4, float4* __restrict__, grid_blocks, block_threads, items_per_thread>
     <<< grid_blocks, block_threads, 0, stream >>> (i, j, N, A, lda);
 }

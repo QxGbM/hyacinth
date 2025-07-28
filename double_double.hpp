@@ -42,9 +42,12 @@ namespace device::dd {
 
   __host__ __device__ __forceinline__ double2 add(double2 a, double2 b) {
     fadd2_err(a, b, a, b);
-    a = normalize(a);
-    b.x = b.x + b.y;
-    return make_double2(a.x, a.y + b.x);
+    return normalize(make_double2(a.x, a.y + (b.x + b.y)));
+  }
+
+  __host__ __device__ __forceinline__ double2 add_sd(double2 a, double b) {
+    double2 c = normalize(make_double2(a.x, b));
+    return normalize(make_double2(c.x, a.y + c.y));
   }
 
   __host__ __device__ __forceinline__ double2 mul(double2 a, double2 b) {

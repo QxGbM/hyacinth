@@ -61,6 +61,16 @@ namespace device::qf {
     return normalize(make_float4(r0, a0.x, a0.y, a.w + b.w + b.z + a1.y + a1.x));
   }
 
+  __host__ __device__ __forceinline__ float4 add_df(float4 a, float2 b) {
+    float2 a0, a1;
+    fadd2_err(make_float2(a.x, a.y), make_float2(b.x, b.y), a0, a1);
+
+    float r0 = a0.x;
+    fadd2_err(make_float2(a0.y, a.z), a1, a0, a1);
+    fadd_err(a0.y, a1.x, a0.y, a1.x);
+    return normalize(make_float4(r0, a0.x, a0.y, a.w + a1.y + a1.x));
+  }
+
   __host__ __device__ __forceinline__ void fmul2_err(float2 a, float2 b, float2& prod, float2& err) {
 #ifdef __CUDA_ARCH__
     prod = make_float2(__fmul_rn(a.x, b.x), __fmul_rn(a.y, b.y));

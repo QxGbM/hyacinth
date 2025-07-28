@@ -70,16 +70,32 @@ namespace internal::int8 {
 
   void vexp_cf32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int32_t* vec_expon);
 
-  void encode_f64_order20(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const double* A, int32_t lda, const int32_t* vec_expon, int8_t* inA, int32_t ldi, int32_t stride);
+  void encode_f64_order20(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const double* A, int32_t lda, const int32_t* vec_expon, int8_t* inA, int32_t ldi, int32_t strideI);
 
-  void encode_f32_order20(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const float* A, int32_t lda, const int32_t* vec_expon, int8_t* inA, int32_t ldi, int32_t stride);
+  void encode_f32_order20(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const float* A, int32_t lda, const int32_t* vec_expon, int8_t* inA, int32_t ldi, int32_t strideI);
 
-  void encode_cf64_order20(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, const int32_t* vec_expon, int8_t* inA, int32_t ldi, int32_t stride);
+  void encode_cf64_order20(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, const int32_t* vec_expon, int8_t* inA, int32_t ldi, int32_t strideI);
 
-  void encode_cf32_order20(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, const int32_t* vec_expon, int8_t* inA, int32_t ldi, int32_t stride);
+  void encode_cf32_order20(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, const int32_t* vec_expon, int8_t* inA, int32_t ldi, int32_t strideI);
 
-  void strided_r8i_ATA_gemm(cublasHandle_t handle, int32_t order, int32_t M, int32_t N, const int8_t* A, int32_t* C);
+  void strided_r8i_ATA_gemm(cublasHandle_t handle, int32_t order, int32_t algnM, int32_t algnN, const int8_t* A, int32_t* C);
 
-  void strided_c8i_AHA_gemm(cublasHandle_t handle, int32_t order, int32_t M, int32_t N, const int8_t* A, int32_t* C);
+  void strided_c8i_AHA_gemm(cublasHandle_t handle, int32_t order, int32_t algnM, int32_t algnN, const int8_t* A, int32_t* C);
+
+  void decode_f64_strided_i32(cudaStream_t stream, int32_t order, int32_t N, const int32_t* vec_expon, const int32_t* A, int32_t lda, double* C, int32_t ldc);
+
+  void decode_f32_strided_i32(cudaStream_t stream, int32_t order, int32_t N, const int32_t* vec_expon, const int32_t* A, int32_t lda, float* C, int32_t ldc);
+
+  void decode_dd_strided_i32(cudaStream_t stream, int32_t order, int32_t N, const int32_t* vec_expon, const int32_t* A, int32_t lda, double2* C, int32_t ldc);
+
+  void decode_qf_strided_i32(cudaStream_t stream, int32_t order, int32_t N, const int32_t* vec_expon, const int32_t* A, int32_t lda, float4* C, int32_t ldc);
+
+  void decode_cf64_strided_i32(cudaStream_t stream, int32_t order, int32_t N, const int32_t* vec_expon, const int32_t* A, int32_t lda, std::complex<double>* C, int32_t ldc);
+
+  void decode_cf32_strided_i32(cudaStream_t stream, int32_t order, int32_t N, const int32_t* vec_expon, const int32_t* A, int32_t lda, std::complex<float>* C, int32_t ldc);
+
+  void decode_complex_dd_strided_i32(cudaStream_t stream, int32_t order, int32_t N, const int32_t* vec_expon, const int32_t* A, int32_t lda, complex_double2* C, int32_t ldc);
+
+  void decode_complex_qf_strided_i32(cudaStream_t stream, int32_t order, int32_t N, const int32_t* vec_expon, const int32_t* A, int32_t lda, complex_float4* C, int32_t ldc);
 
 };
