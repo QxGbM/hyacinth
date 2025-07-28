@@ -8,8 +8,7 @@ __global__ void swap_negate_i32_matrix(int32_t M, int32_t N, int32_t* __restrict
   constexpr int32_t elements_block = BLOCK_THREADS * ITEMS_PER_THREAD;
   constexpr int32_t elements = GRID_Y * elements_block;
   int32_t block_offset = blockIdx.x * elements_block;
-  int32_t rem = M & (elements_block - 1), div = M - rem;
-  int32_t M1 = max(div, rem), M2 = min(div, rem);
+  int32_t M2 = M & (elements_block - 1), M1 = M - M2;
 
   __shared__ typename cub::BlockLoad<int32_t, BLOCK_THREADS, ITEMS_PER_THREAD>::TempStorage temp_load;
   __shared__ typename cub::BlockStore<int32_t, BLOCK_THREADS, ITEMS_PER_THREAD>::TempStorage temp_store;
@@ -62,7 +61,7 @@ void internal::int8::strided_r8i_ATA_gemm(cublasHandle_t handle, int32_t order, 
     const int8_t* AT = &A[i * strideA];
     int32_t* C_i = &C[i * strideC];
     cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, algnN * order, algnM, &one, 
-      AT, CUDA_R_8I, algnM, A, CUDA_R_8I, algnM, &one, C_i, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
+      AT, CUDA_R_8I, algnM, A, CUDA_R_8I, algnM, &one, C_i, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
   }
 }
 
@@ -77,7 +76,7 @@ void internal::int8::strided_c8i_AHA_gemm(cublasHandle_t handle, int32_t order, 
     const int8_t* iAH = &A[(i * 2) * strideA];
     int32_t* C_i = &C[(i * 2) * strideC];
     cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, algnN * order * 2, algnM, &one, 
-      iAH, CUDA_R_8I, algnM, A, CUDA_R_8I, algnM, &one, C_i, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
+      iAH, CUDA_R_8I, algnM, A, CUDA_R_8I, algnM, &one, C_i, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
   }
 
   swap_negate_i32_matrix <grid_x, grid_y, block_threads, items_per_thread>
@@ -87,6 +86,6 @@ void internal::int8::strided_c8i_AHA_gemm(cublasHandle_t handle, int32_t order, 
     const int8_t* rAH = &A[(i * 2 + 1) * strideA];
     int32_t* C_i = &C[(i * 2) * strideC];
     cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, algnN * order * 2, algnM, &one, 
-      rAH, CUDA_R_8I, algnM, A, CUDA_R_8I, algnM, &one, C_i, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
+      rAH, CUDA_R_8I, algnM, A, CUDA_R_8I, algnM, &one, C_i, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
   }
 }

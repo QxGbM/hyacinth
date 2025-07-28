@@ -57,10 +57,9 @@ template <class real_t, class real_const_ptr, int32_t GRID_X, int32_t GRID_Y, in
 __global__ void encode_fp_strided_i8(int32_t order, int32_t M, int32_t N, real_const_ptr A, int32_t lda, const int32_t* __restrict__ vec_expon, uint32_t* __restrict__ inA, int32_t ldi, int32_t strideI) {
   constexpr int32_t items = 1 << COMPLEX;
   constexpr int32_t elements_block = items * BLOCK_THREADS;
-  constexpr int32_t elements = items * elements_block;
+  constexpr int32_t elements = GRID_Y * elements_block;
   int32_t block_offset = blockIdx.x * elements_block;
-  int32_t rem = M & (elements_block - 1), div = M - rem;
-  int32_t M1 = max(div, rem), M2 = min(div, rem);
+  int32_t M2 = M & (elements_block - 1), M1 = M - M2;
 
   __shared__ typename cub::BlockLoad<real_t, BLOCK_THREADS, items>::TempStorage temp_load;
   __shared__ typename cub::BlockStore<uint32_t, BLOCK_THREADS, 1>::TempStorage temp_store;
