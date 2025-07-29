@@ -128,7 +128,7 @@ __global__ void decode_strided_i32(int32_t order, int32_t N, const int32_t* __re
         acc_set_f(val[j], cj, 7 * row_expon[j]);
       }
 
-      for (int32_t k = COMPLEX; k < order; ++k) {
+      for (int32_t k = 1; k < order; ++k) {
         const int32_t* A_k = &A_ij[k * cstrideA];
 
         #pragma unroll

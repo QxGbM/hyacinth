@@ -49,43 +49,72 @@ constexpr int32_t block_threads = 128;
 constexpr int32_t grid_x = 64;
 constexpr int32_t grid_y = 16;
 constexpr int32_t items_per_thread = 4;
+constexpr int32_t iter_k = 1024;
 
-void internal::int8::strided_r8i_ATA_gemm(cublasHandle_t handle, int32_t order, int32_t algnM, int32_t algnN, const int8_t* A, int32_t* C) {
-  int32_t strideA = algnM * algnN, strideC = algnN * algnN;
-  cudaStream_t stream = nullptr;
-  cublasGetStream(handle, &stream);
-  cudaMemsetAsync(C, 0, strideC * (2 * order - 1) * sizeof(int32_t), stream);
-
-  int32_t one = 1;
+void internal::int8::r8i_TN_gemm_strided_AC(cudaStream_t stream, cublasHandle_t handle, int32_t order, int32_t algnM, int32_t algnN, int32_t algnK, const int8_t* AT, int32_t strideA, const int8_t* B, int32_t* C, int32_t strideC) {
+  int32_t one = 1, zero = 0;
   for (int32_t i = 0; i < order; ++i) {
-    const int8_t* AT = &A[i * strideA];
     int32_t* C_i = &C[i * strideC];
-    cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, algnN * order, algnM, &one, 
-      AT, CUDA_R_8I, algnM, A, CUDA_R_8I, algnM, &one, C_i, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+
+    if (i == 0) {
+      cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnM, algnN * order, std::min(algnK, iter_k), &one, 
+        AT, CUDA_R_8I, algnK, B, CUDA_R_8I, algnK, &zero, C, CUDA_R_32I, algnM, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+      cudaMemsetAsync(&C[order * strideC], 0, strideC * sizeof(int32_t), stream);
+    }
+    else {
+      const int8_t* AT_i = &AT[i * strideA];
+      internal::int8::normalize_i32_set_high(stream, strideC, order, C_i);
+      cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnM, algnN * order, std::min(algnK, iter_k), &one, 
+        AT_i, CUDA_R_8I, algnK, B, CUDA_R_8I, algnK, &one, C_i, CUDA_R_32I, algnM, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+    }
+
+    for (int32_t k = iter_k; k < algnK; k += iter_k) {
+      const int8_t* AT_k = &AT[k + i * strideA];
+      const int8_t* BN_k = &B[k];
+      internal::int8::normalize_i32(stream, strideC, order, C_i);
+      cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnM, algnN * order, std::min(algnK - k, iter_k), &one, 
+        AT_k, CUDA_R_8I, algnK, BN_k, CUDA_R_8I, algnK, &one, C_i, CUDA_R_32I, algnM, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+    }
   }
 }
 
-void internal::int8::strided_c8i_AHA_gemm(cublasHandle_t handle, int32_t order, int32_t algnM, int32_t algnN, const int8_t* A, int32_t* C) {
-  int32_t strideA = algnM * algnN, strideC = algnN * algnN;
-  cudaStream_t stream = nullptr;
-  cublasGetStream(handle, &stream);
-  cudaMemsetAsync(C, 0, 2 * strideC * (2 * order - 1) * sizeof(int32_t), stream);
-
-  int32_t one = 1;
+void internal::int8::c8i_HN_gemm_strided_AC(cudaStream_t stream, cublasHandle_t handle, int32_t order, int32_t algnM, int32_t algnN, int32_t algnK, const int8_t* AH, int32_t strideA, const int8_t* B, int32_t* C, int32_t strideC) {
+  int32_t one = 1, zero = 0;
   for (int32_t i = 0; i < order; ++i) {
-    const int8_t* iAH = &A[(i * 2) * strideA];
     int32_t* C_i = &C[(i * 2) * strideC];
-    cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, algnN * order * 2, algnM, &one, 
-      iAH, CUDA_R_8I, algnM, A, CUDA_R_8I, algnM, &one, C_i, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+
+    if (i == 0) {
+      cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnM, 2 * algnN * order, std::min(algnK, iter_k), &one, 
+        AH, CUDA_R_8I, algnK, B, CUDA_R_8I, algnK, &zero, C, CUDA_R_32I, algnM, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+      cudaMemsetAsync(&C[2 * order * strideC], 0, 2 * strideC * sizeof(int32_t), stream);
+    }
+    else {
+      const int8_t* iAH = &AH[(i * 2) * strideA];
+      internal::int8::normalize_i32_set_high(stream, 2 * strideC, order, C_i);
+      cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnM, 2 * algnN * order, std::min(algnK, iter_k), &one, 
+        iAH, CUDA_R_8I, algnK, B, CUDA_R_8I, algnK, &one, C_i, CUDA_R_32I, algnM, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+    }
+
+    for (int32_t k = iter_k; k < algnK; k += iter_k) {
+      const int8_t* iAH_k = &AH[k + 2 * i * strideA];
+      const int8_t* BN_k = &B[k];
+      internal::int8::normalize_i32(stream, 2 * strideC, order, C_i);
+      cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnM, 2 * algnN * order, std::min(algnK - k, iter_k), &one, 
+        iAH_k, CUDA_R_8I, algnK, BN_k, CUDA_R_8I, algnK, &one, C_i, CUDA_R_32I, algnM, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+    }
   }
 
   swap_negate_i32_matrix <grid_x, grid_y, block_threads, items_per_thread>
-  <<< dim3(grid_y, grid_x, 1), block_threads, 0, stream >>> (strideC, 4 * order - 2, C);
+  <<< dim3(grid_y, grid_x, 1), block_threads, 0, stream >>> (strideC, 4 * order, C);
 
   for (int32_t i = 0; i < order; ++i) {
-    const int8_t* rAH = &A[(i * 2 + 1) * strideA];
     int32_t* C_i = &C[(i * 2) * strideC];
-    cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, algnN * order * 2, algnM, &one, 
-      rAH, CUDA_R_8I, algnM, A, CUDA_R_8I, algnM, &one, C_i, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+    for (int32_t k = 0; k < algnK; k += iter_k) {
+      const int8_t* rAH_k = &AH[k + (i * 2 + 1) * strideA];
+      const int8_t* BN_k = &B[k];
+      internal::int8::normalize_i32(stream, 2 * strideC, order, C_i);
+      cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnM, 2 * algnN * order, std::min(algnK - k, iter_k), &one, 
+        rAH_k, CUDA_R_8I, algnK, BN_k, CUDA_R_8I, algnK, &one, C_i, CUDA_R_32I, algnM, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+    }
   }
 }

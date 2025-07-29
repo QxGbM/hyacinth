@@ -78,9 +78,13 @@ namespace internal::int8 {
 
   void encode_cf32_order20(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, const int32_t* vec_expon, int8_t* inA, int32_t ldi, int32_t strideI);
 
-  void strided_r8i_ATA_gemm(cublasHandle_t handle, int32_t order, int32_t algnM, int32_t algnN, const int8_t* A, int32_t* C);
+  void normalize_i32(cudaStream_t stream, int32_t M, int32_t N, int32_t* A);
 
-  void strided_c8i_AHA_gemm(cublasHandle_t handle, int32_t order, int32_t algnM, int32_t algnN, const int8_t* A, int32_t* C);
+  void normalize_i32_set_high(cudaStream_t stream, int32_t M, int32_t N, int32_t* A);
+
+  void r8i_TN_gemm_strided_AC(cudaStream_t stream, cublasHandle_t handle, int32_t order, int32_t algnM, int32_t algnN, int32_t algnK, const int8_t* AT, int32_t strideA, const int8_t* B, int32_t* C, int32_t strideC);
+
+  void c8i_HN_gemm_strided_AC(cudaStream_t stream, cublasHandle_t handle, int32_t order, int32_t algnM, int32_t algnN, int32_t algnK, const int8_t* AH, int32_t strideA, const int8_t* B, int32_t* C, int32_t strideC);
 
   void decode_f64_strided_i32(cudaStream_t stream, int32_t order, int32_t N, const int32_t* vec_expon, const int32_t* A, int32_t lda, double* C, int32_t ldc);
 
