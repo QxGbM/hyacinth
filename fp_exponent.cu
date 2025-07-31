@@ -9,7 +9,7 @@ struct expon_imax {
   __device__ __forceinline__ int32_t operator()(int32_t a, int32_t b) { return max(a, b); }
 };
 
-template <class real_t, class real_const_ptr, int32_t GRID_BLOCKS, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD>
+template <class real_t, class real_const_ptr, int32_t GRID_BLOCKS, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD, int32_t BASE>
 __global__ void vector_exponent(int32_t order, int32_t M, int32_t N, real_const_ptr A, int32_t lda, int32_t* __restrict__ vec_expon) {
   constexpr int32_t elements = ITEMS_PER_THREAD * BLOCK_THREADS;
   int32_t rem = M & (elements - 1), div = M - rem;
@@ -53,7 +53,7 @@ __global__ void vector_exponent(int32_t order, int32_t M, int32_t N, real_const_
 
     if (threadIdx.x == 0) {
       int32_t vec_e;
-      device::int8::fast_div7_i32x(block_res, vec_e, block_res);
+      device::int8::fast_division_i32<BASE>(block_res, vec_e, block_res);
       vec_expon[col] = vec_e - order + 1;
     }
   }
@@ -65,25 +65,25 @@ constexpr int32_t thread_bytes = 32;
 
 void internal::int8::vexp_f64(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const double* A, int32_t lda, int32_t* vec_expon) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(double);
-  vector_exponent <double, const double* __restrict__, grid_blocks, block_threads, items_per_thread>
-  <<< grid_blocks, block_threads, 0, stream >>> (order, M, N, (const double*)A, lda, vec_expon);
+  vector_exponent <double, const double* __restrict__, grid_blocks, block_threads, items_per_thread, exp_base>
+    <<< grid_blocks, block_threads, 0, stream >>> (order, M, N, (const double*)A, lda, vec_expon);
 }
 
 void internal::int8::vexp_f32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const float* A, int32_t lda, int32_t* vec_expon) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(float);
-  vector_exponent <float, const float* __restrict__, grid_blocks, block_threads, items_per_thread>
-  <<< grid_blocks, block_threads, 0, stream >>> (order, M, N, (const float*)A, lda, vec_expon);
+  vector_exponent <float, const float* __restrict__, grid_blocks, block_threads, items_per_thread, exp_base>
+    <<< grid_blocks, block_threads, 0, stream >>> (order, M, N, (const float*)A, lda, vec_expon);
 }
 
 void internal::int8::vexp_cf64(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int32_t* vec_expon) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(double);
-  vector_exponent <double, const double* __restrict__, grid_blocks, block_threads, items_per_thread>
-  <<< grid_blocks, block_threads, 0, stream >>> (order, M * 2, N, (const double*)A, lda * 2, vec_expon);
+  vector_exponent <double, const double* __restrict__, grid_blocks, block_threads, items_per_thread, exp_base>
+    <<< grid_blocks, block_threads, 0, stream >>> (order, M * 2, N, (const double*)A, lda * 2, vec_expon);
 }
 
 void internal::int8::vexp_cf32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int32_t* vec_expon) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(float);
-  vector_exponent <float, const float* __restrict__, grid_blocks, block_threads, items_per_thread>
-  <<< grid_blocks, block_threads, 0, stream >>> (order, M * 2, N, (const float*)A, lda * 2, vec_expon);
+  vector_exponent <float, const float* __restrict__, grid_blocks, block_threads, items_per_thread, exp_base>
+    <<< grid_blocks, block_threads, 0, stream >>> (order, M * 2, N, (const float*)A, lda * 2, vec_expon);
 }
 

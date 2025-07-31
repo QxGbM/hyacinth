@@ -87,7 +87,7 @@ struct acc_i32_set {
   }
 };
 
-template <class real_t, class real_ptr, int32_t GRID_BLOCKS, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD, int32_t COMPLEX>
+template <class real_t, class real_ptr, int32_t GRID_BLOCKS, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD, int32_t BASE, int32_t COMPLEX>
 __global__ void decode_strided_i32(int32_t order, int32_t N, const int32_t* __restrict__ vec_expon, const int32_t* __restrict__ A, int32_t lda, real_ptr C, int32_t ldc) {
   constexpr int32_t elements = ITEMS_PER_THREAD * BLOCK_THREADS;
   const int32_t strideA = lda * lda;
@@ -125,7 +125,7 @@ __global__ void decode_strided_i32(int32_t order, int32_t N, const int32_t* __re
         #pragma unroll
         for (int32_t l = 0; l < COMPLEX; ++l)
           cj[l] = c[l][j];
-        acc_set_f(val[j], cj, 7 * row_expon[j]);
+        acc_set_f(val[j], cj, BASE * row_expon[j]);
       }
 
       for (int32_t k = 1; k < order; ++k) {
@@ -141,7 +141,7 @@ __global__ void decode_strided_i32(int32_t order, int32_t N, const int32_t* __re
           #pragma unroll
           for (int32_t l = 0; l < COMPLEX; ++l)
             cj[l] = c[l][j];
-          acc_f(val[j], cj, 7 * (row_expon[j] + k));
+          acc_f(val[j], cj, BASE * (row_expon[j] + k));
         }
       }
 
@@ -155,42 +155,42 @@ constexpr int32_t grid_blocks = 2048;
 constexpr int32_t items_per_thread = 4;
 
 void internal::int8::decode_f64_strided_i32(cudaStream_t stream, int32_t order, int32_t N, const int32_t* vec_expon, const int32_t* A, int32_t lda, double* C, int32_t ldc) {
-  decode_strided_i32 <double, double* __restrict__, grid_blocks, block_threads, items_per_thread, 1>
-  <<< grid_blocks, block_threads, 0, stream >>> (order, N, vec_expon, A, lda, C, ldc);
+  decode_strided_i32 <double, double* __restrict__, grid_blocks, block_threads, items_per_thread, exp_base, 1>
+    <<< grid_blocks, block_threads, 0, stream >>> (order, N, vec_expon, A, lda, C, ldc);
 }
 
 void internal::int8::decode_f32_strided_i32(cudaStream_t stream, int32_t order, int32_t N, const int32_t* vec_expon, const int32_t* A, int32_t lda, float* C, int32_t ldc) {
-  decode_strided_i32 <float, float* __restrict__, grid_blocks, block_threads, items_per_thread, 1>
-  <<< grid_blocks, block_threads, 0, stream >>> (order, N, vec_expon, A, lda, C, ldc);
+  decode_strided_i32 <float, float* __restrict__, grid_blocks, block_threads, items_per_thread, exp_base, 1>
+    <<< grid_blocks, block_threads, 0, stream >>> (order, N, vec_expon, A, lda, C, ldc);
 }
 
 void internal::int8::decode_dd_strided_i32(cudaStream_t stream, int32_t order, int32_t N, const int32_t* vec_expon, const int32_t* A, int32_t lda, double2* C, int32_t ldc) {
-  decode_strided_i32 <double2, double2* __restrict__, grid_blocks, block_threads, items_per_thread, 1>
-  <<< grid_blocks, block_threads, 0, stream >>> (order, N, vec_expon, A, lda, C, ldc);
+  decode_strided_i32 <double2, double2* __restrict__, grid_blocks, block_threads, items_per_thread, exp_base, 1>
+    <<< grid_blocks, block_threads, 0, stream >>> (order, N, vec_expon, A, lda, C, ldc);
 }
 
 void internal::int8::decode_qf_strided_i32(cudaStream_t stream, int32_t order, int32_t N, const int32_t* vec_expon, const int32_t* A, int32_t lda, float4* C, int32_t ldc) {
-  decode_strided_i32 <float4, float4* __restrict__, grid_blocks, block_threads, items_per_thread, 1>
-  <<< grid_blocks, block_threads, 0, stream >>> (order, N, vec_expon, A, lda, C, ldc);
+  decode_strided_i32 <float4, float4* __restrict__, grid_blocks, block_threads, items_per_thread, exp_base, 1>
+    <<< grid_blocks, block_threads, 0, stream >>> (order, N, vec_expon, A, lda, C, ldc);
 }
 
 void internal::int8::decode_cf64_strided_i32(cudaStream_t stream, int32_t order, int32_t N, const int32_t* vec_expon, const int32_t* A, int32_t lda, std::complex<double>* C, int32_t ldc) {
-  decode_strided_i32 <cuDoubleComplex, cuDoubleComplex* __restrict__, grid_blocks, block_threads, items_per_thread, 2>
-  <<< grid_blocks, block_threads, 0, stream >>> (order, N, vec_expon, A, lda, (cuDoubleComplex*)C, ldc);
+  decode_strided_i32 <cuDoubleComplex, cuDoubleComplex* __restrict__, grid_blocks, block_threads, items_per_thread, exp_base, 2>
+    <<< grid_blocks, block_threads, 0, stream >>> (order, N, vec_expon, A, lda, (cuDoubleComplex*)C, ldc);
 }
 
 void internal::int8::decode_cf32_strided_i32(cudaStream_t stream, int32_t order, int32_t N, const int32_t* vec_expon, const int32_t* A, int32_t lda, std::complex<float>* C, int32_t ldc) {
-  decode_strided_i32 <cuComplex, cuComplex* __restrict__, grid_blocks, block_threads, items_per_thread, 2>
-  <<< grid_blocks, block_threads, 0, stream >>> (order, N, vec_expon, A, lda, (cuComplex*)C, ldc);
+  decode_strided_i32 <cuComplex, cuComplex* __restrict__, grid_blocks, block_threads, items_per_thread, exp_base, 2>
+    <<< grid_blocks, block_threads, 0, stream >>> (order, N, vec_expon, A, lda, (cuComplex*)C, ldc);
 }
 
 void internal::int8::decode_complex_dd_strided_i32(cudaStream_t stream, int32_t order, int32_t N, const int32_t* vec_expon, const int32_t* A, int32_t lda, complex_double2* C, int32_t ldc) {
-  decode_strided_i32 <complex_double2, complex_double2* __restrict__, grid_blocks, block_threads, items_per_thread, 2>
-  <<< grid_blocks, block_threads, 0, stream >>> (order, N, vec_expon, A, lda, C, ldc);
+  decode_strided_i32 <complex_double2, complex_double2* __restrict__, grid_blocks, block_threads, items_per_thread, exp_base, 2>
+    <<< grid_blocks, block_threads, 0, stream >>> (order, N, vec_expon, A, lda, C, ldc);
 }
 
 void internal::int8::decode_complex_qf_strided_i32(cudaStream_t stream, int32_t order, int32_t N, const int32_t* vec_expon, const int32_t* A, int32_t lda, complex_float4* C, int32_t ldc) {
-  decode_strided_i32 <complex_float4, complex_float4* __restrict__, grid_blocks, block_threads, items_per_thread, 2>
-  <<< grid_blocks, block_threads, 0, stream >>> (order, N, vec_expon, A, lda, C, ldc);
+  decode_strided_i32 <complex_float4, complex_float4* __restrict__, grid_blocks, block_threads, items_per_thread, exp_base, 2>
+    <<< grid_blocks, block_threads, 0, stream >>> (order, N, vec_expon, A, lda, C, ldc);
 }
 

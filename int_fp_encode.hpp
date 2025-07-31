@@ -18,135 +18,124 @@ namespace device::int8 {
     return (int32_t(v.u >> 23) & i8) - 127;
   }
 
-  __host__ __device__ __forceinline__ void fast_div7_i32x(int32_t x, int32_t& quo, int32_t& rem) {
-    int32_t m_num = 0x24924924 + (uint32_t(~x) >> 31); // x-:floor(2^32 / 7) x+: ceil(2^32 / 7)
+  template <uint32_t div>
+  __host__ __device__ __forceinline__ void fast_division_i32(int32_t x, int32_t& quo, int32_t& rem) {
+    constexpr uint32_t m_num = uint32_t((uint64_t(1) << 32) / uint64_t(div));
+    int32_t sign_m_num = m_num + (uint32_t(~x) >> 31); // x-:floor(2^32 / div) x+: ceil(2^32 / div)
 #ifdef __CUDA_ARCH__
-    quo = __mulhi(x, m_num);
+    quo = __mulhi(x, sign_m_num);
 #else
-    quo = int32_t((int64_t(x) * int64_t(m_num)) >> 32);
+    quo = int32_t((int64_t(x) * int64_t(sign_m_num)) >> 32);
 #endif
-    rem = x - quo * 7;
+    rem = x - quo * div;
   }
 
-  __host__ __device__ __forceinline__ uint32_t vadd4(uint32_t a, uint32_t b) {
+  template <uint32_t BASE>
+  __host__ __device__ __forceinline__ uint32_t pack_4x_int(uint32_t a, int32_t sign) {
+    constexpr uint32_t iBASE = (uint32_t(1) << BASE) - 1;
+    constexpr uint32_t lsft_1x = 8 - BASE;
+    constexpr uint32_t lsft_2x = 16 - 2 * BASE;
+    constexpr uint32_t lsft_3x = 24 - 3 * BASE;
+    
+    uint32_t a0 = a & iBASE;
+    uint32_t a1 = (a << lsft_1x) & (iBASE << 8);
+    uint32_t a2 = (a << lsft_2x) & (iBASE << 16);
+    uint32_t a3 = (a << lsft_3x) & (iBASE << 24);
+    a = (a0 | a1) | (a2 | a3);
+
 #ifdef __CUDA_ARCH__
-    return __vadd4(a, b);
+    return sign ? __vneg4(a) : a;
 #else
-    union { uint8_t bytes[4]; uint32_t i; } v;
-    v.bytes[0] = uint8_t(a) + uint8_t(b);
-    v.bytes[1] = uint8_t(a >> 8) + uint8_t(b >> 8);
-    v.bytes[2] = uint8_t(a >> 16) + uint8_t(b >> 16);
-    v.bytes[3] = uint8_t(a >> 24) + uint8_t(b >> 24);
-    return v.i;
+    union { uint32_t i; int8_t bytes[4]; } v{a};
+    v.bytes[0] = -v.bytes[0];
+    v.bytes[1] = -v.bytes[1];
+    v.bytes[2] = -v.bytes[2];
+    v.bytes[3] = -v.bytes[3];
+    return sign ? v.i : a;
 #endif
   }
 
-  __host__ __device__ __forceinline__ void encode_double_exp7_9xi8(double value, int32_t& e, uint32_t (&code)[3]) {
-    constexpr uint32_t i7 = (uint32_t(1) << 7) - 1;
+  template <uint32_t BASE>
+  __host__ __device__ __forceinline__ void encode_double(double value, int32_t& e, uint32_t (&code)[4]) {
+    static_assert(4 <= BASE && BASE <= 7, "Integer quantization base need to be in [2^4, 2^7].");
     constexpr uint32_t i11 = (uint32_t(1) << 11) - 1;
     constexpr uint64_t i52 = (uint64_t(1) << 52) - 1;
+
+    constexpr uint32_t rsft_1x = 4 * BASE;
+    constexpr uint32_t rsft_2x = 8 * BASE;
+    constexpr uint32_t rsft_3x = 12 * BASE;
 
     union { double d; int64_t u; } v {value};
 
     int32_t sign = int32_t(v.u >> 63);
     int32_t exp = (int32_t(v.u >> 52) & i11) - 1075, rem; // bias1023 + frac52
-    fast_div7_i32x(exp, e, rem);
+    fast_division_i32<BASE>(exp, e, rem);
 
     int64_t impl_one = -int64_t(-1075 < exp) & (i52 + 1);
     uint64_t frac = ((v.u & i52) | impl_one) << rem;
-    uint64_t sign_frac = sign ? ~frac : frac;
 
-    uint32_t cmpl_i8 = sign & 0x81818181;
-    uint32_t f32 = uint32_t(sign_frac);
-
-    uint32_t a0 = f32 & i7;
-    uint32_t a1 = (f32 << 1) & (i7 << 8);
-    uint32_t a2 = (f32 << 2) & (i7 << 16);
-    uint32_t a3 = (f32 << 3) & (i7 << 24);
-    code[0] = vadd4(a0 | a1 | a2 | a3, cmpl_i8);
-
-    f32 = uint32_t(sign_frac >> 28);
-    a0 = f32 & i7;
-    a1 = (f32 << 1) & (i7 << 8);
-    a2 = (f32 << 2) & (i7 << 16);
-    a3 = (f32 << 3) & (i7 << 24);
-    code[1] = vadd4(a0 | a1 | a2 | a3, cmpl_i8);
-    code[2] = uint8_t((uint32_t(sign_frac >> 56) & i7) + cmpl_i8);
+    code[0] = pack_4x_int<BASE>(uint32_t(frac), sign);
+    code[1] = pack_4x_int<BASE>(uint32_t(frac >> rsft_1x), sign);
+    code[2] = pack_4x_int<BASE>(uint32_t(frac >> rsft_2x), sign);
+    if constexpr (rsft_3x < 64)
+      code[3] = pack_4x_int<BASE>(uint32_t(frac >> rsft_3x), sign);
+    else
+      code[3] = 0;
   }
 
-  __host__ __device__ __forceinline__ void encode_float_exp7_5xi8(float value, int32_t& e, uint32_t (&code)[2]) {
-    constexpr uint32_t i7 = (uint32_t(1) << 7) - 1;
+  template <uint32_t BASE>
+  __host__ __device__ __forceinline__ void encode_float(float value, int32_t& e, uint32_t (&code)[2]) {
+    static_assert(4 <= BASE && BASE <= 7, "Integer quantization base need to be in [2^4, 2^7].");
     constexpr uint32_t i8 = (uint32_t(1) << 8) - 1;
     constexpr uint32_t i23 = (uint32_t(1) << 23) - 1;
+    constexpr uint32_t rsft_1x = 4 * BASE;
 
     union { float d; int32_t u; } v {value};
 
     int32_t sign = v.u >> 31;
     int32_t exp = ((v.u >> 23) & i8) - 150, rem; // bias127 + frac23
-    fast_div7_i32x(exp, e, rem);
+    fast_division_i32<BASE>(exp, e, rem);
 
     int32_t impl_one = -int32_t(-150 < exp) & (i23 + 1);
     uint32_t frac = ((v.u & i23) | impl_one) << rem;
-    uint32_t sign_frac = sign ? ~frac : frac;
 
-    uint32_t cmpl_i8 = sign & 0x81818181;
-
-    uint32_t a0 = sign_frac & i7;
-    uint32_t a1 = (sign_frac << 1) & (i7 << 8);
-    uint32_t a2 = (sign_frac << 2) & (i7 << 16);
-    uint32_t a3 = (sign_frac << 3) & (i7 << 24);
-    code[0] = vadd4(a0 | a1 | a2 | a3, cmpl_i8);
-    code[1] = uint8_t((uint32_t(sign_frac >> 28) & i7) + cmpl_i8);
+    code[0] = pack_4x_int<BASE>(frac, sign);
+    code[1] = pack_4x_int<BASE>(frac >> rsft_1x, sign);
   }
 
-  template <int32_t order>
-  __host__ __device__ __forceinline__ void align_expon(uint32_t (&a)[order], int32_t exp7_diff) {
-    uint32_t rsft = 32 - ((exp7_diff & 3) << 3);
-    int32_t psft = (exp7_diff - (exp7_diff & 3)) >> 2;
-    uint32_t b[order + 1];
+  template <uint32_t ORDER>
+  __host__ __device__ __forceinline__ void align_expon(uint32_t (&a)[ORDER], int32_t exp_diff) {
+    static_assert(1 <= ORDER && ORDER <= 8, "Max integer quantization order need to be in 4x [1, 8].");
+    uint32_t rsft = 32 - ((exp_diff & 3) << 3);
+    uint32_t psft = uint32_t(((exp_diff & 3) - exp_diff) >> 2);
+    uint32_t b[ORDER + 2];
+
+    auto joint_a = [](uint32_t hi, uint32_t lo, uint32_t rsft)
+      { return uint32_t(((uint64_t(hi) << 32) | uint64_t(lo)) >> rsft); };
+    
     b[0] = a[0] << (32 - rsft);
-    b[order] = a[order - 1] >> rsft;
+    if constexpr(1 < ORDER) b[1] = joint_a(a[1], a[0], rsft);
+    if constexpr(2 < ORDER) b[2] = joint_a(a[2], a[1], rsft);
+    if constexpr(3 < ORDER) b[3] = joint_a(a[3], a[2], rsft);
+    if constexpr(4 < ORDER) b[4] = joint_a(a[4], a[3], rsft);
+    if constexpr(5 < ORDER) b[5] = joint_a(a[5], a[4], rsft);
+    if constexpr(6 < ORDER) b[6] = joint_a(a[6], a[5], rsft);
+    if constexpr(7 < ORDER) b[7] = joint_a(a[7], a[6], rsft);
+    b[ORDER] = a[ORDER - 1] >> rsft;
+    b[ORDER + 1] = 0;
 
-#ifdef __CUDA_ARCH__
-    #pragma unroll
+#ifndef __CUDA_ARCH__
+    using std::min;
 #endif
-    for (int32_t i = 1; i < order; ++i)
-      b[i] = uint32_t(((uint64_t(a[i]) << 32) | uint64_t(a[i - 1])) >> rsft);
 
-#ifdef __CUDA_ARCH__
-    #pragma unroll
-#endif
-    for (int32_t i = 0; i < order; ++i) {
-      int32_t j = i - psft;
-      a[i] = (0 <= j && j <= order) ? b[j] : 0;
-    }
-  }
-
-  __host__ __device__ __forceinline__ int32_t decode_scaled_3xi32(int32_t const (&a)[3], int32_t& c) {
-    constexpr uint32_t i21 = (uint32_t(1) << 21) - 1;
-
-    int32_t lo = (uint32_t(c) & i21) + (uint32_t(a[0]) & i21) + (uint32_t(a[1] << 7) & i21) + (uint32_t(a[2] << 14) & i21);
-    int32_t hi = (c >> 21) + (a[0] >> 21) + (a[1] >> 14) + (a[2] >> 7) + (lo >> 21);
-    int32_t sign = hi >> 31;
-
-    c = hi - sign;
-    return (lo & i21) | (sign & ~i21);
-  }
-
-  __host__ __device__ __forceinline__ int64_t decode_scaled_7xi32(int32_t const (&a)[7], int32_t& c) {
-    constexpr uint32_t i21 = (uint32_t(1) << 21) - 1;
-    constexpr uint32_t i28 = (uint32_t(1) << 28) - 1;
-    constexpr uint64_t i49 = (uint64_t(1) << 49) - 1;
-
-    int32_t lo4 = (uint32_t(c) & i28) + (uint32_t(a[0]) & i28) + (uint32_t(a[1] << 7) & i28) + (uint32_t(a[2] << 14) & i28) + (uint32_t(a[3] << 21) & i28);
-    int32_t hi4 = (c >> 28) + (a[0] >> 28) + (a[1] >> 21) + (a[2] >> 14) + (a[3] >> 7) + (lo4 >> 28);
-
-    int32_t lo3 = (uint32_t(hi4) & i21) + (uint32_t(a[4]) & i21) + (uint32_t(a[5] << 7) & i21) + (uint32_t(a[6] << 14) & i21);
-    int32_t hi3 = (hi4 >> 21) + (a[4] >> 21) + (a[5] >> 14) + (a[6] >> 7) + (lo3 >> 21);
-    int32_t sign = hi3 >> 31;
-
-    c = hi3 - sign;
-    return int64_t(lo4 & i28) | (int64_t(lo3 & i21) << 28) | (int64_t(sign) & ~i49);
+    a[0] = b[min(ORDER + 1, psft)];
+    if constexpr(1 < ORDER) a[1] = b[min(ORDER + 1, psft + 1)];
+    if constexpr(2 < ORDER) a[2] = b[min(ORDER + 1, psft + 2)];
+    if constexpr(3 < ORDER) a[3] = b[min(ORDER + 1, psft + 3)];
+    if constexpr(4 < ORDER) a[4] = b[min(ORDER + 1, psft + 4)];
+    if constexpr(5 < ORDER) a[5] = b[min(ORDER + 1, psft + 5)];
+    if constexpr(6 < ORDER) a[6] = b[min(ORDER + 1, psft + 6)];
+    if constexpr(7 < ORDER) a[7] = b[min(ORDER + 1, psft + 7)];
   }
 
 };
