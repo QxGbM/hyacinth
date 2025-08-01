@@ -11,7 +11,7 @@ __global__ void swap_cols_real(int32_t i, int32_t j, int32_t N, real_ptr A, int3
   constexpr int32_t elements = GRID_BLOCKS * elements_block;
   int32_t block_offset = blockIdx.x * elements_block;
   int32_t thread_offset = threadIdx.x * ITEMS_PER_THREAD;
-  int32_t N2 = N & (elements - 1), N1 = N - N2;
+  int32_t N2 = N & (elements_block - 1), N1 = N - N2;
 
   __shared__ typename cub::BlockLoad<real_t, BLOCK_THREADS, ITEMS_PER_THREAD>::TempStorage temp_load;
   __shared__ typename cub::BlockStore<real_t, BLOCK_THREADS, ITEMS_PER_THREAD>::TempStorage temp_store;

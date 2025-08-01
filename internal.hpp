@@ -58,6 +58,18 @@ namespace internal::Cholesky {
 
   void swap_cols_float4_complex(cudaStream_t stream, int32_t i, int32_t j, int32_t N, complex_float4* A, int32_t lda);
 
+  void copy_convert_upper_f64_f64(cudaStream_t stream, int32_t items, int32_t N, const double* A, int32_t lda, double* B, int32_t ldb);
+
+  void copy_convert_upper_f32_f64(cudaStream_t stream, int32_t items, int32_t N, const float* A, int32_t lda, double* B, int32_t ldb);
+
+  void copy_convert_upper_dd_f64(cudaStream_t stream, int32_t items, int32_t N, const double2* A, int32_t lda, double* B, int32_t ldb);
+
+  void copy_convert_upper_qf_f64(cudaStream_t stream, int32_t items, int32_t N, const float4* A, int32_t lda, double* B, int32_t ldb);
+
+  void copy_convert_upper_f64_f32(cudaStream_t stream, int32_t items, int32_t N, const double* A, int32_t lda, float* B, int32_t ldb);
+
+  void copy_convert_upper_f32_f32(cudaStream_t stream, int32_t items, int32_t N, const float* A, int32_t lda, float* B, int32_t ldb);
+
 };
 
 namespace internal::int8 {
@@ -82,8 +94,6 @@ namespace internal::int8 {
   void encode_cf32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, const int32_t* vec_expon, int8_t* inA, int32_t ldi, int32_t strideI);
 
   void normalize_i32(cudaStream_t stream, int32_t M, int32_t N, int32_t* A);
-
-  void normalize_i32_set_high(cudaStream_t stream, int32_t M, int32_t N, int32_t* A);
 
   void r8i_TN_gemm_strided_AC(cudaStream_t stream, cublasHandle_t handle, int32_t k_bits, int32_t order, int32_t algnM, int32_t algnN, int32_t algnK, const int8_t* AT, int32_t strideA, const int8_t* B, int32_t* C, int32_t strideC);
 

@@ -2,7 +2,6 @@
 #include <hyacinth.hpp>
 #include <internal.hpp>
 
-#include <vector>
 #include <numeric>
 
 int32_t device::Cholesky::dpotrfp(cudaStream_t stream, int32_t N, double* A, int32_t lda, int32_t* ipiv) {

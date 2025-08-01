@@ -36,7 +36,7 @@ namespace device::QR {
   // work :: device, queried in params, 256 byte aligned
 
   struct geqp3_params {
-    int32_t M, N, algnM, algnN, order, acc_bits, elem_bytes;
+    int32_t M, N, algnM, algnN, order, acc_bits, elem_bytes, use_fp64_over_32;
     size_t n_i8, n_i32, n_elem, work_bytes;
   };
 
@@ -47,6 +47,10 @@ namespace device::QR {
   void zgeqp3_ronly_params_query(geqp3_params* params, double epi, int32_t M, int32_t N);
 
   void cgeqp3_ronly_params_query(geqp3_params* params, float epi, int32_t M, int32_t N);
+
+  void set_double_double_as_fp128(geqp3_params* params);
+
+  void set_quad_float_as_fp128(geqp3_params* params);
 
   int32_t dgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geqp3_params params, double* A, int32_t lda, int32_t* ipiv, void* workspace);
 

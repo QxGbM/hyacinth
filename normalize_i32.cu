@@ -10,9 +10,8 @@ __device__ void signed_normalize(int32_t (&a)[ITEMS_PER_THREAD], int32_t (&c)[IT
   #pragma unroll
   for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i) {
     int32_t val = a[i] + c[i];
-    int32_t sign = val >> 31;
-    c[i] = (val >> BASE) - sign;
-    a[i] = (val & iBASE) | (sign & ~iBASE);
+    c[i] = val >> BASE;
+    a[i] = val & iBASE;
   }
 }
 
@@ -23,7 +22,7 @@ __device__ void signed_sum(int32_t (&a)[ITEMS_PER_THREAD], int32_t const (&c)[IT
     a[i] += c[i];
 }
 
-template <int32_t GRID_BLOCKS, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD, int32_t BASE, int32_t SET_HIGH>
+template <int32_t GRID_BLOCKS, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD, int32_t BASE>
 __global__ void normalize_columns_i32(int32_t M, int32_t N, int32_t* __restrict__ A) {
   constexpr int32_t elements_block = ITEMS_PER_THREAD * BLOCK_THREADS;
   constexpr int32_t elements = GRID_BLOCKS * elements_block;
@@ -49,13 +48,9 @@ __global__ void normalize_columns_i32(int32_t M, int32_t N, int32_t* __restrict_
       block_store.Store(A_k, a);
     }
 
-    if constexpr (SET_HIGH)
-      block_store.Store(A_tl, c);
-    else {
-      block_load.Load(A_tl, a);
-      signed_sum(a, c);
-      block_store.Store(A_tl, a);
-    }
+    block_load.Load(A_tl, a);
+    signed_sum(a, c);
+    block_store.Store(A_tl, a);
   }
 
   if (0 < M2 && blockIdx.x == 0) {
@@ -70,13 +65,9 @@ __global__ void normalize_columns_i32(int32_t M, int32_t N, int32_t* __restrict_
       block_store.Store(A_k, a, M2);
     }
 
-    if constexpr (SET_HIGH)
-      block_store.Store(A_tl, c);
-    else {
-      block_load.Load(A_tl, a);
-      signed_sum(a, c);
-      block_store.Store(A_tl, a);
-    }
+    block_load.Load(A_tl, a, M2);
+    signed_sum(a, c);
+    block_store.Store(A_tl, a, M2);
   }
 }
 
@@ -85,11 +76,6 @@ constexpr int32_t grid_blocks = 2048;
 constexpr int32_t items_per_thread = 4;
 
 void internal::int8::normalize_i32(cudaStream_t stream, int32_t M, int32_t N, int32_t* A) {
-  normalize_columns_i32 <grid_blocks, block_threads, items_per_thread, exp_base, 0>
-    <<< grid_blocks, block_threads, 0, stream >>> (M, N, A);
-}
-
-void internal::int8::normalize_i32_set_high(cudaStream_t stream, int32_t M, int32_t N, int32_t* A) {
-  normalize_columns_i32 <grid_blocks, block_threads, items_per_thread, exp_base, 1>
+  normalize_columns_i32 <grid_blocks, block_threads, items_per_thread, exp_base>
     <<< grid_blocks, block_threads, 0, stream >>> (M, N, A);
 }

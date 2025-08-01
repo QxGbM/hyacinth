@@ -7,8 +7,8 @@ set(CMAKE_BUILD_TYPE Release)
 project ("hyacinth" LANGUAGES CXX CUDA)
 
 find_package(CUDAToolkit REQUIRED)
-set(CPP_SOURCES potrfp_real.cpp potrfp_complex.cpp qr_params_query.cpp)
-set(CU_SOURCES imax_real.cu imax_complex.cu gemvs_complex.cu gemvs_real.cu swap_cols_complex.cu swap_cols_real.cu fp_exponent.cu encode_fp_int_strided.cu normalize_i32.cu decode_strided_i32.cu strided_i8_gemm.cu)
+set(CPP_SOURCES potrfp_real.cpp potrfp_complex.cpp qr_params_query.cpp geqp3_ronly.cpp)
+set(CU_SOURCES imax_real.cu imax_complex.cu gemvs_complex.cu gemvs_real.cu swap_cols_complex.cu swap_cols_real.cu copy_convert_upper.cu fp_exponent.cu encode_fp_int_strided.cu normalize_i32.cu decode_strided_i32.cu strided_i8_gemm.cu)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 link_libraries(CUDA::cudart CUDA::cublas)
