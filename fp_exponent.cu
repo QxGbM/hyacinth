@@ -25,7 +25,7 @@ __global__ void vector_exponent(int32_t order, int32_t M, int32_t N, real_const_
   expon_imax expon_f;
 
   for (int32_t col = blockIdx.x; col < N; col += GRID_BLOCKS) {
-    real_const_ptr A_i = &A[col * lda];
+    real_const_ptr A_i = &A[uint64_t(col) * uint64_t(lda)];
     block_load.Load(A_i, threadA, M1, real_t());
 
     #pragma unroll

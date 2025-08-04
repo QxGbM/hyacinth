@@ -68,7 +68,7 @@ __global__ void minus_adjAx_plusB_scale_complex(real_t scale, int32_t M, int32_t
   minus_conj_a_fma_complex fma_func;
 
   for (int32_t row = blockIdx.x; row < M; row += GRID_BLOCKS) {
-    complex_const_ptr A_i = &A[row * lda];
+    complex_const_ptr A_i = &A[uint64_t(row) * uint64_t(lda)];
 
     block_load.Load(A_i, threadA, N1, complex_t());
     block_load.Load(A, threadX, N1, complex_t());
@@ -104,7 +104,7 @@ __global__ void minus_adjAx_plusB_scale_complex(real_t scale, int32_t M, int32_t
 
       complex_t res = scal_func(block_res, B[row], scale);
       B[row] = res;
-      B[row * lda] = conj_func(res);
+      B[uint64_t(row) * uint64_t(lda)] = conj_func(res);
     }
   }
 }

@@ -31,8 +31,8 @@ __global__ void copy_convert_upper(int32_t items, int32_t N, constPtrA A, int32_
     int32_t M2 = M & (elements_block - 1);
     int32_t M1 = M - M2;
 
-    constPtrA A_col = &A[col * lda];
-    ptrB B_col = &B[col * ldb];
+    constPtrA A_col = &A[uint64_t(col) * uint64_t(lda)];
+    ptrB B_col = &B[uint64_t(col) * uint64_t(ldb)];
 
     for (int32_t k = block_offset; k < M1; k += elements) {
       block_load.Load(&A_col[k], threadA);

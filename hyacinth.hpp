@@ -37,7 +37,7 @@ namespace device::QR {
 
   struct geqp3_params {
     int32_t M, N, algnM, algnN, orderA, orderC, acc_bits, elem_bytes, iter_k, use_fp64_over_32;
-    size_t n_i8, n_i32, n_elem, work_bytes;
+    uint64_t n_i8, n_i32, n_elem, work_bytes;
   };
 
   void dgeqp3_ronly_params_query(geqp3_params* params, double epi, int32_t M, int32_t N);

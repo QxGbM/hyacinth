@@ -90,8 +90,8 @@ struct acc_i32_set {
 template <class real_t, class real_ptr, int32_t GRID_BLOCKS, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD, int32_t BASE, int32_t COMPLEX>
 __global__ void decode_strided_i32(int32_t k_begin, int32_t k_len, int32_t N, const int32_t* __restrict__ vec_expon, const int32_t* __restrict__ A, int32_t lda, real_ptr C, int32_t ldc) {
   constexpr int32_t elements = ITEMS_PER_THREAD * BLOCK_THREADS;
-  const int32_t strideA = lda * lda;
-  const int32_t cstrideA = COMPLEX * lda * lda;
+  const uint64_t strideA = uint64_t(lda) * uint64_t(lda);
+  const uint64_t cstrideA = uint64_t(COMPLEX) * uint64_t(lda) * uint64_t(lda);
 
   __shared__ typename cub::BlockLoad<int32_t, BLOCK_THREADS, ITEMS_PER_THREAD>::TempStorage temp_load;
   __shared__ typename cub::BlockStore<real_t, BLOCK_THREADS, ITEMS_PER_THREAD>::TempStorage temp_store;
@@ -105,8 +105,8 @@ __global__ void decode_strided_i32(int32_t k_begin, int32_t k_len, int32_t N, co
   acc_i32_set acc_set_f;
 
   for (int32_t col = blockIdx.x; col < N; col += GRID_BLOCKS) {
-    const int32_t* A_col = &A[col * lda];
-    real_ptr C_col = &C[col * ldc];
+    const int32_t* A_col = &A[uint64_t(col) * uint64_t(lda)];
+    real_ptr C_col = &C[uint64_t(col) * uint64_t(ldc)];
     int32_t col_expon = vec_expon[col] + k_begin;
 
     for (int32_t i = 0; i < N; i += elements) {
@@ -116,7 +116,7 @@ __global__ void decode_strided_i32(int32_t k_begin, int32_t k_len, int32_t N, co
 
       #pragma unroll
       for (int32_t j = 0; j < COMPLEX; ++j)
-        block_load.Load(&A_ij[j * strideA], c[j], num_items, 0);
+        block_load.Load(&A_ij[uint64_t(j) * strideA], c[j], num_items, 0);
 
       #pragma unroll
       for (int32_t j = 0; j < ITEMS_PER_THREAD; ++j) {
@@ -129,11 +129,11 @@ __global__ void decode_strided_i32(int32_t k_begin, int32_t k_len, int32_t N, co
       }
 
       for (int32_t k = 1; k < k_len; ++k) {
-        const int32_t* A_k = &A_ij[k * cstrideA];
+        const int32_t* A_k = &A_ij[uint64_t(k) * cstrideA];
 
         #pragma unroll
         for (int32_t j = 0; j < COMPLEX; ++j)
-          block_load.Load(&A_k[j * strideA], c[j], num_items, 0);
+          block_load.Load(&A_k[uint64_t(j) * strideA], c[j], num_items, 0);
 
         #pragma unroll
         for (int32_t j = 0; j < ITEMS_PER_THREAD; ++j) {

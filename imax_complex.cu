@@ -130,11 +130,12 @@ __global__ void update_reduce_complex(int32_t N, complex_const_ptr A, real_ptr X
   __syncthreads();
   if (threadIdx.x == 0) {
     conj conj_f;
-    complex_t Cp = C[block_res.idx], Dp = C[block_res.idx * (ldc + 1)], D0 = C[0];
+    uint64_t iD0 = block_res.idx * uint64_t(ldc), iDp = block_res.idx * uint64_t(ldc + 1);
+    complex_t C0 = C[0], Cp = C[block_res.idx], Dp = C[iDp];
     C[0] = Cp;
-    C[block_res.idx] = D0;
-    C[block_res.idx * ldc] = Dp;
-    C[block_res.idx * (ldc + 1)] = conj_f(Cp);
+    C[block_res.idx] = C0;
+    C[iD0] = Dp;
+    C[iDp] = conj_f(Cp);
 
     rsqrt_real rsqrt_func;
     *i_out = block_res.idx;
@@ -188,11 +189,12 @@ __global__ void reduce_complex(int32_t N, real_ptr X, complex_ptr C, int32_t ldc
   __syncthreads();
   if (threadIdx.x == 0) {
     conj conj_f;
-    complex_t Cp = C[block_res.idx], Dp = C[block_res.idx * (ldc + 1)], D0 = C[0];
+    uint64_t iD0 = block_res.idx * uint64_t(ldc), iDp = block_res.idx * uint64_t(ldc + 1);
+    complex_t C0 = C[0], Cp = C[block_res.idx], Dp = C[iDp];
     C[0] = Cp;
-    C[block_res.idx] = D0;
-    C[block_res.idx * ldc] = Dp;
-    C[block_res.idx * (ldc + 1)] = conj_f(Cp);
+    C[block_res.idx] = C0;
+    C[iD0] = Dp;
+    C[iDp] = conj_f(Cp);
 
     rsqrt_real rsqrt_func;
     *i_out = block_res.idx;

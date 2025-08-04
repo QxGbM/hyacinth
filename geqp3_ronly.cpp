@@ -9,7 +9,7 @@ int32_t device::QR::dgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
   int32_t algnM = params.algnM, algnN = params.algnN;
   int32_t orderA = params.orderA, orderC = params.orderC;
   int32_t order_hi = 2 * orderA, order_lo = order_hi - orderC;
-  int32_t strideA = algnM * algnN;
+  uint64_t strideA = uint64_t(algnM) * uint64_t(algnN);
 
   int8_t* iA = (int8_t*)(workspace);
   int32_t* AHA = (int32_t*)(&iA[params.n_i8]);
@@ -17,7 +17,7 @@ int32_t device::QR::dgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
   int32_t elem_bytes = params.elem_bytes;
   int32_t ret = 0;
 
-  size_t int_bytes = params.n_i8 + params.n_i32 * 4;
+  uint64_t int_bytes = params.n_i8 + params.n_i32 * 4;
   cudaMemsetAsync(workspace, 0, int_bytes);
   void* mat = &iA[int_bytes];
   internal::int8::vexp_f64(stream, orderA, M, N, A, lda, vexp);
@@ -57,8 +57,7 @@ int32_t device::QR::sgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
   int32_t algnM = params.algnM, algnN = params.algnN;
   int32_t orderA = params.orderA, orderC = params.orderC;
   int32_t order_hi = 2 * orderA, order_lo = order_hi - orderC;
-  int32_t strideA = algnM * algnN;
-
+  uint64_t strideA = uint64_t(algnM) * uint64_t(algnN);
 
   int8_t* iA = (int8_t*)(workspace);
   int32_t* AHA = (int32_t*)(&iA[params.n_i8]);
@@ -66,7 +65,7 @@ int32_t device::QR::sgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
   int32_t elem_bytes = params.elem_bytes;
   int32_t ret = 0;
 
-  size_t int_bytes = params.n_i8 + params.n_i32 * 4;
+  uint64_t int_bytes = params.n_i8 + params.n_i32 * 4;
   cudaMemsetAsync(workspace, 0, int_bytes);
   void* mat = &iA[int_bytes];
   internal::int8::vexp_f32(stream, orderA, M, N, A, lda, vexp);
@@ -94,7 +93,7 @@ int32_t device::QR::zgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
   int32_t algnM = params.algnM, algnN = params.algnN;
   int32_t orderA = params.orderA, orderC = params.orderC;
   int32_t order_hi = 2 * orderA, order_lo = order_hi - orderC;
-  int32_t strideA = algnM * algnN;
+  uint64_t strideA = uint64_t(algnM) * uint64_t(algnN);
 
   int8_t* iA = (int8_t*)(workspace);
   int32_t* AHA = (int32_t*)(&iA[params.n_i8]);
@@ -102,7 +101,7 @@ int32_t device::QR::zgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
   int32_t elem_bytes = params.elem_bytes;
   int32_t ret = 0;
 
-  size_t int_bytes = params.n_i8 + params.n_i32 * 4;
+  uint64_t int_bytes = params.n_i8 + params.n_i32 * 4;
   cudaMemsetAsync(workspace, 0, int_bytes);
   void* mat = &iA[int_bytes];
   internal::int8::vexp_cf64(stream, orderA, M, N, A, lda, vexp);
@@ -142,7 +141,7 @@ int32_t device::QR::cgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
   int32_t algnM = params.algnM, algnN = params.algnN;
   int32_t orderA = params.orderA, orderC = params.orderC;
   int32_t order_hi = 2 * orderA, order_lo = order_hi - orderC;
-  int32_t strideA = algnM * algnN;
+  uint64_t strideA = uint64_t(algnM) * uint64_t(algnN);
 
   int8_t* iA = (int8_t*)(workspace);
   int32_t* AHA = (int32_t*)(&iA[params.n_i8]);
@@ -150,7 +149,7 @@ int32_t device::QR::cgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
   int32_t elem_bytes = params.elem_bytes;
   int32_t ret = 0;
 
-  size_t int_bytes = params.n_i8 + params.n_i32 * 4;
+  uint64_t int_bytes = params.n_i8 + params.n_i32 * 4;
   cudaMemsetAsync(workspace, 0, int_bytes);
   void* mat = &iA[int_bytes];
   internal::int8::vexp_cf32(stream, orderA, M, N, A, lda, vexp);

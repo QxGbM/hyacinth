@@ -6,13 +6,13 @@
 
 int32_t device::Cholesky::dpotrfp(cudaStream_t stream, int32_t N, double* A, int32_t lda, int32_t* ipiv) {
   int32_t algnN = (N + 3) & (~3), *pivot_i = &ipiv[algnN + 4];
-  double* scale = (double*)(&ipiv[algnN]), *diag = (double*)(&A[N * lda]);
+  double* scale = (double*)(&ipiv[algnN]), *diag = (double*)(&A[uint64_t(N) * uint64_t(lda)]);
   std::iota(ipiv, &ipiv[N], 1);
   cudaMemcpy2DAsync(diag, sizeof(double), A, (lda + 1) * sizeof(double), sizeof(double), N, cudaMemcpyDeviceToDevice, stream);
 
   for (int32_t i = 0; i < N; ++i) {
-    double* Aprev = (0 < i) ? &A[i + (i - 1) * lda] : nullptr;
-    internal::Cholesky::imax_double(stream, N - i, Aprev, &diag[i], &A[i * (lda + 1)], lda, pivot_i, scale);
+    double* Aprev = (0 < i) ? &A[uint64_t(i) + uint64_t(i - 1) * uint64_t(lda)] : nullptr;
+    internal::Cholesky::imax_double(stream, N - i, Aprev, &diag[i], &A[uint64_t(i) * uint64_t(lda + 1)], lda, pivot_i, scale);
     cudaStreamSynchronize(stream);
 
     if (!std::isfinite(*scale))
@@ -23,20 +23,20 @@ int32_t device::Cholesky::dpotrfp(cudaStream_t stream, int32_t N, double* A, int
       std::iter_swap(&ipiv[i], &ipiv[j]);
       internal::Cholesky::swap_cols_double(stream, i, j, N, A, lda);
     }
-    internal::Cholesky::minus_transAx_plusB_scale_double(stream, *scale, N - i, i, &A[i * lda], lda, &A[i * (lda + 1)]);
+    internal::Cholesky::minus_transAx_plusB_scale_double(stream, *scale, N - i, i, &A[uint64_t(i) * uint64_t(lda)], lda, &A[uint64_t(i) * uint64_t(lda + 1)]);
   }
   return 0;
 }
 
 int32_t device::Cholesky::spotrfp(cudaStream_t stream, int32_t N, float* A, int32_t lda, int32_t* ipiv) {
   int32_t algnN = (N + 3) & (~3), *pivot_i = &ipiv[algnN + 4];
-  float* scale = (float*)(&ipiv[algnN]), *diag = (float*)(&A[N * lda]);
+  float* scale = (float*)(&ipiv[algnN]), *diag = (float*)(&A[uint64_t(N) * uint64_t(lda)]);
   std::iota(ipiv, &ipiv[N], 1);
   cudaMemcpy2DAsync(diag, sizeof(float), A, (lda + 1) * sizeof(float), sizeof(float), N, cudaMemcpyDeviceToDevice, stream);
 
   for (int32_t i = 0; i < N; ++i) {
-    float* Aprev = (0 < i) ? &A[i + (i - 1) * lda] : nullptr;
-    internal::Cholesky::imax_float(stream, N - i, Aprev, &diag[i], &A[i * (lda + 1)], lda, pivot_i, scale);
+    float* Aprev = (0 < i) ? &A[uint64_t(i) + uint64_t(i - 1) * uint64_t(lda)] : nullptr;
+    internal::Cholesky::imax_float(stream, N - i, Aprev, &diag[i], &A[uint64_t(i) * uint64_t(lda + 1)], lda, pivot_i, scale);
     cudaStreamSynchronize(stream);
 
     if (!std::isfinite(*scale))
@@ -47,20 +47,20 @@ int32_t device::Cholesky::spotrfp(cudaStream_t stream, int32_t N, float* A, int3
       std::iter_swap(&ipiv[i], &ipiv[j]);
       internal::Cholesky::swap_cols_float(stream, i, j, N, A, lda);
     }
-    internal::Cholesky::minus_transAx_plusB_scale_float(stream, *scale, N - i, i, &A[i * lda], lda, &A[i * (lda + 1)]);
+    internal::Cholesky::minus_transAx_plusB_scale_float(stream, *scale, N - i, i, &A[uint64_t(i) * uint64_t(lda)], lda, &A[uint64_t(i) * uint64_t(lda + 1)]);
   }
   return 0;
 }
 
 int32_t device::Cholesky::double_double_potrfp(cudaStream_t stream, int32_t N, double2* A, int32_t lda, int32_t* ipiv) {
   int32_t algnN = (N + 3) & (~3), *pivot_i = &ipiv[algnN + 4];
-  double2* scale = (double2*)(&ipiv[algnN]), *diag = (double2*)(&A[N * lda]);
+  double2* scale = (double2*)(&ipiv[algnN]), *diag = (double2*)(&A[uint64_t(N) * uint64_t(lda)]);
   std::iota(ipiv, &ipiv[N], 1);
   cudaMemcpy2DAsync(diag, sizeof(double2), A, (lda + 1) * sizeof(double2), sizeof(double2), N, cudaMemcpyDeviceToDevice, stream);
 
   for (int32_t i = 0; i < N; ++i) {
-    double2* Aprev = (0 < i) ? &A[i + (i - 1) * lda] : nullptr;
-    internal::Cholesky::imax_double2(stream, N - i, Aprev, &diag[i], &A[i * (lda + 1)], lda, pivot_i, scale);
+    double2* Aprev = (0 < i) ? &A[uint64_t(i) + uint64_t(i - 1) * uint64_t(lda)] : nullptr;
+    internal::Cholesky::imax_double2(stream, N - i, Aprev, &diag[i], &A[uint64_t(i) * uint64_t(lda + 1)], lda, pivot_i, scale);
     cudaStreamSynchronize(stream);
 
     if (!device::dd::fisfinite(*scale))
@@ -71,20 +71,20 @@ int32_t device::Cholesky::double_double_potrfp(cudaStream_t stream, int32_t N, d
       std::iter_swap(&ipiv[i], &ipiv[j]);
       internal::Cholesky::swap_cols_double2(stream, i, j, N, A, lda);
     }
-    internal::Cholesky::minus_transAx_plusB_scale_double2(stream, *scale, N - i, i, &A[i * lda], lda, &A[i * (lda + 1)]);
+    internal::Cholesky::minus_transAx_plusB_scale_double2(stream, *scale, N - i, i, &A[uint64_t(i) * uint64_t(lda)], lda, &A[uint64_t(i) * uint64_t(lda + 1)]);
   }
   return 0;
 }
 
 int32_t device::Cholesky::quad_float_potrfp(cudaStream_t stream, int32_t N, float4* A, int32_t lda, int32_t* ipiv) {
   int32_t algnN = (N + 3) & (~3), *pivot_i = &ipiv[algnN + 4];
-  float4* scale = (float4*)(&ipiv[algnN]), *diag = (float4*)(&A[N * lda]);
+  float4* scale = (float4*)(&ipiv[algnN]), *diag = (float4*)(&A[uint64_t(N) * uint64_t(lda)]);
   std::iota(ipiv, &ipiv[N], 1);
   cudaMemcpy2DAsync(diag, sizeof(float4), A, (lda + 1) * sizeof(float4), sizeof(float4), N, cudaMemcpyDeviceToDevice, stream);
 
   for (int32_t i = 0; i < N; ++i) {
-    float4* Aprev = (0 < i) ? &A[i + (i - 1) * lda] : nullptr;
-    internal::Cholesky::imax_float4(stream, N - i, Aprev, &diag[i], &A[i * (lda + 1)], lda, pivot_i, scale);
+    float4* Aprev = (0 < i) ? &A[uint64_t(i) + uint64_t(i - 1) * uint64_t(lda)] : nullptr;
+    internal::Cholesky::imax_float4(stream, N - i, Aprev, &diag[i], &A[uint64_t(i) * uint64_t(lda + 1)], lda, pivot_i, scale);
     cudaStreamSynchronize(stream);
 
     if (!device::qf::fisfinite(*scale))
@@ -95,7 +95,7 @@ int32_t device::Cholesky::quad_float_potrfp(cudaStream_t stream, int32_t N, floa
       std::iter_swap(&ipiv[i], &ipiv[j]);
       internal::Cholesky::swap_cols_float4(stream, i, j, N, A, lda);
     }
-    internal::Cholesky::minus_transAx_plusB_scale_float4(stream, *scale, N - i, i, &A[i * lda], lda, &A[i * (lda + 1)]);
+    internal::Cholesky::minus_transAx_plusB_scale_float4(stream, *scale, N - i, i, &A[uint64_t(i) * uint64_t(lda)], lda, &A[uint64_t(i) * uint64_t(lda + 1)]);
   }
   return 0;
 }

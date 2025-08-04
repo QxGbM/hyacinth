@@ -114,11 +114,12 @@ __global__ void update_reduce_real(int32_t N, real_const_ptr A, real_ptr X, real
 
   __syncthreads();
   if (threadIdx.x == 0) {
-    real_t Cp = C[block_res.idx], Dp = C[block_res.idx * (ldc + 1)], D0 = C[0];
+    uint64_t iD0 = block_res.idx * uint64_t(ldc), iDp = block_res.idx * uint64_t(ldc + 1);
+    real_t C0 = C[0], Cp = C[block_res.idx], Dp = C[iDp];
     C[0] = Cp;
-    C[block_res.idx] = D0;
-    C[block_res.idx * ldc] = Dp;
-    C[block_res.idx * (ldc + 1)] = Cp;
+    C[block_res.idx] = C0;
+    C[iD0] = Dp;
+    C[iDp] = Cp;
 
     rsqrt_real rsqrt_func;
     *i_out = block_res.idx;
@@ -171,11 +172,12 @@ __global__ void reduce_real(int32_t N, real_ptr X, real_ptr C, int32_t ldc, int3
 
   __syncthreads();
   if (threadIdx.x == 0) {
-    real_t Cp = C[block_res.idx], Dp = C[block_res.idx * (ldc + 1)], D0 = C[0];
+    uint64_t iD0 = block_res.idx * uint64_t(ldc), iDp = block_res.idx * uint64_t(ldc + 1);
+    real_t C0 = C[0], Cp = C[block_res.idx], Dp = C[iDp];
     C[0] = Cp;
-    C[block_res.idx] = D0;
-    C[block_res.idx * ldc] = Dp;
-    C[block_res.idx * (ldc + 1)] = Cp;
+    C[block_res.idx] = C0;
+    C[iD0] = Dp;
+    C[iDp] = Cp;
 
     rsqrt_real rsqrt_func;
     *i_out = block_res.idx;
