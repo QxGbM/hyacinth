@@ -52,8 +52,8 @@ __global__ void swap_cols_real(int32_t i, int32_t j, int32_t N, real_ptr A, int3
   }
 }
 
-constexpr int32_t grid_blocks = 64;
-constexpr int32_t block_threads = 8 * 32;
+constexpr int32_t grid_blocks = 128;
+constexpr int32_t block_threads = 128;
 constexpr int32_t thread_bytes = 32;
 
 void internal::Cholesky::swap_cols_double(cudaStream_t stream, int32_t i, int32_t j, int32_t N, double* A, int32_t lda) {

@@ -201,7 +201,7 @@ __global__ void reduce_complex(int32_t N, real_ptr X, complex_ptr C, int32_t ldc
   }
 }
 
-constexpr int32_t block_threads = 16 * 32;
+constexpr int32_t block_threads = 512;
 constexpr int32_t thread_bytes = 32;
 
 void internal::Cholesky::imax_double_complex(cudaStream_t stream, int32_t N, const std::complex<double>* A, double* X, std::complex<double>* C, int32_t ldc, int32_t* piv, double* rsq) {

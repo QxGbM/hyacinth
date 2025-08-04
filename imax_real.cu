@@ -184,7 +184,7 @@ __global__ void reduce_real(int32_t N, real_ptr X, real_ptr C, int32_t ldc, int3
   }
 }
 
-constexpr int32_t block_threads = 16 * 32;
+constexpr int32_t block_threads = 512;
 constexpr int32_t thread_bytes = 32;
 
 void internal::Cholesky::imax_double(cudaStream_t stream, int32_t N, const double* A, double* X, double* C, int32_t ldc, int32_t* piv, double* rsq) {
