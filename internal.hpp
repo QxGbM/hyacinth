@@ -85,13 +85,13 @@ namespace internal::int8 {
 
   void vexp_cf32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int32_t* vec_expon);
 
-  void encode_f64(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const double* A, int32_t lda, const int32_t* vec_expon, int8_t* inA, int32_t ldi, uint64_t strideI);
+  void encode_f64(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const double* C, int32_t ldc, const int32_t* vec_expon, int8_t* A, int32_t lda, uint64_t strideA);
 
-  void encode_f32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const float* A, int32_t lda, const int32_t* vec_expon, int8_t* inA, int32_t ldi, uint64_t strideI);
+  void encode_f32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const float* C, int32_t ldc, const int32_t* vec_expon, int8_t* A, int32_t lda, uint64_t strideA);
 
-  void encode_cf64(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, const int32_t* vec_expon, int8_t* inA, int32_t ldi, uint64_t strideI);
+  void encode_cf64(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<double>* C, int32_t ldc, const int32_t* vec_expon, int8_t* A, int32_t lda, uint64_t strideA);
 
-  void encode_cf32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, const int32_t* vec_expon, int8_t* inA, int32_t ldi, uint64_t strideI);
+  void encode_cf32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<float>* C, int32_t ldc, const int32_t* vec_expon, int8_t* A, int32_t lda, uint64_t strideA);
 
   void r8i_TN_gemm_stridedA(cudaStream_t stream, cublasHandle_t handle, int32_t iter_k, int32_t algnM, int32_t algnN, int32_t algnK, const int8_t* AT, uint64_t strideA, int32_t orderA, const int8_t* B, int32_t* C, int32_t orderC);
 

@@ -15,7 +15,7 @@ int32_t device::Cholesky::dpotrfp(cudaStream_t stream, int32_t N, double* A, int
     internal::Cholesky::imax_double(stream, N - i, Aprev, &diag[i], &A[uint64_t(i) * uint64_t(lda + 1)], lda, pivot_i, scale);
     cudaStreamSynchronize(stream);
 
-    if (!std::isfinite(*scale))
+    if (!std::isnormal(*scale))
       return i + 1;
 
     if (0 < *pivot_i) {
@@ -39,7 +39,7 @@ int32_t device::Cholesky::spotrfp(cudaStream_t stream, int32_t N, float* A, int3
     internal::Cholesky::imax_float(stream, N - i, Aprev, &diag[i], &A[uint64_t(i) * uint64_t(lda + 1)], lda, pivot_i, scale);
     cudaStreamSynchronize(stream);
 
-    if (!std::isfinite(*scale))
+    if (!std::isnormal(*scale))
       return i + 1;
 
     if (0 < *pivot_i) {

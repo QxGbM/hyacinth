@@ -13,8 +13,18 @@ struct conj {
   __device__ __forceinline__ complex_float4 operator()(complex_float4 f) { return device::qf::conj(f); }
 };
 
+template <int32_t COMPLEX, class real_t, int32_t ITEMS_PER_THREAD>
+__device__ __forceinline__ void pred_conj(real_t (&a)[ITEMS_PER_THREAD]) {
+  if constexpr (COMPLEX) {
+    conj conj_func;
+    #pragma unroll
+    for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
+      a[i] = conj_func(a[i]);
+  }
+}
+
 template <class real_t, class real_ptr, int32_t GRID_BLOCKS, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD, int32_t COMPLEX>
-__global__ void swap_cols(int32_t i, int32_t j, int32_t N, real_ptr A, int32_t lda) {
+__global__ void swap_cols_kernel(int32_t i, int32_t j, int32_t N, real_ptr A, int32_t lda) {
   constexpr int32_t elements_block = BLOCK_THREADS * ITEMS_PER_THREAD;
   constexpr int32_t elements = GRID_BLOCKS * elements_block;
   int32_t block_offset = blockIdx.x * elements_block;
@@ -39,13 +49,7 @@ __global__ void swap_cols(int32_t i, int32_t j, int32_t N, real_ptr A, int32_t l
     int32_t thread_loc = thread_offset + k;
     int32_t row_begin = max(thread_loc, i + 1);
     int32_t row_end = min(thread_loc + ITEMS_PER_THREAD, N);
-
-    if constexpr (COMPLEX) {
-      conj conj_func;
-      #pragma unroll
-      for (int32_t l = 0; l < ITEMS_PER_THREAD; ++l)
-        thread_i[l] = conj_func(thread_i[l]);
-    }
+    pred_conj<COMPLEX>(thread_i);
 
     for (int32_t l = row_begin; l < row_end; ++l)
       A_row_j[uint64_t(l) * uint64_t(lda)] = thread_i[l - thread_loc];
@@ -61,13 +65,7 @@ __global__ void swap_cols(int32_t i, int32_t j, int32_t N, real_ptr A, int32_t l
     int32_t thread_loc = thread_offset + N1;
     int32_t row_begin = max(thread_loc, i + 1);
     int32_t row_end = min(thread_loc + ITEMS_PER_THREAD, N);
-
-    if constexpr (COMPLEX) {
-      conj conj_func;
-      #pragma unroll
-      for (int32_t l = 0; l < ITEMS_PER_THREAD; ++l)
-        thread_i[l] = conj_func(thread_i[l]);
-    }
+    pred_conj<COMPLEX>(thread_i);
 
     for (int32_t l = row_begin; l < row_end; ++l)
       A_row_j[uint64_t(l) * uint64_t(lda)] = thread_i[l - thread_loc];
@@ -80,48 +78,48 @@ constexpr int32_t thread_bytes = 32;
 
 void internal::Cholesky::swap_cols_double(cudaStream_t stream, int32_t i, int32_t j, int32_t N, double* A, int32_t lda) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(double);
-  swap_cols <double, double* __restrict__, grid_blocks, block_threads, items_per_thread, 0>
+  swap_cols_kernel <double, double* __restrict__, grid_blocks, block_threads, items_per_thread, 0>
     <<< grid_blocks, block_threads, 0, stream >>> (i, j, N, A, lda);
 }
 
 void internal::Cholesky::swap_cols_float(cudaStream_t stream, int32_t i, int32_t j, int32_t N, float* A, int32_t lda) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(float);
-  swap_cols <float, float* __restrict__, grid_blocks, block_threads, items_per_thread, 0>
+  swap_cols_kernel <float, float* __restrict__, grid_blocks, block_threads, items_per_thread, 0>
     <<< grid_blocks, block_threads, 0, stream >>> (i, j, N, A, lda);
 }
 
 void internal::Cholesky::swap_cols_double2(cudaStream_t stream, int32_t i, int32_t j, int32_t N, double2* A, int32_t lda) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(double2);
-  swap_cols <double2, double2* __restrict__, grid_blocks, block_threads, items_per_thread, 0>
+  swap_cols_kernel <double2, double2* __restrict__, grid_blocks, block_threads, items_per_thread, 0>
     <<< grid_blocks, block_threads, 0, stream >>> (i, j, N, A, lda);
 }
 
 void internal::Cholesky::swap_cols_float4(cudaStream_t stream, int32_t i, int32_t j, int32_t N, float4* A, int32_t lda) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(float4);
-  swap_cols <float4, float4* __restrict__, grid_blocks, block_threads, items_per_thread, 0>
+  swap_cols_kernel <float4, float4* __restrict__, grid_blocks, block_threads, items_per_thread, 0>
     <<< grid_blocks, block_threads, 0, stream >>> (i, j, N, A, lda);
 }
 
 void internal::Cholesky::swap_cols_double_complex(cudaStream_t stream, int32_t i, int32_t j, int32_t N, std::complex<double>* A, int32_t lda) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(std::complex<double>);
-  swap_cols <cuDoubleComplex, cuDoubleComplex* __restrict__, grid_blocks, block_threads, items_per_thread, 1>
+  swap_cols_kernel <cuDoubleComplex, cuDoubleComplex* __restrict__, grid_blocks, block_threads, items_per_thread, 1>
     <<< grid_blocks, block_threads, 0, stream >>> (i, j, N, (cuDoubleComplex*)A, lda);
 }
 
 void internal::Cholesky::swap_cols_float_complex(cudaStream_t stream, int32_t i, int32_t j, int32_t N, std::complex<float>* A, int32_t lda) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(std::complex<float>);
-  swap_cols <cuComplex, cuComplex* __restrict__, grid_blocks, block_threads, items_per_thread, 1>
+  swap_cols_kernel <cuComplex, cuComplex* __restrict__, grid_blocks, block_threads, items_per_thread, 1>
     <<< grid_blocks, block_threads, 0, stream >>> (i, j, N, (cuComplex*)A, lda);
 }
 
 void internal::Cholesky::swap_cols_double2_complex(cudaStream_t stream, int32_t i, int32_t j, int32_t N, complex_double2* A, int32_t lda) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(complex_double2);
-  swap_cols <complex_double2, complex_double2* __restrict__, grid_blocks, block_threads, items_per_thread, 1>
+  swap_cols_kernel <complex_double2, complex_double2* __restrict__, grid_blocks, block_threads, items_per_thread, 1>
     <<< grid_blocks, block_threads, 0, stream >>> (i, j, N, A, lda);
 }
 
 void internal::Cholesky::swap_cols_float4_complex(cudaStream_t stream, int32_t i, int32_t j, int32_t N, complex_float4* A, int32_t lda) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(complex_float4);
-  swap_cols <complex_float4, complex_float4* __restrict__, grid_blocks, block_threads, items_per_thread, 1>
+  swap_cols_kernel <complex_float4, complex_float4* __restrict__, grid_blocks, block_threads, items_per_thread, 1>
     <<< grid_blocks, block_threads, 0, stream >>> (i, j, N, A, lda);
 }

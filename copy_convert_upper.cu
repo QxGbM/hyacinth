@@ -12,7 +12,7 @@ struct convert_fp {
 };
 
 template <int32_t GRID_X, int32_t GRID_Y, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD, class typeA, class constPtrA, class typeB, class ptrB>
-__global__ void copy_convert_upper(int32_t items, int32_t N, constPtrA A, int32_t lda, ptrB B, int32_t ldb) {
+__global__ void copy_upper_kernel(int32_t items, int32_t N, constPtrA A, int32_t lda, ptrB B, int32_t ldb) {
   constexpr int32_t elements_block = BLOCK_THREADS * ITEMS_PER_THREAD;
   constexpr int32_t elements = GRID_Y * elements_block;
   int32_t block_offset = blockIdx.x * elements_block;
@@ -60,31 +60,31 @@ constexpr int32_t grid_y = 4;
 constexpr int32_t items_per_thread = 4;
 
 void internal::Cholesky::copy_convert_upper_f64_f64(cudaStream_t stream, int32_t items, int32_t N, const double* A, int32_t lda, double* B, int32_t ldb) {
-  copy_convert_upper <grid_x, grid_y, block_threads, items_per_thread, double, const double* __restrict__, double, double* __restrict__>
+  copy_upper_kernel <grid_x, grid_y, block_threads, items_per_thread, double, const double* __restrict__, double, double* __restrict__>
     <<< dim3(grid_y, grid_x, 1), block_threads, 0, stream >>> (items, N, A, lda, B, ldb);
 }
 
 void internal::Cholesky::copy_convert_upper_f32_f64(cudaStream_t stream, int32_t items, int32_t N, const float* A, int32_t lda, double* B, int32_t ldb) {
-  copy_convert_upper <grid_x, grid_y, block_threads, items_per_thread, float, const float* __restrict__, double, double* __restrict__>
+  copy_upper_kernel <grid_x, grid_y, block_threads, items_per_thread, float, const float* __restrict__, double, double* __restrict__>
     <<< dim3(grid_y, grid_x, 1), block_threads, 0, stream >>> (items, N, A, lda, B, ldb);
 }
 
 void internal::Cholesky::copy_convert_upper_dd_f64(cudaStream_t stream, int32_t items, int32_t N, const double2* A, int32_t lda, double* B, int32_t ldb) {
-  copy_convert_upper <grid_x, grid_y, block_threads, items_per_thread, double2, const double2* __restrict__, double, double* __restrict__>
+  copy_upper_kernel <grid_x, grid_y, block_threads, items_per_thread, double2, const double2* __restrict__, double, double* __restrict__>
     <<< dim3(grid_y, grid_x, 1), block_threads, 0, stream >>> (items, N, A, lda, B, ldb);
 }
 
 void internal::Cholesky::copy_convert_upper_qf_f64(cudaStream_t stream, int32_t items, int32_t N, const float4* A, int32_t lda, double* B, int32_t ldb) {
-  copy_convert_upper <grid_x, grid_y, block_threads, items_per_thread, float4, const float4* __restrict__, double, double* __restrict__>
+  copy_upper_kernel <grid_x, grid_y, block_threads, items_per_thread, float4, const float4* __restrict__, double, double* __restrict__>
     <<< dim3(grid_y, grid_x, 1), block_threads, 0, stream >>> (items, N, A, lda, B, ldb);
 }
 
 void internal::Cholesky::copy_convert_upper_f64_f32(cudaStream_t stream, int32_t items, int32_t N, const double* A, int32_t lda, float* B, int32_t ldb) {
-  copy_convert_upper <grid_x, grid_y, block_threads, items_per_thread, double, const double* __restrict__, float, float* __restrict__>
+  copy_upper_kernel <grid_x, grid_y, block_threads, items_per_thread, double, const double* __restrict__, float, float* __restrict__>
     <<< dim3(grid_y, grid_x, 1), block_threads, 0, stream >>> (items, N, A, lda, B, ldb);
 }
 
 void internal::Cholesky::copy_convert_upper_f32_f32(cudaStream_t stream, int32_t items, int32_t N, const float* A, int32_t lda, float* B, int32_t ldb) {
-  copy_convert_upper <grid_x, grid_y, block_threads, items_per_thread, float, const float* __restrict__, float, float* __restrict__>
+  copy_upper_kernel <grid_x, grid_y, block_threads, items_per_thread, float, const float* __restrict__, float, float* __restrict__>
     <<< dim3(grid_y, grid_x, 1), block_threads, 0, stream >>> (items, N, A, lda, B, ldb);
 }

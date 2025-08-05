@@ -24,7 +24,7 @@ __device__ void signed_sum(int32_t (&a)[ITEMS_PER_THREAD], int32_t const (&c)[IT
 }
 
 template <int32_t GRID_BLOCKS, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD, int32_t BASE>
-__global__ void normalize_columns_i32(uint64_t M, int32_t N, int32_t* __restrict__ A) {
+__global__ void normalize_kernel(uint64_t M, int32_t N, int32_t* __restrict__ A) {
   constexpr uint64_t elements_block = ITEMS_PER_THREAD * BLOCK_THREADS;
   constexpr uint64_t elements = GRID_BLOCKS * elements_block;
   uint64_t block_offset = blockIdx.x * elements_block;
@@ -136,7 +136,7 @@ void internal::int8::r8i_TN_gemm_stridedA(cudaStream_t stream, cublasHandle_t ha
       cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnM, algnN * order_i, std::min(algnK - k, iter_k), &one, 
         AT_k, CUDA_R_8I, algnK, BN_k, CUDA_R_8I, algnK, &one, C_i, CUDA_R_32I, algnM, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
 
-      normalize_columns_i32 <grid_blocks, block_threads, items_per_thread, exp_base>
+      normalize_kernel <grid_blocks, block_threads, items_per_thread, exp_base>
         <<< grid_blocks, block_threads, 0, stream >>> (strideC, order_i, C_i);
     }
   }
