@@ -8,7 +8,7 @@ project ("hyacinth" LANGUAGES CXX CUDA)
 
 find_package(CUDAToolkit REQUIRED)
 set(CPP_SOURCES potrfp_real.cpp potrfp_complex.cpp qr_params_query.cpp geqp3_ronly.cpp)
-set(CU_SOURCES imax_real.cu imax_complex.cu gemvs_complex.cu gemvs_real.cu swap_cols.cu copy_convert_upper.cu fp_exponent.cu encode_fp_int_strided.cu decode_strided_i32.cu strided_i8_gemm.cu)
+set(CU_SOURCES imax_real.cu imax_complex.cu gemvs_complex.cu gemvs_real.cu swap_cols.cu copy_convert_upper.cu fp_exponent.cu encode_fp_int_strided.cu decode_strided_i32.cu strided_i8_gemm_real.cu strided_i8_gemm_complex.cu)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 link_libraries(CUDA::cudart CUDA::cublas)

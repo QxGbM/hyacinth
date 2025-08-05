@@ -59,67 +59,67 @@ __global__ void encode_kernel(int32_t order, int32_t M, int32_t N, real_const_pt
 
   __shared__ typename cub::BlockLoad<real_t, BLOCK_THREADS, items>::TempStorage temp_load;
   __shared__ typename cub::BlockStore<uint32_t, BLOCK_THREADS, 1>::TempStorage temp_store;
-  real_t threadA[items];
+  real_t val[items];
 
   cub::BlockLoad<real_t, BLOCK_THREADS, items> block_load(temp_load);
   cub::BlockStore<uint32_t, BLOCK_THREADS, 1> block_store(temp_store);
 
   for (int32_t col = blockIdx.y; col < N; col += GRID_X) {
-    real_const_ptr A_i = &C[uint64_t(col) * uint64_t(ldc)];
-    uint64_t B_i = uint64_t(col) * uint64_t(lda);
+    real_const_ptr C_i = &C[uint64_t(col) * uint64_t(ldc)];
+    uint64_t A_i = uint64_t(col) * uint64_t(lda);
     int32_t vec_e = vec_expon[col];
 
     for (int32_t i = block_offset; i < M1; i += elements) {
-      block_load.Load(&A_i[i], threadA);
+      block_load.Load(&C_i[i], val);
 
       if constexpr(COMPLEX) {
-        real_t A_rl[4]{ threadA[0], threadA[2], threadA[4], threadA[6] };
-        real_t A_im[4]{ threadA[1], threadA[3], threadA[5], threadA[7] };
-        uint32_t B_rl[4 * ORDER], B_im[4 * ORDER];
+        real_t C_rl[4]{ val[0], val[2], val[4], val[6] };
+        real_t C_im[4]{ val[1], val[3], val[5], val[7] };
+        uint32_t A_rl[4 * ORDER], A_im[4 * ORDER];
 
-        encode_fp_array<BASE, ORDER>(B_rl, A_rl, vec_e);
-        encode_fp_array<BASE, ORDER>(B_im, A_im, vec_e);
+        encode_fp_array<BASE, ORDER>(A_rl, C_rl, vec_e);
+        encode_fp_array<BASE, ORDER>(A_im, C_im, vec_e);
 
-        uint64_t B_row = B_i + (i >> (2 + COMPLEX));
+        uint64_t A_row = A_i + (i >> (2 + COMPLEX));
         for (int32_t k = 0; k < order; ++k) {
-          uint64_t B_k = B_row + uint64_t(k) * strideA;
-          block_store.Store(&A[B_k], *(uint32_t(*)[1])(&B_rl[k]));
-          block_store.Store(&B[B_k], *(uint32_t(*)[1])(&B_im[k]));
+          uint64_t A_k = A_row + uint64_t(k) * strideA;
+          block_store.Store(&A[A_k], *(uint32_t(*)[1])(&A_rl[k]));
+          block_store.Store(&B[A_k], *(uint32_t(*)[1])(&A_im[k]));
         }
       }
       else {
-        uint32_t threadB[4 * ORDER];
-        encode_fp_array<BASE, ORDER>(threadB, threadA, vec_e);
-        uint64_t B_row = B_i + (i >> (2 + COMPLEX));
+        uint32_t A_rl[4 * ORDER];
+        encode_fp_array<BASE, ORDER>(A_rl, val, vec_e);
+        uint64_t A_row = A_i + (i >> (2 + COMPLEX));
         for (int32_t k = 0; k < order; ++k)
-          block_store.Store(&A[B_row + uint64_t(k) * strideA], *(uint32_t(*)[1])(&threadB[k]));
+          block_store.Store(&A[A_row + uint64_t(k) * strideA], *(uint32_t(*)[1])(&A_rl[k]));
       }
     }
 
     if (0 < M2 && blockIdx.x == 0) {
-      block_load.Load(&A_i[M1], threadA, M2, real_t());
+      block_load.Load(&C_i[M1], val, M2, real_t());
 
       if constexpr(COMPLEX) {
-        real_t A_rl[4]{ threadA[0], threadA[2], threadA[4], threadA[6] };
-        real_t A_im[4]{ threadA[1], threadA[3], threadA[5], threadA[7] };
-        uint32_t B_rl[4 * ORDER], B_im[4 * ORDER];
+        real_t C_rl[4]{ val[0], val[2], val[4], val[6] };
+        real_t C_im[4]{ val[1], val[3], val[5], val[7] };
+        uint32_t A_rl[4 * ORDER], A_im[4 * ORDER];
 
-        encode_fp_array<BASE, ORDER>(B_rl, A_rl, vec_e);
-        encode_fp_array<BASE, ORDER>(B_im, A_im, vec_e);
+        encode_fp_array<BASE, ORDER>(A_rl, C_rl, vec_e);
+        encode_fp_array<BASE, ORDER>(A_im, C_im, vec_e);
 
-        uint64_t B_row = B_i + (M1 >> (2 + COMPLEX));
+        uint64_t A_row = A_i + (M1 >> (2 + COMPLEX));
         for (int32_t k = 0; k < order; ++k) {
-          uint64_t B_k = B_row + uint64_t(k) * strideA;
-          block_store.Store(&A[B_k], *(uint32_t(*)[1])(&B_rl[k]), i8_M2);
-          block_store.Store(&B[B_k], *(uint32_t(*)[1])(&B_im[k]), i8_M2);
+          uint64_t A_k = A_row + uint64_t(k) * strideA;
+          block_store.Store(&A[A_k], *(uint32_t(*)[1])(&A_rl[k]), i8_M2);
+          block_store.Store(&B[A_k], *(uint32_t(*)[1])(&A_im[k]), i8_M2);
         }
       }
       else {
-        uint32_t threadB[4 * ORDER];
-        encode_fp_array<BASE, ORDER>(threadB, threadA, vec_e);
-        uint64_t B_row = B_i + (M1 >> (2 + COMPLEX));
+        uint32_t A_rl[4 * ORDER];
+        encode_fp_array<BASE, ORDER>(A_rl, val, vec_e);
+        uint64_t A_row = A_i + (M1 >> (2 + COMPLEX));
         for (int32_t k = 0; k < order; ++k)
-          block_store.Store(&A[B_row + uint64_t(k) * strideA], *(uint32_t(*)[1])(&threadB[k]), i8_M2);
+          block_store.Store(&A[A_row + uint64_t(k) * strideA], *(uint32_t(*)[1])(&A_rl[k]), i8_M2);
       }
     }
   }
@@ -129,22 +129,32 @@ constexpr int32_t block_threads = 128;
 constexpr int32_t grid_x = 32;
 constexpr int32_t grid_y = 64;
 
-void internal::int8::encode_f64(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const double* C, int32_t ldc, const int32_t* vec_expon, int8_t* A, int32_t lda, uint64_t strideA) {
+void internal::int8::encode_f64(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const double* C, int32_t ldc, const int32_t* vec_expon, int8_t* A, int32_t lda) {
+  lda = lda >> 2;
+  uint64_t strideA = uint64_t(N) * uint64_t(lda);
   encode_kernel <double, const double* __restrict__, grid_x, grid_y, block_threads, 0, exp_base, order_max>
-    <<< dim3(grid_y, grid_x, 1), block_threads, 0, stream >>> (order, M, N, (const double*)C, ldc, vec_expon, (uint32_t*)A, nullptr, lda >> 2, strideA >> 2);
+    <<< dim3(grid_y, grid_x, 1), block_threads, 0, stream >>> (order, M, N, (const double*)C, ldc, vec_expon, (uint32_t*)A, nullptr, lda, strideA);
 }
 
-void internal::int8::encode_f32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const float* C, int32_t ldc, const int32_t* vec_expon, int8_t* A, int32_t lda, uint64_t strideA) {
+void internal::int8::encode_f32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const float* C, int32_t ldc, const int32_t* vec_expon, int8_t* A, int32_t lda) {
+  lda = lda >> 2;
+  uint64_t strideA = uint64_t(N) * uint64_t(lda);
   encode_kernel <float, const float* __restrict__, grid_x, grid_y, block_threads, 0, exp_base, order_max>
-    <<< dim3(grid_y, grid_x, 1), block_threads, 0, stream >>> (order, M, N, (const float*)C, ldc, vec_expon, (uint32_t*)A, nullptr, lda >> 2, strideA >> 2);
+    <<< dim3(grid_y, grid_x, 1), block_threads, 0, stream >>> (order, M, N, (const float*)C, ldc, vec_expon, (uint32_t*)A, nullptr, lda, strideA);
 }
 
-void internal::int8::encode_cf64(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<double>* C, int32_t ldc, const int32_t* vec_expon, int8_t* A, int32_t lda, uint64_t strideA) {
+void internal::int8::encode_cf64(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<double>* C, int32_t ldc, const int32_t* vec_expon, int8_t* A, int32_t lda) {
+  lda = lda >> 2;
+  uint64_t strideA = uint64_t(N) * uint64_t(lda);
+  uint32_t* C_im = &((uint32_t*)A)[uint64_t(order) * strideA];
   encode_kernel <double, const double* __restrict__, grid_x, grid_y, block_threads, 1, exp_base, order_max>
-    <<< dim3(grid_y, grid_x, 1), block_threads, 0, stream >>> (order, M * 2, N, (const double*)C, ldc * 2, vec_expon, (uint32_t*)&A[strideA], (uint32_t*)A, lda >> 2, strideA >> 1);
+    <<< dim3(grid_y, grid_x, 1), block_threads, 0, stream >>> (order, M * 2, N, (const double*)C, ldc * 2, vec_expon, (uint32_t*)A, C_im, lda, strideA);
 }
 
-void internal::int8::encode_cf32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<float>* C, int32_t ldc, const int32_t* vec_expon, int8_t* A, int32_t lda, uint64_t strideA) {
+void internal::int8::encode_cf32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<float>* C, int32_t ldc, const int32_t* vec_expon, int8_t* A, int32_t lda) {
+  lda = lda >> 2;
+  uint64_t strideA = uint64_t(N) * uint64_t(lda);
+  uint32_t* C_im = &((uint32_t*)A)[uint64_t(order) * strideA];
   encode_kernel <float, const float* __restrict__, grid_x, grid_y, block_threads, 1, exp_base, order_max>
-    <<< dim3(grid_y, grid_x, 1), block_threads, 0, stream >>> (order, M * 2, N, (const float*)C, ldc * 2, vec_expon, (uint32_t*)&A[strideA], (uint32_t*)A, lda >> 2, strideA >> 1);
+    <<< dim3(grid_y, grid_x, 1), block_threads, 0, stream >>> (order, M * 2, N, (const float*)C, ldc * 2, vec_expon, (uint32_t*)A, C_im, lda, strideA);
 }

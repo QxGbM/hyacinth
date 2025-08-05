@@ -7,8 +7,8 @@ void device::QR::dgeqp3_ronly_params_query(geqp3_params* params, double epi, int
 
   params->M = M;
   params->N = N;
-  params->algnM = (M + 15) & (~15);
-  params->algnN = (N + 15) & (~15);
+  params->algnM = (M + 63) & (~63);
+  params->algnN = (N + 63) & (~63);
   params->orderA = std::max(1, std::min(internal::int8::order_max * 4, 1 + int32_t(std::ceil(epi / internal::int8::exp_base))));
   params->orderC = std::max(1, std::min(params->orderA * 2, 1 + int32_t(std::ceil((2 * epi) / internal::int8::exp_base))));
   params->acc_bits = std::max(1, int32_t(std::ceil(2 * epi)));
@@ -16,8 +16,9 @@ void device::QR::dgeqp3_ronly_params_query(geqp3_params* params, double epi, int
   params->iter_k = 1024 << (14 - 2 * internal::int8::exp_base);
   params->use_fp64_over_32 = 1;
 
-  params->n_i8 = uint64_t(params->algnM) * uint64_t(params->algnN) * uint64_t(params->orderA);
-  params->n_i32 = uint64_t(params->algnN) * uint64_t(params->algnN) * uint64_t(params->orderC) + uint64_t((N + 63) & (~63));
+  params->n_i8 = uint64_t(params->algnM) * uint64_t(N) * uint64_t(params->orderA);
+  params->n_i8 = (params->n_i8 + uint64_t(255)) & (~uint64_t(255));
+  params->n_i32 = uint64_t(params->algnN) * uint64_t(N) * uint64_t(params->orderC);
   params->n_elem = uint64_t(params->algnN) * uint64_t(N + 1);
   params->work_bytes = params->n_i8 + params->n_i32 * 4 + params->n_elem * params->elem_bytes;
 }
@@ -27,8 +28,8 @@ void device::QR::sgeqp3_ronly_params_query(geqp3_params* params, float epi, int3
 
   params->M = M;
   params->N = N;
-  params->algnM = (M + 15) & (~15);
-  params->algnN = (N + 15) & (~15);
+  params->algnM = (M + 63) & (~63);
+  params->algnN = (N + 63) & (~63);
   params->orderA = std::max(1, std::min(internal::int8::order_max * 4, 1 + int32_t(std::ceil(epi / internal::int8::exp_base))));
   params->orderC = std::max(1, std::min(params->orderA * 2, 1 + int32_t(std::ceil((2 * epi) / internal::int8::exp_base))));
   params->acc_bits = std::max(1, int32_t(std::ceil(2 * epi)));
@@ -36,8 +37,9 @@ void device::QR::sgeqp3_ronly_params_query(geqp3_params* params, float epi, int3
   params->iter_k = 1024 << (14 - 2 * internal::int8::exp_base);
   params->use_fp64_over_32 = 1;
 
-  params->n_i8 = uint64_t(params->algnM) * uint64_t(params->algnN) * uint64_t(params->orderA);
-  params->n_i32 = uint64_t(params->algnN) * uint64_t(params->algnN) * uint64_t(params->orderC) + uint64_t((N + 63) & (~63));
+  params->n_i8 = uint64_t(params->algnM) * uint64_t(N) * uint64_t(params->orderA);
+  params->n_i8 = (params->n_i8 + uint64_t(255)) & (~uint64_t(255));
+  params->n_i32 = uint64_t(params->algnN) * uint64_t(N) * uint64_t(params->orderC);
   params->n_elem = uint64_t(params->algnN) * uint64_t(N + 1);
   params->work_bytes = params->n_i8 + params->n_i32 * 4 + params->n_elem * params->elem_bytes;
 }
@@ -47,8 +49,8 @@ void device::QR::zgeqp3_ronly_params_query(geqp3_params* params, double epi, int
 
   params->M = M;
   params->N = N;
-  params->algnM = (M + 15) & (~15);
-  params->algnN = (N + 15) & (~15);
+  params->algnM = (M + 63) & (~63);
+  params->algnN = (N + 63) & (~63);
   params->orderA = std::max(1, std::min(internal::int8::order_max * 4, 1 + int32_t(std::ceil(epi / internal::int8::exp_base))));
   params->orderC = std::max(1, std::min(params->orderA * 2, 1 + int32_t(std::ceil((2 * epi) / internal::int8::exp_base))));
   params->acc_bits = std::max(1, int32_t(std::ceil(2 * epi)));
@@ -56,8 +58,9 @@ void device::QR::zgeqp3_ronly_params_query(geqp3_params* params, double epi, int
   params->iter_k = 1024 << (14 - 2 * internal::int8::exp_base);
   params->use_fp64_over_32 = 1;
 
-  params->n_i8 = 2 * uint64_t(params->algnM) * uint64_t(params->algnN) * uint64_t(params->orderA);
-  params->n_i32 = 2 * uint64_t(params->algnN) * uint64_t(params->algnN) * uint64_t(params->orderC) + uint64_t((N + 63) & (~63));
+  params->n_i8 = 2 * uint64_t(params->algnM) * uint64_t(N) * uint64_t(params->orderA);
+  params->n_i8 = (params->n_i8 + uint64_t(255)) & (~uint64_t(255));
+  params->n_i32 = 2 * uint64_t(params->algnN) * uint64_t(N) * uint64_t(params->orderC);
   params->n_elem = uint64_t(params->algnN) * uint64_t(N + 1);
   params->work_bytes = params->n_i8 + params->n_i32 * 4 + params->n_elem * params->elem_bytes;
 }
@@ -67,8 +70,8 @@ void device::QR::cgeqp3_ronly_params_query(geqp3_params* params, float epi, int3
 
   params->M = M;
   params->N = N;
-  params->algnM = (M + 15) & (~15);
-  params->algnN = (N + 15) & (~15);
+  params->algnM = (M + 63) & (~63);
+  params->algnN = (N + 63) & (~63);
   params->orderA = std::max(1, std::min(internal::int8::order_max * 4, 1 + int32_t(std::ceil(epi / internal::int8::exp_base))));
   params->orderC = std::max(1, std::min(params->orderA * 2, 1 + int32_t(std::ceil((2 * epi) / internal::int8::exp_base))));
   params->acc_bits = std::max(1, int32_t(std::ceil(2 * epi)));
@@ -76,8 +79,9 @@ void device::QR::cgeqp3_ronly_params_query(geqp3_params* params, float epi, int3
   params->iter_k = 1024 << (14 - 2 * internal::int8::exp_base);
   params->use_fp64_over_32 = 1;
 
-  params->n_i8 = 2 * uint64_t(params->algnM) * uint64_t(params->algnN) * uint64_t(params->orderA);
-  params->n_i32 = 2 * uint64_t(params->algnN) * uint64_t(params->algnN) * uint64_t(params->orderC) + uint64_t((N + 63) & (~63));
+  params->n_i8 = 2 * uint64_t(params->algnM) * uint64_t(N) * uint64_t(params->orderA);
+  params->n_i8 = (params->n_i8 + uint64_t(255)) & (~uint64_t(255));
+  params->n_i32 = 2 * uint64_t(params->algnN) * uint64_t(N) * uint64_t(params->orderC);
   params->n_elem = uint64_t(params->algnN) * uint64_t(N + 1);
   params->work_bytes = params->n_i8 + params->n_i32 * 4 + params->n_elem * params->elem_bytes;
 }

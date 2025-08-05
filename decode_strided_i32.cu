@@ -123,46 +123,58 @@ constexpr int32_t grid_blocks = 2048;
 constexpr int32_t items_per_thread = 4;
 
 void internal::int8::decode_f64_strided_i32(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t N, const int32_t* vec_expon, const int32_t* A, int32_t lda, double* C, int32_t ldc) {
+  int32_t order = order_hi - order_lo;
+  uint64_t strideA = uint64_t(N) * uint64_t(lda);
   decode_kernel <double, double* __restrict__, grid_blocks, block_threads, items_per_thread, exp_base, 1>
-    <<< grid_blocks, block_threads, 0, stream >>> (order_lo, order_hi - order_lo, N, vec_expon, A, nullptr, lda, uint64_t(lda) * uint64_t(lda), C, ldc);
+    <<< grid_blocks, block_threads, 0, stream >>> (order_lo, order, N, vec_expon, A, nullptr, lda, strideA, C, ldc);
 }
 
 void internal::int8::decode_f32_strided_i32(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t N, const int32_t* vec_expon, const int32_t* A, int32_t lda, float* C, int32_t ldc) {
+  int32_t order = order_hi - order_lo;
+  uint64_t strideA = uint64_t(N) * uint64_t(lda);
   decode_kernel <float, float* __restrict__, grid_blocks, block_threads, items_per_thread, exp_base, 1>
-    <<< grid_blocks, block_threads, 0, stream >>> (order_lo, order_hi - order_lo, N, vec_expon, A, nullptr, lda, uint64_t(lda) * uint64_t(lda), C, ldc);
+    <<< grid_blocks, block_threads, 0, stream >>> (order_lo, order, N, vec_expon, A, nullptr, lda, strideA, C, ldc);
 }
 
 void internal::int8::decode_dd_strided_i32(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t N, const int32_t* vec_expon, const int32_t* A, int32_t lda, double2* C, int32_t ldc) {
+  int32_t order = order_hi - order_lo;
+  uint64_t strideA = uint64_t(N) * uint64_t(lda);
   decode_kernel <double2, double2* __restrict__, grid_blocks, block_threads, items_per_thread, exp_base, 1>
-    <<< grid_blocks, block_threads, 0, stream >>> (order_lo, order_hi - order_lo, N, vec_expon, A, nullptr, lda, uint64_t(lda) * uint64_t(lda), C, ldc);
+    <<< grid_blocks, block_threads, 0, stream >>> (order_lo, order, N, vec_expon, A, nullptr, lda, strideA, C, ldc);
 }
 
 void internal::int8::decode_qf_strided_i32(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t N, const int32_t* vec_expon, const int32_t* A, int32_t lda, float4* C, int32_t ldc) {
+  int32_t order = order_hi - order_lo;
+  uint64_t strideA = uint64_t(N) * uint64_t(lda);
   decode_kernel <float4, float4* __restrict__, grid_blocks, block_threads, items_per_thread, exp_base, 1>
-    <<< grid_blocks, block_threads, 0, stream >>> (order_lo, order_hi - order_lo, N, vec_expon, A, nullptr, lda, uint64_t(lda) * uint64_t(lda), C, ldc);
+    <<< grid_blocks, block_threads, 0, stream >>> (order_lo, order, N, vec_expon, A, nullptr, lda, strideA, C, ldc);
 }
 
 void internal::int8::decode_cf64_strided_i32(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t N, const int32_t* vec_expon, const int32_t* A, int32_t lda, std::complex<double>* C, int32_t ldc) {
-  uint64_t strideA = uint64_t(lda) * uint64_t(lda);
+  int32_t order = order_hi - order_lo;
+  uint64_t strideA = uint64_t(N) * uint64_t(lda);
   decode_kernel <cuDoubleComplex, cuDoubleComplex* __restrict__, grid_blocks, block_threads, items_per_thread, exp_base, 2>
-    <<< grid_blocks, block_threads, 0, stream >>> (order_lo, order_hi - order_lo, N, vec_expon, &A[strideA], A, lda, 2 * strideA, (cuDoubleComplex*)C, ldc);
+    <<< grid_blocks, block_threads, 0, stream >>> (order_lo, order, N, vec_expon, A, &A[uint64_t(order) * strideA], lda, strideA, (cuDoubleComplex*)C, ldc);
 }
 
 void internal::int8::decode_cf32_strided_i32(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t N, const int32_t* vec_expon, const int32_t* A, int32_t lda, std::complex<float>* C, int32_t ldc) {
-  uint64_t strideA = uint64_t(lda) * uint64_t(lda);
+  int32_t order = order_hi - order_lo;
+  uint64_t strideA = uint64_t(N) * uint64_t(lda);
   decode_kernel <cuComplex, cuComplex* __restrict__, grid_blocks, block_threads, items_per_thread, exp_base, 2>
-    <<< grid_blocks, block_threads, 0, stream >>> (order_lo, order_hi - order_lo, N, vec_expon, &A[strideA], A, lda, 2 * strideA, (cuComplex*)C, ldc);
+    <<< grid_blocks, block_threads, 0, stream >>> (order_lo, order, N, vec_expon, A, &A[uint64_t(order) * strideA], lda, strideA, (cuComplex*)C, ldc);
 }
 
 void internal::int8::decode_complex_dd_strided_i32(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t N, const int32_t* vec_expon, const int32_t* A, int32_t lda, complex_double2* C, int32_t ldc) {
-  uint64_t strideA = uint64_t(lda) * uint64_t(lda);
+  int32_t order = order_hi - order_lo;
+  uint64_t strideA = uint64_t(N) * uint64_t(lda);
   decode_kernel <complex_double2, complex_double2* __restrict__, grid_blocks, block_threads, items_per_thread, exp_base, 2>
-    <<< grid_blocks, block_threads, 0, stream >>> (order_lo, order_hi - order_lo, N, vec_expon, &A[strideA], A, lda, 2 * strideA, C, ldc);
+    <<< grid_blocks, block_threads, 0, stream >>> (order_lo, order, N, vec_expon, A, &A[uint64_t(order) * strideA], lda, strideA, C, ldc);
 }
 
 void internal::int8::decode_complex_qf_strided_i32(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t N, const int32_t* vec_expon, const int32_t* A, int32_t lda, complex_float4* C, int32_t ldc) {
-  uint64_t strideA = uint64_t(lda) * uint64_t(lda);
+  int32_t order = order_hi - order_lo;
+  uint64_t strideA = uint64_t(N) * uint64_t(lda);
   decode_kernel <complex_float4, complex_float4* __restrict__, grid_blocks, block_threads, items_per_thread, exp_base, 2>
-    <<< grid_blocks, block_threads, 0, stream >>> (order_lo, order_hi - order_lo, N, vec_expon, &A[strideA], A, lda, 2 * strideA, C, ldc);
+    <<< grid_blocks, block_threads, 0, stream >>> (order_lo, order, N, vec_expon, A, &A[uint64_t(order) * strideA], lda, strideA, C, ldc);
 }
 
