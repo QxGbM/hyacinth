@@ -29,6 +29,7 @@ __global__ void normalize_kernel(uint64_t M, int32_t N, int32_t* __restrict__ A,
   constexpr uint64_t elements = GRID_BLOCKS * elements_block;
   uint64_t block_offset = blockIdx.x * elements_block;
   uint64_t M2 = M & (elements_block - 1), M1 = M - M2;
+  uint64_t iter_k = uint64_t(N) * lda;
 
   __shared__ typename cub::BlockLoad<int32_t, BLOCK_THREADS, ITEMS_PER_THREAD>::TempStorage temp_load;
   __shared__ typename cub::BlockStore<int32_t, BLOCK_THREADS, ITEMS_PER_THREAD>::TempStorage temp_store;
@@ -39,36 +40,32 @@ __global__ void normalize_kernel(uint64_t M, int32_t N, int32_t* __restrict__ A,
 
   for (uint64_t row = block_offset; row < M1; row += elements) {
     int32_t* A_row = &A[row];
-    int32_t* A_tl = &A[row + uint64_t(N) * lda];
     int32_t c[ITEMS_PER_THREAD]{};
 
-    for (int32_t k = 0; k < N; ++k) {
-      int32_t* A_k = &A_row[uint64_t(k) * lda];
-      block_load.Load(A_k, a);
+    for (uint64_t k = 0; k < iter_k; k += lda) {
+      block_load.Load(&A_row[k], a);
       signed_normalize<BASE>(a, c);
-      block_store.Store(A_k, a);
+      block_store.Store(&A_row[k], a);
     }
 
-    block_load.Load(A_tl, a);
+    block_load.Load(&A_row[iter_k], a);
     signed_sum(a, c);
-    block_store.Store(A_tl, a);
+    block_store.Store(&A_row[iter_k], a);
   }
 
   if (0 < M2 && blockIdx.x == 0) {
     int32_t* A_row = &A[M1];
-    int32_t* A_tl = &A[M1 + uint64_t(N) * lda];
     int32_t c[ITEMS_PER_THREAD]{};
 
-    for (int32_t k = 0; k < N; ++k) {
-      int32_t* A_k = &A_row[uint64_t(k) * lda];
-      block_load.Load(A_k, a, M2, 0);
+    for (uint64_t k = 0; k < iter_k; k += lda) {
+      block_load.Load(&A_row[k], a, M2, 0);
       signed_normalize<BASE>(a, c);
-      block_store.Store(A_k, a, M2);
+      block_store.Store(&A_row[k], a, M2);
     }
 
-    block_load.Load(A_tl, a, M2);
+    block_load.Load(&A_row[iter_k], a, M2);
     signed_sum(a, c);
-    block_store.Store(A_tl, a, M2);
+    block_store.Store(&A_row[iter_k], a, M2);
   }
 }
 
