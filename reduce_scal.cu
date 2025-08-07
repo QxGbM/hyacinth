@@ -175,6 +175,8 @@ inline void reduce_scal_dispatcher(cudaStream_t stream, real_t scale, int32_t M,
   int32_t grid = (M + elements_block - 1) / elements_block;
 
   switch (N) {
+    case 1: fix_N_reduce_kernel <real_t, matrix_t, matrix_ptr, items_per_thread, 1>
+      <<< grid, 32, 0, stream >>> (scale, M, A, lda); break;
     case 4: fix_N_reduce_kernel <real_t, matrix_t, matrix_ptr, items_per_thread, 4>
       <<< grid, 32, 0, stream >>> (scale, M, A, lda); break;
     case 8: fix_N_reduce_kernel <real_t, matrix_t, matrix_ptr, items_per_thread, 8>

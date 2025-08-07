@@ -191,49 +191,49 @@ inline int64_t gemv_dispatcher(cudaStream_t stream, real_t scale, int32_t M, int
 }
 
 void internal::Cholesky::minus_transAx_plusB_scale_double(cudaStream_t stream, double scale, int32_t M, int32_t N, const double* A, int32_t lda, double* B) {
-  int64_t reduce = gemv_dispatcher<double, double, double* __restrict__, const double* __restrict__>(stream, scale, M, N, A, lda, B);
+  int64_t reduce = N < 1 ? 1 : gemv_dispatcher<double, double, double* __restrict__, const double* __restrict__>(stream, scale, M, N, A, lda, B);
   if (reduce)
     reduce_scal_f64(stream, scale, M, reduce, B, lda);
 }
 
 void internal::Cholesky::minus_transAx_plusB_scale_float(cudaStream_t stream, float scale, int32_t M, int32_t N, const float* A, int32_t lda, float* B) {
-  int64_t reduce = gemv_dispatcher<float, float, float* __restrict__, const float* __restrict__>(stream, scale, M, N, A, lda, B);
+  int64_t reduce = N < 1 ? 1 : gemv_dispatcher<float, float, float* __restrict__, const float* __restrict__>(stream, scale, M, N, A, lda, B);
   if (reduce)
     reduce_scal_f32(stream, scale, M, reduce, B, lda);
 }
 
 void internal::Cholesky::minus_transAx_plusB_scale_double2(cudaStream_t stream, double2 scale, int32_t M, int32_t N, const double2* A, int32_t lda, double2* B) {
-  int64_t reduce = gemv_dispatcher<double2, double2, double2* __restrict__, const double2* __restrict__>(stream, scale, M, N, A, lda, B);
+  int64_t reduce = N < 1 ? 1 : gemv_dispatcher<double2, double2, double2* __restrict__, const double2* __restrict__>(stream, scale, M, N, A, lda, B);
   if (reduce)
     reduce_scal_f128_dd(stream, scale, M, reduce, B, lda);
 }
 
 void internal::Cholesky::minus_transAx_plusB_scale_float4(cudaStream_t stream, float4 scale, int32_t M, int32_t N, const float4* A, int32_t lda, float4* B) {
-  int64_t reduce = gemv_dispatcher<float4, float4, float4* __restrict__, const float4* __restrict__>(stream, scale, M, N, A, lda, B);
+  int64_t reduce = N < 1 ? 1 : gemv_dispatcher<float4, float4, float4* __restrict__, const float4* __restrict__>(stream, scale, M, N, A, lda, B);
   if (reduce)
     reduce_scal_f128_qf(stream, scale, M, reduce, B, lda);
 }
 
 void internal::Cholesky::minus_adjAx_plusB_scale_double_complex(cudaStream_t stream, double scale, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, std::complex<double>* B) {
-  int64_t reduce = gemv_dispatcher<double, cuDoubleComplex, cuDoubleComplex* __restrict__, const cuDoubleComplex* __restrict__>(stream, scale, M, N, (const cuDoubleComplex*)A, lda, (cuDoubleComplex*)B);
+  int64_t reduce = N < 1 ? 1 : gemv_dispatcher<double, cuDoubleComplex, cuDoubleComplex* __restrict__, const cuDoubleComplex* __restrict__>(stream, scale, M, N, (const cuDoubleComplex*)A, lda, (cuDoubleComplex*)B);
   if (reduce)
     reduce_scal_cf64(stream, scale, M, reduce, B, lda);
 }
 
 void internal::Cholesky::minus_adjAx_plusB_scale_float_complex(cudaStream_t stream, float scale, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, std::complex<float>* B) {
-  int64_t reduce = gemv_dispatcher<float, cuComplex, cuComplex* __restrict__, const cuComplex* __restrict__>(stream, scale, M, N, (const cuComplex*)A, lda, (cuComplex*)B);
+  int64_t reduce = N < 1 ? 1 : gemv_dispatcher<float, cuComplex, cuComplex* __restrict__, const cuComplex* __restrict__>(stream, scale, M, N, (const cuComplex*)A, lda, (cuComplex*)B);
   if (reduce)
     reduce_scal_cf32(stream, scale, M, reduce, B, lda);
 }
 
 void internal::Cholesky::minus_adjAx_plusB_scale_double2_complex(cudaStream_t stream, double2 scale, int32_t M, int32_t N, const complex_double2* A, int32_t lda, complex_double2* B) {
-  int64_t reduce = gemv_dispatcher<double2, complex_double2, complex_double2* __restrict__, const complex_double2* __restrict__>(stream, scale, M, N, A, lda, B);
+  int64_t reduce = N < 1 ? 1 : gemv_dispatcher<double2, complex_double2, complex_double2* __restrict__, const complex_double2* __restrict__>(stream, scale, M, N, A, lda, B);
   if (reduce)
     reduce_scal_cf128_dd(stream, scale, M, reduce, B, lda);
 }
 
 void internal::Cholesky::minus_adjAx_plusB_scale_float4_complex(cudaStream_t stream, float4 scale, int32_t M, int32_t N, const complex_float4* A, int32_t lda, complex_float4* B) {
-  int64_t reduce = gemv_dispatcher<float4, complex_float4, complex_float4* __restrict__, const complex_float4* __restrict__>(stream, scale, M, N, A, lda, B);
+  int64_t reduce = N < 1 ? 1 : gemv_dispatcher<float4, complex_float4, complex_float4* __restrict__, const complex_float4* __restrict__>(stream, scale, M, N, A, lda, B);
   if (reduce)
     reduce_scal_cf128_qf(stream, scale, M, reduce, B, lda);
 }
