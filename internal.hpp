@@ -26,21 +26,37 @@ namespace internal::Cholesky {
 
   void imax_float4_complex(cudaStream_t stream, int32_t N, const complex_float4* A, float4* X, complex_float4* C, int32_t ldc, int32_t* piv, float4* rsq);
 
-  void minus_transAx_plusB_scale_double(cudaStream_t stream, const double scale, int32_t M, int32_t N, const double* A, int32_t lda, double* B);
+  void minus_transAx_plusB_scale_double(cudaStream_t stream, double scale, int32_t M, int32_t N, const double* A, int32_t lda, double* B);
 
-  void minus_transAx_plusB_scale_float(cudaStream_t stream, const float scale, int32_t M, int32_t N, const float* A, int32_t lda, float* B);
+  void minus_transAx_plusB_scale_float(cudaStream_t stream, float scale, int32_t M, int32_t N, const float* A, int32_t lda, float* B);
 
-  void minus_transAx_plusB_scale_double2(cudaStream_t stream, const double2 scale, int32_t M, int32_t N, const double2* A, int32_t lda, double2* B);
+  void minus_transAx_plusB_scale_double2(cudaStream_t stream, double2 scale, int32_t M, int32_t N, const double2* A, int32_t lda, double2* B);
 
-  void minus_transAx_plusB_scale_float4(cudaStream_t stream, const float4 scale, int32_t M, int32_t N, const float4* A, int32_t lda, float4* B);
+  void minus_transAx_plusB_scale_float4(cudaStream_t stream, float4 scale, int32_t M, int32_t N, const float4* A, int32_t lda, float4* B);
 
-  void minus_adjAx_plusB_scale_double_complex(cudaStream_t stream, const double scale, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, std::complex<double>* B);
+  void minus_adjAx_plusB_scale_double_complex(cudaStream_t stream, double scale, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, std::complex<double>* B);
 
-  void minus_adjAx_plusB_scale_float_complex(cudaStream_t stream, const float scale, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, std::complex<float>* B);
+  void minus_adjAx_plusB_scale_float_complex(cudaStream_t stream, float scale, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, std::complex<float>* B);
 
-  void minus_adjAx_plusB_scale_double2_complex(cudaStream_t stream, const double2 scale, int32_t M, int32_t N, const complex_double2* A, int32_t lda, complex_double2* B);
+  void minus_adjAx_plusB_scale_double2_complex(cudaStream_t stream, double2 scale, int32_t M, int32_t N, const complex_double2* A, int32_t lda, complex_double2* B);
 
-  void minus_adjAx_plusB_scale_float4_complex(cudaStream_t stream, const float4 scale, int32_t M, int32_t N, const complex_float4* A, int32_t lda, complex_float4* B);
+  void minus_adjAx_plusB_scale_float4_complex(cudaStream_t stream, float4 scale, int32_t M, int32_t N, const complex_float4* A, int32_t lda, complex_float4* B);
+
+  void reduce_scal_f64(cudaStream_t stream, double scale, int32_t M, int32_t N, double* A, int32_t lda);
+
+  void reduce_scal_f32(cudaStream_t stream, float scale, int32_t M, int32_t N, float* A, int32_t lda);
+
+  void reduce_scal_f128_dd(cudaStream_t stream, double2 scale, int32_t M, int32_t N, double2* A, int32_t lda);
+
+  void reduce_scal_f128_qf(cudaStream_t stream, float4 scale, int32_t M, int32_t N, float4* A, int32_t lda);
+
+  void reduce_scal_cf64(cudaStream_t stream, const double scale, int32_t M, int32_t N, std::complex<double>* A, int32_t lda);
+
+  void reduce_scal_cf32(cudaStream_t stream, const float scale, int32_t M, int32_t N, std::complex<float>* A, int32_t lda);
+
+  void reduce_scal_cf128_dd(cudaStream_t stream, const double2 scale, int32_t M, int32_t N, complex_double2* A, int32_t lda);
+
+  void reduce_scal_cf128_qf(cudaStream_t stream, const float4 scale, int32_t M, int32_t N, complex_float4* A, int32_t lda);
 
   void swap_cols_double(cudaStream_t stream, int32_t i, int32_t j, int32_t N, double* A, int32_t lda);
 
