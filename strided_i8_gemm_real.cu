@@ -1,6 +1,6 @@
 
+#include <hyacinth.hpp>
 #include <internal.hpp>
-
 #include <cub/cub.cuh>
 #include <algorithm>
 
@@ -90,7 +90,7 @@ void internal::int8::r8i_TN_gemm_stridedA(cudaStream_t stream, cublasHandle_t ha
       cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * order_i, std::min(algnK - k, iter_k), &one, 
         AT_k, CUDA_R_8I, algnK, AN_k, CUDA_R_8I, algnK, &one, C_i, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
 
-      normalize_kernel <grid_blocks, block_threads, items_per_thread, exp_base>
+      normalize_kernel <grid_blocks, block_threads, items_per_thread, device::Config::exp_base>
         <<< grid_blocks, block_threads, 0, stream >>> (strideC, order_i, C_i, strideC);
     }
   }

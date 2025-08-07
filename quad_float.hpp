@@ -149,14 +149,6 @@ namespace device::qf {
     return fscalbn(x, p);
   }
 
-  __host__ __host__ __device__ __forceinline__ bool fisfinite(float4 a) {
-#ifdef __CUDA_ARCH__
-    return isfinite(a.x) && isfinite(a.y) && isfinite(a.z) && isfinite(a.w);
-#else
-    return std::isfinite(a.x) && std::isfinite(a.y) && std::isfinite(a.z) && std::isfinite(a.w);
-#endif
-  }
-
   __host__ __device__ __forceinline__ complex_float4 negate(complex_float4 a) {
     return make_complex_float4(negate(a.real), negate(a.imag));
   }

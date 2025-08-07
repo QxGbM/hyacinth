@@ -107,7 +107,7 @@ namespace device::dd {
     return add(c, mul(a, b));
   }
 
-  __host__ __device__ __forceinline__ double2 fscalbn2(double2 a, int32_t exp) {
+  __host__ __device__ __forceinline__ double2 fscalbn(double2 a, int32_t exp) {
 #ifdef __CUDA_ARCH__
     return make_double2(scalbn(a.x, exp), scalbn(a.y, exp));
 #else
@@ -124,21 +124,13 @@ namespace device::dd {
     double2 x = make_double2(std::scalbn(1. / std::sqrt(a.x), -p), 0.);
 #endif
     double2 c = make_double2(1.5, 0.);
-    a = fscalbn2(negate(a), (p << 1) - 1);
+    a = fscalbn(negate(a), (p << 1) - 1);
 
     x = mul(x, fma(x, mul(a, x), c));
     x = mul(x, fma(x, mul(a, x), c));
     x = mul(x, fma(x, mul(a, x), c));
 
-    return fscalbn2(x, p);
-  }
-
-  __host__ __device__ __forceinline__ int32_t fisfinite(double2 a) {
-#ifdef __CUDA_ARCH__
-    return isfinite(a.x) && isfinite(a.y);
-#else
-    return std::isfinite(a.x) && std::isfinite(a.y);
-#endif
+    return fscalbn(x, p);
   }
 
   __host__ __device__ __forceinline__ complex_double2 negate(complex_double2 a) {

@@ -105,7 +105,7 @@ namespace device::int8 {
 
   template <uint32_t ORDER>
   __host__ __device__ __forceinline__ void align_expon(uint32_t (&a)[ORDER], int32_t exp_diff) {
-    static_assert(1 <= ORDER && ORDER <= 8, "Max integer quantization order need to be in 4x [1, 8].");
+    static_assert(1 <= ORDER && ORDER <= 8, "Max integer quantization order need to be in [4, 32].");
     uint32_t rsft = 32 - ((exp_diff & 3) << 3);
     uint32_t psft = uint32_t(((exp_diff & 3) - exp_diff) >> 2);
     uint32_t b[ORDER + 2];
