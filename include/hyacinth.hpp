@@ -5,8 +5,6 @@
 #include <complex>
 #include <cuda_runtime_api.h>
 #include <cublas_v2.h>
-#include <double_double.hpp>
-#include <quad_float.hpp>
 
 namespace device::Config {
   // ------------ Changing Config requires recompile the library !! ------------
@@ -26,6 +24,9 @@ namespace device::Config {
   constexpr int32_t order_max = 4;
 #endif
 };
+
+struct complex_double2;
+struct complex_float4;
 
 namespace device::Cholesky {
   // ipiv :: host page-locked, minimal length N + 8, 16 byte aligned

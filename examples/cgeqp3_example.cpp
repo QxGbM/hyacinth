@@ -14,17 +14,16 @@ int32_t main(int32_t argc, char* argv[]) {
 
   int32_t M = 1 < argc ? std::atoi(argv[1]) : 1024;
   int32_t N = std::min(M, 2 < argc ? std::atoi(argv[2]) : 128);
-  double epi = 3 < argc ? std::atof(argv[3]) : 1.e-12;
-  std::vector<std::complex<double>> matA(M * N);
+  double epi = 3 < argc ? std::atof(argv[3]) : 1.e-6;
+  std::vector<std::complex<float>> matA(M * N);
   int32_t* ipiv;
 
   std::mt19937_64 gen;
-  std::normal_distribution<double> dist(0, 32);
-  std::generate(matA.begin(), matA.end(), [&](){ return std::complex<double>(dist(gen), dist(gen)); });
+  std::normal_distribution<float> dist(0, 32);
+  std::generate(matA.begin(), matA.end(), [&](){ return std::complex<float>(dist(gen), dist(gen)); });
 
   device::QR::geqp3_params params;
-  device::QR::zgeqp3_ronly_params_query(&params, epi, M, N);
-  //device::QR::set_quad_float_as_fp128(&params);
+  device::QR::cgeqp3_ronly_params_query(&params, epi, M, N);
 
   std::cout << "ZGEQP3 <" << M << ", " << N << ">\n";
   std::cout << "Epi: " << epi << "\n";
@@ -48,33 +47,33 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
 
-  std::complex<double>* d_A = nullptr;
+  std::complex<float>* d_A = nullptr;
   void* work = nullptr;
-  cudaMalloc((void**)(&d_A), M * N * sizeof(std::complex<double>));
+  cudaMalloc((void**)(&d_A), M * N * sizeof(std::complex<float>));
   cudaMalloc(&work, params.work_bytes);
   cudaMallocHost((void**)(&ipiv), (N + 8) * sizeof(int32_t));
 
-  cudaMemcpy(d_A, matA.data(), M * N * sizeof(std::complex<double>), cudaMemcpyHostToDevice);
+  cudaMemcpy(d_A, matA.data(), M * N * sizeof(std::complex<float>), cudaMemcpyHostToDevice);
 
   cudaEventRecord(start, stream);
-  int32_t ret = device::QR::zgeqp3_ronly(stream, handle, params, d_A, M, ipiv, work);
+  int32_t ret = device::QR::cgeqp3_ronly(stream, handle, params, d_A, M, ipiv, work);
   cudaEventRecord(stop, stream);
 
   cudaDeviceSynchronize();
 
   if (M <= 2048 && N <= 2048) {
-    std::vector<std::complex<double>> matB(M * N);
-    cudaMemcpy(matB.data(), d_A, M * N * sizeof(std::complex<double>), cudaMemcpyDeviceToHost);
+    std::vector<std::complex<float>> matB(M * N);
+    cudaMemcpy(matB.data(), d_A, M * N * sizeof(std::complex<float>), cudaMemcpyDeviceToHost);
 
     std::vector<int32_t> jpiv(N, 0);
-    std::vector<std::complex<double>> tau(N);
-    LAPACKE_zgeqp3(LAPACK_COL_MAJOR, M, N, (lapack_complex_double*)matA.data(), M, jpiv.data(), (lapack_complex_double*)tau.data());
+    std::vector<std::complex<float>> tau(N);
+    LAPACKE_cgeqp3(LAPACK_COL_MAJOR, M, N, (lapack_complex_float*)matA.data(), M, jpiv.data(), (lapack_complex_float*)tau.data());
 
     int32_t err_int = 0;
     for (int32_t i = 0; i < N; ++i) {
       err_int += std::abs(jpiv[i] - ipiv[i]);
       if (matA[i * (M + 1)].real() < 0.)
-        cblas_zdscal(N, -1., &(matA.data())[i], M);
+        cblas_csscal(N, -1.f, &(matA.data())[i], M);
     }
   
     double nrm = 0., err = 0.;
