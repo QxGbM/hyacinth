@@ -129,18 +129,19 @@ __global__ void encode_kernel(int32_t order, int32_t M, int32_t N, real_const_pt
 constexpr int32_t block_threads = 128;
 constexpr int32_t grid_x = 32;
 constexpr int32_t grid_y = 64;
+constexpr int32_t order_max = 4;
 
 void internal::int8::encode_f64(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const double* C, int32_t ldc, const int32_t* vec_expon, int8_t* A, int32_t lda) {
   lda = lda >> 2;
   uint64_t strideA = uint64_t(N) * uint64_t(lda);
-  encode_kernel <double, const double* __restrict__, grid_x, grid_y, block_threads, 0, device::Config::exp_base, device::Config::order_max>
+  encode_kernel <double, const double* __restrict__, grid_x, grid_y, block_threads, 0, device::Config::exp_base, order_max>
     <<< dim3(grid_y, grid_x, 1), block_threads, 0, stream >>> (order, M, N, (const double*)C, ldc, vec_expon, (uint32_t*)A, nullptr, lda, strideA);
 }
 
 void internal::int8::encode_f32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const float* C, int32_t ldc, const int32_t* vec_expon, int8_t* A, int32_t lda) {
   lda = lda >> 2;
   uint64_t strideA = uint64_t(N) * uint64_t(lda);
-  encode_kernel <float, const float* __restrict__, grid_x, grid_y, block_threads, 0, device::Config::exp_base, device::Config::order_max>
+  encode_kernel <float, const float* __restrict__, grid_x, grid_y, block_threads, 0, device::Config::exp_base, order_max>
     <<< dim3(grid_y, grid_x, 1), block_threads, 0, stream >>> (order, M, N, (const float*)C, ldc, vec_expon, (uint32_t*)A, nullptr, lda, strideA);
 }
 
@@ -148,7 +149,7 @@ void internal::int8::encode_cf64(cudaStream_t stream, int32_t order, int32_t M, 
   lda = lda >> 2;
   uint64_t strideA = uint64_t(N) * uint64_t(lda);
   uint32_t* C_im = &((uint32_t*)A)[uint64_t(order) * strideA];
-  encode_kernel <double, const double* __restrict__, grid_x, grid_y, block_threads, 1, device::Config::exp_base, device::Config::order_max>
+  encode_kernel <double, const double* __restrict__, grid_x, grid_y, block_threads, 1, device::Config::exp_base, order_max>
     <<< dim3(grid_y, grid_x, 1), block_threads, 0, stream >>> (order, M * 2, N, (const double*)C, ldc * 2, vec_expon, (uint32_t*)A, C_im, lda, strideA);
 }
 
@@ -156,6 +157,6 @@ void internal::int8::encode_cf32(cudaStream_t stream, int32_t order, int32_t M, 
   lda = lda >> 2;
   uint64_t strideA = uint64_t(N) * uint64_t(lda);
   uint32_t* C_im = &((uint32_t*)A)[uint64_t(order) * strideA];
-  encode_kernel <float, const float* __restrict__, grid_x, grid_y, block_threads, 1, device::Config::exp_base, device::Config::order_max>
+  encode_kernel <float, const float* __restrict__, grid_x, grid_y, block_threads, 1, device::Config::exp_base, order_max>
     <<< dim3(grid_y, grid_x, 1), block_threads, 0, stream >>> (order, M * 2, N, (const float*)C, ldc * 2, vec_expon, (uint32_t*)A, C_im, lda, strideA);
 }

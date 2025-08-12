@@ -1,15 +1,16 @@
 
 #include <hyacinth.hpp>
 #include <internal.hpp>
+#include <limits>
 
 void device::QR::dgeqp3_ronly_params_query(geqp3_params* params, double epi, int32_t M, int32_t N) {
-  epi = -std::log2(epi);
+  epi = -std::log2(std::max(std::abs(epi), std::numeric_limits<double>::epsilon()));
 
   params->M = M;
   params->N = N;
   params->algnM = (M + 63) & (~63);
   params->algnN = (N + 63) & (~63);
-  params->orderA = std::max(1, std::min(device::Config::order_max * 4, 1 + int32_t(std::ceil(epi / device::Config::exp_base))));
+  params->orderA = std::max(1, 1 + int32_t(std::ceil(epi / device::Config::exp_base)));
   params->orderC = std::max(1, std::min(params->orderA * 2, 1 + int32_t(std::ceil((2 * epi) / device::Config::exp_base))));
   params->acc_bits = std::max(1, int32_t(std::ceil(2 * epi)));
   params->elem_bytes = params->acc_bits <= 24 ? 4 : (params->acc_bits <= 53 ? 8 : 16);
@@ -24,13 +25,13 @@ void device::QR::dgeqp3_ronly_params_query(geqp3_params* params, double epi, int
 }
 
 void device::QR::sgeqp3_ronly_params_query(geqp3_params* params, float epi, int32_t M, int32_t N) {
-  epi = -std::log2f(epi);
+  epi = -std::log2f(std::max(std::abs(epi), std::numeric_limits<float>::epsilon()));
 
   params->M = M;
   params->N = N;
   params->algnM = (M + 63) & (~63);
   params->algnN = (N + 63) & (~63);
-  params->orderA = std::max(1, std::min(device::Config::order_max * 4, 1 + int32_t(std::ceil(epi / device::Config::exp_base))));
+  params->orderA = std::max(1, 1 + int32_t(std::ceil(epi / device::Config::exp_base)));
   params->orderC = std::max(1, std::min(params->orderA * 2, 1 + int32_t(std::ceil((2 * epi) / device::Config::exp_base))));
   params->acc_bits = std::max(1, int32_t(std::ceil(2 * epi)));
   params->elem_bytes = params->acc_bits <= 24 ? 4 : 8;
@@ -45,13 +46,13 @@ void device::QR::sgeqp3_ronly_params_query(geqp3_params* params, float epi, int3
 }
 
 void device::QR::zgeqp3_ronly_params_query(geqp3_params* params, double epi, int32_t M, int32_t N) {
-  epi = -std::log2(epi);
+  epi = -std::log2(std::max(std::abs(epi), std::numeric_limits<double>::epsilon()));
 
   params->M = M;
   params->N = N;
   params->algnM = (M + 63) & (~63);
   params->algnN = (N + 63) & (~63);
-  params->orderA = std::max(1, std::min(device::Config::order_max * 4, 1 + int32_t(std::ceil(epi / device::Config::exp_base))));
+  params->orderA = std::max(1, 1 + int32_t(std::ceil(epi / device::Config::exp_base)));
   params->orderC = std::max(1, std::min(params->orderA * 2, 1 + int32_t(std::ceil((2 * epi) / device::Config::exp_base))));
   params->acc_bits = std::max(1, int32_t(std::ceil(2 * epi)));
   params->elem_bytes = params->acc_bits <= 24 ? 8 : (params->acc_bits <= 53 ? 16 : 32);
@@ -66,13 +67,13 @@ void device::QR::zgeqp3_ronly_params_query(geqp3_params* params, double epi, int
 }
 
 void device::QR::cgeqp3_ronly_params_query(geqp3_params* params, float epi, int32_t M, int32_t N) {
-  epi = -std::log2f(epi);
+  epi = -std::log2f(std::max(std::abs(epi), std::numeric_limits<float>::epsilon()));
 
   params->M = M;
   params->N = N;
   params->algnM = (M + 63) & (~63);
   params->algnN = (N + 63) & (~63);
-  params->orderA = std::max(1, std::min(device::Config::order_max * 4, 1 + int32_t(std::ceil(epi / device::Config::exp_base))));
+  params->orderA = std::max(1, 1 + int32_t(std::ceil(epi / device::Config::exp_base)));
   params->orderC = std::max(1, std::min(params->orderA * 2, 1 + int32_t(std::ceil((2 * epi) / device::Config::exp_base))));
   params->acc_bits = std::max(1, int32_t(std::ceil(2 * epi)));
   params->elem_bytes = params->acc_bits <= 24 ? 8 : 16;

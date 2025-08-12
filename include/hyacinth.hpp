@@ -9,19 +9,11 @@
 namespace device::Config {
   // ------------ Changing Config requires recompile the library !! ------------
   // Exponent BASE :: ranged from [4, 7] for integer quantization
-  // Order MAX :: ranged from [1, 8] used in quantization (unit in 4 bytes)
-  //              Ex. order_max=4 --> 16 int8
 
 #ifdef I8_EXP_BASE
   constexpr int32_t exp_base = I8_EXP_BASE;
 #else
   constexpr int32_t exp_base = 6;
-#endif
-
-#ifdef I8_MAX_ORDER
-  constexpr int32_t order_max = I8_MAX_ORDER >> 2;
-#else
-  constexpr int32_t order_max = 4;
 #endif
 };
 

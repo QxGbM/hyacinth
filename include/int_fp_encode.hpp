@@ -105,7 +105,7 @@ namespace device::int8 {
 
   template <uint32_t ORDER>
   __host__ __device__ __forceinline__ void align_expon(uint32_t (&a)[ORDER], int32_t exp_diff) {
-    static_assert(1 <= ORDER && ORDER <= 8, "Max integer quantization order need to be in [4, 32].");
+    static_assert(1 <= ORDER && ORDER <= 4, "Max integer quantization order need to be in [4, 16].");
     uint32_t rsft = 32 - ((exp_diff & 3) << 3);
     uint32_t psft = uint32_t(((exp_diff & 3) - exp_diff) >> 2);
     uint32_t b[ORDER + 2];
@@ -117,10 +117,6 @@ namespace device::int8 {
     if constexpr(1 < ORDER) b[1] = joint_a(a[1], a[0], rsft);
     if constexpr(2 < ORDER) b[2] = joint_a(a[2], a[1], rsft);
     if constexpr(3 < ORDER) b[3] = joint_a(a[3], a[2], rsft);
-    if constexpr(4 < ORDER) b[4] = joint_a(a[4], a[3], rsft);
-    if constexpr(5 < ORDER) b[5] = joint_a(a[5], a[4], rsft);
-    if constexpr(6 < ORDER) b[6] = joint_a(a[6], a[5], rsft);
-    if constexpr(7 < ORDER) b[7] = joint_a(a[7], a[6], rsft);
     b[ORDER] = a[ORDER - 1] >> rsft;
     b[ORDER + 1] = 0;
 
@@ -132,10 +128,6 @@ namespace device::int8 {
     if constexpr(1 < ORDER) a[1] = b[min(ORDER + 1, psft + 1)];
     if constexpr(2 < ORDER) a[2] = b[min(ORDER + 1, psft + 2)];
     if constexpr(3 < ORDER) a[3] = b[min(ORDER + 1, psft + 3)];
-    if constexpr(4 < ORDER) a[4] = b[min(ORDER + 1, psft + 4)];
-    if constexpr(5 < ORDER) a[5] = b[min(ORDER + 1, psft + 5)];
-    if constexpr(6 < ORDER) a[6] = b[min(ORDER + 1, psft + 6)];
-    if constexpr(7 < ORDER) a[7] = b[min(ORDER + 1, psft + 7)];
   }
 
 };
