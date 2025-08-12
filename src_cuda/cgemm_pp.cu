@@ -12,8 +12,8 @@ template <class real_t, class complex_t> struct convert_func {
   const real_t* A;
   complex_t* B;
   int64_t N, lda, strideA, ldb;
-  convert_func(int32_t N, const real_t* A, int32_t lda, int64_t strideA, complex_t* B, int32_t ldb) :
-    A(A), B(B), N(N), lda(lda), strideA(strideA), ldb(ldb) {}
+  convert_func(int32_t N, const real_t* A, int32_t lda, complex_t* B, int32_t ldb) :
+    A(A), B(B), N(N), lda(lda), strideA(int64_t(N) * int64_t(lda)), ldb(ldb) {}
 
   __device__ __forceinline__ cuDoubleComplex conv(double real, double imagA, double imagAT) {
     return make_cuDoubleComplex(real, imagA - imagAT);
@@ -37,22 +37,22 @@ template <class real_t, class complex_t> struct convert_func {
   }
 };
 
-void internal::int8::planar_to_interleave_f64(cudaStream_t stream, int32_t N, double* A, int32_t lda, int64_t strideA, std::complex<double>* B, int32_t ldb) {
+void internal::int8::planar_to_interleave_f64(cudaStream_t stream, int32_t N, double* A, int32_t lda, std::complex<double>* B, int32_t ldb) {
   thrust::counting_iterator<int64_t> iter(0);
-  thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, uint64_t(N) * uint64_t(N), convert_func(N, A, lda, strideA, (cuDoubleComplex*)B, ldb));
+  thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, uint64_t(N) * uint64_t(N), convert_func(N, A, lda, (cuDoubleComplex*)B, ldb));
 }
 
-void internal::int8::planar_to_interleave_f32(cudaStream_t stream, int32_t N, float* A, int32_t lda, int64_t strideA, std::complex<float>* B, int32_t ldb) {
+void internal::int8::planar_to_interleave_f32(cudaStream_t stream, int32_t N, float* A, int32_t lda, std::complex<float>* B, int32_t ldb) {
   thrust::counting_iterator<int64_t> iter(0);
-  thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, uint64_t(N) * uint64_t(N), convert_func(N, A, lda, strideA, (cuComplex*)B, ldb));
+  thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, uint64_t(N) * uint64_t(N), convert_func(N, A, lda, (cuComplex*)B, ldb));
 }
 
-void internal::int8::planar_to_interleave_f128_dd(cudaStream_t stream, int32_t N, double2* A, int32_t lda, int64_t strideA, complex_double2* B, int32_t ldb) {
+void internal::int8::planar_to_interleave_f128_dd(cudaStream_t stream, int32_t N, double2* A, int32_t lda, complex_double2* B, int32_t ldb) {
   thrust::counting_iterator<int64_t> iter(0);
-  thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, uint64_t(N) * uint64_t(N), convert_func(N, A, lda, strideA, B, ldb));
+  thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, uint64_t(N) * uint64_t(N), convert_func(N, A, lda, B, ldb));
 }
 
-void internal::int8::planar_to_interleave_f128_qf(cudaStream_t stream, int32_t N, float4* A, int32_t lda, int64_t strideA, complex_float4* B, int32_t ldb) {
+void internal::int8::planar_to_interleave_f128_qf(cudaStream_t stream, int32_t N, float4* A, int32_t lda, complex_float4* B, int32_t ldb) {
   thrust::counting_iterator<int64_t> iter(0);
-  thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, uint64_t(N) * uint64_t(N), convert_func(N, A, lda, strideA, B, ldb));
+  thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, uint64_t(N) * uint64_t(N), convert_func(N, A, lda, B, ldb));
 }

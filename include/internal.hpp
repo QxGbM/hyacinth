@@ -110,13 +110,13 @@ namespace internal::int8 {
 
   void c8i_HN_gemm_stridedA(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32_t iter_k, int32_t algnN, int32_t algnK, const int8_t* AH, int32_t orderA, int32_t* C, int32_t orderC);
 
-  void planar_to_interleave_f64(cudaStream_t stream, int32_t N, double* A, int32_t lda, int64_t strideA, std::complex<double>* B, int32_t ldb);
+  void planar_to_interleave_f64(cudaStream_t stream, int32_t N, double* A, int32_t lda, std::complex<double>* B, int32_t ldb);
 
-  void planar_to_interleave_f32(cudaStream_t stream, int32_t N, float* A, int32_t lda, int64_t strideA, std::complex<float>* B, int32_t ldb);
+  void planar_to_interleave_f32(cudaStream_t stream, int32_t N, float* A, int32_t lda, std::complex<float>* B, int32_t ldb);
 
-  void planar_to_interleave_f128_dd(cudaStream_t stream, int32_t N, double2* A, int32_t lda, int64_t strideA, complex_double2* B, int32_t ldb);
+  void planar_to_interleave_f128_dd(cudaStream_t stream, int32_t N, double2* A, int32_t lda, complex_double2* B, int32_t ldb);
 
-  void planar_to_interleave_f128_qf(cudaStream_t stream, int32_t N, float4* A, int32_t lda, int64_t strideA, complex_float4* B, int32_t ldb);
+  void planar_to_interleave_f128_qf(cudaStream_t stream, int32_t N, float4* A, int32_t lda, complex_float4* B, int32_t ldb);
 
   void decode_f64_strided_i32(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t N, const int32_t* vec_expon, const int32_t* A, int32_t lda, double* C, int32_t ldc);
 
