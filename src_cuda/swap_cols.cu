@@ -13,8 +13,8 @@ struct conj {
   __device__ __forceinline__ complex_float4 operator()(complex_float4 f) { return device::qf::conj(f); }
 };
 
-template <int32_t COMPLEX, class real_t, int32_t ITEMS_PER_THREAD>
-__device__ __forceinline__ void pred_conj(real_t (&a)[ITEMS_PER_THREAD]) {
+template <int32_t COMPLEX, class matrix_t, int32_t ITEMS_PER_THREAD>
+__device__ __forceinline__ void pred_conj(matrix_t (&a)[ITEMS_PER_THREAD]) {
   if constexpr (COMPLEX) {
     conj conj_func;
     #pragma unroll
@@ -23,21 +23,21 @@ __device__ __forceinline__ void pred_conj(real_t (&a)[ITEMS_PER_THREAD]) {
   }
 }
 
-template <class real_t, class real_ptr, int32_t GRID_BLOCKS, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD, int32_t COMPLEX>
-__global__ void swap_cols_kernel(int32_t i, int32_t j, int32_t N, real_ptr A, int32_t lda) {
+template <class matrix_t, class matrix_ptr, int32_t GRID_BLOCKS, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD, int32_t COMPLEX>
+__global__ void swap_cols_kernel(int32_t i, int32_t j, int32_t N, matrix_ptr A, int32_t lda) {
   constexpr int32_t elements_block = BLOCK_THREADS * ITEMS_PER_THREAD;
   constexpr int32_t elements = GRID_BLOCKS * elements_block;
   int32_t block_offset = blockIdx.x * elements_block;
   int32_t thread_offset = threadIdx.x * ITEMS_PER_THREAD;
   int32_t N2 = N & (elements_block - 1), N1 = N - N2;
 
-  __shared__ typename cub::BlockLoad<real_t, BLOCK_THREADS, ITEMS_PER_THREAD>::TempStorage temp_load;
-  __shared__ typename cub::BlockStore<real_t, BLOCK_THREADS, ITEMS_PER_THREAD>::TempStorage temp_store;
-  real_t thread_i[ITEMS_PER_THREAD], thread_j[ITEMS_PER_THREAD];
-  real_ptr A_col_i = &A[uint64_t(i) * uint64_t(lda)], A_col_j = &A[uint64_t(j) * uint64_t(lda)], A_row_j = &A[j];
+  __shared__ typename cub::BlockLoad<matrix_t, BLOCK_THREADS, ITEMS_PER_THREAD>::TempStorage temp_load;
+  __shared__ typename cub::BlockStore<matrix_t, BLOCK_THREADS, ITEMS_PER_THREAD>::TempStorage temp_store;
+  matrix_t thread_i[ITEMS_PER_THREAD], thread_j[ITEMS_PER_THREAD];
+  matrix_ptr A_col_i = &A[uint64_t(i) * uint64_t(lda)], A_col_j = &A[uint64_t(j) * uint64_t(lda)], A_row_j = &A[j];
 
-  cub::BlockLoad<real_t, BLOCK_THREADS, ITEMS_PER_THREAD> block_load(temp_load);
-  cub::BlockStore<real_t, BLOCK_THREADS, ITEMS_PER_THREAD> block_store(temp_store);
+  cub::BlockLoad<matrix_t, BLOCK_THREADS, ITEMS_PER_THREAD> block_load(temp_load);
+  cub::BlockStore<matrix_t, BLOCK_THREADS, ITEMS_PER_THREAD> block_store(temp_store);
 
   for (int32_t k = block_offset; k < N1; k += elements) {
     block_load.Load(&A_col_i[k], thread_i);

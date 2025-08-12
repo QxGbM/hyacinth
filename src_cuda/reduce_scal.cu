@@ -20,29 +20,40 @@ struct add_complex {
   __device__ __forceinline__ complex_float4 operator()(complex_float4 a, complex_float4 b) { return device::qf::add(a, b); }
 };
 
-struct mul_real {
-  __device__ __forceinline__ double operator()(double a, double b) { return a * b; }
-  __device__ __forceinline__ float operator()(float a, float b) { return a * b; }
-  __device__ __forceinline__ double2 operator()(double2 a, double2 b) { return device::dd::mul(a, b); }
-  __device__ __forceinline__ float4 operator()(float4 a, float4 b) { return device::qf::mul(a, b); }
-};
+struct scal_a_function {
+  __device__ __forceinline__ void operator()(double s, double a, double& c, double& c_conj, double& d) {
+    c_conj = c = s * a; d = fma(-c, c, d);
+  }
+  __device__ __forceinline__ void operator()(float s, float a, float& c, float& c_conj, float& d) {
+    c_conj = c = s * a; d = fmaf(-c, c, d);
+  }
+  __device__ __forceinline__ void operator()(double2 s, double2 a, double2& c, double2& c_conj, double2& d) {
+    c_conj = c = device::dd::mul(s, a); d = device::dd::fma(device::dd::negate(c), c, d);
+  }
+  __device__ __forceinline__ void operator()(float4 s, float4 a, float4& c, float4& c_conj, float4& d) {
+    c_conj = c = device::qf::mul(s, a); d = device::qf::fma(device::qf::negate(c), c, d);
+  }
 
-struct mul_complex {
-  __device__ __forceinline__ cuDoubleComplex operator()(cuDoubleComplex a, double b) {
-    return make_cuDoubleComplex(a.x * b, a.y * b); }
-  __device__ __forceinline__ cuComplex operator()(cuComplex a, float b) {
-    return make_cuComplex(a.x * b, a.y * b); }
-  __device__ __forceinline__ complex_double2 operator()(complex_double2 a, double2 b) { 
-    return device::dd::make_complex_double2(device::dd::mul(a.real, b), device::dd::mul(a.imag, b)); }
-  __device__ __forceinline__ complex_float4 operator()(complex_float4 a, float4 b) { 
-    return device::qf::make_complex_float4(device::qf::mul(a.real, b), device::qf::mul(a.imag, b)); }
-};
-
-struct conj {
-  __device__ __forceinline__ cuDoubleComplex operator()(cuDoubleComplex f) { return make_cuDoubleComplex(f.x, -f.y); }
-  __device__ __forceinline__ cuComplex operator()(cuComplex f) { return make_cuComplex(f.x, -f.y); }
-  __device__ __forceinline__ complex_double2 operator()(complex_double2 f) { return device::dd::conj(f); }
-  __device__ __forceinline__ complex_float4 operator()(complex_float4 f) { return device::qf::conj(f); }
+  __device__ __forceinline__ void operator()(double s, cuDoubleComplex a, cuDoubleComplex& c, cuDoubleComplex& c_conj, double& d) {
+    cuDoubleComplex e = c = make_cuDoubleComplex(s * a.x, s * a.y);
+    c_conj = make_cuDoubleComplex(e.x, -e.y);
+    d = fma(-e.x, e.x, fma(-e.y, e.y, d));
+  }
+  __device__ __forceinline__ void operator()(float s, cuComplex a, cuComplex& c, cuComplex& c_conj, float& d) {
+    cuComplex e = c = make_cuComplex(s * a.x, s * a.y);
+    c_conj = make_cuComplex(e.x, -e.y);
+    d = fmaf(-e.x, e.x, fmaf(-e.y, e.y, d));
+  }
+  __device__ __forceinline__ void operator()(double2 s, complex_double2 a, complex_double2& c, complex_double2& c_conj, double2& d) {
+    complex_double2 e = c = device::dd::make_complex_double2(device::dd::mul(s, a.real), device::dd::mul(s, a.imag));
+    c_conj = device::dd::conj(e);
+    d = device::dd::fma(device::dd::negate(e.real), e.real, device::dd::fma(device::dd::negate(e.imag), e.imag, d));
+  }
+  __device__ __forceinline__ void operator()(float4 s, complex_float4 a, complex_float4& c, complex_float4& c_conj, float4& d) {
+    complex_float4 e = c = device::qf::make_complex_float4(device::qf::mul(s, a.real), device::qf::mul(s, a.imag));
+    c_conj = device::qf::conj(e);
+    d = device::qf::fma(device::qf::negate(e.real), e.real, device::qf::fma(device::qf::negate(e.imag), e.imag, d));
+  }
 };
 
 template <int32_t COMPLEX, class matrix_t, int32_t ITEMS_PER_THREAD>
@@ -61,27 +72,8 @@ __device__ void array_sum(matrix_t (&a)[ITEMS_PER_THREAD], matrix_t const (&b)[I
   }
 }
 
-template <int32_t COMPLEX, class real_t, class matrix_t, int32_t ITEMS_PER_THREAD>
-__device__ void array_mul(real_t s, matrix_t (&a)[ITEMS_PER_THREAD], matrix_t (&b)[ITEMS_PER_THREAD]) {
-  if constexpr(COMPLEX) {
-    mul_complex mul_func;
-    conj conj_func;
-    #pragma unroll
-    for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i) {
-      matrix_t e = a[i] = mul_func(a[i], s);
-      b[i] = conj_func(e);
-    }
-  }
-  else {
-    mul_real mul_func;
-    #pragma unroll
-    for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
-      b[i] = a[i] = mul_func(a[i], s);
-  }
-}
-
-template <class real_t, class matrix_t, class matrix_ptr, int32_t ITEMS_PER_THREAD, int32_t N>
-__global__ void fix_N_reduce_kernel(real_t scale, int32_t M, matrix_ptr A, int32_t lda) {
+template <class real_t, class real_ptr, class matrix_t, class matrix_ptr, int32_t ITEMS_PER_THREAD, int32_t N>
+__global__ void fix_N_reduce_kernel(real_t scale, int32_t M, matrix_ptr A, int32_t lda, real_ptr D) {
   constexpr int32_t COMPLEX = (sizeof(real_t) < sizeof(matrix_t));
   constexpr int32_t block_warps = (N + 7) / 8;
   constexpr int32_t elements_thread = N < 8 ? N : 8;
@@ -91,19 +83,25 @@ __global__ void fix_N_reduce_kernel(real_t scale, int32_t M, matrix_ptr A, int32
 
   __shared__ typename cub::WarpLoad<matrix_t, ITEMS_PER_THREAD, cub::WARP_LOAD_STRIPED>::TempStorage temp_load[block_warps];
   __shared__ typename cub::WarpStore<matrix_t, ITEMS_PER_THREAD, cub::WARP_STORE_STRIPED>::TempStorage temp_store[block_warps];
+  __shared__ typename cub::WarpLoad<real_t, ITEMS_PER_THREAD, cub::WARP_LOAD_STRIPED>::TempStorage temp_load_rl[block_warps];
+  __shared__ typename cub::WarpStore<real_t, ITEMS_PER_THREAD, cub::WARP_STORE_STRIPED>::TempStorage temp_store_rl[block_warps];
+
   __shared__ matrix_t warpA[block_warps][ITEMS_PER_THREAD * 32];
   matrix_t threadA[ITEMS_PER_THREAD], threadB[ITEMS_PER_THREAD];
+  real_t threadD[ITEMS_PER_THREAD];
 
   cub::WarpLoad<matrix_t, ITEMS_PER_THREAD, cub::WARP_LOAD_STRIPED> warp_load(temp_load[threadIdx.y]);
   cub::WarpStore<matrix_t, ITEMS_PER_THREAD, cub::WARP_STORE_STRIPED> warp_store(temp_store[threadIdx.y]);
+  cub::WarpLoad<real_t, ITEMS_PER_THREAD, cub::WARP_LOAD_STRIPED> warp_load_rl(temp_load_rl[threadIdx.y]);
+  cub::WarpStore<real_t, ITEMS_PER_THREAD, cub::WARP_STORE_STRIPED> warp_store_rl(temp_store_rl[threadIdx.y]);
 
   int32_t i = blockIdx.x * elements_block;
   matrix_ptr A_i = &B[i];
-  warp_load.Load(A_i, threadA, M);
+  warp_load.Load(A_i, threadA);
 
   #pragma unroll
   for (int32_t k = 1; k < elements_thread; ++k) {
-    warp_load.Load(&A_i[uint64_t(k) * uint64_t(lda)], threadB, M);
+    warp_load.Load(&A_i[uint64_t(k) * uint64_t(lda)], threadB);
     array_sum<COMPLEX>(threadA, threadB);
   }
 
@@ -119,8 +117,15 @@ __global__ void fix_N_reduce_kernel(real_t scale, int32_t M, matrix_ptr A, int32
   }
 
   if (threadIdx.y == 0) {
-    array_mul<COMPLEX>(scale, threadA, threadB);
+    scal_a_function scal_func;
+    warp_load_rl.Load(&D[i], threadD);
+
+    #pragma unroll
+    for (int32_t k = 0; k < ITEMS_PER_THREAD; ++k)
+      scal_func(scale, threadA[k], threadA[k], threadB[k], threadD[k]);
+
     warp_store.Store(&A[i], threadA, M);
+    warp_store_rl.Store(&D[i], threadD, M);
 
     #pragma unroll
     for (int32_t k = 0; k < ITEMS_PER_THREAD; ++k) {
@@ -133,58 +138,60 @@ __global__ void fix_N_reduce_kernel(real_t scale, int32_t M, matrix_ptr A, int32
 
 constexpr int32_t thread_bytes = 32;
 
-template <class real_t, class matrix_t, class matrix_ptr>
-inline void reduce_scal_dispatcher(cudaStream_t stream, real_t scale, int32_t M, int32_t N, matrix_ptr A, int32_t lda) {
+template <class real_t, class real_ptr, class matrix_t, class matrix_ptr>
+inline void reduce_scal_dispatcher(cudaStream_t stream, real_t scale, int32_t M, int32_t N, matrix_ptr A, int32_t lda, real_ptr D) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(matrix_t);
   constexpr int32_t elements_block = items_per_thread * 32;
   int32_t grid = (M + elements_block - 1) / elements_block;
   int32_t rem = M & (elements_block - 1);
 
   switch (N) {
-    case 1: fix_N_reduce_kernel <real_t, matrix_t, matrix_ptr, items_per_thread, 1>
-      <<< grid, 32, 0, stream >>> (scale, rem, A, lda); break;
-    case 4: fix_N_reduce_kernel <real_t, matrix_t, matrix_ptr, items_per_thread, 4>
-      <<< grid, 32, 0, stream >>> (scale, rem, A, lda); break;
-    case 8: fix_N_reduce_kernel <real_t, matrix_t, matrix_ptr, items_per_thread, 8>
-      <<< grid, 32, 0, stream >>> (scale, rem, A, lda); break;
-    case 16: fix_N_reduce_kernel <real_t, matrix_t, matrix_ptr, items_per_thread, 16>
-      <<< grid, 64, 0, stream >>> (scale, rem, A, lda); break;
-    case 32: fix_N_reduce_kernel <real_t, matrix_t, matrix_ptr, items_per_thread, 32>
-      <<< grid, 128, 0, stream >>> (scale, rem, A, lda); break;
-    case 64: fix_N_reduce_kernel <real_t, matrix_t, matrix_ptr, items_per_thread, 64>
-      <<< grid, 256, 0, stream >>> (scale, rem, A, lda); break;
+    case 1: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, items_per_thread, 1>
+      <<< grid, 32, 0, stream >>> (scale, rem, A, lda, D); break;
+    case 2: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, items_per_thread, 2>
+      <<< grid, 32, 0, stream >>> (scale, rem, A, lda, D); break;
+    case 4: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, items_per_thread, 4>
+      <<< grid, 32, 0, stream >>> (scale, rem, A, lda, D); break;
+    case 8: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, items_per_thread, 8>
+      <<< grid, 32, 0, stream >>> (scale, rem, A, lda, D); break;
+    case 16: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, items_per_thread, 16>
+      <<< grid, 64, 0, stream >>> (scale, rem, A, lda, D); break;
+    case 32: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, items_per_thread, 32>
+      <<< grid, 128, 0, stream >>> (scale, rem, A, lda, D); break;
+    case 64: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, items_per_thread, 64>
+      <<< grid, 256, 0, stream >>> (scale, rem, A, lda, D); break;
     default: break;
   }
 }
 
-void internal::Cholesky::reduce_scal_f64(cudaStream_t stream, const double scale, int32_t M, int32_t N, double* A, int32_t lda) {
-  reduce_scal_dispatcher<double, double, double* __restrict__>(stream, scale, M, N, A, lda);
+void internal::Cholesky::reduce_scal_f64(cudaStream_t stream, const double scale, int32_t M, int32_t N, double* A, int32_t lda, double* D) {
+  reduce_scal_dispatcher<double, double* __restrict__, double, double* __restrict__>(stream, scale, M, N, A, lda, D);
 }
 
-void internal::Cholesky::reduce_scal_f32(cudaStream_t stream, const float scale, int32_t M, int32_t N, float* A, int32_t lda) {
-  reduce_scal_dispatcher<float, float, float* __restrict__>(stream, scale, M, N, A, lda);
+void internal::Cholesky::reduce_scal_f32(cudaStream_t stream, const float scale, int32_t M, int32_t N, float* A, int32_t lda, float* D) {
+  reduce_scal_dispatcher<float, float* __restrict__, float, float* __restrict__>(stream, scale, M, N, A, lda, D);
 }
 
-void internal::Cholesky::reduce_scal_f128_dd(cudaStream_t stream, const double2 scale, int32_t M, int32_t N, double2* A, int32_t lda) {
-  reduce_scal_dispatcher<double2, double2, double2* __restrict__>(stream, scale, M, N, A, lda);
+void internal::Cholesky::reduce_scal_f128_dd(cudaStream_t stream, const double2 scale, int32_t M, int32_t N, double2* A, int32_t lda, double2* D) {
+  reduce_scal_dispatcher<double2, double2* __restrict__, double2, double2* __restrict__>(stream, scale, M, N, A, lda, D);
 }
 
-void internal::Cholesky::reduce_scal_f128_qf(cudaStream_t stream, const float4 scale, int32_t M, int32_t N, float4* A, int32_t lda) {
-  reduce_scal_dispatcher<float4, float4, float4* __restrict__>(stream, scale, M, N, A, lda);
+void internal::Cholesky::reduce_scal_f128_qf(cudaStream_t stream, const float4 scale, int32_t M, int32_t N, float4* A, int32_t lda, float4* D) {
+  reduce_scal_dispatcher<float4, float4* __restrict__, float4, float4* __restrict__>(stream, scale, M, N, A, lda, D);
 }
 
-void internal::Cholesky::reduce_scal_cf64(cudaStream_t stream, const double scale, int32_t M, int32_t N, std::complex<double>* A, int32_t lda) {
-  reduce_scal_dispatcher<double, cuDoubleComplex, cuDoubleComplex* __restrict__>(stream, scale, M, N, (cuDoubleComplex*)A, lda);
+void internal::Cholesky::reduce_scal_cf64(cudaStream_t stream, const double scale, int32_t M, int32_t N, std::complex<double>* A, int32_t lda, double* D) {
+  reduce_scal_dispatcher<double, double* __restrict__, cuDoubleComplex, cuDoubleComplex* __restrict__>(stream, scale, M, N, (cuDoubleComplex*)A, lda, D);
 }
 
-void internal::Cholesky::reduce_scal_cf32(cudaStream_t stream, const float scale, int32_t M, int32_t N, std::complex<float>* A, int32_t lda) {
-  reduce_scal_dispatcher<float, cuComplex, cuComplex* __restrict__>(stream, scale, M, N, (cuComplex*)A, lda);
+void internal::Cholesky::reduce_scal_cf32(cudaStream_t stream, const float scale, int32_t M, int32_t N, std::complex<float>* A, int32_t lda, float* D) {
+  reduce_scal_dispatcher<float, float* __restrict__, cuComplex, cuComplex* __restrict__>(stream, scale, M, N, (cuComplex*)A, lda, D);
 }
 
-void internal::Cholesky::reduce_scal_cf128_dd(cudaStream_t stream, const double2 scale, int32_t M, int32_t N, complex_double2* A, int32_t lda) {
-  reduce_scal_dispatcher<double2, complex_double2, complex_double2* __restrict__>(stream, scale, M, N, A, lda);
+void internal::Cholesky::reduce_scal_cf128_dd(cudaStream_t stream, const double2 scale, int32_t M, int32_t N, complex_double2* A, int32_t lda, double2* D) {
+  reduce_scal_dispatcher<double2, double2* __restrict__, complex_double2, complex_double2* __restrict__>(stream, scale, M, N, A, lda, D);
 }
 
-void internal::Cholesky::reduce_scal_cf128_qf(cudaStream_t stream, const float4 scale, int32_t M, int32_t N, complex_float4* A, int32_t lda) {
-  reduce_scal_dispatcher<float4, complex_float4, complex_float4* __restrict__>(stream, scale, M, N, A, lda);
+void internal::Cholesky::reduce_scal_cf128_qf(cudaStream_t stream, const float4 scale, int32_t M, int32_t N, complex_float4* A, int32_t lda, float4* D) {
+  reduce_scal_dispatcher<float4, float4* __restrict__, complex_float4, complex_float4* __restrict__>(stream, scale, M, N, A, lda, D);
 }

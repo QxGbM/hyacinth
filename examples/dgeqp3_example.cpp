@@ -3,8 +3,13 @@
 #include <random>
 #include <iostream>
 #include <algorithm>
+
+#ifdef USE_MKL
+#include <mkl.h>
+#else
 #include <cblas.h>
 #include <lapacke.h>
+#endif
 
 int32_t main(int32_t argc, char* argv[]) {
   auto cu_err = cudaSetDevice(0);
@@ -24,9 +29,9 @@ int32_t main(int32_t argc, char* argv[]) {
 
   device::QR::geqp3_params params;
   device::QR::dgeqp3_ronly_params_query(&params, epi, M, N);
-  //device::QR::set_quad_float_as_fp128(&params);
+  device::QR::set_quad_float_as_fp128(&params);
 
-  std::cout << "ZGEQP3 <" << M << ", " << N << ">\n";
+  std::cout << "DGEQP3 <" << M << ", " << N << ">\n";
   std::cout << "Epi: " << epi << "\n";
   std::cout << "acc-bits: " << params.acc_bits << "\n";
   std::cout << "orderA: " << params.orderA << "\n";

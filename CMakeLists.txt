@@ -22,8 +22,8 @@ set(CU_SOURCES
   src_cuda/encode_fp_int_strided.cu
   src_cuda/fp_exponent.cu
   src_cuda/gemv_scal.cu
-  src_cuda/imax_real.cu
-  src_cuda/imax_complex.cu
+  src_cuda/cgemm_pp.cu
+  src_cuda/imax_diag.cu
   src_cuda/reduce_scal.cu
   src_cuda/swap_cols.cu
   src_cuda/strided_i8_gemm_complex.cu
@@ -52,6 +52,11 @@ set(TEST_SOURCES
   examples/zgeqp3_example.cpp
 )
 
+string(JOIN " " BLAS_LIBS ${BLAS_LIBRARIES})
+if(BLAS_LIBS MATCHES "mkl")
+  message(STATUS "BLAS is Intel MKL")
+endif()
+
 set_source_files_properties(${TEST_SOURCES} PROPERTIES COMPILE_OPTIONS 
   "-Wall;-Wextra;-fexceptions")
 
@@ -61,6 +66,11 @@ foreach (test ${TEST_SOURCES})
   add_test(NAME ${src}.app COMMAND ${src}.app)
 
   target_include_directories(${src}.app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-  target_link_libraries(${src}.app PRIVATE hyacinth BLAS::BLAS LAPACK::LAPACK CUDA::cudart CUDA::cublas lapacke)
+  target_link_libraries(${src}.app PRIVATE hyacinth BLAS::BLAS LAPACK::LAPACK CUDA::cudart CUDA::cublas)
+  if(BLAS_LIBS MATCHES "mkl")
+    target_compile_options(${src}.app PRIVATE "-DUSE_MKL")
+  else()
+    target_link_libraries(${src}.app PRIVATE lapacke)
+  endif()
   set_target_properties(${src}.app PROPERTIES CUDA_ARCHITECTURES ${SM_TARGETS})
 endforeach ()

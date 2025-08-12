@@ -15,9 +15,8 @@ int32_t device::Cholesky::dpotrfp(cudaStream_t stream, int32_t N, double* A, int
   for (int32_t i = 0; i < N; ++i) {
     uint64_t A_diag = uint64_t(i) * uint64_t(lda + 1);
     uint64_t A_col = uint64_t(i) * uint64_t(lda);
-    uint64_t A_prev = uint64_t(i) + uint64_t(i - 1) * uint64_t(lda);
 
-    internal::Cholesky::imax_double(stream, N - i, 0 < i ? &A[A_prev] : nullptr, &diag[i], &A[A_diag], lda, pivot_i, scale);
+    internal::Cholesky::imax_double(stream, N - i, &diag[i], &A[A_diag], lda, pivot_i, scale);
     cudaStreamSynchronize(stream);
 
     if (!std::isnormal(*scale))
@@ -28,7 +27,7 @@ int32_t device::Cholesky::dpotrfp(cudaStream_t stream, int32_t N, double* A, int
       std::iter_swap(&ipiv[i], &ipiv[j]);
       internal::Cholesky::swap_cols_double(stream, i, j, N, A, lda);
     }
-    internal::Cholesky::minus_transAx_plusB_scale_double(stream, *scale, N - i, i, &A[A_col], lda, &A[A_diag]);
+    internal::Cholesky::gemv_scal_f64(stream, *scale, N - i, i, &A[A_col], lda, &A[A_diag], &diag[i]);
   }
   return 0;
 }
@@ -42,9 +41,8 @@ int32_t device::Cholesky::spotrfp(cudaStream_t stream, int32_t N, float* A, int3
   for (int32_t i = 0; i < N; ++i) {
     uint64_t A_diag = uint64_t(i) * uint64_t(lda + 1);
     uint64_t A_col = uint64_t(i) * uint64_t(lda);
-    uint64_t A_prev = uint64_t(i) + uint64_t(i - 1) * uint64_t(lda);
 
-    internal::Cholesky::imax_float(stream, N - i, 0 < i ? &A[A_prev] : nullptr, &diag[i], &A[A_diag], lda, pivot_i, scale);
+    internal::Cholesky::imax_float(stream, N - i, &diag[i], &A[A_diag], lda, pivot_i, scale);
     cudaStreamSynchronize(stream);
 
     if (!std::isnormal(*scale))
@@ -55,7 +53,7 @@ int32_t device::Cholesky::spotrfp(cudaStream_t stream, int32_t N, float* A, int3
       std::iter_swap(&ipiv[i], &ipiv[j]);
       internal::Cholesky::swap_cols_float(stream, i, j, N, A, lda);
     }
-    internal::Cholesky::minus_transAx_plusB_scale_float(stream, *scale, N - i, i, &A[A_col], lda, &A[A_diag]);
+    internal::Cholesky::gemv_scal_f32(stream, *scale, N - i, i, &A[A_col], lda, &A[A_diag], &diag[i]);
   }
   return 0;
 }
@@ -69,9 +67,8 @@ int32_t device::Cholesky::double_double_potrfp(cudaStream_t stream, int32_t N, d
   for (int32_t i = 0; i < N; ++i) {
     uint64_t A_diag = uint64_t(i) * uint64_t(lda + 1);
     uint64_t A_col = uint64_t(i) * uint64_t(lda);
-    uint64_t A_prev = uint64_t(i) + uint64_t(i - 1) * uint64_t(lda);
 
-    internal::Cholesky::imax_double2(stream, N - i, 0 < i ? &A[A_prev] : nullptr, &diag[i], &A[A_diag], lda, pivot_i, scale);
+    internal::Cholesky::imax_double2(stream, N - i, &diag[i], &A[A_diag], lda, pivot_i, scale);
     cudaStreamSynchronize(stream);
 
     if (!std::isnormal(scale->x))
@@ -82,7 +79,7 @@ int32_t device::Cholesky::double_double_potrfp(cudaStream_t stream, int32_t N, d
       std::iter_swap(&ipiv[i], &ipiv[j]);
       internal::Cholesky::swap_cols_double2(stream, i, j, N, A, lda);
     }
-    internal::Cholesky::minus_transAx_plusB_scale_double2(stream, *scale, N - i, i, &A[A_col], lda, &A[A_diag]);
+    internal::Cholesky::gemv_scal_f128_dd(stream, *scale, N - i, i, &A[A_col], lda, &A[A_diag], &diag[i]);
   }
   return 0;
 }
@@ -96,9 +93,8 @@ int32_t device::Cholesky::quad_float_potrfp(cudaStream_t stream, int32_t N, floa
   for (int32_t i = 0; i < N; ++i) {
     uint64_t A_diag = uint64_t(i) * uint64_t(lda + 1);
     uint64_t A_col = uint64_t(i) * uint64_t(lda);
-    uint64_t A_prev = uint64_t(i) + uint64_t(i - 1) * uint64_t(lda);
 
-    internal::Cholesky::imax_float4(stream, N - i, 0 < i ? &A[A_prev] : nullptr, &diag[i], &A[A_diag], lda, pivot_i, scale);
+    internal::Cholesky::imax_float4(stream, N - i, &diag[i], &A[A_diag], lda, pivot_i, scale);
     cudaStreamSynchronize(stream);
 
     if (!std::isnormal(scale->x))
@@ -109,7 +105,7 @@ int32_t device::Cholesky::quad_float_potrfp(cudaStream_t stream, int32_t N, floa
       std::iter_swap(&ipiv[i], &ipiv[j]);
       internal::Cholesky::swap_cols_float4(stream, i, j, N, A, lda);
     }
-    internal::Cholesky::minus_transAx_plusB_scale_float4(stream, *scale, N - i, i, &A[A_col], lda, &A[A_diag]);
+    internal::Cholesky::gemv_scal_f128_qf(stream, *scale, N - i, i, &A[A_col], lda, &A[A_diag], &diag[i]);
   }
   return 0;
 }
