@@ -38,15 +38,15 @@ template <int32_t base, class real_t, class matrix_t> struct encode_func {
     if constexpr(sizeof(real_t) < sizeof(matrix_t)) {
       union { uint32_t code[code_words]; int8_t bytes[code_bytes]; } c_im;
       union { matrix_t comp; real_t real[2]; } A_i{A[y + x * lda]};
-      int8_t* B_rl = &B[y + x * ldb], *B_im = &B_rl[strideB * order];
+      int8_t* B_rl = &B[y + x * ldb], *B_im = &B_rl[strideB * int64_t(order)];
       encode(A_i.real[0], expon, c.code);
       encode(A_i.real[1], expon, c_im.code);
 
       #pragma unroll
       for (int32_t k = 0; k < code_bytes; ++k) {
         if (k < order) {
-          B_rl[k * strideB] = c.bytes[k];
-          B_im[k * strideB] = c_im.bytes[k];
+          B_rl[int64_t(k) * strideB] = c.bytes[k];
+          B_im[int64_t(k) * strideB] = c_im.bytes[k];
         }
       }
     }
@@ -58,7 +58,7 @@ template <int32_t base, class real_t, class matrix_t> struct encode_func {
       #pragma unroll
       for (int32_t k = 0; k < code_bytes; ++k) {
         if (k < order)
-          B_i[k * strideB] = c.bytes[k];
+          B_i[int64_t(k) * strideB] = c.bytes[k];
       }
     }
   }
