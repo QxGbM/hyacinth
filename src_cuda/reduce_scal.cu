@@ -22,16 +22,16 @@ struct add_complex {
 
 struct scal_a_function {
   __device__ __forceinline__ void operator()(double s, double a, double& c, double& c_conj, double& d) {
-    c_conj = c = s * a; d = fma(-c, c, d);
+    double e = c_conj = c = s * a; d = fma(-e, e, d);
   }
   __device__ __forceinline__ void operator()(float s, float a, float& c, float& c_conj, float& d) {
-    c_conj = c = s * a; d = fmaf(-c, c, d);
+    float e = c_conj = c = s * a; d = fmaf(-e, e, d);
   }
   __device__ __forceinline__ void operator()(double2 s, double2 a, double2& c, double2& c_conj, double2& d) {
-    c_conj = c = device::dd::mul(s, a); d = device::dd::fma(device::dd::negate(c), c, d);
+    double2 e = c_conj = c = device::dd::mul(s, a); d = device::dd::fma(device::dd::negate(e), e, d);
   }
   __device__ __forceinline__ void operator()(float4 s, float4 a, float4& c, float4& c_conj, float4& d) {
-    c_conj = c = device::qf::mul(s, a); d = device::qf::fma(device::qf::negate(c), c, d);
+    float4 e = c_conj = c = device::qf::mul(s, a); d = device::qf::fma(device::qf::negate(e), e, d);
   }
 
   __device__ __forceinline__ void operator()(double s, cuDoubleComplex a, cuDoubleComplex& c, cuDoubleComplex& c_conj, double& d) {
@@ -72,94 +72,97 @@ __device__ void array_sum(matrix_t (&a)[ITEMS_PER_THREAD], matrix_t const (&b)[I
   }
 }
 
-template <class real_t, class real_ptr, class matrix_t, class matrix_ptr, int32_t ITEMS_PER_THREAD, int32_t N>
+template <class real_t, class real_ptr, class matrix_t, class matrix_ptr, int32_t WARP_THREADS, int32_t ITEMS_PER_THREAD, int32_t N>
 __global__ void fix_N_reduce_kernel(real_t scale, int32_t M, matrix_ptr A, int32_t lda, real_ptr D) {
   constexpr int32_t COMPLEX = (sizeof(real_t) < sizeof(matrix_t));
   constexpr int32_t block_warps = (N + 7) / 8;
   constexpr int32_t elements_thread = N < 8 ? N : 8;
-  constexpr int32_t elements_block = ITEMS_PER_THREAD * 32;
-  M = (blockIdx.x + 1 == gridDim.x && 0 < M) ? M : elements_block;
+  constexpr int32_t elements_warp = ITEMS_PER_THREAD * WARP_THREADS;
+  M = (blockIdx.x + 1 == gridDim.x && 0 < M) ? M : elements_warp;
   matrix_ptr B = &A[int64_t((1 - N) + int32_t(threadIdx.y << 3)) * int64_t(lda)];
 
-  __shared__ typename cub::WarpLoad<matrix_t, ITEMS_PER_THREAD, cub::WARP_LOAD_STRIPED>::TempStorage temp_load[block_warps];
-  __shared__ typename cub::WarpStore<matrix_t, ITEMS_PER_THREAD, cub::WARP_STORE_STRIPED>::TempStorage temp_store[block_warps];
-  __shared__ typename cub::WarpLoad<real_t, ITEMS_PER_THREAD, cub::WARP_LOAD_STRIPED>::TempStorage temp_load_rl[block_warps];
-  __shared__ typename cub::WarpStore<real_t, ITEMS_PER_THREAD, cub::WARP_STORE_STRIPED>::TempStorage temp_store_rl[block_warps];
+  __shared__ typename cub::BlockLoad<matrix_t, WARP_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_STRIPED>::TempStorage temp_load[block_warps];
+  __shared__ typename cub::BlockStore<matrix_t, WARP_THREADS, ITEMS_PER_THREAD, cub::BLOCK_STORE_STRIPED>::TempStorage temp_store[block_warps];
+  __shared__ typename cub::BlockLoad<real_t, WARP_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_STRIPED>::TempStorage temp_load_rl[block_warps];
+  __shared__ typename cub::BlockStore<real_t, WARP_THREADS, ITEMS_PER_THREAD, cub::BLOCK_STORE_STRIPED>::TempStorage temp_store_rl[block_warps];
 
-  __shared__ matrix_t warpA[block_warps][ITEMS_PER_THREAD * 32];
+  __shared__ matrix_t warpA[block_warps][elements_warp];
   matrix_t threadA[ITEMS_PER_THREAD], threadB[ITEMS_PER_THREAD];
   real_t threadD[ITEMS_PER_THREAD];
 
-  cub::WarpLoad<matrix_t, ITEMS_PER_THREAD, cub::WARP_LOAD_STRIPED> warp_load(temp_load[threadIdx.y]);
-  cub::WarpStore<matrix_t, ITEMS_PER_THREAD, cub::WARP_STORE_STRIPED> warp_store(temp_store[threadIdx.y]);
-  cub::WarpLoad<real_t, ITEMS_PER_THREAD, cub::WARP_LOAD_STRIPED> warp_load_rl(temp_load_rl[threadIdx.y]);
-  cub::WarpStore<real_t, ITEMS_PER_THREAD, cub::WARP_STORE_STRIPED> warp_store_rl(temp_store_rl[threadIdx.y]);
+  cub::BlockLoad<matrix_t, WARP_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_STRIPED> block_load(temp_load[threadIdx.y]);
+  cub::BlockStore<matrix_t, WARP_THREADS, ITEMS_PER_THREAD, cub::BLOCK_STORE_STRIPED> block_store(temp_store[threadIdx.y]);
+  cub::BlockLoad<real_t, WARP_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_STRIPED> block_load_rl(temp_load_rl[threadIdx.y]);
+  cub::BlockStore<real_t, WARP_THREADS, ITEMS_PER_THREAD, cub::BLOCK_STORE_STRIPED> block_store_rl(temp_store_rl[threadIdx.y]);
 
-  int32_t i = blockIdx.x * elements_block;
+  uint64_t i = blockIdx.x * uint64_t(elements_warp);
   matrix_ptr A_i = &B[i];
-  warp_load.Load(A_i, threadA);
+  block_load.Load(A_i, threadA);
 
   #pragma unroll
   for (int32_t k = 1; k < elements_thread; ++k) {
-    warp_load.Load(&A_i[uint64_t(k) * uint64_t(lda)], threadB);
+    block_load.Load(&A_i[uint64_t(k) * uint64_t(lda)], threadB);
     array_sum<COMPLEX>(threadA, threadB);
   }
 
   if constexpr(8 < N) {
-    warp_store.Store(warpA[threadIdx.y], threadA);
+    block_store.Store(warpA[threadIdx.y], threadA);
     __syncthreads();
 
-    #pragma unroll
-    for (int32_t k = 1; k < block_warps; ++k) {
-      warp_load.Load(warpA[threadIdx.y], threadB);
-      array_sum<COMPLEX>(threadA, threadB);
+    if (threadIdx.y == 0) {
+      #pragma unroll
+      for (int32_t k = 1; k < block_warps; ++k) {
+        block_load.Load(warpA[k], threadB);
+        array_sum<COMPLEX>(threadA, threadB);
+      }
     }
   }
 
   if (threadIdx.y == 0) {
     scal_a_function scal_func;
-    warp_load_rl.Load(&D[i], threadD);
+    block_load_rl.Load(&D[i], threadD);
 
     #pragma unroll
     for (int32_t k = 0; k < ITEMS_PER_THREAD; ++k)
       scal_func(scale, threadA[k], threadA[k], threadB[k], threadD[k]);
 
-    warp_store.Store(&A[i], threadA, M);
-    warp_store_rl.Store(&D[i], threadD, M);
+    block_store.Store(&A[i], threadA, M);
+    block_store_rl.Store(&D[i], threadD, M);
 
     #pragma unroll
     for (int32_t k = 0; k < ITEMS_PER_THREAD; ++k) {
-      int32_t thread_k = (k << 5) + threadIdx.x;
+      int32_t thread_k = (k * WARP_THREADS) + threadIdx.x;
       if (thread_k < M)
-        A[uint64_t(i + thread_k) * uint64_t(lda)] = threadB[k];
+        A[(i + uint64_t(thread_k)) * uint64_t(lda)] = threadB[k];
     }
   }
 }
 
+constexpr int32_t warp_threads = 64;
 constexpr int32_t thread_bytes = 32;
 
 template <class real_t, class real_ptr, class matrix_t, class matrix_ptr>
 inline void reduce_scal_dispatcher(cudaStream_t stream, real_t scale, int32_t M, int32_t N, matrix_ptr A, int32_t lda, real_ptr D) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(matrix_t);
-  constexpr int32_t elements_block = items_per_thread * 32;
-  int32_t grid = (M + elements_block - 1) / elements_block;
-  int32_t rem = M & (elements_block - 1);
+  constexpr int32_t elements_warp = items_per_thread * warp_threads;
+  int32_t grid = (M + elements_warp - 1) / elements_warp;
+  int32_t rem = M & (elements_warp - 1);
 
   switch (N) {
-    case 1: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, items_per_thread, 1>
-      <<< grid, 32, 0, stream >>> (scale, rem, A, lda, D); break;
-    case 2: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, items_per_thread, 2>
-      <<< grid, 32, 0, stream >>> (scale, rem, A, lda, D); break;
-    case 4: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, items_per_thread, 4>
-      <<< grid, 32, 0, stream >>> (scale, rem, A, lda, D); break;
-    case 8: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, items_per_thread, 8>
-      <<< grid, 32, 0, stream >>> (scale, rem, A, lda, D); break;
-    case 16: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, items_per_thread, 16>
-      <<< grid, 64, 0, stream >>> (scale, rem, A, lda, D); break;
-    case 32: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, items_per_thread, 32>
-      <<< grid, 128, 0, stream >>> (scale, rem, A, lda, D); break;
-    case 64: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, items_per_thread, 64>
-      <<< grid, 256, 0, stream >>> (scale, rem, A, lda, D); break;
+    case 1: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, warp_threads, items_per_thread, 1>
+      <<< grid, dim3(warp_threads, 1, 1), 0, stream >>> (scale, rem, A, lda, D); break;
+    case 2: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, warp_threads, items_per_thread, 2>
+      <<< grid, dim3(warp_threads, 1, 1), 0, stream >>> (scale, rem, A, lda, D); break;
+    case 4: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, warp_threads, items_per_thread, 4>
+      <<< grid, dim3(warp_threads, 1, 1), 0, stream >>> (scale, rem, A, lda, D); break;
+    case 8: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, warp_threads, items_per_thread, 8>
+      <<< grid, dim3(warp_threads, 1, 1), 0, stream >>> (scale, rem, A, lda, D); break;
+    case 16: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, warp_threads, items_per_thread, 16>
+      <<< grid, dim3(warp_threads, 2, 1), 0, stream >>> (scale, rem, A, lda, D); break;
+    case 32: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, warp_threads, items_per_thread, 32>
+      <<< grid, dim3(warp_threads, 4, 1), 0, stream >>> (scale, rem, A, lda, D); break;
+    case 64: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, warp_threads, items_per_thread, 64>
+      <<< grid, dim3(warp_threads, 8, 1), 0, stream >>> (scale, rem, A, lda, D); break;
     default: break;
   }
 }
