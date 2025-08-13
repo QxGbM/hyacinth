@@ -77,7 +77,7 @@ namespace device::qf {
     return normalize(make_float4(r0, a0.x, a0.y, a.w + b.w + b.z + a1.y + a1.x));
   }
 
-  __host__ __device__ __forceinline__ float4 add_df(float4 a, float2 b) {
+  __host__ __device__ __forceinline__ float4 add_float2(float4 a, float2 b) {
     float2 a0, a1;
     fadd2_err(make_float2(a.x, a.y), make_float2(b.x, b.y), a0, a1);
 
@@ -147,10 +147,6 @@ namespace device::qf {
     x = mul(x, fma(x, mul(a, x), c));
 
     return fscalbn(x, p);
-  }
-
-  __host__ __device__ __forceinline__ complex_float4 negate(complex_float4 a) {
-    return make_complex_float4(negate(a.real), negate(a.imag));
   }
 
   __host__ __device__ __forceinline__ complex_float4 conj(complex_float4 a) {

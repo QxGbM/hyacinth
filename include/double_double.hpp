@@ -71,7 +71,7 @@ namespace device::dd {
     return make_double2(s, a.y + delta);
   }
 
-  __host__ __device__ __forceinline__ double2 add_sd(double2 a, double b) {
+  __host__ __device__ __forceinline__ double2 add_double(double2 a, double b) {
     double2 c = normalize(make_double2(a.x, b));
     c.y += a.y;
 
@@ -131,10 +131,6 @@ namespace device::dd {
     x = mul(x, fma(x, mul(a, x), c));
 
     return fscalbn(x, p);
-  }
-
-  __host__ __device__ __forceinline__ complex_double2 negate(complex_double2 a) {
-    return make_complex_double2(negate(a.real), negate(a.imag));
   }
 
   __host__ __device__ __forceinline__ complex_double2 conj(complex_double2 a) {

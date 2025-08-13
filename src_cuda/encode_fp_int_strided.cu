@@ -9,12 +9,12 @@
 
 template <int32_t base, class real_t, class matrix_t> struct encode_func {
   const matrix_t* A;
-  const int32_t* vec_e;
+  const int32_t* vec_expon;
   int8_t* B;
   int32_t order;
   int64_t M, lda, ldb, strideB;
-  encode_func(int32_t order, int32_t M, int32_t N, const matrix_t* A, int32_t lda, const int32_t* vec_e, int8_t* B, int32_t ldb) :
-    A(A), vec_e(vec_e), B(B), order(order), M(M), lda(lda), ldb(ldb), strideB(int64_t(N) * int64_t(ldb)) {}
+  encode_func(int32_t order, int32_t M, int32_t N, const matrix_t* A, int32_t lda, const int32_t* vec_expon, int8_t* B, int32_t ldb) :
+    A(A), vec_expon(vec_expon), B(B), order(order), M(M), lda(lda), ldb(ldb), strideB(int64_t(N) * int64_t(ldb)) {}
 
   __device__ __forceinline__ void encode(double f, int32_t vec_e, uint32_t (&code)[4]) {
     int32_t e;
@@ -33,7 +33,7 @@ template <int32_t base, class real_t, class matrix_t> struct encode_func {
     constexpr int32_t code_bytes = sizeof(real_t) * 2;
     union { uint32_t code[code_words]; int8_t bytes[code_bytes]; } c;
     int64_t x = i / M, y = i - M * x;
-    int32_t expon = vec_e[x];
+    int32_t expon = vec_expon[x];
 
     if constexpr(sizeof(real_t) < sizeof(matrix_t)) {
       union { uint32_t code[code_words]; int8_t bytes[code_bytes]; } c_im;
