@@ -105,6 +105,7 @@ namespace device::int8 {
 
   template <uint32_t ORDER>
   __host__ __device__ __forceinline__ void align_expon(uint32_t (&a)[ORDER], int32_t exp_diff) {
+    static_assert(1 <= ORDER && ORDER <= 4, "Integer quantization order must be in [1,4]");
     uint32_t rsft = 32 - ((exp_diff & 3) << 3);
     uint32_t psft = uint32_t(((exp_diff & 3) - exp_diff) >> 2);
     uint32_t b[ORDER + 2];
@@ -126,39 +127,27 @@ namespace device::int8 {
     if constexpr(3 < ORDER) a[3] = b[min_u(ORDER + 1, psft + 3)];
   }
 
-  template <uint32_t BASE, uint32_t ORDER>
-  __host__ __device__ __forceinline__ void add_shifted(uint32_t (&a)[ORDER], int32_t i, uint32_t expon) {
-    static_assert(4 <= BASE && BASE <= 7, "BASE must be in [4,7]");
-    static_assert(1 <= ORDER && ORDER <= 5, "ORDER must be in [1,5]");
+  template <uint32_t ORDER>
+  __host__ __device__ __forceinline__ void add_shifted(uint32_t (&a)[ORDER], int32_t i, int32_t expon) {
+    static_assert(1 <= ORDER && ORDER <= 5, "Integer accumulation order must be in [1,5]");
 
-    constexpr uint32_t base_4x = 4 * BASE;
-    constexpr uint32_t iBASE = (uint32_t(1) << base_4x) - 1;
-    constexpr int32_t small_base = (BASE <= 5);
-    constexpr uint32_t len_b = 5 + small_base;
+    constexpr uint32_t iBASE = ~(uint32_t(1) << 31);
+    int32_t quo, rem;
+    fast_division_i32<31>(expon, quo, rem);
 
-    uint32_t sign = uint32_t(i >> 31) & iBASE;
-    int64_t frac = int64_t(i) << uint32_t(BASE * (expon & 3));
-    int32_t expon_b = 1 - int32_t(expon >> 2);
-
-    uint32_t b[len_b];
+    int64_t frac = int64_t(i) << rem;
+    uint32_t sign = uint32_t(i >> 31) & iBASE, b[4];
     b[0] = 0;
     b[1] = uint32_t(frac) & iBASE;
-    b[2] = uint32_t(frac >> base_4x) & iBASE;
-    b[3] = uint32_t(frac >> (2 * base_4x)) & iBASE;
-
-    if constexpr(small_base) {
-      b[4] = uint32_t(frac >> (3 * base_4x)) & iBASE;
-      b[5] = sign;
-    }
-    else
-      b[4] = sign;
+    b[2] = uint32_t(frac >> 31) & iBASE;
+    b[3] = sign;
     
     auto clamp = [](int32_t x, int32_t lo, int32_t hi) { return x < lo ? lo : (x < hi ? x : hi); };
-    a[0] += b[clamp(expon_b, 0, len_b - 1)];
-    if constexpr(1 < ORDER) a[1] += b[clamp(expon_b + 1, 0, len_b - 1)] + (a[0] >> base_4x);
-    if constexpr(2 < ORDER) a[2] += b[clamp(expon_b + 2, 0, len_b - 1)] + (a[1] >> base_4x);
-    if constexpr(3 < ORDER) a[3] += b[clamp(expon_b + 3, 0, len_b - 1)] + (a[2] >> base_4x);
-    if constexpr(4 < ORDER) a[4] += b[clamp(expon_b + 4, 0, len_b - 1)] + (a[3] >> base_4x);
+    a[0] += b[clamp(1 - quo, 0, 3)];
+    if constexpr(1 < ORDER) a[1] += b[clamp(2 - quo, 0, 3)] + (a[0] >> 31);
+    if constexpr(2 < ORDER) a[2] += b[clamp(3 - quo, 0, 3)] + (a[1] >> 31);
+    if constexpr(3 < ORDER) a[3] += b[clamp(4 - quo, 0, 3)] + (a[2] >> 31);
+    if constexpr(4 < ORDER) a[4] += b[clamp(5 - quo, 0, 3)] + (a[3] >> 31);
     
     a[0] = a[0] & iBASE;
     if constexpr(1 < ORDER) a[1] = a[1] & iBASE;
