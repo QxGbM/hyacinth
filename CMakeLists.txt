@@ -26,7 +26,6 @@ set(CU_SOURCES
   src_cuda/imax_diag.cu
   src_cuda/reduce_scal.cu
   src_cuda/swap_cols.cu
-  src_cuda/strided_i8_gemm_complex.cu
   src_cuda/strided_i8_gemm_real.cu
 )
 

@@ -71,15 +71,6 @@ namespace device::dd {
     return make_double2(s, a.y + delta);
   }
 
-  __host__ __device__ __forceinline__ double2 add_double(double2 a, double b) {
-    double2 c = normalize(make_double2(a.x, b));
-    c.y += a.y;
-
-    double s = c.x + c.y;
-    double delta = c.x - s;
-    return make_double2(s, c.y + delta);
-  }
-
   __host__ __device__ __forceinline__ double2 mul(double2 a, double2 b) {
     double2 d;
 #ifdef __CUDA_ARCH__
@@ -131,6 +122,58 @@ namespace device::dd {
     x = mul(x, fma(x, mul(a, x), c));
 
     return fscalbn(x, p);
+  }
+
+  __host__ __device__ __forceinline__ double2 add_double(double2 a, double b) {
+    double2 c = normalize(make_double2(a.x, b));
+    c.y += a.y;
+
+    double s = c.x + c.y;
+    double delta = c.x - s;
+    return make_double2(s, c.y + delta);
+  }
+
+  __host__ __device__ __forceinline__ double conv_i31_f64(uint32_t i, int32_t expon) {
+#ifndef __CUDA_ARCH__
+    using std::scalbn;
+#endif
+    int32_t sign_i = int32_t(i) | (int32_t(i << 1) & (1 << 31));
+    return scalbn(double(sign_i), expon);
+  }
+
+  __host__ __device__ __forceinline__ double conv_u31_f64(uint32_t i, int32_t expon) {
+#ifndef __CUDA_ARCH__
+    using std::scalbn;
+#endif
+    return scalbn(double(i), expon);
+  }
+
+  template<int32_t ORDER>
+  __host__ __device__ __forceinline__ double2 conv_i31(uint32_t const (&code)[ORDER], int32_t expon) {
+    static_assert(1 <= ORDER && ORDER <= 6, "Integer order must be in [1,6]");
+
+    if constexpr(1 == ORDER)
+      return make_double2(conv_i31_f64(code[0], expon), 0.);
+    else if constexpr(2 == ORDER)
+      return normalize(make_double2(conv_i31_f64(code[1], expon + 31), conv_u31_f64(code[0], expon)));
+    else if constexpr(3 == ORDER) {
+      double2 res = normalize(make_double2(conv_i31_f64(code[2], expon + 31), conv_u31_f64(code[1], expon)));
+      return add_double(fscalbn(res, 31), conv_u31_f64(code[0], expon));
+    }
+    else if constexpr(4 == ORDER) {
+      double2 res = normalize(make_double2(conv_i31_f64(code[3], expon + 31), conv_u31_f64(code[2], expon)));
+      return add(fscalbn(res, 62), normalize(make_double2(conv_u31_f64(code[1], expon + 31), conv_u31_f64(code[0], expon))));
+    }
+    else if constexpr(5 == ORDER) {
+      double2 res = normalize(make_double2(conv_i31_f64(code[4], expon + 31), conv_u31_f64(code[3], expon)));
+      res = add(fscalbn(res, 62), normalize(make_double2(conv_u31_f64(code[2], expon + 31), conv_u31_f64(code[1], expon))));
+      return add_double(fscalbn(res, 31), conv_u31_f64(code[0], expon));
+    }
+    else {
+      double2 res = normalize(make_double2(conv_i31_f64(code[5], expon + 31), conv_u31_f64(code[4], expon)));
+      res = add(fscalbn(res, 62), normalize(make_double2(conv_u31_f64(code[3], expon + 31), conv_u31_f64(code[2], expon))));
+      return add(fscalbn(res, 62), normalize(make_double2(conv_u31_f64(code[1], expon + 31), conv_u31_f64(code[0], expon))));
+    }
   }
 
   __host__ __device__ __forceinline__ complex_double2 conj(complex_double2 a) {

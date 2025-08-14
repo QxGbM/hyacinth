@@ -126,12 +126,12 @@ namespace internal::int8 {
 
   void planar_to_interleave_f128_qf(cudaStream_t stream, int32_t N, const float4* A, int32_t lda, int32_t gemm_expon, const int32_t* vec_expon, complex_float4* B, int32_t ldb);
 
-  void decode_f64_strided_i32(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t N, double* A, const int32_t* B, int32_t ld);
+  void decode_f64_strided_i32(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t order_k, int32_t N, double* A, const int32_t* B, int32_t ld);
 
-  void decode_f32_strided_i32(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t N, float* A, const int32_t* B, int32_t ld);
+  void decode_f32_strided_i32(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t order_k, int32_t N, float* A, const int32_t* B, int32_t ld);
 
-  void decode_dd_strided_i32(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t N, double2* A, const int32_t* B, int32_t ld);
+  void decode_dd_strided_i32(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t order_k, int32_t N, double2* A, const int32_t* B, int32_t ld);
 
-  void decode_qf_strided_i32(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t N, float4* A, const int32_t* B, int32_t ld);
+  void decode_qf_strided_i32(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t order_k, int32_t N, float4* A, const int32_t* B, int32_t ld);
 
 };

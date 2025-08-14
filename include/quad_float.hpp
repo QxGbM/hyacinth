@@ -66,6 +66,15 @@ namespace device::qf {
     return make_float4(a0.x, a0.y, a1.x, a1.y);
   }
 
+  __host__ __device__ __forceinline__ float2 add(float2 a, float2 b) {
+    fadd2_err(a, b, a, b);
+    a.y += b.x + b.y;
+
+    float s = a.x + a.y;
+    float delta = a.x - s;
+    return make_float2(s, a.y + delta);
+  }
+
   __host__ __device__ __forceinline__ float4 add(float4 a, float4 b) {
     float2 a0, a1;
     fadd2_err(make_float2(a.x, a.y), make_float2(b.x, b.y), a0, a1); // 1122 - 1223
@@ -75,16 +84,6 @@ namespace device::qf {
     fadd2_err(make_float2(a0.y, a.z), a1, a0, a1); // 2233 - 2334, 4@a1.y
     fadd_err(a0.y, a1.x, a0.y, a1.x); // 33 - 34, 4@a1.x
     return normalize(make_float4(r0, a0.x, a0.y, a.w + b.w + b.z + a1.y + a1.x));
-  }
-
-  __host__ __device__ __forceinline__ float4 add_float2(float4 a, float2 b) {
-    float2 a0, a1;
-    fadd2_err(make_float2(a.x, a.y), make_float2(b.x, b.y), a0, a1);
-
-    float r0 = a0.x;
-    fadd2_err(make_float2(a0.y, a.z), a1, a0, a1);
-    fadd_err(a0.y, a1.x, a0.y, a1.x);
-    return normalize(make_float4(r0, a0.x, a0.y, a.w + a1.y + a1.x));
   }
 
   __host__ __device__ __forceinline__ void fmul2_err(float2 a, float2 b, float2& prod, float2& err) {
@@ -147,6 +146,88 @@ namespace device::qf {
     x = mul(x, fma(x, mul(a, x), c));
 
     return fscalbn(x, p);
+  }
+
+  __host__ __device__ __forceinline__ float4 add_float2(float4 a, float2 b) {
+    float2 a0, a1;
+    fadd2_err(make_float2(a.x, a.y), make_float2(b.x, b.y), a0, a1);
+
+    float r0 = a0.x;
+    fadd2_err(make_float2(a0.y, a.z), a1, a0, a1);
+    fadd_err(a0.y, a1.x, a0.y, a1.x);
+    return normalize(make_float4(r0, a0.x, a0.y, a.w + a1.y + a1.x));
+  }
+
+  __host__ __device__ __forceinline__ float2 conv_i31_f32(uint32_t i, int32_t expon) {
+#ifndef __CUDA_ARCH__
+    using std::scalbnf;
+#endif
+    int32_t sign_i = int32_t(i) | (int32_t(i << 1) & (1 << 31));
+    float c1 = float(sign_i);
+    float c2 = float(sign_i + int32_t(-c1));
+    return make_float2(scalbnf(c1, expon), scalbnf(c2, expon));
+  }
+
+  __host__ __device__ __forceinline__ float2 conv_u31_f32(uint32_t i, int32_t expon) {
+#ifndef __CUDA_ARCH__
+    using std::scalbnf;
+#endif
+    float c1 = float(i);
+    float c2 = float(int32_t(i) + int32_t(-c1));
+    return make_float2(scalbnf(c1, expon), scalbnf(c2, expon));
+  }
+
+  template<int32_t ORDER>
+  __host__ __device__ __forceinline__ float4 conv_i31(uint32_t const (&code)[ORDER], int32_t expon) {
+    static_assert(1 <= ORDER && ORDER <= 6, "Integer order must be in [1,6]");
+
+    if constexpr(1 == ORDER) {
+      float2 c0 = conv_i31_f32(code[0], expon);
+      return make_float4(c0.x, c0.y, 0.f, 0.f);
+    }
+    else if constexpr(2 == ORDER) {
+      float2 c1 = conv_i31_f32(code[1], expon + 31);
+      float2 c0 = conv_u31_f32(code[0], expon);
+      return normalize(make_float4(c1.x, c1.y, c0.x, c0.y));
+    }
+    else if constexpr(3 == ORDER) {
+      float2 c1 = conv_i31_f32(code[2], expon + 31);
+      float2 c0 = conv_u31_f32(code[1], expon);
+      float4 res = normalize(make_float4(c1.x, c1.y, c0.x, c0.y));
+      return add_float2(fscalbn(res, 31), conv_u31_f32(code[0], expon));
+    }
+    else if constexpr(4 == ORDER) {
+      float2 c1 = conv_i31_f32(code[3], expon + 31);
+      float2 c0 = conv_u31_f32(code[2], expon);
+      float4 res = normalize(make_float4(c1.x, c1.y, c0.x, c0.y));
+      
+      c1 = conv_u31_f32(code[1], expon + 31);
+      c0 = conv_u31_f32(code[0], expon);
+      return add(fscalbn(res, 62), normalize(make_float4(c1.x, c1.y, c0.x, c0.y)));
+    }
+    if constexpr(5 == ORDER) {
+      float2 c1 = conv_i31_f32(code[4], expon + 31);
+      float2 c0 = conv_u31_f32(code[3], expon);
+      float4 res = normalize(make_float4(c1.x, c1.y, c0.x, c0.y));
+      
+      c1 = conv_u31_f32(code[2], expon + 31);
+      c0 = conv_u31_f32(code[1], expon);
+      res = add(fscalbn(res, 62), normalize(make_float4(c1.x, c1.y, c0.x, c0.y)));
+      return add_float2(fscalbn(res, 31), conv_u31_f32(code[0], expon));
+    }
+    else {
+      float2 c1 = conv_i31_f32(code[5], expon + 31);
+      float2 c0 = conv_u31_f32(code[4], expon);
+      float4 res = normalize(make_float4(c1.x, c1.y, c0.x, c0.y));
+      
+      c1 = conv_u31_f32(code[3], expon + 31);
+      c0 = conv_u31_f32(code[2], expon);
+      res = add(fscalbn(res, 62), normalize(make_float4(c1.x, c1.y, c0.x, c0.y)));
+
+      c1 = conv_u31_f32(code[1], expon + 31);
+      c0 = conv_u31_f32(code[0], expon);
+      return add(fscalbn(res, 62), normalize(make_float4(c1.x, c1.y, c0.x, c0.y)));
+    }
   }
 
   __host__ __device__ __forceinline__ complex_float4 conj(complex_float4 a) {

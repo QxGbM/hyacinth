@@ -29,7 +29,7 @@ int32_t main(int32_t argc, char* argv[]) {
 
   device::QR::geqp3_params params;
   device::QR::dgeqp3_ronly_params_query(&params, epi, M, N);
-  device::QR::set_quad_float_as_fp128(&params);
+  //device::QR::set_quad_float_as_fp128(&params);
 
   std::cout << "DGEQP3 <" << M << ", " << N << ">\n";
   std::cout << "Epi: " << epi << "\n";

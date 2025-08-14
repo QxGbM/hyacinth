@@ -32,15 +32,15 @@ namespace device::int8 {
 
   template <uint32_t BASE>
   __host__ __device__ __forceinline__ uint32_t pack_4x_int(uint32_t a, uint32_t sign) {
-    constexpr uint32_t i31 = (uint32_t(1) << BASE) - 1;
+    constexpr uint32_t iBASE = (uint32_t(1) << BASE) - 1;
     constexpr uint32_t lsft_1x = 8 - BASE;
     constexpr uint32_t lsft_2x = 16 - 2 * BASE;
     constexpr uint32_t lsft_3x = 24 - 3 * BASE;
     
-    uint32_t a0 = a & i31;
-    uint32_t a1 = (a << lsft_1x) & (i31 << 8);
-    uint32_t a2 = (a << lsft_2x) & (i31 << 16);
-    uint32_t a3 = (a << lsft_3x) & (i31 << 24);
+    uint32_t a0 = a & iBASE;
+    uint32_t a1 = (a << lsft_1x) & (iBASE << 8);
+    uint32_t a2 = (a << lsft_2x) & (iBASE << 16);
+    uint32_t a3 = (a << lsft_3x) & (iBASE << 24);
     a = (a0 | a1) | (a2 | a3);
 
 #ifdef __CUDA_ARCH__
@@ -134,7 +134,7 @@ namespace device::int8 {
 
   template <uint32_t ORDER>
   __host__ __device__ __forceinline__ void add_shifted(uint32_t (&a)[ORDER], int32_t i, int32_t expon) {
-    static_assert(1 <= ORDER && ORDER <= 5, "Integer accumulation order must be in [1,5]");
+    static_assert(1 <= ORDER && ORDER <= 6, "Integer accumulation order must be in [1,6]");
 
     constexpr uint32_t i31 = ~(uint32_t(1) << 31);
     int32_t quo, rem;
@@ -146,12 +146,14 @@ namespace device::int8 {
     if constexpr(2 < ORDER) a[2] += b[clamp_i32(3 - quo, 0, 3)] + (a[1] >> 31);
     if constexpr(3 < ORDER) a[3] += b[clamp_i32(4 - quo, 0, 3)] + (a[2] >> 31);
     if constexpr(4 < ORDER) a[4] += b[clamp_i32(5 - quo, 0, 3)] + (a[3] >> 31);
+    if constexpr(5 < ORDER) a[5] += b[clamp_i32(6 - quo, 0, 3)] + (a[4] >> 31);
     
     a[0] = a[0] & i31;
     if constexpr(1 < ORDER) a[1] = a[1] & i31;
     if constexpr(2 < ORDER) a[2] = a[2] & i31;
     if constexpr(3 < ORDER) a[3] = a[3] & i31;
     if constexpr(4 < ORDER) a[4] = a[4] & i31;
+    if constexpr(5 < ORDER) a[5] = a[5] & i31;
   }
 
 };
