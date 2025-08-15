@@ -32,12 +32,9 @@ int32_t main(int32_t argc, char* argv[]) {
 
   std::cout << "SGEQP3 <" << M << ", " << N << ">\n";
   std::cout << "Epi: " << epi << "\n";
-  std::cout << "acc-bits: " << params.acc_bits << "\n";
   std::cout << "orderA: " << params.orderA << "\n";
-  std::cout << "orderC: " << params.orderC << "\n";
   std::cout << "IGEMM k=" << params.iter_k << "\n";
   std::cout << "i8 bytes: " << params.n_i8 << "\n";
-  std::cout << "i32 bytes: " << 4*params.n_i32 << "\n";
   std::cout << "Matrix elements: " << params.n_elem << "\n";
   std::cout << "Matrix element bytes: " << params.elem_bytes << "\n";
   std::cout << "Total work bytes: " << params.work_bytes << "\n" << std::endl;

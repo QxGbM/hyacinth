@@ -7,7 +7,7 @@
 #include <thrust/iterator/counting_iterator.h>
 #include <thrust/execution_policy.h>
 
-template <int32_t base, class real_t, class matrix_t> struct encode_func {
+template <class real_t, class matrix_t> struct encode_func {
   const matrix_t* A;
   const int32_t* vec_expon;
   int8_t* B;
@@ -18,13 +18,13 @@ template <int32_t base, class real_t, class matrix_t> struct encode_func {
 
   __device__ __forceinline__ void encode(double f, int32_t vec_e, uint32_t (&code)[4]) {
     int32_t e;
-    device::int8::encode_double<base>(f, e, code);
+    device::int8::encode_double<device::Config::exp_base>(f, e, code);
     device::int8::align_expon(code, e - vec_e);
   }
 
   __device__ __forceinline__ void encode(float f, int32_t vec_e, uint32_t (&code)[2]) {
     int32_t e;
-    device::int8::encode_float<base>(f, e, code);
+    device::int8::encode_float<device::Config::exp_base>(f, e, code);
     device::int8::align_expon(code, e - vec_e);
   }
 
@@ -66,24 +66,24 @@ template <int32_t base, class real_t, class matrix_t> struct encode_func {
 
 void internal::int8::encode_f64(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const double* C, int32_t ldc, const int32_t* vec_expon, int8_t* A, int32_t lda) {
   thrust::counting_iterator<int64_t> iter(0);
-  encode_func<device::Config::exp_base, double, double> encode(order, M, N, C, ldc, vec_expon, A, lda);
+  encode_func<double, double> encode(order, M, N, C, ldc, vec_expon, A, lda);
   thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, uint64_t(M) * uint64_t(N), encode);
 }
 
 void internal::int8::encode_f32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const float* C, int32_t ldc, const int32_t* vec_expon, int8_t* A, int32_t lda) {
   thrust::counting_iterator<int64_t> iter(0);
-  encode_func<device::Config::exp_base, float, float> encode(order, M, N, C, ldc, vec_expon, A, lda);
+  encode_func<float, float> encode(order, M, N, C, ldc, vec_expon, A, lda);
   thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, uint64_t(M) * uint64_t(N), encode);
 }
 
 void internal::int8::encode_cf64(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<double>* C, int32_t ldc, const int32_t* vec_expon, int8_t* A, int32_t lda) {
   thrust::counting_iterator<int64_t> iter(0);
-  encode_func<device::Config::exp_base, double, double2> encode(order, M, N, (double2*)C, ldc, vec_expon, A, lda);
+  encode_func<double, double2> encode(order, M, N, (double2*)C, ldc, vec_expon, A, lda);
   thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, uint64_t(M) * uint64_t(N), encode);
 }
 
 void internal::int8::encode_cf32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<float>* C, int32_t ldc, const int32_t* vec_expon, int8_t* A, int32_t lda) {
   thrust::counting_iterator<int64_t> iter(0);
-  encode_func<device::Config::exp_base, float, float2> encode(order, M, N, (float2*)C, ldc, vec_expon, A, lda);
+  encode_func<float, float2> encode(order, M, N, (float2*)C, ldc, vec_expon, A, lda);
   thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, uint64_t(M) * uint64_t(N), encode);
 }

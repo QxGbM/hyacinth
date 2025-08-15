@@ -9,7 +9,7 @@
 #include <thrust/iterator/counting_iterator.h>
 #include <thrust/execution_policy.h>
 
-template <int32_t base, class real_t> struct scalbn_func {
+template <class real_t> struct scalbn_func {
   real_t* A;
   const int32_t* vec_expon;
   int32_t gemm_expon;
@@ -33,36 +33,36 @@ template <int32_t base, class real_t> struct scalbn_func {
   __device__ __forceinline__ void operator()(int64_t i) {
     int64_t x = i / N, y = i - N * x;
     real_t f = A[y + x * lda];
-    int32_t expon = base * (vec_expon[x] + vec_expon[y] + gemm_expon);
+    int32_t expon = device::Config::exp_base * (vec_expon[x] + vec_expon[y] + gemm_expon);
     A[y + x * lda] = scal(expon, f);
   }
 };
 
 void internal::int8::scal_exponent_f64(cudaStream_t stream, int32_t N, double* A, int32_t lda, int32_t gemm_expon, const int32_t* vec_expon) {
   thrust::counting_iterator<int64_t> iter(0);
-  scalbn_func<device::Config::exp_base, double> conv(N, A, lda, gemm_expon, vec_expon);
+  scalbn_func<double> conv(N, A, lda, gemm_expon, vec_expon);
   thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, uint64_t(N) * uint64_t(N), conv);
 }
 
 void internal::int8::scal_exponent_f32(cudaStream_t stream, int32_t N, float* A, int32_t lda, int32_t gemm_expon, const int32_t* vec_expon) {
   thrust::counting_iterator<int64_t> iter(0);
-  scalbn_func<device::Config::exp_base, float> conv(N, A, lda, gemm_expon, vec_expon);
+  scalbn_func<float> conv(N, A, lda, gemm_expon, vec_expon);
   thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, uint64_t(N) * uint64_t(N), conv);
 }
 
 void internal::int8::scal_exponent_f128_dd(cudaStream_t stream, int32_t N, double2* A, int32_t lda, int32_t gemm_expon, const int32_t* vec_expon) {
   thrust::counting_iterator<int64_t> iter(0);
-  scalbn_func<device::Config::exp_base, double2> conv(N, A, lda, gemm_expon, vec_expon);
+  scalbn_func<double2> conv(N, A, lda, gemm_expon, vec_expon);
   thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, uint64_t(N) * uint64_t(N), conv);
 }
 
 void internal::int8::scal_exponent_f128_qf(cudaStream_t stream, int32_t N, float4* A, int32_t lda, int32_t gemm_expon, const int32_t* vec_expon) {
   thrust::counting_iterator<int64_t> iter(0);
-  scalbn_func<device::Config::exp_base, float4> conv(N, A, lda, gemm_expon, vec_expon);
+  scalbn_func<float4> conv(N, A, lda, gemm_expon, vec_expon);
   thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, uint64_t(N) * uint64_t(N), conv);
 }
 
-template <int32_t base, class real_t, class complex_t> struct convert_func {
+template <class real_t, class complex_t> struct convert_func {
   const real_t* A;
   const int32_t* vec_expon;
   complex_t* B;
@@ -89,31 +89,31 @@ template <int32_t base, class real_t, class complex_t> struct convert_func {
     real_t real = A[y + x * lda];
     real_t imagA = A[strideA + y + x * lda];
     real_t imagAT = A[strideA + x + y * lda];
-    int32_t expon = base * (vec_expon[x] + vec_expon[y] + gemm_expon);
+    int32_t expon = device::Config::exp_base * (vec_expon[x] + vec_expon[y] + gemm_expon);
     B[y + x * ldb] = conv(expon, real, imagA, imagAT);
   }
 };
 
 void internal::int8::planar_to_interleave_f64(cudaStream_t stream, int32_t N, const double* A, int32_t lda, int32_t gemm_expon, const int32_t* vec_expon, std::complex<double>* B, int32_t ldb) {
   thrust::counting_iterator<int64_t> iter(0);
-  convert_func<device::Config::exp_base, double, cuDoubleComplex> conv(N, A, lda, gemm_expon, vec_expon, (cuDoubleComplex*)B, ldb);
+  convert_func<double, cuDoubleComplex> conv(N, A, lda, gemm_expon, vec_expon, (cuDoubleComplex*)B, ldb);
   thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, uint64_t(N) * uint64_t(N), conv);
 }
 
 void internal::int8::planar_to_interleave_f32(cudaStream_t stream, int32_t N, const float* A, int32_t lda, int32_t gemm_expon, const int32_t* vec_expon, std::complex<float>* B, int32_t ldb) {
   thrust::counting_iterator<int64_t> iter(0);
-  convert_func<device::Config::exp_base, float, cuComplex> conv(N, A, lda, gemm_expon, vec_expon, (cuComplex*)B, ldb);
+  convert_func<float, cuComplex> conv(N, A, lda, gemm_expon, vec_expon, (cuComplex*)B, ldb);
   thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, uint64_t(N) * uint64_t(N), conv);
 }
 
 void internal::int8::planar_to_interleave_f128_dd(cudaStream_t stream, int32_t N, const double2* A, int32_t lda, int32_t gemm_expon, const int32_t* vec_expon, complex_double2* B, int32_t ldb) {
   thrust::counting_iterator<int64_t> iter(0);
-  convert_func<device::Config::exp_base, double2, complex_double2> conv(N, A, lda, gemm_expon, vec_expon, B, ldb);
+  convert_func<double2, complex_double2> conv(N, A, lda, gemm_expon, vec_expon, B, ldb);
   thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, uint64_t(N) * uint64_t(N), conv);
 }
 
 void internal::int8::planar_to_interleave_f128_qf(cudaStream_t stream, int32_t N, const float4* A, int32_t lda, int32_t gemm_expon, const int32_t* vec_expon, complex_float4* B, int32_t ldb) {
   thrust::counting_iterator<int64_t> iter(0);
-  convert_func<device::Config::exp_base, float4, complex_float4> conv(N, A, lda, gemm_expon, vec_expon, B, ldb);
+  convert_func<float4, complex_float4> conv(N, A, lda, gemm_expon, vec_expon, B, ldb);
   thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, uint64_t(N) * uint64_t(N), conv);
 }
