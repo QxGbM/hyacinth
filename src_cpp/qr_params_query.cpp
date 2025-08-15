@@ -15,12 +15,11 @@ void device::QR::dgeqp3_ronly_params_query(geqp3_params* params, double epi, int
   params->acc_bits = std::max(1, int32_t(std::ceil(2 * epi)));
   params->elem_bytes = params->acc_bits <= 24 ? 4 : (params->acc_bits <= 53 ? 8 : 16);
   params->iter_k = 24 - 2 * device::Config::exp_base;
-  params->split_k = 3;
   params->use_fp64_over_32 = 1;
 
   params->n_i8 = uint64_t(params->algnM) * uint64_t(N) * uint64_t(params->orderA);
   params->n_i8 = (params->n_i8 + uint64_t(255)) & (~uint64_t(255));
-  params->n_i32 = uint64_t(params->algnN) * uint64_t(N) * uint64_t(params->orderA) * uint64_t(1 << (params->split_k)) ;
+  params->n_i32 = uint64_t(params->algnN) * uint64_t(N) * uint64_t(params->orderC);
   params->n_elem = uint64_t(params->algnN) * uint64_t(N + 1);
   params->work_bytes = params->n_i8 + params->n_i32 * 4 + params->n_elem * params->elem_bytes;
 }
@@ -37,7 +36,6 @@ void device::QR::sgeqp3_ronly_params_query(geqp3_params* params, float epi, int3
   params->acc_bits = std::max(1, int32_t(std::ceil(2 * epi)));
   params->elem_bytes = params->acc_bits <= 24 ? 4 : 8;
   params->iter_k = 24 - 2 * device::Config::exp_base;
-  params->split_k = 2;
   params->use_fp64_over_32 = 1;
 
   params->n_i8 = uint64_t(params->algnM) * uint64_t(N) * uint64_t(params->orderA);
@@ -59,7 +57,6 @@ void device::QR::zgeqp3_ronly_params_query(geqp3_params* params, double epi, int
   params->acc_bits = std::max(1, int32_t(std::ceil(2 * epi)));
   params->elem_bytes = params->acc_bits <= 24 ? 8 : (params->acc_bits <= 53 ? 16 : 32);
   params->iter_k = 24 - 2 * device::Config::exp_base;
-  params->split_k = 2;
   params->use_fp64_over_32 = 1;
 
   params->n_i8 = 2 * uint64_t(params->algnM) * uint64_t(N) * uint64_t(params->orderA);
@@ -81,7 +78,6 @@ void device::QR::cgeqp3_ronly_params_query(geqp3_params* params, float epi, int3
   params->acc_bits = std::max(1, int32_t(std::ceil(2 * epi)));
   params->elem_bytes = params->acc_bits <= 24 ? 8 : 16;
   params->iter_k = 24 - 2 * device::Config::exp_base;
-  params->split_k = 2;
   params->use_fp64_over_32 = 1;
 
   params->n_i8 = 2 * uint64_t(params->algnM) * uint64_t(N) * uint64_t(params->orderA);

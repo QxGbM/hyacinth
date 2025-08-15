@@ -22,7 +22,7 @@ int32_t device::QR::dgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
 
   if (elem_bytes == 4) {
     float* mat_f32 = (float*)mat;
-    internal::int8::r8i_TN_gemm_stridedA_f32(stream, handle, N, params.iter_k, params.split_k, algnN, algnM, iA, orderA, mat_f32, AHA);
+    internal::int8::r8i_TN_gemm_stridedA_f32(stream, handle, N, params.iter_k, algnN, algnM, iA, orderA, mat_f32, AHA);
     internal::int8::scal_exponent_f32(stream, N, mat_f32, algnN, orderA, vexp);
 
     ret = device::Cholesky::spotrfp(stream, N, mat_f32, algnN, ipiv);
@@ -30,7 +30,7 @@ int32_t device::QR::dgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
   }
   else if (elem_bytes == 8) {
     double* mat_f64 = (double*)mat;
-    internal::int8::r8i_TN_gemm_stridedA_f64(stream, handle, N, params.iter_k, params.split_k, algnN, algnM, iA, orderA, mat_f64, AHA);
+    internal::int8::r8i_TN_gemm_stridedA_f64(stream, handle, N, params.iter_k, algnN, algnM, iA, orderA, mat_f64, AHA);
     internal::int8::scal_exponent_f64(stream, N, mat_f64, algnN, orderA, vexp);
 
     ret = device::Cholesky::dpotrfp(stream, N, mat_f64, algnN, ipiv);
@@ -38,7 +38,7 @@ int32_t device::QR::dgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
   }
   else if (elem_bytes == 16 && params.use_fp64_over_32 == 1) {
     double2* mat_dd = (double2*)mat;
-    internal::int8::r8i_TN_gemm_stridedA_f128_dd(stream, handle, N, params.iter_k, params.split_k, algnN, algnM, iA, orderA, mat_dd, AHA);
+    internal::int8::r8i_TN_gemm_stridedA_f128_dd(stream, handle, N, params.iter_k, algnN, algnM, iA, orderA, mat_dd, AHA);
     internal::int8::scal_exponent_f128_dd(stream, N, mat_dd, algnN, orderA, vexp);
 
     ret = device::Cholesky::double_double_potrfp(stream, N, mat_dd, algnN, ipiv);
@@ -46,7 +46,7 @@ int32_t device::QR::dgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
   }
   else {
     float4* mat_qf = (float4*)mat;
-    internal::int8::r8i_TN_gemm_stridedA_f128_qf(stream, handle, N, params.iter_k, params.split_k, algnN, algnM, iA, orderA, mat_qf, AHA);
+    internal::int8::r8i_TN_gemm_stridedA_f128_qf(stream, handle, N, params.iter_k, algnN, algnM, iA, orderA, mat_qf, AHA);
     internal::int8::scal_exponent_f128_qf(stream, N, mat_qf, algnN, orderA, vexp);
 
     ret = device::Cholesky::quad_float_potrfp(stream, N, mat_qf, algnN, ipiv);
@@ -78,7 +78,7 @@ int32_t device::QR::sgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
 
   if (elem_bytes == 4) {
     float* mat_f32 = (float*)mat;
-    internal::int8::decode_f32_strided_i32(stream, order_lo, order_hi, params.iter_k, 1, N, mat_f32, AHA, algnN);
+    internal::int8::decode_f32_strided_i32(stream, order_lo, order_hi, N, mat_f32, AHA, algnN);
     internal::int8::scal_exponent_f32(stream, N, mat_f32, algnN, gemm_expon, vexp);
 
     ret = device::Cholesky::spotrfp(stream, N, mat_f32, algnN, ipiv);
@@ -86,7 +86,7 @@ int32_t device::QR::sgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
   }
   else {
     double* mat_f64 = (double*)mat;
-    internal::int8::decode_f64_strided_i32(stream, order_lo, order_hi, params.iter_k, 1, N, mat_f64, AHA, algnN);
+    internal::int8::decode_f64_strided_i32(stream, order_lo, order_hi, N, mat_f64, AHA, algnN);
     internal::int8::scal_exponent_f64(stream, N, mat_f64, algnN, gemm_expon, vexp);
 
     ret = device::Cholesky::dpotrfp(stream, N, mat_f64, algnN, ipiv);
@@ -125,8 +125,8 @@ int32_t device::QR::zgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
 
   if (elem_bytes == 8) {
     float* mat_f32 = (float*)mat;
-    internal::int8::decode_f32_strided_i32(stream, order_lo, order_hi, params.iter_k, 1, N, mat_f32, AHA, algnN);
-    internal::int8::decode_f32_strided_i32(stream, order_lo, order_hi, params.iter_k, 1, N, &mat_f32[strideC], AHA_im, algnN);
+    internal::int8::decode_f32_strided_i32(stream, order_lo, order_hi, N, mat_f32, AHA, algnN);
+    internal::int8::decode_f32_strided_i32(stream, order_lo, order_hi, N, &mat_f32[strideC], AHA_im, algnN);
 
     internal::int8::planar_to_interleave_f32(stream, N, mat_f32, algnN, gemm_expon, vexp, (std::complex<float>*)workspace, algnN);
     ret = device::Cholesky::cpotrfp(stream, N, (std::complex<float>*)workspace, algnN, ipiv);
@@ -134,8 +134,8 @@ int32_t device::QR::zgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
   }
   else if (elem_bytes == 16) {
     double* mat_f64 = (double*)mat;
-    internal::int8::decode_f64_strided_i32(stream, order_lo, order_hi, params.iter_k, 1, N, mat_f64, AHA, algnN);
-    internal::int8::decode_f64_strided_i32(stream, order_lo, order_hi, params.iter_k, 1, N, &mat_f64[strideC], AHA_im, algnN);
+    internal::int8::decode_f64_strided_i32(stream, order_lo, order_hi, N, mat_f64, AHA, algnN);
+    internal::int8::decode_f64_strided_i32(stream, order_lo, order_hi, N, &mat_f64[strideC], AHA_im, algnN);
 
     internal::int8::planar_to_interleave_f64(stream, N, mat_f64, algnN, gemm_expon, vexp, (std::complex<double>*)workspace, algnN);
     ret = device::Cholesky::zpotrfp(stream, N, (std::complex<double>*)workspace, algnN, ipiv);
@@ -143,8 +143,8 @@ int32_t device::QR::zgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
   }
   else if (elem_bytes == 32 && params.use_fp64_over_32 == 1) {
     double2* mat_dd = (double2*)mat;
-    internal::int8::decode_f128_dd_strided_i32(stream, order_lo, order_hi, params.iter_k, 1, N, mat_dd, AHA, algnN);
-    internal::int8::decode_f128_dd_strided_i32(stream, order_lo, order_hi, params.iter_k, 1, N, &mat_dd[strideC], AHA_im, algnN);
+    internal::int8::decode_f128_dd_strided_i32(stream, order_lo, order_hi, N, mat_dd, AHA, algnN);
+    internal::int8::decode_f128_dd_strided_i32(stream, order_lo, order_hi, N, &mat_dd[strideC], AHA_im, algnN);
 
     internal::int8::planar_to_interleave_f128_dd(stream, N, mat_dd, algnN, gemm_expon, vexp, (complex_double2*)workspace, algnN);
     ret = device::Cholesky::complex_double_double_potrfp(stream, N, (complex_double2*)workspace, algnN, ipiv);
@@ -152,8 +152,8 @@ int32_t device::QR::zgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
   }
   else {
     float4* mat_qf = (float4*)mat;
-    internal::int8::decode_f128_qf_strided_i32(stream, order_lo, order_hi, params.iter_k, 1, N, mat_qf, AHA, algnN);
-    internal::int8::decode_f128_qf_strided_i32(stream, order_lo, order_hi, params.iter_k, 1, N, &mat_qf[strideC], AHA_im, algnN);
+    internal::int8::decode_f128_qf_strided_i32(stream, order_lo, order_hi, N, mat_qf, AHA, algnN);
+    internal::int8::decode_f128_qf_strided_i32(stream, order_lo, order_hi, N, &mat_qf[strideC], AHA_im, algnN);
 
     internal::int8::planar_to_interleave_f128_qf(stream, N, mat_qf, algnN, gemm_expon, vexp, (complex_float4*)workspace, algnN);
     ret = device::Cholesky::complex_quad_float_potrfp(stream, N, (complex_float4*)workspace, algnN, ipiv);
@@ -192,8 +192,8 @@ int32_t device::QR::cgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
 
   if (elem_bytes == 8) {
     float* mat_f32 = (float*)mat;
-    internal::int8::decode_f32_strided_i32(stream, order_lo, order_hi, params.iter_k, 1, N, mat_f32, AHA, algnN);
-    internal::int8::decode_f32_strided_i32(stream, order_lo, order_hi, params.iter_k, 1, N, &mat_f32[strideC], AHA_im, algnN);
+    internal::int8::decode_f32_strided_i32(stream, order_lo, order_hi, N, mat_f32, AHA, algnN);
+    internal::int8::decode_f32_strided_i32(stream, order_lo, order_hi, N, &mat_f32[strideC], AHA_im, algnN);
 
     internal::int8::planar_to_interleave_f32(stream, N, mat_f32, algnN, gemm_expon, vexp, (std::complex<float>*)workspace, algnN);
     ret = device::Cholesky::cpotrfp(stream, N, (std::complex<float>*)workspace, algnN, ipiv);
@@ -201,8 +201,8 @@ int32_t device::QR::cgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
   }
   else if (elem_bytes == 16) {
     double* mat_f64 = (double*)mat;
-    internal::int8::decode_f64_strided_i32(stream, order_lo, order_hi, params.iter_k, 1, N, mat_f64, AHA, algnN);
-    internal::int8::decode_f64_strided_i32(stream, order_lo, order_hi, params.iter_k, 1, N, &mat_f64[strideC], AHA_im, algnN);
+    internal::int8::decode_f64_strided_i32(stream, order_lo, order_hi, N, mat_f64, AHA, algnN);
+    internal::int8::decode_f64_strided_i32(stream, order_lo, order_hi, N, &mat_f64[strideC], AHA_im, algnN);
 
     internal::int8::planar_to_interleave_f64(stream, N, mat_f64, algnN, gemm_expon, vexp, (std::complex<double>*)workspace, algnN);
     ret = device::Cholesky::zpotrfp(stream, N, (std::complex<double>*)workspace, algnN, ipiv);

@@ -48,7 +48,7 @@ namespace device::QR {
   // work :: device, queried in params, 256 byte aligned
 
   struct geqp3_params {
-    int32_t M, N, algnM, algnN, orderA, orderC, acc_bits, elem_bytes, iter_k, split_k, use_fp64_over_32;
+    int32_t M, N, algnM, algnN, orderA, orderC, acc_bits, elem_bytes, iter_k, use_fp64_over_32;
     uint64_t n_i8, n_i32, n_elem, work_bytes;
   };
 

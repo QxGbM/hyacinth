@@ -11,7 +11,6 @@ find_package(CUDAToolkit REQUIRED)
 
 set(CPP_SOURCES
   src_cpp/geqp3_ronly.cpp
-  src_cpp/i8_gemm.cpp
   src_cpp/potrfp_complex.cpp
   src_cpp/potrfp_real.cpp
   src_cpp/qr_params_query.cpp

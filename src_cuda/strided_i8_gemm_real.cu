@@ -1,77 +1,90 @@
 
 #include <hyacinth.hpp>
 #include <internal.hpp>
-#include <cub/cub.cuh>
 #include <algorithm>
 
-template <int32_t BASE, int32_t ITEMS_PER_THREAD>
-__device__ void signed_normalize(int32_t (&a)[ITEMS_PER_THREAD], int32_t (&c)[ITEMS_PER_THREAD]) {
-  constexpr uint32_t iBASE = (uint32_t(1) << BASE) - 1;
-  #pragma unroll
-  for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i) {
-    int32_t val = a[i] + c[i];
-    int32_t sign = val >> 31;
-    c[i] = (val >> BASE) - sign;
-    a[i] = (val & iBASE) | (sign & ~iBASE);
-  }
-}
+#include <thrust/for_each.h>
+#include <thrust/iterator/counting_iterator.h>
+#include <thrust/execution_policy.h>
 
-template <int32_t ITEMS_PER_THREAD>
-__device__ void signed_sum(int32_t (&a)[ITEMS_PER_THREAD], int32_t const (&c)[ITEMS_PER_THREAD]) {
-  #pragma unroll
-  for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
-    a[i] += c[i];
-}
+template <uint32_t beta, uint32_t N, uint32_t BASE> struct normalize_i32 {
+  int4* A;
+  uint64_t stride;
+  normalize_i32(uint64_t M, int32_t* A) : A((int4*)A), stride(M >> 2) {}
 
-template <int32_t GRID_BLOCKS, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD, int32_t BASE>
-__global__ void normalize_kernel(uint64_t M, int32_t N, int32_t* __restrict__ A, uint64_t lda) {
-  constexpr uint64_t elements_block = ITEMS_PER_THREAD * BLOCK_THREADS;
-  constexpr uint64_t elements = GRID_BLOCKS * elements_block;
-  uint64_t block_offset = blockIdx.x * elements_block;
-  uint64_t M2 = M & (elements_block - 1), M1 = M - M2;
-  uint64_t iter_k = uint64_t(N) * lda;
+  __device__ __forceinline__ void operator()(uint64_t i) {
+    constexpr uint32_t iBASE = (uint32_t(1) << BASE) - 1;
 
-  __shared__ typename cub::BlockLoad<int32_t, BLOCK_THREADS, ITEMS_PER_THREAD>::TempStorage temp_load;
-  __shared__ typename cub::BlockStore<int32_t, BLOCK_THREADS, ITEMS_PER_THREAD>::TempStorage temp_store;
+    int4 A_i = A[i];
+    A[i] = make_int4(A_i.x & iBASE, A_i.y & iBASE, A_i.z & iBASE, A_i.w & iBASE);
+    A_i = make_int4(A_i.x >> BASE, A_i.y >> BASE, A_i.z >> BASE, A_i.w >> BASE);
 
-  cub::BlockLoad<int32_t, BLOCK_THREADS, ITEMS_PER_THREAD> block_load(temp_load);
-  cub::BlockStore<int32_t, BLOCK_THREADS, ITEMS_PER_THREAD> block_store(temp_store);
-  int32_t a[ITEMS_PER_THREAD];
+    #pragma unroll
+    for (uint32_t k = 1; k < N; ++k) {
+      uint64_t j = i + uint64_t(k) * stride;
+      int4 A_k = A[j];
+      int4 val = make_int4(A_i.x + A_k.x, A_i.y + A_k.y, A_i.z + A_k.z, A_i.w + A_k.w);
 
-  for (uint64_t row = block_offset; row < M1; row += elements) {
-    int32_t* A_row = &A[row];
-    int32_t c[ITEMS_PER_THREAD]{};
+      A_k.x = val.x & iBASE;
+      A_k.y = val.y & iBASE;
+      A_k.z = val.z & iBASE;
+      A_k.w = val.w & iBASE;
+      A[j] = A_k;
 
-    for (uint64_t k = 0; k < iter_k; k += lda) {
-      block_load.Load(&A_row[k], a);
-      signed_normalize<BASE>(a, c);
-      block_store.Store(&A_row[k], a);
+      A_i.x = val.x >> BASE;
+      A_i.y = val.y >> BASE;
+      A_i.z = val.z >> BASE;
+      A_i.w = val.w >> BASE;
     }
 
-    block_load.Load(&A_row[iter_k], a);
-    signed_sum(a, c);
-    block_store.Store(&A_row[iter_k], a);
-  }
-
-  if (0 < M2 && blockIdx.x == 0) {
-    int32_t* A_row = &A[M1];
-    int32_t c[ITEMS_PER_THREAD]{};
-
-    for (uint64_t k = 0; k < iter_k; k += lda) {
-      block_load.Load(&A_row[k], a, M2, 0);
-      signed_normalize<BASE>(a, c);
-      block_store.Store(&A_row[k], a, M2);
+    uint64_t j = i + uint64_t(N) * stride;
+    if constexpr (beta) {
+      int4 A_k = A[j];
+      A[j] = make_int4(A_i.x + A_k.x, A_i.y + A_k.y, A_i.z + A_k.z, A_i.w + A_k.w);
     }
+    else
+      A[j] = A_i;
+  }
+};
 
-    block_load.Load(&A_row[iter_k], a, M2);
-    signed_sum(a, c);
-    block_store.Store(&A_row[iter_k], a, M2);
+template <uint32_t beta>
+void normalization_dispatcher(cudaStream_t stream, uint64_t M, int32_t order, int32_t* A) {
+  thrust::counting_iterator<uint64_t> iter(0);
+  auto policy = thrust::cuda::par_nosync.on(stream);
+  switch(order) {
+    case 1: { normalize_i32<beta, 1, device::Config::exp_base> normalize(M, A);
+      thrust::for_each_n(policy, iter, normalize.stride, normalize); break; }
+    case 2: { normalize_i32<beta, 2, device::Config::exp_base> normalize(M, A);
+      thrust::for_each_n(policy, iter, normalize.stride, normalize); break; }
+    case 3: { normalize_i32<beta, 3, device::Config::exp_base> normalize(M, A);
+      thrust::for_each_n(policy, iter, normalize.stride, normalize); break; }
+    case 4: { normalize_i32<beta, 4, device::Config::exp_base> normalize(M, A);
+      thrust::for_each_n(policy, iter, normalize.stride, normalize); break; }
+    case 5: { normalize_i32<beta, 5, device::Config::exp_base> normalize(M, A);
+      thrust::for_each_n(policy, iter, normalize.stride, normalize); break; }
+    case 6: { normalize_i32<beta, 6, device::Config::exp_base> normalize(M, A);
+      thrust::for_each_n(policy, iter, normalize.stride, normalize); break; }
+    case 7: { normalize_i32<beta, 7, device::Config::exp_base> normalize(M, A);
+      thrust::for_each_n(policy, iter, normalize.stride, normalize); break; }
+    case 8: { normalize_i32<beta, 8, device::Config::exp_base> normalize(M, A);
+      thrust::for_each_n(policy, iter, normalize.stride, normalize); break; }
+    case 9: { normalize_i32<beta, 9, device::Config::exp_base> normalize(M, A);
+      thrust::for_each_n(policy, iter, normalize.stride, normalize); break; }
+    case 10: { normalize_i32<beta, 10, device::Config::exp_base> normalize(M, A);
+      thrust::for_each_n(policy, iter, normalize.stride, normalize); break; }
+    case 11: { normalize_i32<beta, 11, device::Config::exp_base> normalize(M, A);
+      thrust::for_each_n(policy, iter, normalize.stride, normalize); break; }
+    case 12: { normalize_i32<beta, 12, device::Config::exp_base> normalize(M, A);
+      thrust::for_each_n(policy, iter, normalize.stride, normalize); break; }
+    case 13: { normalize_i32<beta, 13, device::Config::exp_base> normalize(M, A);
+      thrust::for_each_n(policy, iter, normalize.stride, normalize); break; }
+    case 14: { normalize_i32<beta, 14, device::Config::exp_base> normalize(M, A);
+      thrust::for_each_n(policy, iter, normalize.stride, normalize); break; }
+    case 15: { normalize_i32<beta, 15, device::Config::exp_base> normalize(M, A);
+      thrust::for_each_n(policy, iter, normalize.stride, normalize); break; }
+    default: break;
   }
 }
-
-constexpr int32_t block_threads = 128;
-constexpr int32_t grid_blocks = 2048;
-constexpr int32_t items_per_thread = 4;
 
 void internal::int8::r8i_TN_gemm_stridedA(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32_t iter_k, int32_t algnN, int32_t algnK, const int8_t* AT, const int8_t* A, int32_t orderA, int32_t* C, int32_t orderC) {
   uint64_t strideC = uint64_t(algnN) * uint64_t(N);
@@ -90,8 +103,139 @@ void internal::int8::r8i_TN_gemm_stridedA(cudaStream_t stream, cublasHandle_t ha
       cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * order_i, std::min(algnK - k, iter_k), &one, 
         AT_k, CUDA_R_8I, algnK, AN_k, CUDA_R_8I, algnK, &one, C_i, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
 
-      normalize_kernel <grid_blocks, block_threads, items_per_thread, device::Config::exp_base>
-        <<< grid_blocks, block_threads, 0, stream >>> (strideC, order_i, C_i, strideC);
+      normalization_dispatcher<1>(stream, strideC, order_i, C_i);
+    }
+  }
+}
+
+void internal::int8::r8i_TN_gemm_stridedA_f64(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32_t order_k, int32_t algnN, int32_t algnK, const int8_t* A, int32_t orderA, double* C, int32_t* workspace) {
+  uint64_t strideA = uint64_t(algnK) * uint64_t(N);
+  uint64_t strideC = uint64_t(algnN) * uint64_t(N);
+  int32_t iter_k = 1 << order_k, one = 1, zero = 0;
+  
+  for (int32_t i = 0; i < orderA; ++i) {
+    int32_t first_iter = int32_t(i == 0);
+    int32_t order_i = orderA - first_iter;
+
+    if (algnK <= iter_k) {
+      cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * order_i, algnK, &one, 
+        &A[uint64_t(i) * strideA], CUDA_R_8I, algnK, &A[uint64_t(first_iter) * strideA], CUDA_R_8I, algnK, &zero, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+      decode_f64_strided_i32(stream, i - order_i, i, N, C, workspace, algnN);
+    }
+    else {
+      cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * order_i, iter_k, &one, 
+        &A[uint64_t(i) * strideA], CUDA_R_8I, algnK, &A[uint64_t(first_iter) * strideA], CUDA_R_8I, algnK, &zero, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+      normalization_dispatcher<0>(stream, strideC, order_i, workspace);
+
+      for (int32_t k = iter_k; k < algnK; k += iter_k) {
+        const int8_t* AT_k = &A[uint64_t(k) + uint64_t(i) * strideA];
+        const int8_t* AN_k = &A[uint64_t(k) + uint64_t(first_iter) * strideA];
+
+        if (k != iter_k)
+          normalization_dispatcher<1>(stream, strideC, order_i, workspace);
+        cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * order_i, std::min(algnK - k, iter_k), &one, 
+          AT_k, CUDA_R_8I, algnK, AN_k, CUDA_R_8I, algnK, &one, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+      }
+      decode_f64_strided_i32(stream, i - order_i, i + 1, N, C, workspace, algnN);
+    }
+  }
+}
+
+void internal::int8::r8i_TN_gemm_stridedA_f32(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32_t order_k, int32_t algnN, int32_t algnK, const int8_t* A, int32_t orderA, float* C, int32_t* workspace) {
+  uint64_t strideA = uint64_t(algnK) * uint64_t(N);
+  uint64_t strideC = uint64_t(algnN) * uint64_t(N);
+  int32_t iter_k = 1 << order_k, one = 1, zero = 0;
+  
+  for (int32_t i = 0; i < orderA; ++i) {
+    int32_t first_iter = int32_t(i == 0);
+    int32_t order_i = orderA - first_iter;
+
+    if (algnK <= iter_k) {
+      cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * order_i, algnK, &one, 
+        &A[uint64_t(i) * strideA], CUDA_R_8I, algnK, &A[uint64_t(first_iter) * strideA], CUDA_R_8I, algnK, &zero, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+      decode_f32_strided_i32(stream, i - order_i, i, N, C, workspace, algnN);
+    }
+    else {
+      cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * order_i, iter_k, &one, 
+        &A[uint64_t(i) * strideA], CUDA_R_8I, algnK, &A[uint64_t(first_iter) * strideA], CUDA_R_8I, algnK, &zero, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+      normalization_dispatcher<0>(stream, strideC, order_i, workspace);
+
+      for (int32_t k = iter_k; k < algnK; k += iter_k) {
+        const int8_t* AT_k = &A[uint64_t(k) + uint64_t(i) * strideA];
+        const int8_t* AN_k = &A[uint64_t(k) + uint64_t(first_iter) * strideA];
+
+        if (k != iter_k)
+          normalization_dispatcher<1>(stream, strideC, order_i, workspace);
+        cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * order_i, std::min(algnK - k, iter_k), &one, 
+          AT_k, CUDA_R_8I, algnK, AN_k, CUDA_R_8I, algnK, &one, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+      }
+      decode_f32_strided_i32(stream, i - order_i, i + 1, N, C, workspace, algnN);
+    }
+  }
+}
+
+void internal::int8::r8i_TN_gemm_stridedA_f128_dd(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32_t order_k, int32_t algnN, int32_t algnK, const int8_t* A, int32_t orderA, double2* C, int32_t* workspace) {
+  uint64_t strideA = uint64_t(algnK) * uint64_t(N);
+  uint64_t strideC = uint64_t(algnN) * uint64_t(N);
+  int32_t iter_k = 1 << order_k, one = 1, zero = 0;
+  
+  for (int32_t i = 0; i < orderA; ++i) {
+    int32_t first_iter = int32_t(i == 0);
+    int32_t order_i = orderA - first_iter;
+
+    if (algnK <= iter_k) {
+      cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * order_i, algnK, &one, 
+        &A[uint64_t(i) * strideA], CUDA_R_8I, algnK, &A[uint64_t(first_iter) * strideA], CUDA_R_8I, algnK, &zero, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+      decode_f128_dd_strided_i32(stream, i - order_i, i, N, C, workspace, algnN);
+    }
+    else {
+      cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * order_i, iter_k, &one, 
+        &A[uint64_t(i) * strideA], CUDA_R_8I, algnK, &A[uint64_t(first_iter) * strideA], CUDA_R_8I, algnK, &zero, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+      normalization_dispatcher<0>(stream, strideC, order_i, workspace);
+
+      for (int32_t k = iter_k; k < algnK; k += iter_k) {
+        const int8_t* AT_k = &A[uint64_t(k) + uint64_t(i) * strideA];
+        const int8_t* AN_k = &A[uint64_t(k) + uint64_t(first_iter) * strideA];
+
+        if (k != iter_k)
+          normalization_dispatcher<1>(stream, strideC, order_i, workspace);
+        cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * order_i, std::min(algnK - k, iter_k), &one, 
+          AT_k, CUDA_R_8I, algnK, AN_k, CUDA_R_8I, algnK, &one, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+      }
+      decode_f128_dd_strided_i32(stream, i - order_i, i + 1, N, C, workspace, algnN);
+    }
+  }
+}
+
+void internal::int8::r8i_TN_gemm_stridedA_f128_qf(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32_t order_k, int32_t algnN, int32_t algnK, const int8_t* A, int32_t orderA, float4* C, int32_t* workspace) {
+  uint64_t strideA = uint64_t(algnK) * uint64_t(N);
+  uint64_t strideC = uint64_t(algnN) * uint64_t(N);
+  int32_t iter_k = 1 << order_k, one = 1, zero = 0;
+  
+  for (int32_t i = 0; i < orderA; ++i) {
+    int32_t first_iter = int32_t(i == 0);
+    int32_t order_i = orderA - first_iter;
+
+    if (algnK <= iter_k) {
+      cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * order_i, algnK, &one, 
+        &A[uint64_t(i) * strideA], CUDA_R_8I, algnK, &A[uint64_t(first_iter) * strideA], CUDA_R_8I, algnK, &zero, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+      decode_f128_qf_strided_i32(stream, i - order_i, i, N, C, workspace, algnN);
+    }
+    else {
+      cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * order_i, iter_k, &one, 
+        &A[uint64_t(i) * strideA], CUDA_R_8I, algnK, &A[uint64_t(first_iter) * strideA], CUDA_R_8I, algnK, &zero, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+      normalization_dispatcher<0>(stream, strideC, order_i, workspace);
+
+      for (int32_t k = iter_k; k < algnK; k += iter_k) {
+        const int8_t* AT_k = &A[uint64_t(k) + uint64_t(i) * strideA];
+        const int8_t* AN_k = &A[uint64_t(k) + uint64_t(first_iter) * strideA];
+
+        if (k != iter_k)
+          normalization_dispatcher<1>(stream, strideC, order_i, workspace);
+        cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * order_i, std::min(algnK - k, iter_k), &one, 
+          AT_k, CUDA_R_8I, algnK, AN_k, CUDA_R_8I, algnK, &one, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+      }
+      decode_f128_qf_strided_i32(stream, i - order_i, i + 1, N, C, workspace, algnN);
     }
   }
 }
