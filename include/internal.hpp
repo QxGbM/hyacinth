@@ -108,7 +108,13 @@ namespace internal::int8 {
 
   void r8i_TN_gemm_stridedA(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32_t iter_k, int32_t algnN, int32_t algnK, const int8_t* AT, const int8_t* A, int32_t orderA, int32_t* C, int32_t orderC);
 
-  void c8i_HN_gemm_stridedA(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32_t iter_k, int32_t algnN, int32_t algnK, const int8_t* AH, int32_t orderA, int32_t* C, int32_t orderC);
+  void r8i_TN_gemm_stridedA_f64(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32_t order_k, int32_t order_split_k, int32_t algnN, int32_t algnK, const int8_t* A, int32_t orderA, double* C, int32_t* workspace);
+
+  void r8i_TN_gemm_stridedA_f32(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32_t order_k, int32_t order_split_k, int32_t algnN, int32_t algnK, const int8_t* A, int32_t orderA, float* C, int32_t* workspace);
+
+  void r8i_TN_gemm_stridedA_f128_dd(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32_t order_k, int32_t order_split_k, int32_t algnN, int32_t algnK, const int8_t* A, int32_t orderA, double2* C, int32_t* workspace);
+
+  void r8i_TN_gemm_stridedA_f128_qf(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32_t order_k, int32_t order_split_k, int32_t algnN, int32_t algnK, const int8_t* A, int32_t orderA, float4* C, int32_t* workspace);
 
   void scal_exponent_f64(cudaStream_t stream, int32_t N, double* A, int32_t lda, int32_t gemm_expon, const int32_t* vec_expon);
 
@@ -126,12 +132,12 @@ namespace internal::int8 {
 
   void planar_to_interleave_f128_qf(cudaStream_t stream, int32_t N, const float4* A, int32_t lda, int32_t gemm_expon, const int32_t* vec_expon, complex_float4* B, int32_t ldb);
 
-  void decode_f64_strided_i32(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t order_k, int32_t N, double* A, const int32_t* B, int32_t ld);
+  void decode_f64_strided_i32(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t order_k, int32_t split_k, int32_t N, double* A, const int32_t* B, int32_t ld);
 
-  void decode_f32_strided_i32(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t order_k, int32_t N, float* A, const int32_t* B, int32_t ld);
+  void decode_f32_strided_i32(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t order_k, int32_t split_k, int32_t N, float* A, const int32_t* B, int32_t ld);
 
-  void decode_dd_strided_i32(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t order_k, int32_t N, double2* A, const int32_t* B, int32_t ld);
+  void decode_f128_dd_strided_i32(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t order_k, int32_t split_k, int32_t N, double2* A, const int32_t* B, int32_t ld);
 
-  void decode_qf_strided_i32(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t order_k, int32_t N, float4* A, const int32_t* B, int32_t ld);
+  void decode_f128_qf_strided_i32(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t order_k, int32_t split_k, int32_t N, float4* A, const int32_t* B, int32_t ld);
 
 };

@@ -139,7 +139,7 @@ namespace device::int8 {
     constexpr uint32_t i31 = ~(uint32_t(1) << 31);
     int32_t quo, rem;
     fast_division_i32<31>(expon, quo, rem);
-    uint32_t b[4]{ 0, (uint32_t(i) << rem) & i31, uint32_t(i >> (31 - rem)) & i31, uint32_t(i >> 31) & i31 };
+    uint32_t b[4]{ 0, (uint32_t(i) << rem) & i31, uint32_t(i >> (31 - rem)) & i31, -(uint32_t(i) >> 31) & i31 };
     
     a[0] += b[clamp_i32(1 - quo, 0, 3)];
     if constexpr(1 < ORDER) a[1] += b[clamp_i32(2 - quo, 0, 3)] + (a[0] >> 31);

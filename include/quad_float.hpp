@@ -177,57 +177,33 @@ namespace device::qf {
     return make_float2(scalbnf(c1, expon), scalbnf(c2, expon));
   }
 
-  template<int32_t ORDER>
-  __host__ __device__ __forceinline__ float4 conv_i31(uint32_t const (&code)[ORDER], int32_t expon) {
-    static_assert(1 <= ORDER && ORDER <= 6, "Integer order must be in [1,6]");
+  template <uint32_t ORDER>
+  __host__ __device__ __forceinline__ float conv_a31_f32(uint32_t const (&a)[ORDER], int32_t expon) {
+    static_assert(1 <= ORDER && ORDER <= 6, "Integer 32 accumulation order must be in [1,6]");
+#ifndef __CUDA_ARCH__
+    using std::scalbnf;
+#endif
+    float res = conv_i31_f32(a[ORDER - 1], expon).x;
+    if constexpr(5 < ORDER) res = scalbnf(res, 31) + conv_u31_f32(a[4], expon).x;
+    if constexpr(4 < ORDER) res = scalbnf(res, 31) + conv_u31_f32(a[3], expon).x;
+    if constexpr(3 < ORDER) res = scalbnf(res, 31) + conv_u31_f32(a[2], expon).x;
+    if constexpr(2 < ORDER) res = scalbnf(res, 31) + conv_u31_f32(a[1], expon).x;
+    if constexpr(1 < ORDER) res = scalbnf(res, 31) + conv_u31_f32(a[0], expon).x;
+    return res;
+  }
 
-    if constexpr(1 == ORDER) {
-      float2 c0 = conv_i31_f32(code[0], expon);
-      return make_float4(c0.x, c0.y, 0.f, 0.f);
-    }
-    else if constexpr(2 == ORDER) {
-      float2 c1 = conv_i31_f32(code[1], expon + 31);
-      float2 c0 = conv_u31_f32(code[0], expon);
-      return normalize(make_float4(c1.x, c1.y, c0.x, c0.y));
-    }
-    else if constexpr(3 == ORDER) {
-      float2 c1 = conv_i31_f32(code[2], expon + 31);
-      float2 c0 = conv_u31_f32(code[1], expon);
-      float4 res = normalize(make_float4(c1.x, c1.y, c0.x, c0.y));
-      return add_float2(fscalbn(res, 31), conv_u31_f32(code[0], expon));
-    }
-    else if constexpr(4 == ORDER) {
-      float2 c1 = conv_i31_f32(code[3], expon + 31);
-      float2 c0 = conv_u31_f32(code[2], expon);
-      float4 res = normalize(make_float4(c1.x, c1.y, c0.x, c0.y));
-      
-      c1 = conv_u31_f32(code[1], expon + 31);
-      c0 = conv_u31_f32(code[0], expon);
-      return add(fscalbn(res, 62), normalize(make_float4(c1.x, c1.y, c0.x, c0.y)));
-    }
-    if constexpr(5 == ORDER) {
-      float2 c1 = conv_i31_f32(code[4], expon + 31);
-      float2 c0 = conv_u31_f32(code[3], expon);
-      float4 res = normalize(make_float4(c1.x, c1.y, c0.x, c0.y));
-      
-      c1 = conv_u31_f32(code[2], expon + 31);
-      c0 = conv_u31_f32(code[1], expon);
-      res = add(fscalbn(res, 62), normalize(make_float4(c1.x, c1.y, c0.x, c0.y)));
-      return add_float2(fscalbn(res, 31), conv_u31_f32(code[0], expon));
-    }
-    else {
-      float2 c1 = conv_i31_f32(code[5], expon + 31);
-      float2 c0 = conv_u31_f32(code[4], expon);
-      float4 res = normalize(make_float4(c1.x, c1.y, c0.x, c0.y));
-      
-      c1 = conv_u31_f32(code[3], expon + 31);
-      c0 = conv_u31_f32(code[2], expon);
-      res = add(fscalbn(res, 62), normalize(make_float4(c1.x, c1.y, c0.x, c0.y)));
+  template <uint32_t ORDER>
+  __host__ __device__ __forceinline__ float4 conv_a31_qf(uint32_t const (&a)[ORDER], int32_t expon) {
+    static_assert(1 <= ORDER && ORDER <= 6, "Integer 32 accumulation order must be in [1,6]");
 
-      c1 = conv_u31_f32(code[1], expon + 31);
-      c0 = conv_u31_f32(code[0], expon);
-      return add(fscalbn(res, 62), normalize(make_float4(c1.x, c1.y, c0.x, c0.y)));
-    }
+    float2 conv = conv_i31_f32(a[ORDER - 1], expon);
+    float4 res = make_float4(conv.x, conv.y, 0.f, 0.f);
+    if constexpr(5 < ORDER) res = add_float2(fscalbn(res, 31), conv_u31_f32(a[4], expon));
+    if constexpr(4 < ORDER) res = add_float2(fscalbn(res, 31), conv_u31_f32(a[3], expon));
+    if constexpr(3 < ORDER) res = add_float2(fscalbn(res, 31), conv_u31_f32(a[2], expon));
+    if constexpr(2 < ORDER) res = add_float2(fscalbn(res, 31), conv_u31_f32(a[1], expon));
+    if constexpr(1 < ORDER) res = add_float2(fscalbn(res, 31), conv_u31_f32(a[0], expon));
+    return res;
   }
 
   __host__ __device__ __forceinline__ complex_float4 conj(complex_float4 a) {

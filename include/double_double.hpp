@@ -148,32 +148,32 @@ namespace device::dd {
     return scalbn(double(i), expon);
   }
 
-  template<int32_t ORDER>
-  __host__ __device__ __forceinline__ double2 conv_i31(uint32_t const (&code)[ORDER], int32_t expon) {
-    static_assert(1 <= ORDER && ORDER <= 6, "Integer order must be in [1,6]");
+  template <uint32_t ORDER>
+  __host__ __device__ __forceinline__ double conv_a31_f64(uint32_t const (&a)[ORDER], int32_t expon) {
+    static_assert(1 <= ORDER && ORDER <= 6, "Integer 32 accumulation order must be in [1,6]");
+#ifndef __CUDA_ARCH__
+    using std::scalbn;
+#endif
+    double res = conv_i31_f64(a[ORDER - 1], expon);
+    if constexpr(5 < ORDER) res = scalbn(res, 31) + conv_u31_f64(a[4], expon);
+    if constexpr(4 < ORDER) res = scalbn(res, 31) + conv_u31_f64(a[3], expon);
+    if constexpr(3 < ORDER) res = scalbn(res, 31) + conv_u31_f64(a[2], expon);
+    if constexpr(2 < ORDER) res = scalbn(res, 31) + conv_u31_f64(a[1], expon);
+    if constexpr(1 < ORDER) res = scalbn(res, 31) + conv_u31_f64(a[0], expon);
+    return res;
+  }
 
-    if constexpr(1 == ORDER)
-      return make_double2(conv_i31_f64(code[0], expon), 0.);
-    else if constexpr(2 == ORDER)
-      return normalize(make_double2(conv_i31_f64(code[1], expon + 31), conv_u31_f64(code[0], expon)));
-    else if constexpr(3 == ORDER) {
-      double2 res = normalize(make_double2(conv_i31_f64(code[2], expon + 31), conv_u31_f64(code[1], expon)));
-      return add_double(fscalbn(res, 31), conv_u31_f64(code[0], expon));
-    }
-    else if constexpr(4 == ORDER) {
-      double2 res = normalize(make_double2(conv_i31_f64(code[3], expon + 31), conv_u31_f64(code[2], expon)));
-      return add(fscalbn(res, 62), normalize(make_double2(conv_u31_f64(code[1], expon + 31), conv_u31_f64(code[0], expon))));
-    }
-    else if constexpr(5 == ORDER) {
-      double2 res = normalize(make_double2(conv_i31_f64(code[4], expon + 31), conv_u31_f64(code[3], expon)));
-      res = add(fscalbn(res, 62), normalize(make_double2(conv_u31_f64(code[2], expon + 31), conv_u31_f64(code[1], expon))));
-      return add_double(fscalbn(res, 31), conv_u31_f64(code[0], expon));
-    }
-    else {
-      double2 res = normalize(make_double2(conv_i31_f64(code[5], expon + 31), conv_u31_f64(code[4], expon)));
-      res = add(fscalbn(res, 62), normalize(make_double2(conv_u31_f64(code[3], expon + 31), conv_u31_f64(code[2], expon))));
-      return add(fscalbn(res, 62), normalize(make_double2(conv_u31_f64(code[1], expon + 31), conv_u31_f64(code[0], expon))));
-    }
+  template <uint32_t ORDER>
+  __host__ __device__ __forceinline__ double2 conv_a31_dd(uint32_t const (&a)[ORDER], int32_t expon) {
+    static_assert(1 <= ORDER && ORDER <= 6, "Integer 32 accumulation order must be in [1,6]");
+
+    double2 res = make_double2(conv_i31_f64(a[ORDER - 1], expon), 0.);
+    if constexpr(5 < ORDER) res = add_double(fscalbn(res, 31), conv_u31_f64(a[4], expon));
+    if constexpr(4 < ORDER) res = add_double(fscalbn(res, 31), conv_u31_f64(a[3], expon));
+    if constexpr(3 < ORDER) res = add_double(fscalbn(res, 31), conv_u31_f64(a[2], expon));
+    if constexpr(2 < ORDER) res = add_double(fscalbn(res, 31), conv_u31_f64(a[1], expon));
+    if constexpr(1 < ORDER) res = add_double(fscalbn(res, 31), conv_u31_f64(a[0], expon));
+    return res;
   }
 
   __host__ __device__ __forceinline__ complex_double2 conj(complex_double2 a) {
