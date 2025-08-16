@@ -76,49 +76,49 @@ constexpr int32_t grid_blocks = 128;
 constexpr int32_t block_threads = 128;
 constexpr int32_t thread_bytes = 32;
 
-void internal::Cholesky::swap_cols_double(cudaStream_t stream, int32_t i, int32_t j, int32_t N, double* A, int32_t lda) {
+void internal::Cholesky::swap_cols_f64(cudaStream_t stream, int32_t i, int32_t j, int32_t N, double* A, int32_t lda) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(double);
   swap_cols_kernel <double, double* __restrict__, grid_blocks, block_threads, items_per_thread, 0>
     <<< grid_blocks, block_threads, 0, stream >>> (i, j, N, A, lda);
 }
 
-void internal::Cholesky::swap_cols_float(cudaStream_t stream, int32_t i, int32_t j, int32_t N, float* A, int32_t lda) {
+void internal::Cholesky::swap_cols_f32(cudaStream_t stream, int32_t i, int32_t j, int32_t N, float* A, int32_t lda) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(float);
   swap_cols_kernel <float, float* __restrict__, grid_blocks, block_threads, items_per_thread, 0>
     <<< grid_blocks, block_threads, 0, stream >>> (i, j, N, A, lda);
 }
 
-void internal::Cholesky::swap_cols_double2(cudaStream_t stream, int32_t i, int32_t j, int32_t N, double2* A, int32_t lda) {
+void internal::Cholesky::swap_cols_f128_dd(cudaStream_t stream, int32_t i, int32_t j, int32_t N, double2* A, int32_t lda) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(double2);
   swap_cols_kernel <double2, double2* __restrict__, grid_blocks, block_threads, items_per_thread, 0>
     <<< grid_blocks, block_threads, 0, stream >>> (i, j, N, A, lda);
 }
 
-void internal::Cholesky::swap_cols_float4(cudaStream_t stream, int32_t i, int32_t j, int32_t N, float4* A, int32_t lda) {
+void internal::Cholesky::swap_cols_f128_qf(cudaStream_t stream, int32_t i, int32_t j, int32_t N, float4* A, int32_t lda) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(float4);
   swap_cols_kernel <float4, float4* __restrict__, grid_blocks, block_threads, items_per_thread, 0>
     <<< grid_blocks, block_threads, 0, stream >>> (i, j, N, A, lda);
 }
 
-void internal::Cholesky::swap_cols_double_complex(cudaStream_t stream, int32_t i, int32_t j, int32_t N, std::complex<double>* A, int32_t lda) {
+void internal::Cholesky::swap_cols_cf64(cudaStream_t stream, int32_t i, int32_t j, int32_t N, std::complex<double>* A, int32_t lda) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(std::complex<double>);
   swap_cols_kernel <cuDoubleComplex, cuDoubleComplex* __restrict__, grid_blocks, block_threads, items_per_thread, 1>
     <<< grid_blocks, block_threads, 0, stream >>> (i, j, N, (cuDoubleComplex*)A, lda);
 }
 
-void internal::Cholesky::swap_cols_float_complex(cudaStream_t stream, int32_t i, int32_t j, int32_t N, std::complex<float>* A, int32_t lda) {
+void internal::Cholesky::swap_cols_cf32(cudaStream_t stream, int32_t i, int32_t j, int32_t N, std::complex<float>* A, int32_t lda) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(std::complex<float>);
   swap_cols_kernel <cuComplex, cuComplex* __restrict__, grid_blocks, block_threads, items_per_thread, 1>
     <<< grid_blocks, block_threads, 0, stream >>> (i, j, N, (cuComplex*)A, lda);
 }
 
-void internal::Cholesky::swap_cols_double2_complex(cudaStream_t stream, int32_t i, int32_t j, int32_t N, complex_double2* A, int32_t lda) {
+void internal::Cholesky::swap_cols_cf128_dd(cudaStream_t stream, int32_t i, int32_t j, int32_t N, complex_double2* A, int32_t lda) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(complex_double2);
   swap_cols_kernel <complex_double2, complex_double2* __restrict__, grid_blocks, block_threads, items_per_thread, 1>
     <<< grid_blocks, block_threads, 0, stream >>> (i, j, N, A, lda);
 }
 
-void internal::Cholesky::swap_cols_float4_complex(cudaStream_t stream, int32_t i, int32_t j, int32_t N, complex_float4* A, int32_t lda) {
+void internal::Cholesky::swap_cols_cf128_qf(cudaStream_t stream, int32_t i, int32_t j, int32_t N, complex_float4* A, int32_t lda) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(complex_float4);
   swap_cols_kernel <complex_float4, complex_float4* __restrict__, grid_blocks, block_threads, items_per_thread, 1>
     <<< grid_blocks, block_threads, 0, stream >>> (i, j, N, A, lda);

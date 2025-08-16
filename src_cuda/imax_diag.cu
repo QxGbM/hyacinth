@@ -143,49 +143,49 @@ __global__ void imax_kernel(int32_t N, real_ptr X, complex_ptr C, int32_t ldc, i
 constexpr int32_t block_threads = 512;
 constexpr int32_t thread_bytes = 32;
 
-void internal::Cholesky::imax_double(cudaStream_t stream, int32_t N, double* X, double* C, int32_t ldc, int32_t* piv, double* rsq) {
+void internal::Cholesky::imax_f64(cudaStream_t stream, int32_t N, double* X, double* C, int32_t ldc, int32_t* piv, double* rsq) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(double);
   imax_kernel <double, double* __restrict__, double, double* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (N, X, C, ldc, piv, rsq);
 }
 
-void internal::Cholesky::imax_float(cudaStream_t stream, int32_t N, float* X, float* C, int32_t ldc, int32_t* piv, float* rsq) {
+void internal::Cholesky::imax_f32(cudaStream_t stream, int32_t N, float* X, float* C, int32_t ldc, int32_t* piv, float* rsq) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(float);
   imax_kernel <float, float* __restrict__, float, float* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (N, X, C, ldc, piv, rsq);
 }
 
-void internal::Cholesky::imax_double2(cudaStream_t stream, int32_t N, double2* X, double2* C, int32_t ldc, int32_t* piv, double2* rsq) {
+void internal::Cholesky::imax_f128_dd(cudaStream_t stream, int32_t N, double2* X, double2* C, int32_t ldc, int32_t* piv, double2* rsq) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(double2);
   imax_kernel <double2, double2* __restrict__, double2, double2* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (N, X, C, ldc, piv, rsq);
 }
 
-void internal::Cholesky::imax_float4(cudaStream_t stream, int32_t N, float4* X, float4* C, int32_t ldc, int32_t* piv, float4* rsq) {
+void internal::Cholesky::imax_f128_qf(cudaStream_t stream, int32_t N, float4* X, float4* C, int32_t ldc, int32_t* piv, float4* rsq) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(float4);
   imax_kernel <float4, float4* __restrict__, float4, float4* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (N, X, C, ldc, piv, rsq);
 }
 
-void internal::Cholesky::imax_double_complex(cudaStream_t stream, int32_t N, double* X, std::complex<double>* C, int32_t ldc, int32_t* piv, double* rsq) {
+void internal::Cholesky::imax_cf64(cudaStream_t stream, int32_t N, double* X, std::complex<double>* C, int32_t ldc, int32_t* piv, double* rsq) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(std::complex<double>);
   imax_kernel <double, double* __restrict__, cuDoubleComplex, cuDoubleComplex* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (N, X, (cuDoubleComplex*)C, ldc, piv, rsq);
 }
 
-void internal::Cholesky::imax_float_complex(cudaStream_t stream, int32_t N, float* X, std::complex<float>* C, int32_t ldc, int32_t* piv, float* rsq) {
+void internal::Cholesky::imax_cf32(cudaStream_t stream, int32_t N, float* X, std::complex<float>* C, int32_t ldc, int32_t* piv, float* rsq) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(std::complex<float>);
   imax_kernel <float, float* __restrict__, cuComplex, cuComplex* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (N, X, (cuComplex*)C, ldc, piv, rsq);
 }
 
-void internal::Cholesky::imax_double2_complex(cudaStream_t stream, int32_t N, double2* X, complex_double2* C, int32_t ldc, int32_t* piv, double2* rsq) {
+void internal::Cholesky::imax_cf128_dd(cudaStream_t stream, int32_t N, double2* X, complex_double2* C, int32_t ldc, int32_t* piv, double2* rsq) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(complex_double2);
   imax_kernel <double2, double2* __restrict__, complex_double2, complex_double2* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (N, X, C, ldc, piv, rsq);
 }
 
-void internal::Cholesky::imax_float4_complex(cudaStream_t stream, int32_t N, float4* X, complex_float4* C, int32_t ldc, int32_t* piv, float4* rsq) {
+void internal::Cholesky::imax_cf128_qf(cudaStream_t stream, int32_t N, float4* X, complex_float4* C, int32_t ldc, int32_t* piv, float4* rsq) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(complex_float4);
   imax_kernel <float4, float4* __restrict__, complex_float4, complex_float4* __restrict__, block_threads, items_per_thread>
     <<< 1, block_threads, 0, stream >>> (N, X, C, ldc, piv, rsq);

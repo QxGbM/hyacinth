@@ -1,90 +1,160 @@
 
+#include <hyacinth.hpp>
 #include <internal.hpp>
-#include <cub/cub.cuh>
+#include <double_double.hpp>
+#include <quad_float.hpp>
+
+#include <thrust/for_each.h>
+#include <thrust/iterator/counting_iterator.h>
+#include <thrust/execution_policy.h>
 
 struct convert_fp {
   __device__ __forceinline__ void operator()(double a, double& b) { b = a; }
   __device__ __forceinline__ void operator()(float a, double& b) { b = double(a); }
   __device__ __forceinline__ void operator()(double2 a, double& b) { b = a.x + a.y; }
-  __device__ __forceinline__ void operator()(float4 a, double& b) { b = double(a.x) + double(a.y) + double(a.z) + double(a.w); }
+  __device__ __forceinline__ void operator()(float4 a, double& b) {
+    b = double(a.x) + double(a.y) + double(a.z) + double(a.w); }
+
   __device__ __forceinline__ void operator()(double a, float& b) { b = float(a); }
   __device__ __forceinline__ void operator()(float a, float& b) { b = a; }
+
+  __device__ __forceinline__ void operator()(double a, double2& b) { b = make_double2(a, 0.); }
+  __device__ __forceinline__ void operator()(double2 a, double2& b) { b = a; }
+  __device__ __forceinline__ void operator()(float4 a, double2& b) {
+    b = device::dd::normalize(make_double2(double(a.x) + double(a.y), double(a.z) + double(a.w))); }
+
+  __device__ __forceinline__ void operator()(double a, float4& b) {
+    float a1 = float(a); double c = a - double(a1);
+    float a2 = float(c), a3 = float(c - double(a2));
+    b = make_float4(a1, a2, a3, 0.f);
+  }
+  __device__ __forceinline__ void operator()(double2 a, float4& b) {
+    float4 c, d; operator()(a.x, c); operator()(a.y, d); b = device::qf::add(c, d); }
+  __device__ __forceinline__ void operator()(float4 a, float4& b) { b = a; }
 };
 
-template <int32_t GRID_X, int32_t GRID_Y, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD, class typeA, class constPtrA, class typeB, class ptrB>
-__global__ void copy_upper_kernel(int32_t items, int32_t N, constPtrA A, int32_t lda, ptrB B, int32_t ldb) {
-  constexpr int32_t elements_block = BLOCK_THREADS * ITEMS_PER_THREAD;
-  constexpr int32_t elements = GRID_Y * elements_block;
-  int32_t block_offset = blockIdx.x * elements_block;
+template <int32_t M, class typeA, class typeB> struct upper_tri_conv_copy {
+  const typeA* A;
+  typeB* B;
+  uint64_t lda, ldb;
+  upper_tri_conv_copy(const typeA* A, int32_t lda, typeB* B, int32_t ldb) :
+    A(A), B(B), lda(lda), ldb(ldb) {}
+  
+  __device__ __forceinline__ void operator()(uint64_t i) {
+    float r = sqrtf(__ull2float_rz((i << (4 - M)) + 1));
+    uint64_t x = (uint64_t(r) - 1) >> 1;
+    uint64_t base = (x * (x + 1)) >> (2 - M);
+    uint64_t y = i - base;
 
-  __shared__ typename cub::BlockLoad<typeA, BLOCK_THREADS, ITEMS_PER_THREAD>::TempStorage temp_load;
-  __shared__ typename cub::BlockStore<typeB, BLOCK_THREADS, ITEMS_PER_THREAD>::TempStorage temp_store;
-  typeA threadA[ITEMS_PER_THREAD];
-  typeB threadB[ITEMS_PER_THREAD];
+    convert_fp conv;
+    conv(A[y + x * lda], B[y + x * ldb]);
+  }
+};
 
-  cub::BlockLoad<typeA, BLOCK_THREADS, ITEMS_PER_THREAD> block_load(temp_load);
-  cub::BlockStore<typeB, BLOCK_THREADS, ITEMS_PER_THREAD> block_store(temp_store);
-  convert_fp conv_f;
+template <class typeA, class typeB> struct rect_conv_copy {
+  const typeA* A;
+  typeB* B;
+  uint64_t M, lda, ldb;
+  rect_conv_copy(int32_t M, const typeA* A, int32_t lda, typeB* B, int32_t ldb) :
+    A(A), B(B), M(M), lda(lda), ldb(ldb) {}
+  
+  __device__ __forceinline__ void operator()(uint64_t i) {
+    uint64_t x = i / M, y = i - x * M;
+    convert_fp conv;
+    conv(A[y + x * lda], B[y + x * ldb]);
+  }
+};
 
-  for (int32_t col = blockIdx.y; col < N; col += GRID_X) {
-    int32_t M = (col + 1) * items;
-    int32_t M2 = M & (elements_block - 1);
-    int32_t M1 = M - M2;
+template <class typeA, class typeB>
+inline void upper_tri_dispatcher(cudaStream_t stream, int32_t M, int32_t N, const typeA* A, int32_t lda, typeB* B, int32_t ldb) {
+  uint64_t iter_items = uint64_t(N) * uint64_t(N + 1);
+  thrust::counting_iterator<uint64_t> iter(0);
 
-    constPtrA A_col = &A[uint64_t(col) * uint64_t(lda)];
-    ptrB B_col = &B[uint64_t(col) * uint64_t(ldb)];
-
-    for (int32_t k = block_offset; k < M1; k += elements) {
-      block_load.Load(&A_col[k], threadA);
-
-      #pragma unroll
-      for (int32_t l = 0; l < ITEMS_PER_THREAD; ++l)
-        conv_f(threadA[l], threadB[l]);
-      block_store.Store(&B_col[k], threadB);
-    }
-
-    if (0 < M2 && blockIdx.x == 0) {
-      block_load.Load(&A_col[M1], threadA, M2);
-
-      #pragma unroll
-      for (int32_t l = 0; l < ITEMS_PER_THREAD; ++l)
-        conv_f(threadA[l], threadB[l]);
-      block_store.Store(&B_col[M1], threadB, M2);
-    }
+  if (M == 1) {
+    upper_tri_conv_copy<1, typeA, typeB> conv(A, lda, B, ldb);
+    thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, iter_items >> 1, conv);
+  }
+  else if (M == 2) {
+    upper_tri_conv_copy<2, typeA, typeB> conv(A, lda, B, ldb);
+    thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, iter_items, conv);
   }
 }
 
-constexpr int32_t block_threads = 128;
-constexpr int32_t grid_x = 512;
-constexpr int32_t grid_y = 4;
-constexpr int32_t items_per_thread = 4;
-
-void internal::Cholesky::copy_convert_upper_f64_f64(cudaStream_t stream, int32_t items, int32_t N, const double* A, int32_t lda, double* B, int32_t ldb) {
-  copy_upper_kernel <grid_x, grid_y, block_threads, items_per_thread, double, const double* __restrict__, double, double* __restrict__>
-    <<< dim3(grid_y, grid_x, 1), block_threads, 0, stream >>> (items, N, A, lda, B, ldb);
+void device::copy_upper_triangular(cudaStream_t stream, int32_t M, int32_t N, const void* A, int32_t lda, Precision precA, void* B, int32_t ldb, Precision precB) {
+  if (precA == Precision::FP64) {
+    if (precB == Precision::FP64)
+      upper_tri_dispatcher<double, double>(stream, M, N, (const double*)A, lda, (double*)B, ldb);
+    else if (precB == Precision::FP32)
+      upper_tri_dispatcher<double, float>(stream, M, N, (const double*)A, lda, (float*)B, ldb);
+    else if (precB == Precision::FP128_DD)
+      upper_tri_dispatcher<double, double2>(stream, M, N, (const double*)A, lda, (double2*)B, ldb);
+    else if (precB == Precision::FP128_QF)
+      upper_tri_dispatcher<double, float4>(stream, M, N, (const double*)A, lda, (float4*)B, ldb);
+  }
+  else if (precA == Precision::FP32) {
+    if (precB == Precision::FP64)
+      upper_tri_dispatcher<float, double>(stream, M, N, (const float*)A, lda, (double*)B, ldb);
+    else if (precB == Precision::FP32)
+      upper_tri_dispatcher<float, float>(stream, M, N, (const float*)A, lda, (float*)B, ldb);
+  }
+  else if (precA == Precision::FP128_DD) {
+    if (precB == Precision::FP64)
+      upper_tri_dispatcher<double2, double>(stream, M, N, (const double2*)A, lda, (double*)B, ldb);
+    else if (precB == Precision::FP128_DD)
+      upper_tri_dispatcher<double2, double2>(stream, M, N, (const double2*)A, lda, (double2*)B, ldb);
+    else if (precB == Precision::FP128_QF)
+      upper_tri_dispatcher<double2, float4>(stream, M, N, (const double2*)A, lda, (float4*)B, ldb);
+  }
+  else if (precA == Precision::FP128_QF) {
+    if (precB == Precision::FP64)
+      upper_tri_dispatcher<float4, double>(stream, M, N, (const float4*)A, lda, (double*)B, ldb);
+    else if (precB == Precision::FP128_DD)
+      upper_tri_dispatcher<float4, double2>(stream, M, N, (const float4*)A, lda, (double2*)B, ldb);
+    else if (precB == Precision::FP128_QF)
+      upper_tri_dispatcher<float4, float4>(stream, M, N, (const float4*)A, lda, (float4*)B, ldb);
+  }
 }
 
-void internal::Cholesky::copy_convert_upper_f32_f64(cudaStream_t stream, int32_t items, int32_t N, const float* A, int32_t lda, double* B, int32_t ldb) {
-  copy_upper_kernel <grid_x, grid_y, block_threads, items_per_thread, float, const float* __restrict__, double, double* __restrict__>
-    <<< dim3(grid_y, grid_x, 1), block_threads, 0, stream >>> (items, N, A, lda, B, ldb);
+template <class typeA, class typeB>
+inline void rect_dispatcher(cudaStream_t stream, int32_t M, int32_t N, const typeA* A, int32_t lda, typeB* B, int32_t ldb) {
+  uint64_t iter_items = uint64_t(N) * uint64_t(M);
+  thrust::counting_iterator<uint64_t> iter(0);
+
+  rect_conv_copy<typeA, typeB> conv(M, A, lda, B, ldb);
+  thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, iter_items, conv);
 }
 
-void internal::Cholesky::copy_convert_upper_dd_f64(cudaStream_t stream, int32_t items, int32_t N, const double2* A, int32_t lda, double* B, int32_t ldb) {
-  copy_upper_kernel <grid_x, grid_y, block_threads, items_per_thread, double2, const double2* __restrict__, double, double* __restrict__>
-    <<< dim3(grid_y, grid_x, 1), block_threads, 0, stream >>> (items, N, A, lda, B, ldb);
-}
-
-void internal::Cholesky::copy_convert_upper_qf_f64(cudaStream_t stream, int32_t items, int32_t N, const float4* A, int32_t lda, double* B, int32_t ldb) {
-  copy_upper_kernel <grid_x, grid_y, block_threads, items_per_thread, float4, const float4* __restrict__, double, double* __restrict__>
-    <<< dim3(grid_y, grid_x, 1), block_threads, 0, stream >>> (items, N, A, lda, B, ldb);
-}
-
-void internal::Cholesky::copy_convert_upper_f64_f32(cudaStream_t stream, int32_t items, int32_t N, const double* A, int32_t lda, float* B, int32_t ldb) {
-  copy_upper_kernel <grid_x, grid_y, block_threads, items_per_thread, double, const double* __restrict__, float, float* __restrict__>
-    <<< dim3(grid_y, grid_x, 1), block_threads, 0, stream >>> (items, N, A, lda, B, ldb);
-}
-
-void internal::Cholesky::copy_convert_upper_f32_f32(cudaStream_t stream, int32_t items, int32_t N, const float* A, int32_t lda, float* B, int32_t ldb) {
-  copy_upper_kernel <grid_x, grid_y, block_threads, items_per_thread, float, const float* __restrict__, float, float* __restrict__>
-    <<< dim3(grid_y, grid_x, 1), block_threads, 0, stream >>> (items, N, A, lda, B, ldb);
+void device::copy_rectangle(cudaStream_t stream, int32_t M, int32_t N, const void* A, int32_t lda, Precision precA, void* B, int32_t ldb, Precision precB) {
+  if (precA == Precision::FP64) {
+    if (precB == Precision::FP64)
+      rect_dispatcher<double, double>(stream, M, N, (const double*)A, lda, (double*)B, ldb);
+    else if (precB == Precision::FP32)
+      rect_dispatcher<double, float>(stream, M, N, (const double*)A, lda, (float*)B, ldb);
+    else if (precB == Precision::FP128_DD)
+      rect_dispatcher<double, double2>(stream, M, N, (const double*)A, lda, (double2*)B, ldb);
+    else if (precB == Precision::FP128_QF)
+      rect_dispatcher<double, float4>(stream, M, N, (const double*)A, lda, (float4*)B, ldb);
+  }
+  else if (precA == Precision::FP32) {
+    if (precB == Precision::FP64)
+      rect_dispatcher<float, double>(stream, M, N, (const float*)A, lda, (double*)B, ldb);
+    else if (precB == Precision::FP32)
+      rect_dispatcher<float, float>(stream, M, N, (const float*)A, lda, (float*)B, ldb);
+  }
+  else if (precA == Precision::FP128_DD) {
+    if (precB == Precision::FP64)
+      rect_dispatcher<double2, double>(stream, M, N, (const double2*)A, lda, (double*)B, ldb);
+    else if (precB == Precision::FP128_DD)
+      rect_dispatcher<double2, double2>(stream, M, N, (const double2*)A, lda, (double2*)B, ldb);
+    else if (precB == Precision::FP128_QF)
+      rect_dispatcher<double2, float4>(stream, M, N, (const double2*)A, lda, (float4*)B, ldb);
+  }
+  else if (precA == Precision::FP128_QF) {
+    if (precB == Precision::FP64)
+      rect_dispatcher<float4, double>(stream, M, N, (const float4*)A, lda, (double*)B, ldb);
+    else if (precB == Precision::FP128_DD)
+      rect_dispatcher<float4, double2>(stream, M, N, (const float4*)A, lda, (double2*)B, ldb);
+    else if (precB == Precision::FP128_QF)
+      rect_dispatcher<float4, float4>(stream, M, N, (const float4*)A, lda, (float4*)B, ldb);
+  }
 }

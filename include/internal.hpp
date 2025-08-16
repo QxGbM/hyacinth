@@ -10,21 +10,21 @@ struct complex_float4;
 
 namespace internal::Cholesky {
 
-  void imax_double(cudaStream_t stream, int32_t N, double* X, double* C, int32_t ldc, int32_t* piv, double* rsq);
+  void imax_f64(cudaStream_t stream, int32_t N, double* X, double* C, int32_t ldc, int32_t* piv, double* rsq);
 
-  void imax_float(cudaStream_t stream, int32_t N, float* X, float* C, int32_t ldc, int32_t* piv, float* rsq);
+  void imax_f32(cudaStream_t stream, int32_t N, float* X, float* C, int32_t ldc, int32_t* piv, float* rsq);
 
-  void imax_double2(cudaStream_t stream, int32_t N, double2* X, double2* C, int32_t ldc, int32_t* piv, double2* rsq);
+  void imax_f128_dd(cudaStream_t stream, int32_t N, double2* X, double2* C, int32_t ldc, int32_t* piv, double2* rsq);
 
-  void imax_float4(cudaStream_t stream, int32_t N, float4* X, float4* C, int32_t ldc, int32_t* piv, float4* rsq);
+  void imax_f128_qf(cudaStream_t stream, int32_t N, float4* X, float4* C, int32_t ldc, int32_t* piv, float4* rsq);
 
-  void imax_double_complex(cudaStream_t stream, int32_t N, double* X, std::complex<double>* C, int32_t ldc, int32_t* piv, double* rsq);
+  void imax_cf64(cudaStream_t stream, int32_t N, double* X, std::complex<double>* C, int32_t ldc, int32_t* piv, double* rsq);
 
-  void imax_float_complex(cudaStream_t stream, int32_t N, float* X, std::complex<float>* C, int32_t ldc, int32_t* piv, float* rsq);
+  void imax_cf32(cudaStream_t stream, int32_t N, float* X, std::complex<float>* C, int32_t ldc, int32_t* piv, float* rsq);
 
-  void imax_double2_complex(cudaStream_t stream, int32_t N, double2* X, complex_double2* C, int32_t ldc, int32_t* piv, double2* rsq);
+  void imax_cf128_dd(cudaStream_t stream, int32_t N, double2* X, complex_double2* C, int32_t ldc, int32_t* piv, double2* rsq);
 
-  void imax_float4_complex(cudaStream_t stream, int32_t N, float4* X, complex_float4* C, int32_t ldc, int32_t* piv, float4* rsq);
+  void imax_cf128_qf(cudaStream_t stream, int32_t N, float4* X, complex_float4* C, int32_t ldc, int32_t* piv, float4* rsq);
 
   void gemv_scal_f64(cudaStream_t stream, double scale, int32_t M, int32_t N, const double* A, int32_t lda, double* B, double* D);
 
@@ -58,33 +58,21 @@ namespace internal::Cholesky {
 
   void reduce_scal_cf128_qf(cudaStream_t stream, const float4 scale, int32_t M, int32_t N, complex_float4* A, int32_t lda, float4* D);
 
-  void swap_cols_double(cudaStream_t stream, int32_t i, int32_t j, int32_t N, double* A, int32_t lda);
+  void swap_cols_f64(cudaStream_t stream, int32_t i, int32_t j, int32_t N, double* A, int32_t lda);
 
-  void swap_cols_float(cudaStream_t stream, int32_t i, int32_t j, int32_t N, float* A, int32_t lda);
+  void swap_cols_f32(cudaStream_t stream, int32_t i, int32_t j, int32_t N, float* A, int32_t lda);
 
-  void swap_cols_double2(cudaStream_t stream, int32_t i, int32_t j, int32_t N, double2* A, int32_t lda);
+  void swap_cols_f128_dd(cudaStream_t stream, int32_t i, int32_t j, int32_t N, double2* A, int32_t lda);
 
-  void swap_cols_float4(cudaStream_t stream, int32_t i, int32_t j, int32_t N, float4* A, int32_t lda);
+  void swap_cols_f128_qf(cudaStream_t stream, int32_t i, int32_t j, int32_t N, float4* A, int32_t lda);
 
-  void swap_cols_double_complex(cudaStream_t stream, int32_t i, int32_t j, int32_t N, std::complex<double>* A, int32_t lda);
+  void swap_cols_cf64(cudaStream_t stream, int32_t i, int32_t j, int32_t N, std::complex<double>* A, int32_t lda);
 
-  void swap_cols_float_complex(cudaStream_t stream, int32_t i, int32_t j, int32_t N, std::complex<float>* A, int32_t lda);
+  void swap_cols_cf32(cudaStream_t stream, int32_t i, int32_t j, int32_t N, std::complex<float>* A, int32_t lda);
 
-  void swap_cols_double2_complex(cudaStream_t stream, int32_t i, int32_t j, int32_t N, complex_double2* A, int32_t lda);
+  void swap_cols_cf128_dd(cudaStream_t stream, int32_t i, int32_t j, int32_t N, complex_double2* A, int32_t lda);
 
-  void swap_cols_float4_complex(cudaStream_t stream, int32_t i, int32_t j, int32_t N, complex_float4* A, int32_t lda);
-
-  void copy_convert_upper_f64_f64(cudaStream_t stream, int32_t items, int32_t N, const double* A, int32_t lda, double* B, int32_t ldb);
-
-  void copy_convert_upper_f32_f64(cudaStream_t stream, int32_t items, int32_t N, const float* A, int32_t lda, double* B, int32_t ldb);
-
-  void copy_convert_upper_dd_f64(cudaStream_t stream, int32_t items, int32_t N, const double2* A, int32_t lda, double* B, int32_t ldb);
-
-  void copy_convert_upper_qf_f64(cudaStream_t stream, int32_t items, int32_t N, const float4* A, int32_t lda, double* B, int32_t ldb);
-
-  void copy_convert_upper_f64_f32(cudaStream_t stream, int32_t items, int32_t N, const double* A, int32_t lda, float* B, int32_t ldb);
-
-  void copy_convert_upper_f32_f32(cudaStream_t stream, int32_t items, int32_t N, const float* A, int32_t lda, float* B, int32_t ldb);
+  void swap_cols_cf128_qf(cudaStream_t stream, int32_t i, int32_t j, int32_t N, complex_float4* A, int32_t lda);
 
 };
 
