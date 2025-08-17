@@ -11,6 +11,7 @@ find_package(CUDAToolkit REQUIRED)
 
 set(CPP_SOURCES
   src_cpp/geqp3_ronly.cpp
+  src_cpp/i8_gemm.cpp
   src_cpp/potrfp_complex.cpp
   src_cpp/potrfp_real.cpp
   src_cpp/qr_params_query.cpp
@@ -22,11 +23,11 @@ set(CU_SOURCES
   src_cuda/encode_fp_int_strided.cu
   src_cuda/fp_exponent.cu
   src_cuda/gemv_scal.cu
-  src_cuda/cgemm_pp.cu
+  src_cuda/igemm_normalize.cu
+  src_cuda/igemm_pp.cu
   src_cuda/imax_diag.cu
   src_cuda/reduce_scal.cu
   src_cuda/swap_cols.cu
-  src_cuda/strided_i8_gemm_real.cu
 )
 
 set_source_files_properties(${CPP_SOURCES} PROPERTIES COMPILE_OPTIONS 

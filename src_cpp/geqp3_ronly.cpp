@@ -23,7 +23,7 @@ int32_t device::QR::dgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
     internal::int8::r8i_TN_gemm_stridedA_f32(stream, handle, N, params.iter_k, algnN, algnM, iA, iA, orderA, mat_f32, scratch);
     internal::int8::scal_exponent_f32(stream, N, mat_f32, algnN, orderA, vexp);
 
-    ret = device::Cholesky::rpotrfp_f32(stream, N, mat_f32, algnN, jpiv);
+    ret = device::Cholesky::rpotrfp(stream, 0., N, mat_f32, algnN, Precision::FP32, jpiv);
     device::copy_upper_triangular(stream, 1, N, mat_f32, algnN, Precision::FP32, A, lda, Precision::FP64);
   }
   else if (elem_bytes == 8) {
@@ -31,7 +31,7 @@ int32_t device::QR::dgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
     internal::int8::r8i_TN_gemm_stridedA_f64(stream, handle, N, params.iter_k, algnN, algnM, iA, iA, orderA, mat_f64, scratch);
     internal::int8::scal_exponent_f64(stream, N, mat_f64, algnN, orderA, vexp);
 
-    ret = device::Cholesky::rpotrfp_f64(stream, N, mat_f64, algnN, jpiv);
+    ret = device::Cholesky::rpotrfp(stream, 0., N, mat_f64, algnN, Precision::FP64, jpiv);
     device::copy_upper_triangular(stream, 1, N, mat_f64, algnN, Precision::FP64, A, lda, Precision::FP64);
   }
   else if (elem_bytes == 16 && params.use_fp64_over_32 == 1) {
@@ -39,7 +39,7 @@ int32_t device::QR::dgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
     internal::int8::r8i_TN_gemm_stridedA_f128_dd(stream, handle, N, params.iter_k, algnN, algnM, iA, iA, orderA, mat_dd, scratch);
     internal::int8::scal_exponent_f128_dd(stream, N, mat_dd, algnN, orderA, vexp);
 
-    ret = device::Cholesky::rpotrfp_f128_dd(stream, N, mat_dd, algnN, jpiv);
+    ret = device::Cholesky::rpotrfp(stream, 0., N, mat_dd, algnN, Precision::FP128_DD, jpiv);
     device::copy_upper_triangular(stream, 1, N, mat_dd, algnN, Precision::FP128_DD, A, lda, Precision::FP64);
   }
   else {
@@ -47,7 +47,7 @@ int32_t device::QR::dgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
     internal::int8::r8i_TN_gemm_stridedA_f128_qf(stream, handle, N, params.iter_k, algnN, algnM, iA, iA, orderA, mat_qf, scratch);
     internal::int8::scal_exponent_f128_qf(stream, N, mat_qf, algnN, orderA, vexp);
 
-    ret = device::Cholesky::rpotrfp_f128_qf(stream, N, mat_qf, algnN, jpiv);
+    ret = device::Cholesky::rpotrfp(stream, 0., N, mat_qf, algnN, Precision::FP128_QF, jpiv);
     device::copy_upper_triangular(stream, 1, N, mat_qf, algnN, Precision::FP128_QF, A, lda, Precision::FP64);
   }
 
@@ -73,7 +73,7 @@ int32_t device::QR::sgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
     internal::int8::r8i_TN_gemm_stridedA_f32(stream, handle, N, params.iter_k, algnN, algnM, iA, iA, orderA, mat_f32, scratch);
     internal::int8::scal_exponent_f32(stream, N, mat_f32, algnN, orderA, vexp);
 
-    ret = device::Cholesky::rpotrfp_f32(stream, N, mat_f32, algnN, jpiv);
+    ret = device::Cholesky::rpotrfp(stream, 0., N, mat_f32, algnN, Precision::FP32, jpiv);
     device::copy_upper_triangular(stream, 1, N, mat_f32, algnN, Precision::FP32, A, lda, Precision::FP32);
   }
   else {
@@ -81,7 +81,7 @@ int32_t device::QR::sgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
     internal::int8::r8i_TN_gemm_stridedA_f64(stream, handle, N, params.iter_k, algnN, algnM, iA, iA, orderA, mat_f64, scratch);
     internal::int8::scal_exponent_f64(stream, N, mat_f64, algnN, orderA, vexp);
 
-    ret = device::Cholesky::rpotrfp_f64(stream, N, mat_f64, algnN, jpiv);
+    ret = device::Cholesky::rpotrfp(stream, 0., N, mat_f64, algnN, Precision::FP64, jpiv);
     device::copy_upper_triangular(stream, 1, N, mat_f64, algnN, Precision::FP64, A, lda, Precision::FP32);
   }
 
@@ -112,7 +112,7 @@ int32_t device::QR::zgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
     internal::int8::r8i_TN_gemm_stridedA_f32(stream, handle, N, params.iter_k, algnN, algnM, iA, A_im, orderA, &mat_f32[strideC], scratch);
 
     internal::int8::planar_to_interleave_f32(stream, N, mat_f32, algnN, orderA, vexp, (std::complex<float>*)iA, algnN);
-    ret = device::Cholesky::cpotrfp_f32(stream, N, (std::complex<float>*)iA, algnN, jpiv);
+    ret = device::Cholesky::cpotrfp(stream, 0., N, (std::complex<float>*)iA, algnN, Precision::FP32, jpiv);
     device::copy_upper_triangular(stream, 2, N, (float*)iA, algnN * 2, Precision::FP32, (double*)A, lda * 2, Precision::FP64);
   }
   else if (elem_bytes == 16) {
@@ -122,7 +122,7 @@ int32_t device::QR::zgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
     internal::int8::r8i_TN_gemm_stridedA_f64(stream, handle, N, params.iter_k, algnN, algnM, iA, A_im, orderA, &mat_f64[strideC], scratch);
 
     internal::int8::planar_to_interleave_f64(stream, N, mat_f64, algnN, orderA, vexp, (std::complex<double>*)iA, algnN);
-    ret = device::Cholesky::cpotrfp_f64(stream, N, (std::complex<double>*)iA, algnN, jpiv);
+    ret = device::Cholesky::cpotrfp(stream, 0., N, (std::complex<double>*)iA, algnN, Precision::FP64, jpiv);
     device::copy_upper_triangular(stream, 2, N, (double*)iA, algnN * 2, Precision::FP64, (double*)A, lda * 2, Precision::FP64);
   }
   else if (elem_bytes == 32 && params.use_fp64_over_32 == 1) {
@@ -132,7 +132,7 @@ int32_t device::QR::zgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
     internal::int8::r8i_TN_gemm_stridedA_f128_dd(stream, handle, N, params.iter_k, algnN, algnM, iA, A_im, orderA, &mat_dd[strideC], scratch);
 
     internal::int8::planar_to_interleave_f128_dd(stream, N, mat_dd, algnN, orderA, vexp, (complex_double2*)iA, algnN);
-    ret = device::Cholesky::cpotrfp_f128_dd(stream, N, (complex_double2*)iA, algnN, jpiv);
+    ret = device::Cholesky::cpotrfp(stream, 0., N, (complex_double2*)iA, algnN, Precision::FP128_DD, jpiv);
     device::copy_upper_triangular(stream, 2, N, (double2*)iA, algnN * 2, Precision::FP128_DD, (double*)A, lda * 2, Precision::FP64);
   }
   else {
@@ -142,7 +142,7 @@ int32_t device::QR::zgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
     internal::int8::r8i_TN_gemm_stridedA_f128_qf(stream, handle, N, params.iter_k, algnN, algnM, iA, A_im, orderA, &mat_qf[strideC], scratch);
 
     internal::int8::planar_to_interleave_f128_qf(stream, N, mat_qf, algnN, orderA, vexp, (complex_float4*)iA, algnN);
-    ret = device::Cholesky::cpotrfp_f128_qf(stream, N, (complex_float4*)iA, algnN, jpiv);
+    ret = device::Cholesky::cpotrfp(stream, 0., N, (complex_float4*)iA, algnN, Precision::FP128_QF, jpiv);
     device::copy_upper_triangular(stream, 2, N, (float4*)iA, algnN * 2, Precision::FP128_QF, (double*)A, lda * 2, Precision::FP64);
   }
 
@@ -173,7 +173,7 @@ int32_t device::QR::cgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
     internal::int8::r8i_TN_gemm_stridedA_f32(stream, handle, N, params.iter_k, algnN, algnM, iA, A_im, orderA, &mat_f32[strideC], scratch);
 
     internal::int8::planar_to_interleave_f32(stream, N, mat_f32, algnN, orderA, vexp, (std::complex<float>*)iA, algnN);
-    ret = device::Cholesky::cpotrfp_f32(stream, N, (std::complex<float>*)iA, algnN, jpiv);
+    ret = device::Cholesky::cpotrfp(stream, 0., N, (std::complex<float>*)iA, algnN, Precision::FP32, jpiv);
     device::copy_upper_triangular(stream, 2, N, (float*)iA, algnN * 2, Precision::FP32, (float*)A, lda * 2, Precision::FP32);
   }
   else if (elem_bytes == 16) {
@@ -183,7 +183,7 @@ int32_t device::QR::cgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geq
     internal::int8::r8i_TN_gemm_stridedA_f64(stream, handle, N, params.iter_k, algnN, algnM, iA, A_im, orderA, &mat_f64[strideC], scratch);
 
     internal::int8::planar_to_interleave_f64(stream, N, mat_f64, algnN, orderA, vexp, (std::complex<double>*)iA, algnN);
-    ret = device::Cholesky::cpotrfp_f64(stream, N, (std::complex<double>*)iA, algnN, jpiv);
+    ret = device::Cholesky::cpotrfp(stream, 0., N, (std::complex<double>*)iA, algnN, Precision::FP64, jpiv);
     device::copy_upper_triangular(stream, 2, N, (double*)iA, algnN * 2, Precision::FP64, (float*)A, lda * 2, Precision::FP32);
   }
 

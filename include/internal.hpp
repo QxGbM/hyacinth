@@ -102,6 +102,8 @@ namespace internal::int8 {
 
   void r8i_TN_gemm_stridedA_f128_qf(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32_t order_k, int32_t algnN, int32_t algnK, const int8_t* AT, const int8_t* A, int32_t orderA, float4* C, int32_t* workspace);
 
+  void i32_normalization(cudaStream_t stream, uint64_t M, int32_t order, int32_t beta, int32_t* A);
+
   void scal_exponent_f64(cudaStream_t stream, int32_t N, double* A, int32_t lda, int32_t gemm_expon, const int32_t* vec_expon);
 
   void scal_exponent_f32(cudaStream_t stream, int32_t N, float* A, int32_t lda, int32_t gemm_expon, const int32_t* vec_expon);

@@ -35,26 +35,15 @@ namespace device {
 namespace device::Cholesky {
   // jpiv :: host page-locked, minimal length N + 8, 16 byte aligned
   // A :: device, minimal length lda * (N + 1), 16 byte aligned
+  // epi :: Early termination, For [0., 1.] epi, it serves as relative error; For [1., N], it serves as fixed rank
+  //        epi = 0., Will not terminate early, unless divided-by-0 occurs at diagonal
 
-  int32_t rpotrfp(cudaStream_t stream, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv);
+  // Return :: Number of iterations [0, N] = matrix rank
+  //           The last interation is on the fly when function returns, will need synchronization to access
 
-  int32_t rpotrfp_f64(cudaStream_t stream, int32_t N, double* A, int32_t lda, int32_t* jpiv);
+  int32_t rpotrfp(cudaStream_t stream, double epi, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv);
 
-  int32_t rpotrfp_f32(cudaStream_t stream, int32_t N, float* A, int32_t lda, int32_t* jpiv);
-
-  int32_t rpotrfp_f128_dd(cudaStream_t stream, int32_t N, double2* A, int32_t lda, int32_t* jpiv);
-
-  int32_t rpotrfp_f128_qf(cudaStream_t stream, int32_t N, float4* A, int32_t lda, int32_t* jpiv);
-
-  int32_t cpotrfp(cudaStream_t stream, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv);
-
-  int32_t cpotrfp_f64(cudaStream_t stream, int32_t N, std::complex<double>* A, int32_t lda, int32_t* jpiv);
-
-  int32_t cpotrfp_f32(cudaStream_t stream, int32_t N, std::complex<float>* A, int32_t lda, int32_t* jpiv);
-
-  int32_t cpotrfp_f128_dd(cudaStream_t stream, int32_t N, complex_double2* A, int32_t lda, int32_t* jpiv);
-
-  int32_t cpotrfp_f128_qf(cudaStream_t stream, int32_t N, complex_float4* A, int32_t lda, int32_t* jpiv);
+  int32_t cpotrfp(cudaStream_t stream, double epi, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv);
 
 };
 

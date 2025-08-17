@@ -42,30 +42,50 @@ inline void gemv_dispatcher(cudaStream_t stream, void* scale, int32_t M, int32_t
     internal::Cholesky::gemv_scal_f128_qf(stream, *((float4*)scale), M, N, (const float4*)A, lda, (float4*)B, (float4*)D);
 }
 
-template <Precision prec>
-inline int32_t diag_pred(void* diag) {
-  if constexpr(prec == Precision::FP64 || prec == Precision::FP128_DD)
-    return !std::isnormal(*((double*)diag));
-  else if constexpr(prec == Precision::FP32 || prec == Precision::FP128_QF)
-    return !std::isnormal(*((float*)diag));
+template <Precision prec, class real_t>
+inline double set_s0(real_t diag, double epi) {
+  if constexpr(prec == Precision::FP64)
+    return epi * diag;
+  else if constexpr(prec == Precision::FP32)
+    return epi * double(diag);
+  else if constexpr(prec == Precision::FP128_DD)
+    return epi * diag.x;
+  else if constexpr(prec == Precision::FP128_QF)
+    return epi * double(diag.x);
 }
 
 template <Precision prec, class real_t>
-inline int32_t real_potrfp(cudaStream_t stream, int32_t N, real_t* A, int32_t lda, int32_t* jpiv) {
-  int32_t algnN = (N + 3) & (~3), *pivot_i = &jpiv[algnN + 4];
+inline int32_t diag_pred(real_t diag, double s0) {
+  double diag_f64 = 0.;
+  if constexpr(prec == Precision::FP64)
+    diag_f64 = diag;
+  else if constexpr(prec == Precision::FP32)
+    diag_f64 = double(diag);
+  else if constexpr(prec == Precision::FP128_DD)
+    diag_f64 = diag.x;
+  else if constexpr(prec == Precision::FP128_QF)
+    diag_f64 = double(diag.x);
+  return !(std::isnormal(diag_f64) && diag_f64 <= s0);
+}
+
+template <Precision prec, class real_t>
+inline int32_t real_potrfp(cudaStream_t stream, double epi, int32_t N, real_t* A, int32_t lda, int32_t* jpiv) {
+  int32_t algnN = (N + 3) & (~3), *pivot_i = &jpiv[algnN + 4], iters = epi < 1. ? N : std::min(N, int32_t(epi));
   real_t* scale = (real_t*)(&jpiv[algnN]), *diag = (real_t*)(&A[uint64_t(N) * uint64_t(lda)]);
+  double s0 = std::numeric_limits<double>::infinity();
   std::iota(jpiv, &jpiv[N], 1);
   cudaMemcpy2DAsync(diag, sizeof(real_t), A, (lda + 1) * sizeof(real_t), sizeof(real_t), N, cudaMemcpyDeviceToDevice, stream);
 
-  for (int32_t i = 0; i < N; ++i) {
+  for (int32_t i = 0; i < iters; ++i) {
     uint64_t A_diag = uint64_t(i) * uint64_t(lda + 1);
     uint64_t A_col = uint64_t(i) * uint64_t(lda);
 
     imax_dispatcher<prec>(stream, N - i, &diag[i], &A[A_diag], lda, pivot_i, scale);
     cudaStreamSynchronize(stream);
 
-    if (diag_pred<prec>(scale))
-      return i + 1;
+    s0 = (0 == i && epi < 1.) ? set_s0<prec, real_t>(*scale, 1. / epi) : s0;
+    if (diag_pred<prec, real_t>(*scale, s0))
+      return i;
 
     if (0 < *pivot_i) {
       int32_t j = *pivot_i + i;
@@ -74,37 +94,21 @@ inline int32_t real_potrfp(cudaStream_t stream, int32_t N, real_t* A, int32_t ld
     }
     gemv_dispatcher<prec>(stream, scale, N - i, i, &A[A_col], lda, &A[A_diag], &diag[i]);
   }
-  return 0;
+  return iters;
 }
 
-int32_t device::Cholesky::rpotrfp(cudaStream_t stream, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv) {
+int32_t device::Cholesky::rpotrfp(cudaStream_t stream, double epi, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv) {
+  epi = std::max(epi, 0.);
   switch (precA) {
     case Precision::FP64:
-      return real_potrfp<Precision::FP64, double>(stream, N, (double*)A, lda, jpiv);
+      return real_potrfp<Precision::FP64, double>(stream, epi, N, (double*)A, lda, jpiv);
     case Precision::FP32:
-      return real_potrfp<Precision::FP32, float>(stream, N, (float*)A, lda, jpiv);
+      return real_potrfp<Precision::FP32, float>(stream, epi, N, (float*)A, lda, jpiv);
     case Precision::FP128_DD:
-      return real_potrfp<Precision::FP128_DD, double2>(stream, N, (double2*)A, lda, jpiv);
+      return real_potrfp<Precision::FP128_DD, double2>(stream, epi, N, (double2*)A, lda, jpiv);
     case Precision::FP128_QF:
-      return real_potrfp<Precision::FP128_QF, float4>(stream, N, (float4*)A, lda, jpiv);
+      return real_potrfp<Precision::FP128_QF, float4>(stream, epi, N, (float4*)A, lda, jpiv);
     default:
       return -1;
   }
 }
-
-int32_t device::Cholesky::rpotrfp_f64(cudaStream_t stream, int32_t N, double* A, int32_t lda, int32_t* jpiv) {
-  return real_potrfp<Precision::FP64, double>(stream, N, A, lda, jpiv);
-}
-
-int32_t device::Cholesky::rpotrfp_f32(cudaStream_t stream, int32_t N, float* A, int32_t lda, int32_t* jpiv) {
-  return real_potrfp<Precision::FP32, float>(stream, N, A, lda, jpiv);
-}
-
-int32_t device::Cholesky::rpotrfp_f128_dd(cudaStream_t stream, int32_t N, double2* A, int32_t lda, int32_t* jpiv) {
-  return real_potrfp<Precision::FP128_DD, double2>(stream, N, A, lda, jpiv);
-}
-
-int32_t device::Cholesky::rpotrfp_f128_qf(cudaStream_t stream, int32_t N, float4* A, int32_t lda, int32_t* jpiv) {
-  return real_potrfp<Precision::FP128_QF, float4>(stream, N, A, lda, jpiv);
-}
-
