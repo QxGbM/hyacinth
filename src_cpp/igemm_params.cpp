@@ -9,14 +9,14 @@ void device_igemm_behavior(int32_t& iter_k, Precision& which_f128) {
   cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, device);
 
   device = 100 * major + minor;
-  iter_k = device == 900 ? (1024 << (14 - 2 * device::Config::exp_base)) : 16384;
+  iter_k = device == 900 ? (1024 << std::min(5, 14 - 2 * device::Config::exp_base)) : 32768;
   which_f128 = (device == 800 || device == 900 || device == 1000) ? Precision::FP128_DD : Precision::FP128_QF;
 }
 
 void device::MixPrecAHA::rATA_params_query(gemm_params* param, double epi, int32_t M, int32_t N, Precision precA) {
   double machine_epi = precA == Precision::FP32 ? 
     double(std::numeric_limits<float>::epsilon()) : std::numeric_limits<double>::epsilon();
-  epi = -std::log2(std::max(std::abs(epi), machine_epi));
+  epi = -std::log2(std::min(1., std::max(epi, machine_epi)));
 
   param->M = M; param->N = N; param->precA = precA;
   param->algnM = (M + 63) & (~63); param->algnN = (N + 63) & (~63);
@@ -37,13 +37,16 @@ void device::MixPrecAHA::rATA_params_query(gemm_params* param, double epi, int32
   param->i8_bytes = (param->i8_bytes + algn_i8) & (~algn_i8);
   param->exp_bytes = sizeof(int32_t) * uint64_t(param->algnN);
   param->scratch_bytes = sizeof(int32_t) * uint64_t(param->orderA + 1) * strideC;
-  param->C_bytes = param->acc_bytes + param->i8_bytes + param->scratch_bytes + param->exp_bytes;
+
+  uint64_t A_elem_bytes = precA == Precision::FP32 ? sizeof(float) : sizeof(double);
+  uint64_t spare_space = std::max(param->i8_bytes + param->scratch_bytes, A_elem_bytes * strideC);
+  param->C_bytes = param->acc_bytes + param->exp_bytes + spare_space;
 }
 
 void device::MixPrecAHA::cAHA_params_query(gemm_params* param, double epi, int32_t M, int32_t N, Precision precA) {
   double machine_epi = precA == Precision::FP32 ? 
     double(std::numeric_limits<float>::epsilon()) : std::numeric_limits<double>::epsilon();
-  epi = -std::log2(std::max(std::abs(epi), machine_epi));
+  epi = -std::log2(std::min(1., std::max(epi, machine_epi)));
 
   param->M = M; param->N = N; param->precA = precA;
   param->algnM = (M + 63) & (~63); param->algnN = (N + 63) & (~63);

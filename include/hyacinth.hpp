@@ -28,10 +28,13 @@ namespace device {
 
   void copy_upper_triangular(cudaStream_t stream, int32_t M, int32_t N, const void* A, int32_t lda, Precision precA, void* B, int32_t ldb, Precision precB);
 
-  void copy_rectangle(cudaStream_t stream, int32_t M, int32_t N, const void* A, int32_t lda, Precision precA, void* B, int32_t ldb, Precision precB);
+  void copy_permute(cudaStream_t stream, int32_t M, int32_t N, const int32_t* jpiv, const void* A, int32_t lda, void* B, int32_t ldb, Precision prec);
+
+  void strided_identity(cudaStream_t stream, int32_t M, int32_t N, int32_t strideD, void* A, int32_t lda, Precision prec);
 
   // Mixed precision geqp3, synchronous call, includes memory alloc/dealloc
-  // A :: device, minimal length lda * N
+  // Will always attempt to create the complete R unless rank deficient
+  // A :: device, minimal length lda * N, M <= lda
   // jpiv :: host/device, minimal length N
 
   int32_t dgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t M, int32_t N, double* A, int32_t lda, int32_t* jpiv);
@@ -42,20 +45,39 @@ namespace device {
 
   int32_t cgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t M, int32_t N, std::complex<float>* A, int32_t lda, int32_t* jpiv);
 
+  // Mixed precision interpolative decomposition, synchronous call, includes memory alloc/dealloc
+  // Outputs A ~= A[:jpiv(1, rank)] * X, rank of X as function return
+  // A :: device, minimal length lda * N, M <= lda
+  // jpiv :: host/device, minimal length N
+  // X :: device, minimal length ldx * N, rank <= ldx
+
+  int32_t interp_decomp_f64(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank,
+    int32_t M, int32_t N, const double* A, int32_t lda, int32_t* jpiv, double* X, int32_t ldx);
+
+  int32_t interp_decomp_f32(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank,
+    int32_t M, int32_t N, const float* A, int32_t lda, int32_t* jpiv, float* X, int32_t ldx);
+
+  int32_t interp_decomp_cf64(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank,
+    int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int32_t* jpiv, std::complex<double>* X, int32_t ldx);
+
+  int32_t interp_decomp_cf32(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank,
+    int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int32_t* jpiv, std::complex<float>* X, int32_t ldx);
+
 };
 
 namespace device::Cholesky {
   // jpiv :: host page-locked, minimal length N + 8, 16 byte aligned
   // A :: device, minimal length lda * (N + 1), 16 byte aligned
-  // epi :: Early termination, For [0., 1.] epi, it serves as relative error; For [1., N], it serves as fixed rank
-  //        epi = 0., Will not terminate early, unless divided-by-0 occurs at diagonal
+  // epi :: Early termination by relative error, truncated to [0., 1.];
+  // iters :: Early termination by fix rank, truncated to [1, N];
+  // epi = 0. && iters = N, Will not terminate early, unless divided-by-0 occurs at diagonal
 
   // Return :: Number of iterations [0, N] = matrix rank
   //           The last interation is on the fly when function returns, will need synchronization to access
 
-  int32_t rpotrfp(cudaStream_t stream, double epi, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv);
+  int32_t rpotrfp(cudaStream_t stream, double epi, int32_t iters, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv);
 
-  int32_t cpotrfp(cudaStream_t stream, double epi, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv);
+  int32_t cpotrfp(cudaStream_t stream, double epi, int32_t iters, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv);
 
 };
 

@@ -13,12 +13,12 @@ set(CPP_SOURCES
   src_cpp/geqp3_ronly.cpp
   src_cpp/igemm_params.cpp
   src_cpp/igemm.cpp
+  src_cpp/interp_decomp.cpp
   src_cpp/potrfp_complex.cpp
   src_cpp/potrfp_real.cpp
 )
 
 set(CU_SOURCES
-  src_cuda/copy_convert_upper.cu
   src_cuda/decode_strided_i32.cu
   src_cuda/encode_fp_int_strided.cu
   src_cuda/fp_exponent.cu
@@ -28,6 +28,7 @@ set(CU_SOURCES
   src_cuda/imax_diag.cu
   src_cuda/reduce_scal.cu
   src_cuda/swap_cols.cu
+  src_cuda/utils.cu
 )
 
 set_source_files_properties(${CPP_SOURCES} PROPERTIES COMPILE_OPTIONS 
@@ -48,6 +49,7 @@ enable_testing()
 set(TEST_SOURCES
   examples/cgeqp3_example.cpp
   examples/dgeqp3_example.cpp
+  examples/dlra_example.cpp
   examples/sgeqp3_example.cpp
   examples/zgeqp3_example.cpp
 )

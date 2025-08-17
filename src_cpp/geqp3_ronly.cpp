@@ -1,8 +1,6 @@
 
 #include <hyacinth.hpp>
 #include <internal.hpp>
-#include <double_double.hpp>
-#include <quad_float.hpp>
 
 int32_t device::dgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t M, int32_t N, double* A, int32_t lda, int32_t* jpiv) {
   device::MixPrecAHA::gemm_params param;
@@ -14,7 +12,7 @@ int32_t device::dgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double 
   cudaMallocHost((void**)(&dpiv), (N + 8) * sizeof(int32_t));
 
   device::MixPrecAHA::rATA(stream, handle, param, A, lda, work);
-  int32_t ret = device::Cholesky::rpotrfp(stream, 0., N, work, param.algnN, param.precC, dpiv);
+  int32_t ret = device::Cholesky::rpotrfp(stream, 0., N, N, work, param.algnN, param.precC, dpiv);
   copy_upper_triangular(stream, 1, N, work, param.algnN, param.precC, A, lda, param.precA);
 
   cudaStreamSynchronize(stream);
@@ -34,7 +32,7 @@ int32_t device::sgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double 
   cudaMallocHost((void**)(&dpiv), (N + 8) * sizeof(int32_t));
 
   device::MixPrecAHA::rATA(stream, handle, param, A, lda, work);
-  int32_t ret = device::Cholesky::rpotrfp(stream, 0., N, work, param.algnN, param.precC, dpiv);
+  int32_t ret = device::Cholesky::rpotrfp(stream, 0., N, N, work, param.algnN, param.precC, dpiv);
   copy_upper_triangular(stream, 1, N, work, param.algnN, param.precC, A, lda, param.precA);
 
   cudaStreamSynchronize(stream);
@@ -54,7 +52,7 @@ int32_t device::zgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double 
   cudaMallocHost((void**)(&dpiv), (N + 8) * sizeof(int32_t));
 
   device::MixPrecAHA::cAHA(stream, handle, param, A, lda, work);
-  int32_t ret = device::Cholesky::cpotrfp(stream, 0., N, work, param.algnN, param.precC, dpiv);
+  int32_t ret = device::Cholesky::cpotrfp(stream, 0., N, N, work, param.algnN, param.precC, dpiv);
   copy_upper_triangular(stream, 2, N, work, 2 * param.algnN, param.precC, A, 2 * lda, param.precA);
 
   cudaStreamSynchronize(stream);
@@ -74,7 +72,7 @@ int32_t device::cgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double 
   cudaMallocHost((void**)(&dpiv), (N + 8) * sizeof(int32_t));
 
   device::MixPrecAHA::cAHA(stream, handle, param, A, lda, work);
-  int32_t ret = device::Cholesky::cpotrfp(stream, 0., N, work, param.algnN, param.precC, dpiv);
+  int32_t ret = device::Cholesky::cpotrfp(stream, 0., N, N, work, param.algnN, param.precC, dpiv);
   copy_upper_triangular(stream, 2, N, work, 2 * param.algnN, param.precC, A, 2 * lda, param.precA);
 
   cudaStreamSynchronize(stream);
