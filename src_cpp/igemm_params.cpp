@@ -1,0 +1,71 @@
+
+#include <hyacinth.hpp>
+#include <limits>
+
+void device_igemm_behavior(int32_t& iter_k, Precision& which_f128) {
+  int32_t device, major, minor;
+  cudaGetDevice(&device);
+  cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, device);
+  cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, device);
+
+  device = 100 * major + minor;
+  iter_k = device == 900 ? (1024 << (14 - 2 * device::Config::exp_base)) : 16384;
+  which_f128 = (device == 800 || device == 900 || device == 1000) ? Precision::FP128_DD : Precision::FP128_QF;
+}
+
+void device::MixPrecAHA::rATA_params_query(gemm_params* param, double epi, int32_t M, int32_t N, Precision precA) {
+  double machine_epi = precA == Precision::FP32 ? 
+    double(std::numeric_limits<float>::epsilon()) : std::numeric_limits<double>::epsilon();
+  epi = -std::log2(std::max(std::abs(epi), machine_epi));
+
+  param->M = M; param->N = N; param->precA = precA;
+  param->algnM = (M + 63) & (~63); param->algnN = (N + 63) & (~63);
+  param->orderA = std::max(1, 1 + int32_t(std::ceil(epi / device::Config::exp_base)));
+
+  int32_t acc_bits = std::max(1, int32_t(std::ceil(2 * epi)));
+  Precision f128;
+  device_igemm_behavior(param->iter_k, f128);
+  param->precC = acc_bits <= 24 ? Precision::FP32 : (acc_bits <= 53 ? Precision::FP64 : f128);
+  param->C_elem_bytes = acc_bits <= 24 ? 4 : (acc_bits <= 53 ? 8 : 16);
+
+  constexpr uint64_t algn_i8 = uint64_t(64) * sizeof(int32_t) - 1;
+  uint64_t strideA = uint64_t(param->algnM) * uint64_t(N);
+  uint64_t strideC = uint64_t(param->algnN) * uint64_t(N);
+
+  param->acc_bytes = uint64_t(param->C_elem_bytes) * strideC;
+  param->i8_bytes = uint64_t(param->orderA) * strideA;
+  param->i8_bytes = (param->i8_bytes + algn_i8) & (~algn_i8);
+  param->exp_bytes = sizeof(int32_t) * uint64_t(param->algnN);
+  param->scratch_bytes = sizeof(int32_t) * uint64_t(param->orderA + 1) * strideC;
+  param->C_bytes = param->acc_bytes + param->i8_bytes + param->scratch_bytes + param->exp_bytes;
+}
+
+void device::MixPrecAHA::cAHA_params_query(gemm_params* param, double epi, int32_t M, int32_t N, Precision precA) {
+  double machine_epi = precA == Precision::FP32 ? 
+    double(std::numeric_limits<float>::epsilon()) : std::numeric_limits<double>::epsilon();
+  epi = -std::log2(std::max(std::abs(epi), machine_epi));
+
+  param->M = M; param->N = N; param->precA = precA;
+  param->algnM = (M + 63) & (~63); param->algnN = (N + 63) & (~63);
+  param->orderA = std::max(1, 1 + int32_t(std::ceil(epi / device::Config::exp_base)));
+
+  int32_t acc_bits = std::max(1, int32_t(std::ceil(2 * epi)));
+  Precision f128;
+  device_igemm_behavior(param->iter_k, f128);
+  param->precC = acc_bits <= 24 ? Precision::FP32 : (acc_bits <= 53 ? Precision::FP64 : f128);
+  param->C_elem_bytes = acc_bits <= 24 ? 8 : (acc_bits <= 53 ? 16 : 32);
+
+  constexpr uint64_t algn_i8 = uint64_t(64) * sizeof(int32_t) - 1;
+  uint64_t strideA = uint64_t(2) * uint64_t(param->algnM) * uint64_t(N);
+  uint64_t strideC = uint64_t(param->algnN) * uint64_t(N);
+
+  param->acc_bytes = uint64_t(param->C_elem_bytes) * strideC;
+  param->i8_bytes = uint64_t(param->orderA) * strideA;
+  param->i8_bytes = (param->i8_bytes + algn_i8) & (~algn_i8);
+  param->exp_bytes = sizeof(int32_t) * uint64_t(param->algnN);
+  param->scratch_bytes = sizeof(int32_t) * uint64_t(param->orderA + 1) * strideC;
+
+  uint64_t spare_space = std::max(param->i8_bytes + param->scratch_bytes, param->acc_bytes);
+  param->C_bytes = param->acc_bytes + param->exp_bytes + spare_space;
+}
+

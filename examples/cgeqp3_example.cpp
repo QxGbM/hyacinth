@@ -21,23 +21,14 @@ int32_t main(int32_t argc, char* argv[]) {
   int32_t N = std::min(M, 2 < argc ? std::atoi(argv[2]) : 128);
   double epi = 3 < argc ? std::atof(argv[3]) : 1.e-6;
   std::vector<std::complex<float>> matA(M * N);
-  int32_t* ipiv;
+  std::vector<int32_t> ipiv(N);
 
   std::mt19937_64 gen;
   std::normal_distribution<float> dist(0, 32);
   std::generate(matA.begin(), matA.end(), [&](){ return std::complex<float>(dist(gen), dist(gen)); });
 
-  device::QR::geqp3_params params;
-  device::QR::cgeqp3_ronly_params_query(&params, epi, M, N);
-
   std::cout << "CGEQP3 <" << M << ", " << N << ">\n";
   std::cout << "Epi: " << epi << "\n";
-  std::cout << "orderA: " << params.orderA << "\n";
-  std::cout << "IGEMM k=" << params.iter_k << "\n";
-  std::cout << "i8 bytes: " << params.n_i8 << "\n";
-  std::cout << "Matrix elements: " << params.n_elem << "\n";
-  std::cout << "Matrix element bytes: " << params.elem_bytes << "\n";
-  std::cout << "Total work bytes: " << params.work_bytes << "\n" << std::endl;
 
   cudaStream_t stream;
   cublasHandle_t handle;
@@ -50,15 +41,11 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaEventCreate(&stop);
 
   std::complex<float>* d_A = nullptr;
-  void* work = nullptr;
   cudaMalloc((void**)(&d_A), M * N * sizeof(std::complex<float>));
-  cudaMalloc(&work, params.work_bytes);
-  cudaMallocHost((void**)(&ipiv), (N + 8) * sizeof(int32_t));
-
   cudaMemcpy(d_A, matA.data(), M * N * sizeof(std::complex<float>), cudaMemcpyHostToDevice);
 
   cudaEventRecord(start, stream);
-  int32_t ret = device::QR::cgeqp3_ronly(stream, handle, params, d_A, M, ipiv, work);
+  int32_t ret = device::cgeqp3_ronly(stream, handle, epi, M, N, d_A, M, ipiv.data());
   cudaEventRecord(stop, stream);
 
   cudaDeviceSynchronize();
@@ -97,7 +84,6 @@ int32_t main(int32_t argc, char* argv[]) {
   std::cout << "GFLOPs: " << double(flops) * 1.e-6 / milliseconds << "\n";
 
   cudaFree(d_A);
-  cudaFreeHost(ipiv);
   cudaEventDestroy(start);
   cudaEventDestroy(stop);
   cudaStreamDestroy(stream);

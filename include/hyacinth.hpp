@@ -30,6 +30,18 @@ namespace device {
 
   void copy_rectangle(cudaStream_t stream, int32_t M, int32_t N, const void* A, int32_t lda, Precision precA, void* B, int32_t ldb, Precision precB);
 
+  // Mixed precision geqp3, synchronous call, includes memory alloc/dealloc
+  // A :: device, minimal length lda * N
+  // jpiv :: host/device, minimal length N
+
+  int32_t dgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t M, int32_t N, double* A, int32_t lda, int32_t* jpiv);
+
+  int32_t sgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t M, int32_t N, float* A, int32_t lda, int32_t* jpiv);
+
+  int32_t zgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t M, int32_t N, std::complex<double>* A, int32_t lda, int32_t* jpiv);
+
+  int32_t cgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t M, int32_t N, std::complex<float>* A, int32_t lda, int32_t* jpiv);
+
 };
 
 namespace device::Cholesky {
@@ -47,38 +59,39 @@ namespace device::Cholesky {
 
 };
 
-namespace device::QR {
-  // jpiv :: host page-locked, minimal length N + 8, 16 byte aligned
-  // A :: device, minimal length lda * N, 16 byte aligned
-  // work :: device, queried in params, 256 byte aligned
+namespace device::MixPrecAHA {
+  // A :: device, minimal length lda * N
+  // C :: device, queried in param, 256 byte aligned
 
-  struct geqp3_params {
-    int32_t M, N, algnM, algnN, orderA, elem_bytes, iter_k, use_fp64_over_32;
-    uint64_t n_elem, n_i8, v_exp, scratchpad, work_bytes;
+  // Output :: C = A^H * A, Stored in the leading positions
+  //           C is [param.N] by [param.N] with stride [param.algnN]
+  //           Precision used is [param.precC], with [param.C_elem_bytes] sized elements
+
+  struct gemm_params {
+    Precision precA;
+    int32_t M;
+    int32_t N;
+    int32_t algnM;
+    int32_t orderA;
+    int32_t iter_k;
+
+    Precision precC;
+    int32_t algnN;
+    int32_t C_elem_bytes;
+
+    uint64_t acc_bytes;
+    uint64_t i8_bytes;
+    uint64_t exp_bytes;
+    uint64_t scratch_bytes;
+    uint64_t C_bytes;
   };
 
-  void dgeqp3_ronly_params_query(geqp3_params* params, double epi, int32_t M, int32_t N);
+  void rATA_params_query(gemm_params* param, double epi, int32_t M, int32_t N, Precision precA);
 
-  void sgeqp3_ronly_params_query(geqp3_params* params, float epi, int32_t M, int32_t N);
+  void cAHA_params_query(gemm_params* param, double epi, int32_t M, int32_t N, Precision precA);
 
-  void zgeqp3_ronly_params_query(geqp3_params* params, double epi, int32_t M, int32_t N);
+  void rATA(cudaStream_t stream, cublasHandle_t handle, gemm_params param, const void* A, int32_t lda, void* C);
 
-  void cgeqp3_ronly_params_query(geqp3_params* params, float epi, int32_t M, int32_t N);
+  void cAHA(cudaStream_t stream, cublasHandle_t handle, gemm_params param, const void* A, int32_t lda, void* C);
 
-  void set_double_double_as_fp128(geqp3_params* params);
-
-  void set_quad_float_as_fp128(geqp3_params* params);
-
-  int32_t dgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geqp3_params params, double* A, int32_t lda, int32_t* jpiv, void* workspace);
-
-  int32_t sgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geqp3_params params, float* A, int32_t lda, int32_t* jpiv, void* workspace);
-
-  int32_t zgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geqp3_params params, std::complex<double>* A, int32_t lda, int32_t* jpiv, void* workspace);
-
-  int32_t cgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, geqp3_params params, std::complex<float>* A, int32_t lda, int32_t* jpiv, void* workspace);
-
-};
-
-namespace device::ID {
-  
 };
