@@ -34,7 +34,7 @@ int32_t main(int32_t argc, char* argv[]) {
 
   make_1D_oscilatory(200, M, N, matA.data(), M);
 
-  std::cout << "F64 LR-APPROX <" << M << ", " << N << ">\n";
+  std::cout << "CF32 LR-APPROX <" << M << ", " << N << ">\n";
   std::cout << "Epi: " << epi << "\n";
 
   cudaStream_t stream;
