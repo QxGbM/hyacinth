@@ -10,6 +10,7 @@ set (SM_TARGETS "all-major")
 find_package(CUDAToolkit REQUIRED)
 
 set(CPP_SOURCES
+  src_cpp/check_id.cpp
   src_cpp/geqp3_ronly.cpp
   src_cpp/igemm_params.cpp
   src_cpp/igemm.cpp

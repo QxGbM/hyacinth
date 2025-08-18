@@ -25,7 +25,7 @@ int32_t device::interp_decomp_f64(cudaStream_t stream, cublasHandle_t handle, do
       cublasDtrsm(handle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, rank, N - rank, &one, R, algnN, R2, algnN);
     }
     strided_identity(stream, rank, rank, rank + 1, R, algnN, Precision::FP64);
-    copy_permute(stream, rank, N, dpiv, R, algnN, X, ldx, Precision::FP64);
+    copy_permute(stream, 0, rank, N, dpiv, R, algnN, X, ldx, Precision::FP64);
   }
 
   cudaStreamSynchronize(stream);
@@ -57,7 +57,7 @@ int32_t device::interp_decomp_f32(cudaStream_t stream, cublasHandle_t handle, do
       cublasStrsm(handle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, rank, N - rank, &one, R, algnN, R2, algnN);
     }
     strided_identity(stream, rank, rank, rank + 1, R, algnN, Precision::FP32);
-    copy_permute(stream, rank, N, dpiv, R, algnN, X, ldx, Precision::FP32);
+    copy_permute(stream, 0, rank, N, dpiv, R, algnN, X, ldx, Precision::FP32);
   }
 
   cudaStreamSynchronize(stream);
@@ -90,7 +90,7 @@ int32_t device::interp_decomp_cf64(cudaStream_t stream, cublasHandle_t handle, d
       cublasZtrsm(handle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, rank, N - rank, (cuDoubleComplex*)&one, R, algnN, R2, algnN);
     }
     strided_identity(stream, 2 * rank, rank, 2 * (rank + 1), R, 2 * algnN, Precision::FP64);
-    copy_permute(stream, 2 * rank, N, dpiv, R, 2 * algnN, X, 2 * ldx, Precision::FP64);
+    copy_permute(stream, 0, 2 * rank, N, dpiv, R, 2 * algnN, X, 2 * ldx, Precision::FP64);
   }
 
   cudaStreamSynchronize(stream);
@@ -123,7 +123,7 @@ int32_t device::interp_decomp_cf32(cudaStream_t stream, cublasHandle_t handle, d
       cublasCtrsm(handle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, rank, N - rank, (cuComplex*)&one, R, algnN, R2, algnN);
     }
     strided_identity(stream, 2 * rank, rank, 2 * (rank + 1), R, 2 * algnN, Precision::FP32);
-    copy_permute(stream, 2 * rank, N, dpiv, R, 2 * algnN, X, 2 * ldx, Precision::FP32);
+    copy_permute(stream, 0, 2 * rank, N, dpiv, R, 2 * algnN, X, 2 * ldx, Precision::FP32);
   }
 
   cudaStreamSynchronize(stream);

@@ -91,7 +91,7 @@ void device::copy_upper_triangular(cudaStream_t stream, int32_t M, int32_t N, co
   }
 }
 
-template <class real_t> struct permute_copy {
+template <int32_t sc0ga1, class real_t> struct permute_copy {
   const real_t* A;
   real_t* B;
   const int32_t* jpiv;
@@ -102,20 +102,31 @@ template <class real_t> struct permute_copy {
   __device__ __forceinline__ void operator()(uint64_t i) {
     uint64_t x = i / M, y = i - x * M;
     uint64_t px = uint64_t(jpiv[x] - 1);
-    B[y + px * ldb] = A[y + x * lda];
+    if constexpr(sc0ga1)
+      B[y + x * ldb] = A[y + px * lda];
+    else
+      B[y + px * ldb] = A[y + x * lda];
   }
 };
 
-void device::copy_permute(cudaStream_t stream, int32_t M, int32_t N, const int32_t* jpiv, const void* A, int32_t lda, void* B, int32_t ldb, Precision prec) {
+void device::copy_permute(cudaStream_t stream, int32_t sc0ga1, int32_t M, int32_t N, const int32_t* jpiv, const void* A, int32_t lda, void* B, int32_t ldb, Precision prec) {
   uint64_t iter_items = uint64_t(N) * uint64_t(M);
   thrust::counting_iterator<uint64_t> iter(0);
 
-  if (prec == Precision::FP64) {
-    permute_copy<double> perm(M, jpiv, (const double*)A, lda, (double*)B, ldb);
+  if (prec == Precision::FP64 && !sc0ga1) {
+    permute_copy<0, double> perm(M, jpiv, (const double*)A, lda, (double*)B, ldb);
     thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, iter_items, perm);
   }
-  else if (prec == Precision::FP32) {
-    permute_copy<float> perm(M, jpiv, (const float*)A, lda, (float*)B, ldb);
+  else if (prec == Precision::FP64 && sc0ga1) {
+    permute_copy<1, double> perm(M, jpiv, (const double*)A, lda, (double*)B, ldb);
+    thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, iter_items, perm);
+  }
+  else if (prec == Precision::FP32 && !sc0ga1) {
+    permute_copy<0, float> perm(M, jpiv, (const float*)A, lda, (float*)B, ldb);
+    thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, iter_items, perm);
+  }
+  else if (prec == Precision::FP32 && sc0ga1) {
+    permute_copy<1, float> perm(M, jpiv, (const float*)A, lda, (float*)B, ldb);
     thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, iter_items, perm);
   }
 }

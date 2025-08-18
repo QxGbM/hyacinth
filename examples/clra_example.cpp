@@ -56,28 +56,9 @@ int32_t main(int32_t argc, char* argv[]) {
   int32_t rank = device::interp_decomp_cf32(stream, handle, epi, N, M, N, d_A, M, ipiv.data(), d_X, N);
   cudaEventRecord(stop, stream);
 
-  cudaDeviceSynchronize();
-
-  if (M <= 2048 && N <= 2048) {
-    std::vector<std::complex<float>> matB(M * N), matC(M * rank), matX(N * N);
-    cudaMemcpy(matX.data(), d_X, N * N * sizeof(std::complex<float>), cudaMemcpyDeviceToHost);
-
-    for (int32_t i = 0; i < rank; ++i) {
-      int32_t col = (ipiv[i] - 1);
-      std::copy_n(&matA[uint64_t(col) * uint64_t(M)], M, &matC[uint64_t(i) * uint64_t(M)]);
-    }
-    std::complex<float> zero(0., 0.), one(1., 0.);
-    cblas_cgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, rank, &one, &matC[0], M, &matX[0], N, &zero, &matB[0], M);
-  
-    double nrm = 0., err = 0.;
-    for (int32_t j = 0; j < N; ++j)
-      for (int32_t i = 0; i < M; ++i) {
-        err += std::norm(matB[i + j * M] - matA[i + j * M]);
-        nrm += std::norm(matA[i + j * M]);
-    }
-    
-    std::cout << "Approx Err: " << std::sqrt(err / nrm) << "\n" << std::endl;
-  }
+  double rel_err = 0.;
+  device::check_interp_decomp_cf32(stream, handle, rank, M, N, d_A, M, ipiv.data(), d_X, N, &rel_err);
+  std::cout << "Rel Err: " << rel_err << std::endl;
 
   float milliseconds = 0.0f;
   cudaEventElapsedTime(&milliseconds, start, stop);

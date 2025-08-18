@@ -28,7 +28,7 @@ namespace device {
 
   void copy_upper_triangular(cudaStream_t stream, int32_t M, int32_t N, const void* A, int32_t lda, Precision precA, void* B, int32_t ldb, Precision precB);
 
-  void copy_permute(cudaStream_t stream, int32_t M, int32_t N, const int32_t* jpiv, const void* A, int32_t lda, void* B, int32_t ldb, Precision prec);
+  void copy_permute(cudaStream_t stream, int32_t sc0ga1, int32_t M, int32_t N, const int32_t* jpiv, const void* A, int32_t lda, void* B, int32_t ldb, Precision prec);
 
   void strided_identity(cudaStream_t stream, int32_t M, int32_t N, int32_t strideD, void* A, int32_t lda, Precision prec);
 
@@ -62,6 +62,18 @@ namespace device {
 
   int32_t interp_decomp_cf32(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank,
     int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int32_t* jpiv, std::complex<float>* X, int32_t ldx);
+
+  void check_interp_decomp_f64(cudaStream_t stream, cublasHandle_t handle, int32_t rank,
+    int32_t M, int32_t N, const double* A, int32_t lda, const int32_t* jpiv, const double* X, int32_t ldx, double* rel_err);
+
+  void check_interp_decomp_f32(cudaStream_t stream, cublasHandle_t handle, int32_t rank,
+    int32_t M, int32_t N, const float* A, int32_t lda, const int32_t* jpiv, const float* X, int32_t ldx, double* rel_err);
+
+  void check_interp_decomp_cf64(cudaStream_t stream, cublasHandle_t handle, int32_t rank,
+    int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, const int32_t* jpiv, const std::complex<double>* X, int32_t ldx, double* rel_err);
+
+  void check_interp_decomp_cf32(cudaStream_t stream, cublasHandle_t handle, int32_t rank,
+    int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, const int32_t* jpiv, const std::complex<float>* X, int32_t ldx, double* rel_err);
 
 };
 

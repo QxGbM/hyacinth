@@ -99,7 +99,7 @@ inline int32_t real_potrfp(cudaStream_t stream, double epi, int32_t iters, int32
 }
 
 int32_t device::Cholesky::rpotrfp(cudaStream_t stream, double epi, int32_t iters, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv) {
-  epi = std::min(1., std::max(epi, 0.));
+  epi = std::min(1., std::max(0., epi));
   iters = std::min(N, std::max(0, iters));
   switch (precA) {
     case Precision::FP64:
