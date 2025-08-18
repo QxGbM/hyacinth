@@ -56,7 +56,7 @@ inline double set_s0(real_t diag, double epi) {
 }
 
 template <Precision prec, class real_t>
-inline int32_t diag_pred(real_t diag, double s0) {
+inline int32_t diag_pred(real_t diag, int32_t piv, double s0) {
   double diag_f64 = 0.;
   if constexpr(prec == Precision::FP64)
     diag_f64 = diag;
@@ -66,7 +66,7 @@ inline int32_t diag_pred(real_t diag, double s0) {
     diag_f64 = diag.x;
   else if constexpr(prec == Precision::FP128_QF)
     diag_f64 = double(diag.x);
-  return !(std::isnormal(diag_f64) && diag_f64 <= s0);
+  return !(std::isnormal(diag_f64) && diag_f64 <= s0 && 0 <= piv);
 }
 
 template <Precision prec, class real_t, class complex_t>
@@ -86,7 +86,7 @@ inline int32_t complex_potrfp(cudaStream_t stream, double epi, int32_t iters, in
 
     if (i == 0)
       s0 = set_s0<prec>(*scale, 1. / epi);
-    if (diag_pred<prec>(*scale, s0))
+    if (diag_pred<prec>(*scale, *pivot_i, s0))
       return i;
 
     if (0 < *pivot_i) {

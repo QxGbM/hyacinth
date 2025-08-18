@@ -23,7 +23,7 @@ int32_t main(int32_t argc, char* argv[]) {
   std::vector<std::complex<float>> matA(M * N);
   std::vector<int32_t> ipiv(N);
 
-  std::mt19937_64 gen;
+  std::mt19937_64 gen(42);
   std::normal_distribution<float> dist(0, 32);
   std::generate(matA.begin(), matA.end(), [&](){ return std::complex<float>(dist(gen), dist(gen)); });
 

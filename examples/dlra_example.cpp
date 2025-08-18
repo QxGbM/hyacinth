@@ -24,17 +24,17 @@ int32_t main(int32_t argc, char* argv[]) {
   std::vector<double> matA(M * N);
   std::vector<int32_t> ipiv(N);
 
-  std::mt19937_64 gen;
+  std::mt19937_64 gen(42);
   std::normal_distribution<double> dist(0, 32);
   std::generate(matA.begin(), matA.end(), [&](){ return dist(gen); });
 
-  Eigen::Map<Eigen::MatrixXd> mapA(matA.data(), M, N);
+  /*Eigen::Map<Eigen::MatrixXd> mapA(matA.data(), M, N);
   Eigen::MatrixXd AAT = mapA * mapA.adjoint();
   for (int32_t i = 0; i < 5; ++i) {
     AAT /= AAT.norm();
     AAT = AAT * AAT.adjoint();
   }
-  mapA = AAT * mapA;
+  mapA = AAT * mapA;*/
 
   std::cout << "F64 LR-APPROX <" << M << ", " << N << ">\n";
   std::cout << "Epi: " << epi << "\n";
@@ -55,16 +55,16 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaMemcpy(d_A, matA.data(), M * N * sizeof(double), cudaMemcpyHostToDevice);
 
   cudaEventRecord(start, stream);
-  int32_t rank = device::interp_decomp_f64(stream, handle, epi, std::min(M, N), M, N, d_A, M, ipiv.data(), d_X, N);
+  int32_t rank = device::interp_decomp_f64(stream, handle, epi, N, M, N, d_A, M, ipiv.data(), d_X, N);
   cudaEventRecord(stop, stream);
 
   cudaDeviceSynchronize();
 
   if (M <= 2048 && N <= 2048) {
-    std::vector<double> matB(M * N), matC(M * N), matX(N * N);
+    std::vector<double> matB(M * N), matC(M * rank), matX(N * N);
     cudaMemcpy(matX.data(), d_X, N * N * sizeof(double), cudaMemcpyDeviceToHost);
 
-    for (int32_t i = 0; i < N; ++i) {
+    for (int32_t i = 0; i < rank; ++i) {
       int32_t col = (ipiv[i] - 1);
       std::copy_n(&matA[uint64_t(col) * uint64_t(M)], M, &matC[uint64_t(i) * uint64_t(M)]);
     }
@@ -82,12 +82,14 @@ int32_t main(int32_t argc, char* argv[]) {
 
   float milliseconds = 0.0f;
   cudaEventElapsedTime(&milliseconds, start, stop);
-  int64_t flops = (int64_t(N) * int64_t(N) * int64_t(N) * -2 / 3) + (int64_t(M) * int64_t(N) * int64_t(N) * 2);
+  int64_t qr_flops = (int64_t(N) * int64_t(N) * int64_t(N) * -2 / 3) + (int64_t(M) * int64_t(N) * int64_t(N) * 2);
+  int64_t trsm_flops = int64_t(N) * int64_t(rank) * int64_t(rank);
   std::cout << "Matrix A rank: " << rank << std::endl;
   std::cout << "Time: " << milliseconds << " ms\n";
-  std::cout << "QR GFLOPs: " << double(flops) * 1.e-6 / milliseconds << "\n";
+  std::cout << "Total GFLOPs: " << double(qr_flops + trsm_flops) * 1.e-6 / milliseconds << "\n";
 
   cudaFree(d_A);
+  cudaFree(d_X);
   cudaEventDestroy(start);
   cudaEventDestroy(stop);
   cudaStreamDestroy(stream);

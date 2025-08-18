@@ -17,8 +17,11 @@ struct convert_fp {
 
   __device__ __forceinline__ void operator()(double a, float& b) { b = float(a); }
   __device__ __forceinline__ void operator()(float a, float& b) { b = a; }
+  __device__ __forceinline__ void operator()(double2 a, float& b) { b = float(a.x) + float(a.y); }
+  __device__ __forceinline__ void operator()(float4 a, float& b) { b = a.x + a.y + a.z + a.w; }
 
   __device__ __forceinline__ void operator()(double a, double2& b) { b = make_double2(a, 0.); }
+  __device__ __forceinline__ void operator()(float a, double2& b) { b = make_double2(double(a), 0.); }
   __device__ __forceinline__ void operator()(double2 a, double2& b) { b = a; }
   __device__ __forceinline__ void operator()(float4 a, double2& b) {
     b = device::dd::normalize(make_double2(double(a.x) + double(a.y), double(a.z) + double(a.w))); }
@@ -28,6 +31,7 @@ struct convert_fp {
     float a2 = float(c), a3 = float(c - double(a2));
     b = make_float4(a1, a2, a3, 0.f);
   }
+  __device__ __forceinline__ void operator()(float a, float4& b) { b = make_float4(a, 0.f, 0.f, 0.f); }
   __device__ __forceinline__ void operator()(double2 a, float4& b) {
     float4 c, d; operator()(a.x, c); operator()(a.y, d); b = device::qf::add(c, d); }
   __device__ __forceinline__ void operator()(float4 a, float4& b) { b = a; }
@@ -66,38 +70,24 @@ inline void upper_tri_dispatcher(cudaStream_t stream, int32_t M, int32_t N, cons
   }
 }
 
+template <class typeA>
+inline void upper_tri_dispatcher(cudaStream_t stream, int32_t M, int32_t N, const typeA* A, int32_t lda, void* B, int32_t ldb, Precision precB) {
+  switch (precB) {
+    case Precision::FP64: upper_tri_dispatcher<typeA, double>(stream, M, N, A, lda, (double*)B, ldb); break;
+    case Precision::FP32: upper_tri_dispatcher<typeA, float>(stream, M, N, A, lda, (float*)B, ldb); break;
+    case Precision::FP128_DD: upper_tri_dispatcher<typeA, double2>(stream, M, N, A, lda, (double2*)B, ldb); break;
+    case Precision::FP128_QF: upper_tri_dispatcher<typeA, float4>(stream, M, N, A, lda, (float4*)B, ldb); break;
+    default: break;
+  }
+}
+
 void device::copy_upper_triangular(cudaStream_t stream, int32_t M, int32_t N, const void* A, int32_t lda, Precision precA, void* B, int32_t ldb, Precision precB) {
-  if (precA == Precision::FP64) {
-    if (precB == Precision::FP64)
-      upper_tri_dispatcher<double, double>(stream, M, N, (const double*)A, lda, (double*)B, ldb);
-    else if (precB == Precision::FP32)
-      upper_tri_dispatcher<double, float>(stream, M, N, (const double*)A, lda, (float*)B, ldb);
-    else if (precB == Precision::FP128_DD)
-      upper_tri_dispatcher<double, double2>(stream, M, N, (const double*)A, lda, (double2*)B, ldb);
-    else if (precB == Precision::FP128_QF)
-      upper_tri_dispatcher<double, float4>(stream, M, N, (const double*)A, lda, (float4*)B, ldb);
-  }
-  else if (precA == Precision::FP32) {
-    if (precB == Precision::FP64)
-      upper_tri_dispatcher<float, double>(stream, M, N, (const float*)A, lda, (double*)B, ldb);
-    else if (precB == Precision::FP32)
-      upper_tri_dispatcher<float, float>(stream, M, N, (const float*)A, lda, (float*)B, ldb);
-  }
-  else if (precA == Precision::FP128_DD) {
-    if (precB == Precision::FP64)
-      upper_tri_dispatcher<double2, double>(stream, M, N, (const double2*)A, lda, (double*)B, ldb);
-    else if (precB == Precision::FP128_DD)
-      upper_tri_dispatcher<double2, double2>(stream, M, N, (const double2*)A, lda, (double2*)B, ldb);
-    else if (precB == Precision::FP128_QF)
-      upper_tri_dispatcher<double2, float4>(stream, M, N, (const double2*)A, lda, (float4*)B, ldb);
-  }
-  else if (precA == Precision::FP128_QF) {
-    if (precB == Precision::FP64)
-      upper_tri_dispatcher<float4, double>(stream, M, N, (const float4*)A, lda, (double*)B, ldb);
-    else if (precB == Precision::FP128_DD)
-      upper_tri_dispatcher<float4, double2>(stream, M, N, (const float4*)A, lda, (double2*)B, ldb);
-    else if (precB == Precision::FP128_QF)
-      upper_tri_dispatcher<float4, float4>(stream, M, N, (const float4*)A, lda, (float4*)B, ldb);
+  switch (precA) {
+    case Precision::FP64: upper_tri_dispatcher<double>(stream, M, N, (const double*)A, lda, B, ldb, precB); break;
+    case Precision::FP32: upper_tri_dispatcher<float>(stream, M, N, (const float*)A, lda, B, ldb, precB); break;
+    case Precision::FP128_DD: upper_tri_dispatcher<double2>(stream, M, N, (const double2*)A, lda, B, ldb, precB); break;
+    case Precision::FP128_QF: upper_tri_dispatcher<float4>(stream, M, N, (const float4*)A, lda, B, ldb, precB); break;
+    default: break;
   }
 }
 
