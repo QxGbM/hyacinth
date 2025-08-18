@@ -47,11 +47,10 @@ find_package(LAPACK REQUIRED)
 enable_testing()
 
 set(TEST_SOURCES
-  examples/cgeqp3_example.cpp
-  examples/dgeqp3_example.cpp
-  examples/dlra_example.cpp
-  examples/sgeqp3_example.cpp
-  examples/zgeqp3_example.cpp
+  examples/cgeqp3_example.cpp examples/clra_example.cpp
+  examples/dgeqp3_example.cpp examples/dlra_example.cpp
+  examples/sgeqp3_example.cpp examples/slra_example.cpp
+  examples/zgeqp3_example.cpp examples/zlra_example.cpp
 )
 
 string(JOIN " " BLAS_LIBS ${BLAS_LIBRARIES})

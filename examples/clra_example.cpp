@@ -1,8 +1,8 @@
 
 #include <hyacinth.hpp>
-#include <random>
 #include <iostream>
 #include <algorithm>
+#include <numeric>
 #include <vector>
 
 #ifdef USE_MKL
@@ -11,6 +11,14 @@
 #include <cblas.h>
 #include <lapacke.h>
 #endif
+
+void make_1D_oscilatory(double w, int32_t M, int32_t N, std::complex<float>* A, int32_t lda) {
+  for (int32_t j = 0; j < N; ++j)
+    for (int32_t i = 0; i < M; ++i) {
+      float d = std::abs(i - (j + M));
+      A[uint64_t(i) + uint64_t(j) * uint64_t(lda)] = std::complex<float>(std::cos(w * d) / d, std::sin(w * d) / d);
+    }
+}
 
 int32_t main(int32_t argc, char* argv[]) {
   auto cu_err = cudaSetDevice(0);
@@ -24,11 +32,9 @@ int32_t main(int32_t argc, char* argv[]) {
   std::vector<std::complex<float>> matA(M * N);
   std::vector<int32_t> ipiv(N);
 
-  std::mt19937_64 gen(42);
-  std::normal_distribution<float> dist(0, 32);
-  std::generate(matA.begin(), matA.end(), [&](){ return std::complex<float>(dist(gen), dist(gen)); });
+  make_1D_oscilatory(200, M, N, matA.data(), M);
 
-  std::cout << "CGEQP3 <" << M << ", " << N << ">\n";
+  std::cout << "F64 LR-APPROX <" << M << ", " << N << ">\n";
   std::cout << "Epi: " << epi << "\n";
 
   cudaStream_t stream;
@@ -41,50 +47,48 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
 
-  std::complex<float>* d_A = nullptr;
+  std::complex<float>* d_A = nullptr, * d_X = nullptr;
   cudaMalloc((void**)(&d_A), M * N * sizeof(std::complex<float>));
+  cudaMalloc((void**)(&d_X), N * N * sizeof(std::complex<float>));
   cudaMemcpy(d_A, matA.data(), M * N * sizeof(std::complex<float>), cudaMemcpyHostToDevice);
 
   cudaEventRecord(start, stream);
-  int32_t ret = device::cgeqp3_ronly(stream, handle, epi, M, N, d_A, M, ipiv.data());
+  int32_t rank = device::interp_decomp_cf32(stream, handle, epi, N, M, N, d_A, M, ipiv.data(), d_X, N);
   cudaEventRecord(stop, stream);
 
   cudaDeviceSynchronize();
 
   if (M <= 2048 && N <= 2048) {
-    std::vector<std::complex<float>> matB(M * N);
-    cudaMemcpy(matB.data(), d_A, M * N * sizeof(std::complex<float>), cudaMemcpyDeviceToHost);
+    std::vector<std::complex<float>> matB(M * N), matC(M * rank), matX(N * N);
+    cudaMemcpy(matX.data(), d_X, N * N * sizeof(std::complex<float>), cudaMemcpyDeviceToHost);
 
-    std::vector<int32_t> jpiv(N, 0);
-    std::vector<std::complex<float>> tau(N);
-    LAPACKE_cgeqp3(LAPACK_COL_MAJOR, M, N, (lapack_complex_float*)matA.data(), M, jpiv.data(), (lapack_complex_float*)tau.data());
-
-    int32_t err_int = 0;
-    for (int32_t i = 0; i < N; ++i) {
-      err_int += std::abs(jpiv[i] - ipiv[i]);
-      if (matA[i * (M + 1)].real() < 0.)
-        cblas_csscal(N, -1.f, &(matA.data())[i], M);
+    for (int32_t i = 0; i < rank; ++i) {
+      int32_t col = (ipiv[i] - 1);
+      std::copy_n(&matA[uint64_t(col) * uint64_t(M)], M, &matC[uint64_t(i) * uint64_t(M)]);
     }
+    std::complex<float> zero(0., 0.), one(1., 0.);
+    cblas_cgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, rank, &one, &matC[0], M, &matX[0], N, &zero, &matB[0], M);
   
     double nrm = 0., err = 0.;
     for (int32_t j = 0; j < N; ++j)
-      for (int32_t i = 0; i <= j; ++i) {
+      for (int32_t i = 0; i < M; ++i) {
         err += std::norm(matB[i + j * M] - matA[i + j * M]);
         nrm += std::norm(matA[i + j * M]);
     }
-
-    std::cout << "Pivot Err: " << err_int << "\n";
-    std::cout << "Err: " << std::sqrt(err / nrm) << "\n" << std::endl;
+    
+    std::cout << "Approx Err: " << std::sqrt(err / nrm) << "\n" << std::endl;
   }
 
   float milliseconds = 0.0f;
   cudaEventElapsedTime(&milliseconds, start, stop);
-  int64_t flops = (int64_t(N) * int64_t(N) * int64_t(N) * -2 / 3) + (int64_t(M) * int64_t(N) * int64_t(N) * 2);
-  std::cout << "Cholesky return: " << ret << std::endl;
+  int64_t qr_flops = (int64_t(N) * int64_t(N) * int64_t(N) * -2 / 3) + (int64_t(M) * int64_t(N) * int64_t(N) * 2);
+  int64_t trsm_flops = int64_t(N) * int64_t(rank) * int64_t(rank);
+  std::cout << "Matrix A rank: " << rank << std::endl;
   std::cout << "Time: " << milliseconds << " ms\n";
-  std::cout << "GFLOPs: " << double(flops) * 1.e-6 / milliseconds << "\n";
+  std::cout << "Total GFLOPs: " << double(qr_flops + trsm_flops) * 1.e-6 / milliseconds << "\n";
 
   cudaFree(d_A);
+  cudaFree(d_X);
   cudaEventDestroy(start);
   cudaEventDestroy(stop);
   cudaStreamDestroy(stream);

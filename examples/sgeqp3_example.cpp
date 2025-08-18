@@ -3,6 +3,7 @@
 #include <random>
 #include <iostream>
 #include <algorithm>
+#include <vector>
 
 #ifdef USE_MKL
 #include <mkl.h>

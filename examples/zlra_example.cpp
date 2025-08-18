@@ -12,11 +12,11 @@
 #include <lapacke.h>
 #endif
 
-void make_1D_oscilatory(double w, int32_t M, int32_t N, double* A, int32_t lda) {
+void make_1D_oscilatory(double w, int32_t M, int32_t N, std::complex<double>* A, int32_t lda) {
   for (int32_t j = 0; j < N; ++j)
     for (int32_t i = 0; i < M; ++i) {
       double d = std::abs(i - (j + M));
-      A[uint64_t(i) + uint64_t(j) * uint64_t(lda)] = std::cos(w * d) / d;
+      A[uint64_t(i) + uint64_t(j) * uint64_t(lda)] = std::complex<double>(std::cos(w * d) / d, std::sin(w * d) / d);
     }
 }
 
@@ -29,7 +29,7 @@ int32_t main(int32_t argc, char* argv[]) {
   int32_t M = 1 < argc ? std::atoi(argv[1]) : 1024;
   int32_t N = std::min(M, 2 < argc ? std::atoi(argv[2]) : 128);
   double epi = 3 < argc ? std::atof(argv[3]) : 1.e-12;
-  std::vector<double> matA(M * N);
+  std::vector<std::complex<double>> matA(M * N);
   std::vector<int32_t> ipiv(N);
 
   make_1D_oscilatory(200, M, N, matA.data(), M);
@@ -47,26 +47,27 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
 
-  double* d_A = nullptr, * d_X = nullptr;
-  cudaMalloc((void**)(&d_A), M * N * sizeof(double));
-  cudaMalloc((void**)(&d_X), N * N * sizeof(double));
-  cudaMemcpy(d_A, matA.data(), M * N * sizeof(double), cudaMemcpyHostToDevice);
+  std::complex<double>* d_A = nullptr, * d_X = nullptr;
+  cudaMalloc((void**)(&d_A), M * N * sizeof(std::complex<double>));
+  cudaMalloc((void**)(&d_X), N * N * sizeof(std::complex<double>));
+  cudaMemcpy(d_A, matA.data(), M * N * sizeof(std::complex<double>), cudaMemcpyHostToDevice);
 
   cudaEventRecord(start, stream);
-  int32_t rank = device::interp_decomp_f64(stream, handle, epi, N, M, N, d_A, M, ipiv.data(), d_X, N);
+  int32_t rank = device::interp_decomp_cf64(stream, handle, epi, N, M, N, d_A, M, ipiv.data(), d_X, N);
   cudaEventRecord(stop, stream);
 
   cudaDeviceSynchronize();
 
   if (M <= 2048 && N <= 2048) {
-    std::vector<double> matB(M * N), matC(M * rank), matX(N * N);
-    cudaMemcpy(matX.data(), d_X, N * N * sizeof(double), cudaMemcpyDeviceToHost);
+    std::vector<std::complex<double>> matB(M * N), matC(M * rank), matX(N * N);
+    cudaMemcpy(matX.data(), d_X, N * N * sizeof(std::complex<double>), cudaMemcpyDeviceToHost);
 
     for (int32_t i = 0; i < rank; ++i) {
       int32_t col = (ipiv[i] - 1);
       std::copy_n(&matA[uint64_t(col) * uint64_t(M)], M, &matC[uint64_t(i) * uint64_t(M)]);
     }
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, rank, 1., &matC[0], M, &matX[0], N, 0., &matB[0], M);
+    std::complex<double> zero(0., 0.), one(1., 0.);
+    cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, rank, &one, &matC[0], M, &matX[0], N, &zero, &matB[0], M);
   
     double nrm = 0., err = 0.;
     for (int32_t j = 0; j < N; ++j)
