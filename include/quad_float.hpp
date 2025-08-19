@@ -130,24 +130,6 @@ namespace device::qf {
 #endif
   }
 
-  __host__ __device__ __forceinline__ float4 frsqrt(float4 a) {
-#ifdef __CUDA_ARCH__
-    int32_t p = int32_t(scalbnf(-log2f(a.x), -1));
-    float4 x = make_float4(scalbnf(rsqrtf(a.x), -p), 0.f, 0.f, 0.f);
-#else
-    int32_t p = int32_t(-0.5f * std::log2f(a.x));
-    float4 x = make_float4(std::scalbnf(1.f / std::sqrt(a.x), -p), 0.f, 0.f, 0.f);
-#endif
-    float4 c = make_float4(1.5f, 0.f, 0.f, 0.f);
-    a = fscalbn(negate(a), (p << 1) - 1);
-
-    x = mul(x, fma(x, mul(a, x), c));
-    x = mul(x, fma(x, mul(a, x), c));
-    x = mul(x, fma(x, mul(a, x), c));
-
-    return fscalbn(x, p);
-  }
-
   __host__ __device__ __forceinline__ float4 add_float2(float4 a, float2 b) {
     float2 a0, a1;
     fadd2_err(make_float2(a.x, a.y), make_float2(b.x, b.y), a0, a1);
@@ -204,6 +186,20 @@ namespace device::qf {
     if constexpr(2 < ORDER) res = add_float2(fscalbn(res, 31), conv_u31_f32(a[1], expon));
     if constexpr(1 < ORDER) res = add_float2(fscalbn(res, 31), conv_u31_f32(a[0], expon));
     return res;
+  }
+
+  __host__ __device__ __forceinline__ float4 dd2qf(double2 a) {
+    float a0 = float(a.x); a.x = a.x - double(a0);
+    float a1 = float(a.x); a.y = a.y + (a.x - double(a1));
+    float a2 = float(a.y);
+    return make_float4(a0, a1, a2, a.y - double(a2));
+  }
+  
+  __host__ __device__ __forceinline__ double2 qf2dd(float4 a) {
+    double2 c = make_double2(double(a.x) + double(a.y), double(a.z) + double(a.w));
+    double s = c.x + c.y;
+    double delta = c.x - s;
+    return make_double2(s, c.y + delta);
   }
 
   __host__ __device__ __forceinline__ complex_float4 conj(complex_float4 a) {

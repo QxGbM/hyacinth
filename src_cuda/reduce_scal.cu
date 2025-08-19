@@ -73,12 +73,13 @@ __device__ void array_sum(matrix_t (&a)[ITEMS_PER_THREAD], matrix_t const (&b)[I
 }
 
 template <class real_t, class real_ptr, class matrix_t, class matrix_ptr, int32_t WARP_THREADS, int32_t ITEMS_PER_THREAD, int32_t N>
-__global__ void fix_N_reduce_kernel(real_t scale, int32_t M, matrix_ptr A, int32_t lda, real_ptr D) {
+__global__ void fix_N_reduce_kernel(real_t sq, real_t rsq, int32_t M, matrix_ptr A, int32_t lda, real_ptr D) {
   constexpr int32_t COMPLEX = (sizeof(real_t) < sizeof(matrix_t));
   constexpr int32_t block_warps = (N + 7) / 8;
   constexpr int32_t elements_thread = N < 8 ? N : 8;
   constexpr int32_t elements_warp = ITEMS_PER_THREAD * WARP_THREADS;
-  M = (blockIdx.x + 1 == gridDim.x && 0 < M) ? M : elements_warp;
+  int32_t small_load_pred = int32_t(blockIdx.x + 1 == gridDim.x && 0 < M);
+  M = small_load_pred ? M : elements_warp;
   matrix_ptr B = &A[int64_t((1 - N) + int32_t(threadIdx.y << 3)) * int64_t(lda)];
 
   __shared__ typename cub::BlockLoad<matrix_t, WARP_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_STRIPED>::TempStorage temp_load[block_warps];
@@ -95,9 +96,12 @@ __global__ void fix_N_reduce_kernel(real_t scale, int32_t M, matrix_ptr A, int32
   cub::BlockLoad<real_t, WARP_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_STRIPED> block_load_rl(temp_load_rl[threadIdx.y]);
   cub::BlockStore<real_t, WARP_THREADS, ITEMS_PER_THREAD, cub::BLOCK_STORE_STRIPED> block_store_rl(temp_store_rl[threadIdx.y]);
 
-  uint64_t i = blockIdx.x * uint64_t(elements_warp);
+  int32_t i = 1 + blockIdx.x * elements_warp;
   matrix_ptr A_i = &B[i];
-  block_load.Load(A_i, threadA);
+  if (small_load_pred)
+    block_load.Load(A_i, threadA, M);
+  else
+    block_load.Load(A_i, threadA);
 
   #pragma unroll
   for (int32_t k = 1; k < elements_thread; ++k) {
@@ -120,21 +124,39 @@ __global__ void fix_N_reduce_kernel(real_t scale, int32_t M, matrix_ptr A, int32
 
   if (threadIdx.y == 0) {
     scal_a_function scal_func;
-    block_load_rl.Load(&D[i], threadD);
+    if (small_load_pred)
+      block_load_rl.Load(&D[i], threadD, M);
+    else
+      block_load_rl.Load(&D[i], threadD);
 
     #pragma unroll
     for (int32_t k = 0; k < ITEMS_PER_THREAD; ++k)
-      scal_func(scale, threadA[k], threadA[k], threadB[k], threadD[k]);
+      scal_func(rsq, threadA[k], threadA[k], threadB[k], threadD[k]);
 
-    block_store.Store(&A[i], threadA, M);
-    block_store_rl.Store(&D[i], threadD, M);
+    if (small_load_pred) {
+      block_store.Store(&A[i], threadA, M);
+      block_store_rl.Store(&D[i], threadD, M);
 
-    #pragma unroll
-    for (int32_t k = 0; k < ITEMS_PER_THREAD; ++k) {
-      int32_t thread_k = (k * WARP_THREADS) + threadIdx.x;
-      if (thread_k < M)
-        A[(i + uint64_t(thread_k)) * uint64_t(lda)] = threadB[k];
+      #pragma unroll
+      for (int32_t k = 0; k < ITEMS_PER_THREAD; ++k) {
+        int32_t thread_k = (k * WARP_THREADS) + threadIdx.x;
+        if (thread_k < M)
+          A[(uint64_t(i) + uint64_t(thread_k)) * uint64_t(lda)] = threadB[k];
+      }
     }
+    else {
+      block_store.Store(&A[i], threadA);
+      block_store_rl.Store(&D[i], threadD);
+
+      #pragma unroll
+      for (int32_t k = 0; k < ITEMS_PER_THREAD; ++k) {
+        int32_t thread_k = (k * WARP_THREADS) + threadIdx.x;
+        A[(uint64_t(i) + uint64_t(thread_k)) * uint64_t(lda)] = threadB[k];
+      }
+    }
+
+    if (threadIdx.x == 0 && blockIdx.x == 0)
+      ((real_t*)A)[0] = sq;
   }
 }
 
@@ -142,59 +164,64 @@ constexpr int32_t warp_threads = 64;
 constexpr int32_t thread_bytes = 32;
 
 template <class real_t, class real_ptr, class matrix_t, class matrix_ptr>
-inline void reduce_scal_dispatcher(cudaStream_t stream, real_t scale, int32_t M, int32_t N, matrix_ptr A, int32_t lda, real_ptr D) {
-  constexpr int32_t items_per_thread = thread_bytes / sizeof(matrix_t);
-  constexpr int32_t elements_warp = items_per_thread * warp_threads;
-  int32_t grid = (M + elements_warp - 1) / elements_warp;
-  int32_t rem = M & (elements_warp - 1);
+inline void reduce_scal_dispatcher(cudaStream_t stream, const real_t* scale, int32_t M, int32_t N, matrix_ptr A, int32_t lda, real_ptr D) {
+  if (1 < M) {
+    constexpr int32_t items_per_thread = thread_bytes / sizeof(matrix_t);
+    constexpr int32_t elements_warp = items_per_thread * warp_threads;
+    int32_t grid = ((M - 1) + elements_warp - 1) / elements_warp;
+    int32_t rem = (M - 1) & (elements_warp - 1);
+    real_t sq = scale[0], rsq = scale[1];
 
-  switch (N) {
-    case 1: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, warp_threads, items_per_thread, 1>
-      <<< grid, dim3(warp_threads, 1, 1), 0, stream >>> (scale, rem, A, lda, D); break;
-    case 2: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, warp_threads, items_per_thread, 2>
-      <<< grid, dim3(warp_threads, 1, 1), 0, stream >>> (scale, rem, A, lda, D); break;
-    case 4: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, warp_threads, items_per_thread, 4>
-      <<< grid, dim3(warp_threads, 1, 1), 0, stream >>> (scale, rem, A, lda, D); break;
-    case 8: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, warp_threads, items_per_thread, 8>
-      <<< grid, dim3(warp_threads, 1, 1), 0, stream >>> (scale, rem, A, lda, D); break;
-    case 16: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, warp_threads, items_per_thread, 16>
-      <<< grid, dim3(warp_threads, 2, 1), 0, stream >>> (scale, rem, A, lda, D); break;
-    case 32: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, warp_threads, items_per_thread, 32>
-      <<< grid, dim3(warp_threads, 4, 1), 0, stream >>> (scale, rem, A, lda, D); break;
-    case 64: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, warp_threads, items_per_thread, 64>
-      <<< grid, dim3(warp_threads, 8, 1), 0, stream >>> (scale, rem, A, lda, D); break;
-    default: break;
+    switch (N) {
+      case 1: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, warp_threads, items_per_thread, 1>
+        <<< grid, dim3(warp_threads, 1, 1), 0, stream >>> (sq, rsq, rem, A, lda, D); break;
+      case 2: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, warp_threads, items_per_thread, 2>
+        <<< grid, dim3(warp_threads, 1, 1), 0, stream >>> (sq, rsq, rem, A, lda, D); break;
+      case 4: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, warp_threads, items_per_thread, 4>
+        <<< grid, dim3(warp_threads, 1, 1), 0, stream >>> (sq, rsq, rem, A, lda, D); break;
+      case 8: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, warp_threads, items_per_thread, 8>
+        <<< grid, dim3(warp_threads, 1, 1), 0, stream >>> (sq, rsq, rem, A, lda, D); break;
+      case 16: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, warp_threads, items_per_thread, 16>
+        <<< grid, dim3(warp_threads, 2, 1), 0, stream >>> (sq, rsq, rem, A, lda, D); break;
+      case 32: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, warp_threads, items_per_thread, 32>
+        <<< grid, dim3(warp_threads, 4, 1), 0, stream >>> (sq, rsq, rem, A, lda, D); break;
+      case 64: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, warp_threads, items_per_thread, 64>
+        <<< grid, dim3(warp_threads, 8, 1), 0, stream >>> (sq, rsq, rem, A, lda, D); break;
+      default: break;
+    }
   }
+  else if (1 == M)
+    cudaMemcpyAsync(A, scale, sizeof(real_t), cudaMemcpyHostToDevice, stream);
 }
 
-void internal::Cholesky::reduce_scal_f64(cudaStream_t stream, const double scale, int32_t M, int32_t N, double* A, int32_t lda, double* D) {
+void internal::Cholesky::reduce_scal_f64(cudaStream_t stream, const double* scale, int32_t M, int32_t N, double* A, int32_t lda, double* D) {
   reduce_scal_dispatcher<double, double* __restrict__, double, double* __restrict__>(stream, scale, M, N, A, lda, D);
 }
 
-void internal::Cholesky::reduce_scal_f32(cudaStream_t stream, const float scale, int32_t M, int32_t N, float* A, int32_t lda, float* D) {
+void internal::Cholesky::reduce_scal_f32(cudaStream_t stream, const float* scale, int32_t M, int32_t N, float* A, int32_t lda, float* D) {
   reduce_scal_dispatcher<float, float* __restrict__, float, float* __restrict__>(stream, scale, M, N, A, lda, D);
 }
 
-void internal::Cholesky::reduce_scal_f128_dd(cudaStream_t stream, const double2 scale, int32_t M, int32_t N, double2* A, int32_t lda, double2* D) {
+void internal::Cholesky::reduce_scal_f128_dd(cudaStream_t stream, const double2* scale, int32_t M, int32_t N, double2* A, int32_t lda, double2* D) {
   reduce_scal_dispatcher<double2, double2* __restrict__, double2, double2* __restrict__>(stream, scale, M, N, A, lda, D);
 }
 
-void internal::Cholesky::reduce_scal_f128_qf(cudaStream_t stream, const float4 scale, int32_t M, int32_t N, float4* A, int32_t lda, float4* D) {
+void internal::Cholesky::reduce_scal_f128_qf(cudaStream_t stream, const float4* scale, int32_t M, int32_t N, float4* A, int32_t lda, float4* D) {
   reduce_scal_dispatcher<float4, float4* __restrict__, float4, float4* __restrict__>(stream, scale, M, N, A, lda, D);
 }
 
-void internal::Cholesky::reduce_scal_cf64(cudaStream_t stream, const double scale, int32_t M, int32_t N, std::complex<double>* A, int32_t lda, double* D) {
+void internal::Cholesky::reduce_scal_cf64(cudaStream_t stream, const double* scale, int32_t M, int32_t N, std::complex<double>* A, int32_t lda, double* D) {
   reduce_scal_dispatcher<double, double* __restrict__, cuDoubleComplex, cuDoubleComplex* __restrict__>(stream, scale, M, N, (cuDoubleComplex*)A, lda, D);
 }
 
-void internal::Cholesky::reduce_scal_cf32(cudaStream_t stream, const float scale, int32_t M, int32_t N, std::complex<float>* A, int32_t lda, float* D) {
+void internal::Cholesky::reduce_scal_cf32(cudaStream_t stream, const float* scale, int32_t M, int32_t N, std::complex<float>* A, int32_t lda, float* D) {
   reduce_scal_dispatcher<float, float* __restrict__, cuComplex, cuComplex* __restrict__>(stream, scale, M, N, (cuComplex*)A, lda, D);
 }
 
-void internal::Cholesky::reduce_scal_cf128_dd(cudaStream_t stream, const double2 scale, int32_t M, int32_t N, complex_double2* A, int32_t lda, double2* D) {
+void internal::Cholesky::reduce_scal_cf128_dd(cudaStream_t stream, const double2* scale, int32_t M, int32_t N, complex_double2* A, int32_t lda, double2* D) {
   reduce_scal_dispatcher<double2, double2* __restrict__, complex_double2, complex_double2* __restrict__>(stream, scale, M, N, A, lda, D);
 }
 
-void internal::Cholesky::reduce_scal_cf128_qf(cudaStream_t stream, const float4 scale, int32_t M, int32_t N, complex_float4* A, int32_t lda, float4* D) {
+void internal::Cholesky::reduce_scal_cf128_qf(cudaStream_t stream, const float4* scale, int32_t M, int32_t N, complex_float4* A, int32_t lda, float4* D) {
   reduce_scal_dispatcher<float4, float4* __restrict__, complex_float4, complex_float4* __restrict__>(stream, scale, M, N, A, lda, D);
 }

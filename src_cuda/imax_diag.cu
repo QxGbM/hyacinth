@@ -33,53 +33,23 @@ template <class real_t> struct real_pair_max {
   }
 };
 
-struct rsqrt_real {
-  __device__ __forceinline__ double operator()(double f) { return rsqrt(f); }
-  __device__ __forceinline__ float operator()(float f) { return rsqrtf(f); }
-  __device__ __forceinline__ double2 operator()(double2 f) { return device::dd::frsqrt(f); }
-  __device__ __forceinline__ float4 operator()(float4 f) { return device::qf::frsqrt(f); }
-};
-
-struct swap_real {
-  __device__ __forceinline__ void operator()(double& c0, double& cp, double& d0, double& dp) {
-    double t1 = c0, t2 = cp, t3 = dp;
-    c0 = t2; cp = t1; d0 = t3; dp = t2;
+struct conj_complex {
+  __device__ __forceinline__ cuDoubleComplex operator()(cuDoubleComplex c) {
+    return make_cuDoubleComplex(c.x, -c.y);
   }
-  __device__ __forceinline__ void operator()(float& c0, float& cp, float& d0, float& dp) {
-    float t1 = c0, t2 = cp, t3 = dp;
-    c0 = t2; cp = t1; d0 = t3; dp = t2;
+  __device__ __forceinline__ cuComplex operator()(cuComplex c) {
+    return make_cuComplex(c.x, -c.y);
   }
-  __device__ __forceinline__ void operator()(double2& c0, double2& cp, double2& d0, double2& dp) {
-    double2 t1 = c0, t2 = cp, t3 = dp;
-    c0 = t2; cp = t1; d0 = t3; dp = t2;
+  __device__ __forceinline__ complex_double2 operator()(complex_double2 c) {
+    return device::dd::make_complex_double2(c.real, device::dd::negate(c.imag));
   }
-  __device__ __forceinline__ void operator()(float4& c0, float4& cp, float4& d0, float4& dp) {
-    float4 t1 = c0, t2 = cp, t3 = dp;
-    c0 = t2; cp = t1; d0 = t3; dp = t2;
-  }
-};
-
-struct swap_complex {
-  __device__ __forceinline__ void operator()(cuDoubleComplex& c0, cuDoubleComplex& cp, cuDoubleComplex& d0, cuDoubleComplex& dp) {
-    cuDoubleComplex t1 = c0, t2 = cp, t3 = dp;
-    c0 = t2; cp = t1; d0 = t3; dp = make_cuDoubleComplex(t2.x, -t2.y);
-  }
-  __device__ __forceinline__ void operator()(cuComplex& c0, cuComplex& cp, cuComplex& d0, cuComplex& dp) {
-    cuComplex t1 = c0, t2 = cp, t3 = dp;
-    c0 = t2; cp = t1; d0 = t3; dp = make_cuComplex(t2.x, -t2.y);
-  }
-  __device__ __forceinline__ void operator()(complex_double2& c0, complex_double2& cp, complex_double2& d0, complex_double2& dp) {
-    complex_double2 t1 = c0, t2 = cp, t3 = dp;
-    c0 = t2; cp = t1; d0 = t3; dp = device::dd::make_complex_double2(t2.real, device::dd::negate(t2.imag));
-  }
-  __device__ __forceinline__ void operator()(complex_float4& c0, complex_float4& cp, complex_float4& d0, complex_float4& dp) {
-    complex_float4 t1 = c0, t2 = cp, t3 = dp;
-    c0 = t2; cp = t1; d0 = t3; dp = device::qf::make_complex_float4(t2.real, device::qf::negate(t2.imag));
+  __device__ __forceinline__ complex_float4 operator()(complex_float4 c) {
+    return device::qf::make_complex_float4(c.real, device::qf::negate(c.imag));
   }
 };
 
 template <class real_t, class real_ptr, class complex_t, class complex_ptr, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD>
-__global__ void imax_kernel(int32_t N, real_ptr X, complex_ptr C, int32_t ldc, int32_t* __restrict__ i_out, real_ptr rsq_out) {
+__global__ void imax_kernel(int32_t N, real_ptr X, complex_ptr C, int32_t ldc, int32_t* __restrict__ i_out, real_ptr d_out) {
   constexpr int32_t elements = BLOCK_THREADS * ITEMS_PER_THREAD;
   int32_t rem = N & (elements - 1), div = N - rem;
   int32_t N1 = max(div, rem), N2 = min(div, rem);
@@ -123,17 +93,15 @@ __global__ void imax_kernel(int32_t N, real_ptr X, complex_ptr C, int32_t ldc, i
   __syncthreads();
   if (threadIdx.x == 0 && block_res.idx < N) {
     if constexpr(sizeof(real_t) < sizeof(complex_t)) {
-      swap_complex swap_f;
-      swap_f(C[0], C[block_res.idx], C[block_res.idx * uint64_t(ldc)], C[block_res.idx * uint64_t(ldc + 1)]);
+      conj_complex conj_f;
+      complex_t cp = C[0] = C[block_res.idx];
+      C[block_res.idx * uint64_t(ldc + 1)] = conj_f(cp);
     }
-    else {
-      swap_real swap_f;
-      swap_f(C[0], C[block_res.idx], C[block_res.idx * uint64_t(ldc)], C[block_res.idx * uint64_t(ldc + 1)]);
-    }
+    else
+      C[0] = C[block_res.idx * uint64_t(ldc + 1)] = C[block_res.idx];
 
-    rsqrt_real rsqrt_func;
     *i_out = block_res.idx;
-    *rsq_out = rsqrt_func(block_res.real);
+    *d_out = block_res.real;
     X[block_res.idx] = X[0];
   }
   else if (threadIdx.x == 0)
@@ -143,50 +111,50 @@ __global__ void imax_kernel(int32_t N, real_ptr X, complex_ptr C, int32_t ldc, i
 constexpr int32_t block_threads = 512;
 constexpr int32_t thread_bytes = 32;
 
-void internal::Cholesky::imax_f64(cudaStream_t stream, int32_t N, double* X, double* C, int32_t ldc, int32_t* piv, double* rsq) {
+void internal::Cholesky::imax_f64(cudaStream_t stream, int32_t N, double* X, double* C, int32_t ldc, int32_t* piv, double* diag) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(double);
   imax_kernel <double, double* __restrict__, double, double* __restrict__, block_threads, items_per_thread>
-    <<< 1, block_threads, 0, stream >>> (N, X, C, ldc, piv, rsq);
+    <<< 1, block_threads, 0, stream >>> (N, X, C, ldc, piv, diag);
 }
 
-void internal::Cholesky::imax_f32(cudaStream_t stream, int32_t N, float* X, float* C, int32_t ldc, int32_t* piv, float* rsq) {
+void internal::Cholesky::imax_f32(cudaStream_t stream, int32_t N, float* X, float* C, int32_t ldc, int32_t* piv, float* diag) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(float);
   imax_kernel <float, float* __restrict__, float, float* __restrict__, block_threads, items_per_thread>
-    <<< 1, block_threads, 0, stream >>> (N, X, C, ldc, piv, rsq);
+    <<< 1, block_threads, 0, stream >>> (N, X, C, ldc, piv, diag);
 }
 
-void internal::Cholesky::imax_f128_dd(cudaStream_t stream, int32_t N, double2* X, double2* C, int32_t ldc, int32_t* piv, double2* rsq) {
+void internal::Cholesky::imax_f128_dd(cudaStream_t stream, int32_t N, double2* X, double2* C, int32_t ldc, int32_t* piv, double2* diag) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(double2);
   imax_kernel <double2, double2* __restrict__, double2, double2* __restrict__, block_threads, items_per_thread>
-    <<< 1, block_threads, 0, stream >>> (N, X, C, ldc, piv, rsq);
+    <<< 1, block_threads, 0, stream >>> (N, X, C, ldc, piv, diag);
 }
 
-void internal::Cholesky::imax_f128_qf(cudaStream_t stream, int32_t N, float4* X, float4* C, int32_t ldc, int32_t* piv, float4* rsq) {
+void internal::Cholesky::imax_f128_qf(cudaStream_t stream, int32_t N, float4* X, float4* C, int32_t ldc, int32_t* piv, float4* diag) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(float4);
   imax_kernel <float4, float4* __restrict__, float4, float4* __restrict__, block_threads, items_per_thread>
-    <<< 1, block_threads, 0, stream >>> (N, X, C, ldc, piv, rsq);
+    <<< 1, block_threads, 0, stream >>> (N, X, C, ldc, piv, diag);
 }
 
-void internal::Cholesky::imax_cf64(cudaStream_t stream, int32_t N, double* X, std::complex<double>* C, int32_t ldc, int32_t* piv, double* rsq) {
+void internal::Cholesky::imax_cf64(cudaStream_t stream, int32_t N, double* X, std::complex<double>* C, int32_t ldc, int32_t* piv, double* diag) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(std::complex<double>);
   imax_kernel <double, double* __restrict__, cuDoubleComplex, cuDoubleComplex* __restrict__, block_threads, items_per_thread>
-    <<< 1, block_threads, 0, stream >>> (N, X, (cuDoubleComplex*)C, ldc, piv, rsq);
+    <<< 1, block_threads, 0, stream >>> (N, X, (cuDoubleComplex*)C, ldc, piv, diag);
 }
 
-void internal::Cholesky::imax_cf32(cudaStream_t stream, int32_t N, float* X, std::complex<float>* C, int32_t ldc, int32_t* piv, float* rsq) {
+void internal::Cholesky::imax_cf32(cudaStream_t stream, int32_t N, float* X, std::complex<float>* C, int32_t ldc, int32_t* piv, float* diag) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(std::complex<float>);
   imax_kernel <float, float* __restrict__, cuComplex, cuComplex* __restrict__, block_threads, items_per_thread>
-    <<< 1, block_threads, 0, stream >>> (N, X, (cuComplex*)C, ldc, piv, rsq);
+    <<< 1, block_threads, 0, stream >>> (N, X, (cuComplex*)C, ldc, piv, diag);
 }
 
-void internal::Cholesky::imax_cf128_dd(cudaStream_t stream, int32_t N, double2* X, complex_double2* C, int32_t ldc, int32_t* piv, double2* rsq) {
+void internal::Cholesky::imax_cf128_dd(cudaStream_t stream, int32_t N, double2* X, complex_double2* C, int32_t ldc, int32_t* piv, double2* diag) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(complex_double2);
   imax_kernel <double2, double2* __restrict__, complex_double2, complex_double2* __restrict__, block_threads, items_per_thread>
-    <<< 1, block_threads, 0, stream >>> (N, X, C, ldc, piv, rsq);
+    <<< 1, block_threads, 0, stream >>> (N, X, C, ldc, piv, diag);
 }
 
-void internal::Cholesky::imax_cf128_qf(cudaStream_t stream, int32_t N, float4* X, complex_float4* C, int32_t ldc, int32_t* piv, float4* rsq) {
+void internal::Cholesky::imax_cf128_qf(cudaStream_t stream, int32_t N, float4* X, complex_float4* C, int32_t ldc, int32_t* piv, float4* diag) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(complex_float4);
   imax_kernel <float4, float4* __restrict__, complex_float4, complex_float4* __restrict__, block_threads, items_per_thread>
-    <<< 1, block_threads, 0, stream >>> (N, X, C, ldc, piv, rsq);
+    <<< 1, block_threads, 0, stream >>> (N, X, C, ldc, piv, diag);
 }

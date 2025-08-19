@@ -23,8 +23,7 @@ struct convert_fp {
   __device__ __forceinline__ void operator()(double a, double2& b) { b = make_double2(a, 0.); }
   __device__ __forceinline__ void operator()(float a, double2& b) { b = make_double2(double(a), 0.); }
   __device__ __forceinline__ void operator()(double2 a, double2& b) { b = a; }
-  __device__ __forceinline__ void operator()(float4 a, double2& b) {
-    b = device::dd::normalize(make_double2(double(a.x) + double(a.y), double(a.z) + double(a.w))); }
+  __device__ __forceinline__ void operator()(float4 a, double2& b) { b = device::dd::qf2dd(a); }
 
   __device__ __forceinline__ void operator()(double a, float4& b) {
     float a1 = float(a); double c = a - double(a1);
@@ -32,8 +31,7 @@ struct convert_fp {
     b = make_float4(a1, a2, a3, 0.f);
   }
   __device__ __forceinline__ void operator()(float a, float4& b) { b = make_float4(a, 0.f, 0.f, 0.f); }
-  __device__ __forceinline__ void operator()(double2 a, float4& b) {
-    float4 c, d; operator()(a.x, c); operator()(a.y, d); b = device::qf::add(c, d); }
+  __device__ __forceinline__ void operator()(double2 a, float4& b) { b = device::dd::dd2qf(a); }
   __device__ __forceinline__ void operator()(float4 a, float4& b) { b = a; }
 };
 

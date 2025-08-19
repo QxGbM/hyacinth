@@ -78,7 +78,7 @@ namespace device {
 };
 
 namespace device::Cholesky {
-  // jpiv :: host page-locked, minimal length N + 8, 16 byte aligned
+  // jpiv :: host page-locked, minimal length N + 12, 16 byte aligned
   // A :: device, minimal length lda * (N + 1), 16 byte aligned
   // epi :: Early termination by relative error, truncated to [0., 1.];
   // iters :: Early termination by fix rank, truncated to [1, N];

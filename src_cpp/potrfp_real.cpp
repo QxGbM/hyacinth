@@ -7,15 +7,15 @@
 #include <numeric>
 
 template <Precision prec>
-inline void imax_dispatcher(cudaStream_t stream, int32_t N, void* X, void* C, int32_t ldc, int32_t* piv, void* rsq) {
+inline void imax_dispatcher(cudaStream_t stream, int32_t N, void* X, void* C, int32_t ldc, int32_t* piv, void* diag) {
   if constexpr(prec == Precision::FP64)
-    internal::Cholesky::imax_f64(stream, N, (double*)X, (double*)C, ldc, piv, (double*)rsq);
+    internal::Cholesky::imax_f64(stream, N, (double*)X, (double*)C, ldc, piv, (double*)diag);
   else if constexpr(prec == Precision::FP32)
-    internal::Cholesky::imax_f32(stream, N, (float*)X, (float*)C, ldc, piv, (float*)rsq);
+    internal::Cholesky::imax_f32(stream, N, (float*)X, (float*)C, ldc, piv, (float*)diag);
   else if constexpr(prec == Precision::FP128_DD)
-    internal::Cholesky::imax_f128_dd(stream, N, (double2*)X, (double2*)C, ldc, piv, (double2*)rsq);
+    internal::Cholesky::imax_f128_dd(stream, N, (double2*)X, (double2*)C, ldc, piv, (double2*)diag);
   else if constexpr(prec == Precision::FP128_QF)
-    internal::Cholesky::imax_f128_qf(stream, N, (float4*)X, (float4*)C, ldc, piv, (float4*)rsq);
+    internal::Cholesky::imax_f128_qf(stream, N, (float4*)X, (float4*)C, ldc, piv, (float4*)diag);
 }
 
 template <Precision prec>
@@ -30,16 +30,32 @@ inline void swap_cols_dispatcher(cudaStream_t stream, int32_t i, int32_t j, int3
     internal::Cholesky::swap_cols_f128_qf(stream, i, j, N, (float4*)A, lda);
 }
 
-template <Precision prec>
-inline void gemv_dispatcher(cudaStream_t stream, void* scale, int32_t M, int32_t N, const void* A, int32_t lda, void* B, void* D) {
+template <Precision prec, class real_t>
+inline void rsqrt_real(real_t& f, real_t& rsq) {
   if constexpr(prec == Precision::FP64)
-    internal::Cholesky::gemv_scal_f64(stream, *((double*)scale), M, N, (const double*)A, lda, (double*)B, (double*)D);
+  { f = std::sqrt(f); rsq = 1. / f; }
   else if constexpr(prec == Precision::FP32)
-    internal::Cholesky::gemv_scal_f32(stream, *((float*)scale), M, N, (const float*)A, lda, (float*)B, (float*)D);
+  { f = std::sqrt(f); rsq = 1.f / f; }
   else if constexpr(prec == Precision::FP128_DD)
-    internal::Cholesky::gemv_scal_f128_dd(stream, *((double2*)scale), M, N, (const double2*)A, lda, (double2*)B, (double2*)D);
+  { rsq = device::dd::frsqrt(f); f = device::dd::mul(rsq, f); }
+  else if constexpr(prec == Precision::FP128_QF) {
+    double2 d = device::dd::qf2dd(f);
+    double2 drsq = device::dd::frsqrt(d);
+    f = device::dd::dd2qf(device::dd::mul(drsq, d));
+    rsq = device::dd::dd2qf(drsq);
+  }
+}
+
+template <Precision prec, class real_t>
+inline void gemv_dispatcher(cudaStream_t stream, const real_t* scale, int32_t M, int32_t N, const void* A, int32_t lda, void* B, real_t* D) {
+  if constexpr(prec == Precision::FP64)
+    internal::Cholesky::gemv_scal_f64(stream, scale, M, N, (const double*)A, lda, (double*)B, D);
+  else if constexpr(prec == Precision::FP32)
+    internal::Cholesky::gemv_scal_f32(stream, scale, M, N, (const float*)A, lda, (float*)B, D);
+  else if constexpr(prec == Precision::FP128_DD)
+    internal::Cholesky::gemv_scal_f128_dd(stream, scale, M, N, (const double2*)A, lda, (double2*)B, D);
   else if constexpr(prec == Precision::FP128_QF)
-    internal::Cholesky::gemv_scal_f128_qf(stream, *((float4*)scale), M, N, (const float4*)A, lda, (float4*)B, (float4*)D);
+    internal::Cholesky::gemv_scal_f128_qf(stream, scale, M, N, (const float4*)A, lda, (float4*)B, D);
 }
 
 template <Precision prec, class real_t>
@@ -70,7 +86,7 @@ inline int32_t diag_pred(real_t diag, int32_t piv, double s0) {
 
 template <Precision prec, class real_t>
 inline int32_t real_potrfp(cudaStream_t stream, double epi, int32_t iters, int32_t N, real_t* A, int32_t lda, int32_t* jpiv) {
-  int32_t algnN = (N + 3) & (~3), *pivot_i = &jpiv[algnN + 4];
+  int32_t algnN = (N + 3) & (~3), *pivot_i = &jpiv[algnN + 8];
   real_t* scale = (real_t*)(&jpiv[algnN]), *diag = (real_t*)(&A[uint64_t(N) * uint64_t(lda)]);
   double s0 = std::numeric_limits<double>::infinity();
   std::iota(jpiv, &jpiv[N], 1);
@@ -83,16 +99,18 @@ inline int32_t real_potrfp(cudaStream_t stream, double epi, int32_t iters, int32
     imax_dispatcher<prec>(stream, N - i, &diag[i], &A[A_diag], lda, pivot_i, scale);
     cudaStreamSynchronize(stream);
 
-    if (i == 0)
-      s0 = set_s0<prec>(*scale, 1. / epi);
-    if (diag_pred<prec>(*scale, *pivot_i, s0))
-      return i;
-
     if (0 < *pivot_i) {
       int32_t j = *pivot_i + i;
       std::iter_swap(&jpiv[i], &jpiv[j]);
       swap_cols_dispatcher<prec>(stream, i, j, N, A, lda);
     }
+
+    rsqrt_real<prec>(scale[0], scale[1]);
+    if (i == 0)
+      s0 = set_s0<prec>(scale[1], 1. / epi);
+    if (diag_pred<prec>(scale[1], *pivot_i, s0))
+      return i;
+
     gemv_dispatcher<prec>(stream, scale, N - i, i, &A[A_col], lda, &A[A_diag], &diag[i]);
   }
   return iters;
