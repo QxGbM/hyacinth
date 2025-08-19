@@ -9,7 +9,7 @@ void device_igemm_behavior(int32_t& iter_k, Precision& which_f128) {
   cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, device);
 
   device = 100 * major + minor;
-  iter_k = device == 900 ? (1024 << std::min(5, 14 - 2 * device::Config::exp_base)) : 32768;
+  iter_k = 65536 << (14 - 2 * device::Config::exp_base);
   which_f128 = (device == 800 || device == 900 || device == 1000) ? Precision::FP128_DD : Precision::FP128_QF;
 }
 

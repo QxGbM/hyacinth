@@ -13,7 +13,7 @@ namespace device::Config {
 #ifdef I8_EXP_BASE
   constexpr int32_t exp_base = I8_EXP_BASE;
 #else
-  constexpr int32_t exp_base = 6;
+  constexpr int32_t exp_base = 7;
 #endif
 };
 

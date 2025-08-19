@@ -116,18 +116,18 @@ namespace device::dd {
   }
 
   __host__ __device__ __forceinline__ double2 frsqrt(double2 a) {
+    double rsq; int32_t p;
 #ifdef __CUDA_ARCH__
-    int32_t p = int32_t(scalbn(-log2(a.x), -1));
-    double2 x = make_double2(scalbn(rsqrt(a.x), -p), 0.);
+    rsq = rsqrt(a.x);
 #else
-    int32_t p = int32_t(-0.5 * std::log2(a.x));
-    double2 x = make_double2(std::scalbn(1. / std::sqrt(a.x), -p), 0.);
+    using std::frexp;
+    rsq = 1. / std::sqrt(a.x);
 #endif
+    double2 x = make_double2(frexp(rsq, &p), 0.);
     a = fscalbn(negate(a), (p << 1) - 1);
 
     x = mul(x, add_double(mul(x, mul(a, x)), 1.5));
     x = mul(x, add_double(mul(x, mul(a, x)), 1.5));
-
     return fscalbn(x, p);
   }
 
