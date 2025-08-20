@@ -2,15 +2,14 @@
 #include <hyacinth.hpp>
 #include <limits>
 
-void device_igemm_behavior(int32_t& iter_k, Precision& which_f128) {
+inline device::Precision device_igemm_behavior() {
   int32_t device, major, minor;
   cudaGetDevice(&device);
   cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, device);
   cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, device);
 
   device = 100 * major + minor;
-  iter_k = 65536 << (14 - 2 * device::Config::exp_base);
-  which_f128 = (device == 800 || device == 900 || device == 1000) ? Precision::FP128_DD : Precision::FP128_QF;
+  return (device == 800 || device == 900 || device == 1000) ? device::Precision::FP128_DD : device::Precision::FP128_QF;
 }
 
 void device::MixPrecAHA::rATA_params_query(gemm_params* param, double epi, int32_t M, int32_t N, Precision precA) {
@@ -23,8 +22,8 @@ void device::MixPrecAHA::rATA_params_query(gemm_params* param, double epi, int32
   param->orderA = std::max(1, 1 + int32_t(std::ceil(epi / device::Config::exp_base)));
 
   int32_t acc_bits = std::max(1, int32_t(std::ceil(2 * epi)));
-  Precision f128;
-  device_igemm_behavior(param->iter_k, f128);
+  Precision f128 = device_igemm_behavior();
+  param->iter_k = 65536 << (14 - 2 * device::Config::exp_base);
   param->precC = acc_bits <= 24 ? Precision::FP32 : (acc_bits <= 53 ? Precision::FP64 : f128);
   param->C_elem_bytes = acc_bits <= 24 ? 4 : (acc_bits <= 53 ? 8 : 16);
 
@@ -53,8 +52,8 @@ void device::MixPrecAHA::cAHA_params_query(gemm_params* param, double epi, int32
   param->orderA = std::max(1, 1 + int32_t(std::ceil(epi / device::Config::exp_base)));
 
   int32_t acc_bits = std::max(1, int32_t(std::ceil(2 * epi)));
-  Precision f128;
-  device_igemm_behavior(param->iter_k, f128);
+  Precision f128 = device_igemm_behavior();
+  param->iter_k = 65536 << (14 - 2 * device::Config::exp_base);
   param->precC = acc_bits <= 24 ? Precision::FP32 : (acc_bits <= 53 ? Precision::FP64 : f128);
   param->C_elem_bytes = acc_bits <= 24 ? 8 : (acc_bits <= 53 ? 16 : 32);
 

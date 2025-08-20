@@ -6,25 +6,19 @@
 #include <cuda_runtime_api.h>
 #include <cublas_v2.h>
 
-namespace device::Config {
-  // ------------ Changing Config requires recompile the library !! ------------
-  // Exponent BASE :: ranged from [4, 7] for integer quantization
-
-#ifdef I8_EXP_BASE
-  constexpr int32_t exp_base = I8_EXP_BASE;
-#else
-  constexpr int32_t exp_base = 7;
-#endif
-};
-
-struct complex_double2;
-struct complex_float4;
-enum class Precision { FP32, FP64, FP128_DD, FP128_QF };
-
 namespace device {
+  namespace Config {
+    // ------------ Changing Config requires recompile the library !! ------------
+    // Exponent BASE :: ranged from [4, 7] for integer quantization
+
+    constexpr int32_t exp_base = 7;
+  };
+
+  enum class Precision { FP32, FP64, FP128_DD, FP128_QF };
+
   // triangluar copy :: copies M * i items from column i, only accept M = [1, 2]
   // rectangle copy :: no limits
-  // conversion :: float <--> float,double; double <--> all; fp128 <--> double,fp128; [ no direct conversion float <--> fp128 ]
+  // conversion :: [all] to [all] is okay
 
   void copy_upper_triangular(cudaStream_t stream, int32_t M, int32_t N, const void* A, int32_t lda, Precision precA, void* B, int32_t ldb, Precision precB);
 
@@ -75,57 +69,56 @@ namespace device {
   void check_interp_decomp_cf32(cudaStream_t stream, cublasHandle_t handle, int32_t rank,
     int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, const int32_t* jpiv, const std::complex<float>* X, int32_t ldx, double* rel_err);
 
-};
+  namespace Cholesky {
+    // jpiv :: host page-locked, minimal length N + 12, 16 byte aligned
+    // A :: device, minimal length lda * (N + 1), 16 byte aligned
+    // epi :: Early termination by relative error, truncated to [0., 1.];
+    // iters :: Early termination by fix rank, truncated to [1, N];
+    // epi = 0. && iters = N, Will not terminate early, unless divided-by-0 occurs at diagonal
 
-namespace device::Cholesky {
-  // jpiv :: host page-locked, minimal length N + 12, 16 byte aligned
-  // A :: device, minimal length lda * (N + 1), 16 byte aligned
-  // epi :: Early termination by relative error, truncated to [0., 1.];
-  // iters :: Early termination by fix rank, truncated to [1, N];
-  // epi = 0. && iters = N, Will not terminate early, unless divided-by-0 occurs at diagonal
+    // Return :: Number of iterations [0, N] = matrix rank
+    //           The last interation is on the fly when function returns, will need synchronization to access
 
-  // Return :: Number of iterations [0, N] = matrix rank
-  //           The last interation is on the fly when function returns, will need synchronization to access
+    int32_t rpotrfp(cudaStream_t stream, double epi, int32_t iters, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv);
 
-  int32_t rpotrfp(cudaStream_t stream, double epi, int32_t iters, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv);
+    int32_t cpotrfp(cudaStream_t stream, double epi, int32_t iters, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv);
 
-  int32_t cpotrfp(cudaStream_t stream, double epi, int32_t iters, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv);
-
-};
-
-namespace device::MixPrecAHA {
-  // A :: device, minimal length lda * N
-  // C :: device, queried in param, 256 byte aligned
-
-  // Output :: C = A^H * A, Stored in the leading positions
-  //           C is [param.N] by [param.N] with stride [param.algnN]
-  //           Precision used is [param.precC], with [param.C_elem_bytes] sized elements
-
-  struct gemm_params {
-    Precision precA;
-    int32_t M;
-    int32_t N;
-    int32_t algnM;
-    int32_t orderA;
-    int32_t iter_k;
-
-    Precision precC;
-    int32_t algnN;
-    int32_t C_elem_bytes;
-
-    uint64_t acc_bytes;
-    uint64_t i8_bytes;
-    uint64_t exp_bytes;
-    uint64_t scratch_bytes;
-    uint64_t C_bytes;
   };
 
-  void rATA_params_query(gemm_params* param, double epi, int32_t M, int32_t N, Precision precA);
+  namespace MixPrecAHA {
+    // A :: device, minimal length lda * N
+    // C :: device, queried in param, 256 byte aligned
 
-  void cAHA_params_query(gemm_params* param, double epi, int32_t M, int32_t N, Precision precA);
+    // Output :: C = A^H * A, Stored in the leading positions
+    //           C is [param.N] by [param.N] with stride [param.algnN]
+    //           Precision used is [param.precC], with [param.C_elem_bytes] sized elements
 
-  void rATA(cudaStream_t stream, cublasHandle_t handle, gemm_params param, const void* A, int32_t lda, void* C);
+    struct gemm_params {
+      Precision precA;
+      int32_t M;
+      int32_t N;
+      int32_t algnM;
+      int32_t orderA;
+      int32_t iter_k;
 
-  void cAHA(cudaStream_t stream, cublasHandle_t handle, gemm_params param, const void* A, int32_t lda, void* C);
+      Precision precC;
+      int32_t algnN;
+      int32_t C_elem_bytes;
 
+      uint64_t acc_bytes;
+      uint64_t i8_bytes;
+      uint64_t exp_bytes;
+      uint64_t scratch_bytes;
+      uint64_t C_bytes;
+    };
+
+    void rATA_params_query(gemm_params* param, double epi, int32_t M, int32_t N, Precision precA);
+
+    void cAHA_params_query(gemm_params* param, double epi, int32_t M, int32_t N, Precision precA);
+
+    void rATA(cudaStream_t stream, cublasHandle_t handle, gemm_params param, const void* A, int32_t lda, void* C);
+
+    void cAHA(cudaStream_t stream, cublasHandle_t handle, gemm_params param, const void* A, int32_t lda, void* C);
+
+  };
 };

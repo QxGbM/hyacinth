@@ -3,7 +3,6 @@
 #include <cstdint>
 #include <complex>
 #include <cuda_runtime_api.h>
-#include <cublas_v2.h>
 
 struct complex_double2;
 struct complex_float4;

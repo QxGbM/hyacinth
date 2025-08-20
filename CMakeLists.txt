@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_BUILD_TYPE Release)
 
 project ("hyacinth" LANGUAGES CXX CUDA)
-set (SM_TARGETS "all-major")
+set(SM_TARGETS "80;90;100;120")
 
 find_package(CUDAToolkit REQUIRED)
 
@@ -38,7 +38,7 @@ set_source_files_properties(${CU_SOURCES} PROPERTIES COMPILE_OPTIONS
   "-Xcompiler=-Wall;-Xcompiler=-Wextra;-Xcompiler=-fexceptions")
 
 add_library(hyacinth SHARED ${CPP_SOURCES} ${CU_SOURCES})
-set_target_properties(hyacinth PROPERTIES CUDA_ARCHITECTURES ${SM_TARGETS})
+set_property(TARGET hyacinth PROPERTY CUDA_ARCHITECTURES ${SM_TARGETS})
 
 target_include_directories(hyacinth PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(hyacinth PRIVATE CUDA::cudart CUDA::cublas)
@@ -74,5 +74,4 @@ foreach (test ${TEST_SOURCES})
   else()
     target_link_libraries(${src}.app PRIVATE lapacke)
   endif()
-  set_target_properties(${src}.app PROPERTIES CUDA_ARCHITECTURES ${SM_TARGETS})
 endforeach ()

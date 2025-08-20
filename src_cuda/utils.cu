@@ -69,12 +69,12 @@ inline void upper_tri_dispatcher(cudaStream_t stream, int32_t M, int32_t N, cons
 }
 
 template <class typeA>
-inline void upper_tri_dispatcher(cudaStream_t stream, int32_t M, int32_t N, const typeA* A, int32_t lda, void* B, int32_t ldb, Precision precB) {
+inline void upper_tri_dispatcher(cudaStream_t stream, int32_t M, int32_t N, const typeA* A, int32_t lda, void* B, int32_t ldb, device::Precision precB) {
   switch (precB) {
-    case Precision::FP64: upper_tri_dispatcher<typeA, double>(stream, M, N, A, lda, (double*)B, ldb); break;
-    case Precision::FP32: upper_tri_dispatcher<typeA, float>(stream, M, N, A, lda, (float*)B, ldb); break;
-    case Precision::FP128_DD: upper_tri_dispatcher<typeA, double2>(stream, M, N, A, lda, (double2*)B, ldb); break;
-    case Precision::FP128_QF: upper_tri_dispatcher<typeA, float4>(stream, M, N, A, lda, (float4*)B, ldb); break;
+    case device::Precision::FP64: upper_tri_dispatcher<typeA, double>(stream, M, N, A, lda, (double*)B, ldb); break;
+    case device::Precision::FP32: upper_tri_dispatcher<typeA, float>(stream, M, N, A, lda, (float*)B, ldb); break;
+    case device::Precision::FP128_DD: upper_tri_dispatcher<typeA, double2>(stream, M, N, A, lda, (double2*)B, ldb); break;
+    case device::Precision::FP128_QF: upper_tri_dispatcher<typeA, float4>(stream, M, N, A, lda, (float4*)B, ldb); break;
     default: break;
   }
 }

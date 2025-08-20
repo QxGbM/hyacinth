@@ -2,41 +2,19 @@
 #include <hyacinth.hpp>
 #include <internal.hpp>
 
-inline void encode_dispatcher_real(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const void* C, int32_t ldc, Precision prec, int32_t* vec_expon, int8_t* A, int32_t lda) {
-  if (prec == Precision::FP64) {
-    internal::int8::vexp_f64(stream, order, M, N, (const double*)C, ldc, vec_expon);
-    internal::int8::encode_f64(stream, order, M, N, (const double*)C, ldc, vec_expon, A, lda);
-  }
-  else if (prec == Precision::FP32) {
-    internal::int8::vexp_f32(stream, order, M, N, (const float*)C, ldc, vec_expon);
-    internal::int8::encode_f32(stream, order, M, N, (const float*)C, ldc, vec_expon, A, lda);
-  }
-}
-
-inline void encode_dispatcher_complex(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const void* C, int32_t ldc, Precision prec, int32_t* vec_expon, int8_t* A, int32_t lda) {
-  if (prec == Precision::FP64) {
-    internal::int8::vexp_cf64(stream, order, M, N, (const std::complex<double>*)C, ldc, vec_expon);
-    internal::int8::encode_cf64(stream, order, M, N, (const std::complex<double>*)C, ldc, vec_expon, A, lda);
-  }
-  else if (prec == Precision::FP32) {
-    internal::int8::vexp_cf32(stream, order, M, N, (const std::complex<float>*)C, ldc, vec_expon);
-    internal::int8::encode_cf32(stream, order, M, N, (const std::complex<float>*)C, ldc, vec_expon, A, lda);
-  }
-}
-
-template <Precision prec>
+template <device::Precision prec>
 inline void decode_dispatcher(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t N, void* A, const int32_t* B, int32_t ld) {
-  if constexpr(prec == Precision::FP64)
+  if constexpr(prec == device::Precision::FP64)
     internal::int8::decode_f64_strided_i32(stream, order_lo, order_hi, N, (double*)A, B, ld);
-  else if constexpr(prec == Precision::FP32)
+  else if constexpr(prec == device::Precision::FP32)
     internal::int8::decode_f32_strided_i32(stream, order_lo, order_hi, N, (float*)A, B, ld);
-  else if constexpr(prec == Precision::FP128_DD)
+  else if constexpr(prec == device::Precision::FP128_DD)
     internal::int8::decode_f128_dd_strided_i32(stream, order_lo, order_hi, N, (double2*)A, B, ld);
-  else if constexpr(prec == Precision::FP128_QF)
+  else if constexpr(prec == device::Precision::FP128_QF)
     internal::int8::decode_f128_qf_strided_i32(stream, order_lo, order_hi, N, (float4*)A, B, ld);
 }
 
-template <Precision prec>
+template <device::Precision prec>
 void i8gemm_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32_t iter_k, int32_t algnN, int32_t algnK, const int8_t* AT, const int8_t* A, int32_t orderA, void* C, int32_t* workspace) {
   uint64_t strideA = uint64_t(algnK) * uint64_t(N);
   uint64_t strideC = uint64_t(algnN) * uint64_t(N);
@@ -69,6 +47,17 @@ void i8gemm_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t N, in
   }
 }
 
+inline void encode_dispatcher_real(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const void* C, int32_t ldc, device::Precision prec, int32_t* vec_expon, int8_t* A, int32_t lda) {
+  if (prec == device::Precision::FP64) {
+    internal::int8::vexp_f64(stream, order, M, N, (const double*)C, ldc, vec_expon);
+    internal::int8::encode_f64(stream, order, M, N, (const double*)C, ldc, vec_expon, A, lda);
+  }
+  else if (prec == device::Precision::FP32) {
+    internal::int8::vexp_f32(stream, order, M, N, (const float*)C, ldc, vec_expon);
+    internal::int8::encode_f32(stream, order, M, N, (const float*)C, ldc, vec_expon, A, lda);
+  }
+}
+
 void device::MixPrecAHA::rATA(cudaStream_t stream, cublasHandle_t handle, gemm_params param, const void* A, int32_t lda, void* C) {
   int32_t M = param.M, N = param.N;
   int32_t algnM = param.algnM, algnN = param.algnN;
@@ -94,6 +83,17 @@ void device::MixPrecAHA::rATA(cudaStream_t stream, cublasHandle_t handle, gemm_p
   else if (param.precC == Precision::FP128_QF) {
     i8gemm_dispatcher<Precision::FP128_QF>(stream, handle, N, param.iter_k, algnN, algnM, iA, iA, orderA, acc, (int32_t*)workspace);
     internal::int8::scal_exponent_f128_qf(stream, N, (float4*)acc, algnN, orderA, (int32_t*)v_exp);
+  }
+}
+
+inline void encode_dispatcher_complex(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const void* C, int32_t ldc, device::Precision prec, int32_t* vec_expon, int8_t* A, int32_t lda) {
+  if (prec == device::Precision::FP64) {
+    internal::int8::vexp_cf64(stream, order, M, N, (const std::complex<double>*)C, ldc, vec_expon);
+    internal::int8::encode_cf64(stream, order, M, N, (const std::complex<double>*)C, ldc, vec_expon, A, lda);
+  }
+  else if (prec == device::Precision::FP32) {
+    internal::int8::vexp_cf32(stream, order, M, N, (const std::complex<float>*)C, ldc, vec_expon);
+    internal::int8::encode_cf32(stream, order, M, N, (const std::complex<float>*)C, ldc, vec_expon, A, lda);
   }
 }
 
