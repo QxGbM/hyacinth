@@ -38,12 +38,8 @@ inline void rsqrt_real(real_t& f, real_t& rsq) {
   { f = std::sqrt(f); rsq = 1.f / f; }
   else if constexpr(prec == Precision::FP128_DD)
   { rsq = device::dd::frsqrt(f); f = device::dd::mul(rsq, f); }
-  else if constexpr(prec == Precision::FP128_QF) {
-    double2 d = device::dd::qf2dd(f);
-    double2 drsq = device::dd::frsqrt(d);
-    f = device::dd::dd2qf(device::dd::mul(drsq, d));
-    rsq = device::dd::dd2qf(drsq);
-  }
+  else if constexpr(prec == Precision::FP128_QF)
+  { rsq = device::qf::frsqrt(f); f = device::qf::mul(rsq, f); }
 }
 
 template <Precision prec, class real_t>

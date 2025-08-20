@@ -5,19 +5,18 @@
 #include <numeric>
 #include <vector>
 
-#ifdef USE_MKL
-#include <mkl.h>
-#else
-#include <cblas.h>
-#include <lapacke.h>
-#endif
+void make_2D_oscillatory(double w, int32_t sep, int32_t M, int32_t N, std::complex<float>* A, int32_t lda) {
+  auto translate_2d = [](int64_t i) { int64_t x = i / 128, y = i - 128 * x; return std::complex<double>(x, y); };
+  sep = 128 * sep + ((M + 127) & (~127));
 
-void make_1D_oscilatory(double w, int32_t M, int32_t N, std::complex<float>* A, int32_t lda) {
-  for (int32_t j = 0; j < N; ++j)
+  for (int32_t j = 0; j < N; ++j) {
+    auto vj = translate_2d(j + sep);
     for (int32_t i = 0; i < M; ++i) {
-      float d = std::abs(i - (j + M));
-      A[uint64_t(i) + uint64_t(j) * uint64_t(lda)] = std::complex<float>(std::cos(w * d) / d, std::sin(w * d) / d);
+      auto vi = translate_2d(i);
+      double d = std::abs(vi - vj);
+      A[uint64_t(i) + uint64_t(j) * uint64_t(lda)] = std::complex<float>(float(std::cos(w * d) / d), float(std::sin(w * d) / d));
     }
+  }
 }
 
 int32_t main(int32_t argc, char* argv[]) {
@@ -26,16 +25,20 @@ int32_t main(int32_t argc, char* argv[]) {
   if (cu_err != cudaSuccess)
   { std::cerr << cudaGetErrorString(cu_err) << std::endl; return -1; }
 
-  int32_t M = 1 < argc ? std::atoi(argv[1]) : 1024;
-  int32_t N = std::min(M, 2 < argc ? std::atoi(argv[2]) : 128);
+  int64_t M = 1 < argc ? std::atoi(argv[1]) : 1024;
+  int64_t N = 2 < argc ? std::atoi(argv[2]) : 128;
+  N = std::min(M, N);
+
   double epi = 3 < argc ? std::atof(argv[3]) : 1.e-6;
+  double omega = 4 < argc ? std::atof(argv[4]) : 0.;
+  int32_t sep = 5 < argc ? std::atoi(argv[5]) : 0;
+
   std::vector<std::complex<float>> matA(M * N);
   std::vector<int32_t> ipiv(N);
-
-  make_1D_oscilatory(200, M, N, matA.data(), M);
+  make_2D_oscillatory(omega, sep, M, N, matA.data(), M);
 
   std::cout << "CF32 LR-APPROX <" << M << ", " << N << ">\n";
-  std::cout << "Epi: " << epi << "\n";
+  std::cout << "Epi: " << epi << ", Omega: " << omega << ", Sep: " << sep << "\n";
 
   cudaStream_t stream;
   cublasHandle_t handle;

@@ -72,26 +72,18 @@ namespace device::dd {
   }
 
   __host__ __device__ __forceinline__ double2 mul(double2 a, double2 b) {
+#ifndef __CUDA_ARCH__
+    using std::fma;
+#endif
     double2 d;
-#ifdef __CUDA_ARCH__
-    d.x = __dmul_rn(a.x, b.x);
-    d.y = __fma_rn(a.x, b.x, -d.x);
-    d.y = __fma_rn(a.x, b.y, d.y);
-    d.y = __fma_rn(a.y, b.x, d.y);
-
-    double s = __dadd_rn(d.x, d.y);
-    double delta = __dadd_rn(d.x, -s);
-    return make_double2(s, __dadd_rn(d.y, delta));
-#else
     d.x = a.x * b.x;
-    d.y = std::fma(a.x, b.x, -d.x);
-    d.y = std::fma(a.x, b.y, d.y);
-    d.y = std::fma(a.y, b.x, d.y);
+    d.y = fma(a.x, b.x, -d.x);
+    d.y = fma(a.x, b.y, d.y);
+    d.y = fma(a.y, b.x, d.y);
 
     double s = d.x + d.y;
     double delta = d.x - s;
     return make_double2(s, d.y + delta);
-#endif
   }
 
   __host__ __device__ __forceinline__ double2 fma(double2 a, double2 b, double2 c) {
@@ -99,11 +91,10 @@ namespace device::dd {
   }
 
   __host__ __device__ __forceinline__ double2 fscalbn(double2 a, int32_t exp) {
-#ifdef __CUDA_ARCH__
-    return make_double2(scalbn(a.x, exp), scalbn(a.y, exp));
-#else
-    return make_double2(std::scalbn(a.x, exp), std::scalbn(a.y, exp));
+#ifndef __CUDA_ARCH__
+    using std::scalbn;
 #endif
+    return make_double2(scalbn(a.x, exp), scalbn(a.y, exp));
   }
 
   __host__ __device__ __forceinline__ double2 add_double(double2 a, double b) {
@@ -117,11 +108,11 @@ namespace device::dd {
 
   __host__ __device__ __forceinline__ double2 frsqrt(double2 a) {
     double rsq; int32_t p;
-#ifdef __CUDA_ARCH__
-    rsq = rsqrt(a.x);
-#else
+#ifndef __CUDA_ARCH__
     using std::frexp;
     rsq = 1. / std::sqrt(a.x);
+#else
+    rsq = rsqrt(a.x);
 #endif
     double2 x = make_double2(frexp(rsq, &p), 0.);
     a = fscalbn(negate(a), (p << 1) - 1);
@@ -182,10 +173,14 @@ namespace device::dd {
   }
   
   __host__ __device__ __forceinline__ double2 qf2dd(float4 a) {
-    double2 c = make_double2(double(a.x) + double(a.y), double(a.z) + double(a.w));
-    double s = c.x + c.y;
-    double delta = c.x - s;
-    return make_double2(s, c.y + delta);
+    double2 c = make_double2(a.x, a.y);
+    double2 d = make_double2(a.z, a.w);
+    double2 s0 = make_double2(c.x + c.y, d.x + d.y);
+    double delta0 = c.y + (c.x - s0.x);
+
+    double s1 = s0.x + s0.y;
+    double delta1 = s0.y + (s0.x - s1);
+    return make_double2(s1, delta0 + delta1);
   }
 
   __host__ __device__ __forceinline__ complex_double2 conj(complex_double2 a) {

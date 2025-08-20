@@ -18,8 +18,10 @@ int32_t main(int32_t argc, char* argv[]) {
   if (cu_err != cudaSuccess)
   { std::cerr << cudaGetErrorString(cu_err) << std::endl; return -1; }
 
-  int32_t M = 1 < argc ? std::atoi(argv[1]) : 1024;
-  int32_t N = std::min(M, 2 < argc ? std::atoi(argv[2]) : 128);
+  int64_t M = 1 < argc ? std::atoi(argv[1]) : 1024;
+  int64_t N = 2 < argc ? std::atoi(argv[2]) : 128;
+  N = std::min(M, N);
+
   double epi = 3 < argc ? std::atof(argv[3]) : 1.e-12;
   std::vector<std::complex<double>> matA(M * N);
   std::vector<int32_t> ipiv(N);
@@ -61,7 +63,7 @@ int32_t main(int32_t argc, char* argv[]) {
 
     int32_t err_int = 0;
     for (int32_t i = 0; i < N; ++i) {
-      err_int += std::abs(jpiv[i] - ipiv[i]);
+      err_int += int32_t(jpiv[i] != ipiv[i]);
       if (matA[i * (M + 1)].real() < 0.)
         cblas_zdscal(N, -1., &(matA.data())[i], M);
     }
