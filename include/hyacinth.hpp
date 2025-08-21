@@ -16,11 +16,10 @@ namespace device {
 
   enum class Precision { FP32, FP64, FP128_DD, FP128_QF };
 
-  // triangluar copy :: copies M * i items from column i, only accept M = [1, 2]
   // rectangle copy :: no limits
   // conversion :: [all] to [all] is okay
 
-  void copy_upper_triangular(cudaStream_t stream, int32_t M, int32_t N, const void* A, int32_t lda, Precision precA, void* B, int32_t ldb, Precision precB);
+  void convert_and_copy(cudaStream_t stream, int32_t M, int32_t N, const void* A, int32_t lda, Precision precA, void* B, int32_t ldb, Precision precB);
 
   void copy_permute(cudaStream_t stream, int32_t sc0ga1, int32_t M, int32_t N, const int32_t* jpiv, const void* A, int32_t lda, void* B, int32_t ldb, Precision prec);
 

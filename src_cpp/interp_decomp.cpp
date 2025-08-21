@@ -6,18 +6,18 @@
 int32_t device::interp_decomp_f64(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank,
   int32_t M, int32_t N, const double* A, int32_t lda, int32_t* jpiv, double* X, int32_t ldx) {
   
-  device::MixPrecAHA::gemm_params param;
-  device::MixPrecAHA::rATA_params_query(&param, epi, M, N, Precision::FP64);
+  MixPrecAHA::gemm_params param;
+  MixPrecAHA::rATA_params_query(&param, epi, M, N, Precision::FP64);
 
   void* work = nullptr;
   int32_t* dpiv = nullptr, algnN = param.algnN;
   cudaMalloc(&work, param.C_bytes);
   cudaMallocHost((void**)(&dpiv), (N + 12) * sizeof(int32_t));
 
-  device::MixPrecAHA::rATA(stream, handle, param, A, lda, work);
-  rank = device::Cholesky::rpotrfp(stream, epi, rank, N, work, algnN, param.precC, dpiv);
+  MixPrecAHA::rATA(stream, handle, param, A, lda, work);
+  rank = Cholesky::rpotrfp(stream, epi, rank, N, work, algnN, param.precC, dpiv);
   double* R = (double*)(&((int8_t*)work)[param.acc_bytes]);
-  copy_upper_triangular(stream, 1, N, work, algnN, param.precC, R, algnN, Precision::FP64);
+  convert_and_copy(stream, rank, N, work, algnN, param.precC, R, algnN, Precision::FP64);
 
   if (0 < rank) {
     if (rank < N) {
@@ -38,18 +38,18 @@ int32_t device::interp_decomp_f64(cudaStream_t stream, cublasHandle_t handle, do
 int32_t device::interp_decomp_f32(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank,
   int32_t M, int32_t N, const float* A, int32_t lda, int32_t* jpiv, float* X, int32_t ldx) {
 
-  device::MixPrecAHA::gemm_params param;
-  device::MixPrecAHA::rATA_params_query(&param, epi, M, N, Precision::FP32);
+  MixPrecAHA::gemm_params param;
+  MixPrecAHA::rATA_params_query(&param, epi, M, N, Precision::FP32);
 
   void* work = nullptr;
   int32_t* dpiv = nullptr, algnN = param.algnN;
   cudaMalloc(&work, param.C_bytes);
   cudaMallocHost((void**)(&dpiv), (N + 12) * sizeof(int32_t));
 
-  device::MixPrecAHA::rATA(stream, handle, param, A, lda, work);
-  rank = device::Cholesky::rpotrfp(stream, epi, rank, N, work, algnN, param.precC, dpiv);
+  MixPrecAHA::rATA(stream, handle, param, A, lda, work);
+  rank = Cholesky::rpotrfp(stream, epi, rank, N, work, algnN, param.precC, dpiv);
   float* R = (float*)(&((int8_t*)work)[param.acc_bytes]);
-  copy_upper_triangular(stream, 1, N, work, algnN, param.precC, R, algnN, Precision::FP32);
+  convert_and_copy(stream, rank, N, work, algnN, param.precC, R, algnN, Precision::FP32);
 
   if (0 < rank) {
     if (rank < N) {
@@ -70,18 +70,18 @@ int32_t device::interp_decomp_f32(cudaStream_t stream, cublasHandle_t handle, do
 int32_t device::interp_decomp_cf64(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank,
   int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int32_t* jpiv, std::complex<double>* X, int32_t ldx) {
 
-  device::MixPrecAHA::gemm_params param;
-  device::MixPrecAHA::cAHA_params_query(&param, epi, M, N, Precision::FP64);
+  MixPrecAHA::gemm_params param;
+  MixPrecAHA::cAHA_params_query(&param, epi, M, N, Precision::FP64);
 
   void* work = nullptr;
   int32_t* dpiv = nullptr, algnN = param.algnN;
   cudaMalloc(&work, param.C_bytes);
   cudaMallocHost((void**)(&dpiv), (N + 12) * sizeof(int32_t));
 
-  device::MixPrecAHA::cAHA(stream, handle, param, A, lda, work);
-  rank = device::Cholesky::cpotrfp(stream, epi, rank, N, work, algnN, param.precC, dpiv);
+  MixPrecAHA::cAHA(stream, handle, param, A, lda, work);
+  rank = Cholesky::cpotrfp(stream, epi, rank, N, work, algnN, param.precC, dpiv);
   cuDoubleComplex* R = (cuDoubleComplex*)(&((int8_t*)work)[param.acc_bytes]);
-  copy_upper_triangular(stream, 2, N, work, 2 * algnN, param.precC, R, 2 * algnN, Precision::FP64);
+  convert_and_copy(stream, 2 * rank, N, work, 2 * algnN, param.precC, R, 2 * algnN, Precision::FP64);
 
   if (0 < rank) {
     if (rank < N) {
@@ -103,18 +103,18 @@ int32_t device::interp_decomp_cf64(cudaStream_t stream, cublasHandle_t handle, d
 int32_t device::interp_decomp_cf32(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank,
   int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int32_t* jpiv, std::complex<float>* X, int32_t ldx) {
 
-  device::MixPrecAHA::gemm_params param;
-  device::MixPrecAHA::cAHA_params_query(&param, epi, M, N, Precision::FP32);
+  MixPrecAHA::gemm_params param;
+  MixPrecAHA::cAHA_params_query(&param, epi, M, N, Precision::FP32);
 
   void* work = nullptr;
   int32_t* dpiv = nullptr, algnN = param.algnN;
   cudaMalloc(&work, param.C_bytes);
   cudaMallocHost((void**)(&dpiv), (N + 12) * sizeof(int32_t));
 
-  device::MixPrecAHA::cAHA(stream, handle, param, A, lda, work);
-  rank = device::Cholesky::cpotrfp(stream, epi, rank, N, work, algnN, param.precC, dpiv);
+  MixPrecAHA::cAHA(stream, handle, param, A, lda, work);
+  rank = Cholesky::cpotrfp(stream, epi, rank, N, work, algnN, param.precC, dpiv);
   cuComplex* R = (cuComplex*)(&((int8_t*)work)[param.acc_bytes]);
-  copy_upper_triangular(stream, 2, N, work, 2 * algnN, param.precC, R, 2 * algnN, Precision::FP32);
+  convert_and_copy(stream, 2 * rank, N, work, 2 * algnN, param.precC, R, 2 * algnN, Precision::FP32);
 
   if (0 < rank) {
     if (rank < N) {
