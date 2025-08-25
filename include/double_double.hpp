@@ -4,7 +4,7 @@
 #include <cmath>
 #include <cuda_runtime.h>
 
-struct complex_double2 {
+struct __align__(32) complex_double2 {
   double2 real;
   double2 imag;
 };
@@ -181,10 +181,6 @@ namespace device::dd {
     double s1 = s0.x + s0.y;
     double delta1 = s0.y + (s0.x - s1);
     return make_double2(s1, delta0 + delta1);
-  }
-
-  __host__ __device__ __forceinline__ complex_double2 conj(complex_double2 a) {
-    return make_complex_double2(a.real, negate(a.imag));
   }
 
   __host__ __device__ __forceinline__ complex_double2 add(complex_double2 a, complex_double2 b) {

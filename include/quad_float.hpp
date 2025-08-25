@@ -4,7 +4,7 @@
 #include <cmath>
 #include <cuda_runtime.h>
 
-struct complex_float4 {
+struct __align__(32) complex_float4 {
   float4 real;
   float4 imag;
 };
@@ -64,15 +64,6 @@ namespace device::qf {
     fadd_err(a0.y, a1.x, a0.y, a1.x);
     fadd_err(a1.x, a1.y, a1.x, a1.y);
     return make_float4(a0.x, a0.y, a1.x, a1.y);
-  }
-
-  __host__ __device__ __forceinline__ float2 add(float2 a, float2 b) {
-    fadd2_err(a, b, a, b);
-    a.y += b.x + b.y;
-
-    float s = a.x + a.y;
-    float delta = a.x - s;
-    return make_float2(s, a.y + delta);
   }
 
   __host__ __device__ __forceinline__ float4 add(float4 a, float4 b) {
@@ -219,10 +210,6 @@ namespace device::qf {
     double s1 = s0.x + s0.y;
     double delta1 = s0.y + (s0.x - s1);
     return make_double2(s1, delta0 + delta1);
-  }
-
-  __host__ __device__ __forceinline__ complex_float4 conj(complex_float4 a) {
-    return make_complex_float4(a.real, negate(a.imag));
   }
 
   __host__ __device__ __forceinline__ complex_float4 add(complex_float4 a, complex_float4 b) {

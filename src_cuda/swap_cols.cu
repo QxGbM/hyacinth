@@ -9,8 +9,8 @@
 struct conj {
   __device__ __forceinline__ cuDoubleComplex operator()(cuDoubleComplex f) { return make_cuDoubleComplex(f.x, -f.y); }
   __device__ __forceinline__ cuComplex operator()(cuComplex f) { return make_cuComplex(f.x, -f.y); }
-  __device__ __forceinline__ complex_double2 operator()(complex_double2 f) { return device::dd::conj(f); }
-  __device__ __forceinline__ complex_float4 operator()(complex_float4 f) { return device::qf::conj(f); }
+  __device__ __forceinline__ complex_double2 operator()(complex_double2 f) { return device::dd::make_complex_double2(f.real, device::dd::negate(f.imag)); }
+  __device__ __forceinline__ complex_float4 operator()(complex_float4 f) { return device::qf::make_complex_float4(f.real, device::qf::negate(f.imag)); }
 };
 
 template <int32_t COMPLEX, class matrix_t, int32_t ITEMS_PER_THREAD>

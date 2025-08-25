@@ -46,12 +46,12 @@ struct scal_a_function {
   }
   __device__ __forceinline__ void operator()(double2 s, complex_double2 a, complex_double2& c, complex_double2& c_conj, double2& d) {
     complex_double2 e = c = device::dd::make_complex_double2(device::dd::mul(s, a.real), device::dd::mul(s, a.imag));
-    c_conj = device::dd::conj(e);
+    c_conj = device::dd::make_complex_double2(e.real, device::dd::negate(e.imag));
     d = device::dd::fma(device::dd::negate(e.real), e.real, device::dd::fma(device::dd::negate(e.imag), e.imag, d));
   }
   __device__ __forceinline__ void operator()(float4 s, complex_float4 a, complex_float4& c, complex_float4& c_conj, float4& d) {
     complex_float4 e = c = device::qf::make_complex_float4(device::qf::mul(s, a.real), device::qf::mul(s, a.imag));
-    c_conj = device::qf::conj(e);
+    c_conj = device::qf::make_complex_float4(e.real, device::qf::negate(e.imag));
     d = device::qf::fma(device::qf::negate(e.real), e.real, device::qf::fma(device::qf::negate(e.imag), e.imag, d));
   }
 };
