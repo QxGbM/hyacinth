@@ -37,9 +37,6 @@ int32_t main(int32_t argc, char* argv[]) {
   std::vector<int32_t> ipiv(N);
   make_2D_oscillatory(omega, sep, M, N, matA.data(), M);
 
-  std::cout << "F32 LR-APPROX <" << M << ", " << N << ">\n";
-  std::cout << "Epi: " << epi << ", Omega: " << omega << ", Sep: " << sep << "\n";
-
   cudaStream_t stream;
   cublasHandle_t handle;
   cudaStreamCreate(&stream);
@@ -55,21 +52,21 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaMalloc((void**)(&d_X), N * N * sizeof(float));
   cudaMemcpy(d_A, matA.data(), M * N * sizeof(float), cudaMemcpyHostToDevice);
 
+  device::cublas_preload_real(handle);
   cudaEventRecord(start, stream);
   int32_t rank = device::interp_decomp_f32(stream, handle, epi, N, M, N, d_A, M, ipiv.data(), d_X, N);
   cudaEventRecord(stop, stream);
 
   double rel_err = 0.;
   device::check_interp_decomp_f32(stream, handle, rank, M, N, d_A, M, ipiv.data(), d_X, N, &rel_err);
-  std::cout << "Rel Err: " << rel_err << std::endl;
 
   float milliseconds = 0.0f;
   cudaEventElapsedTime(&milliseconds, start, stop);
   int64_t qr_flops = (int64_t(N) * int64_t(N) * int64_t(N) * -2 / 3) + (int64_t(M) * int64_t(N) * int64_t(N) * 2);
   int64_t trsm_flops = int64_t(N) * int64_t(rank) * int64_t(rank);
-  std::cout << "Matrix A rank: " << rank << std::endl;
-  std::cout << "Time: " << milliseconds << " ms\n";
-  std::cout << "Total GFLOPs: " << double(qr_flops + trsm_flops) * 1.e-6 / milliseconds << "\n";
+  double gflops = double(qr_flops + trsm_flops) * 1.e-6 / milliseconds;
+
+  std::cout << "S-LRA," << M << "," << N << "," << epi << "," << omega << "," << sep << "," << rel_err << "," << rank << "," << milliseconds << "," << gflops << std::endl;
 
   cudaFree(d_A);
   cudaFree(d_X);
@@ -77,6 +74,9 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaEventDestroy(stop);
   cudaStreamDestroy(stream);
   cublasDestroy(handle);
-  std::cerr << cudaGetErrorString(cudaGetLastError()) << std::endl;
+
+  cu_err = cudaGetLastError();
+  if (cu_err != cudaSuccess)
+    std::cerr << cudaGetErrorString(cu_err) << std::endl;
   return 0;
 }

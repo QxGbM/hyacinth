@@ -10,7 +10,6 @@ struct __align__(32) complex_float4 {
 };
 
 namespace device::qf {
-  constexpr int32_t use_pred_fast_sum = 0;
 
   __host__ __device__ __forceinline__ complex_float4 make_complex_float4(float4 real, float4 imag) {
     return complex_float4({ real, imag });
@@ -22,39 +21,18 @@ namespace device::qf {
 
   __host__ __device__ __forceinline__ void fadd_err(float a, float b, float& sum, float& err) {
     sum = a + b;
-    if constexpr(use_pred_fast_sum) {
-      union { float fp; uint32_t in; } va{a}, vb{b};
-      int32_t pred = (va.in << 1) < (vb.in << 1);
-
-      a = pred ? vb.fp : va.fp;
-      b = pred ? va.fp : vb.fp;
-      err = b + (a - sum);
-    }
-    else {
-      float delta = a - sum;
-      float s_delta = sum + delta;
-      float b_delta = b + delta;
-      err = (a - s_delta) + b_delta;
-    }
+    float delta = a - sum;
+    float s_delta = sum + delta;
+    float b_delta = b + delta;
+    err = (a - s_delta) + b_delta;
   }
 
   __host__ __device__ __forceinline__ void fadd2_err(float2 a, float2 b, float2& sum, float2& err) {
     sum = make_float2(a.x + b.x, a.y + b.y);
-    if constexpr(use_pred_fast_sum) {
-      union { float2 fp; uint32_t in[2]; } va{a}, vb{b};
-      int32_t pred_x = (va.in[0] << 1) < (vb.in[0] << 1);
-      int32_t pred_y = (va.in[1] << 1) < (vb.in[1] << 1);
-
-      a = make_float2(pred_x ? vb.fp.x : va.fp.x, pred_y ? vb.fp.y : va.fp.y);
-      b = make_float2(pred_x ? va.fp.x : vb.fp.x, pred_y ? va.fp.y : vb.fp.y);
-      err = make_float2(b.x + (a.x - sum.x), b.y + (a.y - sum.y));
-    }
-    else {
-      float2 delta = make_float2(a.x - sum.x, a.y - sum.y);
-      float2 s_delta = make_float2(sum.x + delta.x, sum.y + delta.y);
-      float2 b_delta = make_float2(b.x + delta.x, b.y + delta.y);
-      err = make_float2((a.x - s_delta.x) + b_delta.x, (a.y - s_delta.y) + b_delta.y);
-    }
+    float2 delta = make_float2(a.x - sum.x, a.y - sum.y);
+    float2 s_delta = make_float2(sum.x + delta.x, sum.y + delta.y);
+    float2 b_delta = make_float2(b.x + delta.x, b.y + delta.y);
+    err = make_float2((a.x - s_delta.x) + b_delta.x, (a.y - s_delta.y) + b_delta.y);
   }
 
   __host__ __device__ __forceinline__ float4 normalize(float4 a) {
@@ -86,10 +64,13 @@ namespace device::qf {
   }
 
   __host__ __device__ __forceinline__ float4 mul(float4 a, float4 b) {
+#ifndef __CUDA_ARCH__
+    using std::fmaf;
+#endif
     float2 prod, err;
     fmul2_err(make_float2(a.x, a.y), make_float2(b.x, b.y), prod, err);
     float c1 = prod.x;
-    float c4 = err.y + (a.w * b.x + a.z * b.y) + (a.y * b.z + a.x * b.w);
+    float c4 = fmaf(a.w, b.x, a.z * b.y) + fmaf(a.y, b.z, fmaf(a.x, b.w, err.y));
     float2 c23 = make_float2(err.x, prod.y);
 
     fmul2_err(make_float2(a.y, a.z), make_float2(b.x, b.x), prod, err);

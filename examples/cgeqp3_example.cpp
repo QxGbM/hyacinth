@@ -30,9 +30,6 @@ int32_t main(int32_t argc, char* argv[]) {
   std::normal_distribution<float> dist(0, 32);
   std::generate(matA.begin(), matA.end(), [&](){ return std::complex<float>(dist(gen), dist(gen)); });
 
-  std::cout << "CGEQP3 <" << M << ", " << N << ">\n";
-  std::cout << "Epi: " << epi << "\n";
-
   cudaStream_t stream;
   cublasHandle_t handle;
   cudaStreamCreate(&stream);
@@ -53,6 +50,8 @@ int32_t main(int32_t argc, char* argv[]) {
 
   cudaDeviceSynchronize();
 
+  int32_t err_int = 0;
+  double err = 0.;
   if (M <= 2048 && N <= 2048) {
     std::vector<std::complex<float>> matB(M * N);
     cudaMemcpy(matB.data(), d_A, M * N * sizeof(std::complex<float>), cudaMemcpyDeviceToHost);
@@ -61,36 +60,35 @@ int32_t main(int32_t argc, char* argv[]) {
     std::vector<std::complex<float>> tau(N);
     LAPACKE_cgeqp3(LAPACK_COL_MAJOR, M, N, (lapack_complex_float*)matA.data(), M, jpiv.data(), (lapack_complex_float*)tau.data());
 
-    int32_t err_int = 0;
     for (int32_t i = 0; i < N; ++i) {
       err_int += int32_t(jpiv[i] != ipiv[i]);
       if (matA[i * (M + 1)].real() < 0.)
         cblas_csscal(N, -1.f, &(matA.data())[i], M);
     }
   
-    double nrm = 0., err = 0.;
+    double nrm = 0.;
     for (int32_t j = 0; j < N; ++j)
       for (int32_t i = 0; i <= j; ++i) {
         err += std::norm(matB[i + j * M] - matA[i + j * M]);
         nrm += std::norm(matA[i + j * M]);
     }
-
-    std::cout << "Pivot Err: " << err_int << "\n";
-    std::cout << "Err: " << std::sqrt(err / nrm) << "\n" << std::endl;
+    err = std::sqrt(err / nrm);
   }
 
   float milliseconds = 0.0f;
   cudaEventElapsedTime(&milliseconds, start, stop);
   int64_t flops = (int64_t(N) * int64_t(N) * int64_t(N) * -2 / 3) + (int64_t(M) * int64_t(N) * int64_t(N) * 2);
-  std::cout << "Cholesky return: " << ret << std::endl;
-  std::cout << "Time: " << milliseconds << " ms\n";
-  std::cout << "GFLOPs: " << double(flops) * 1.e-6 / milliseconds << "\n";
+  double gflops = double(flops) * 1.e-6 / milliseconds;
 
+  std::cout << "CGEQP3," << M << "," << N << "," << epi << "," << err_int << "," << err << "," << ret << "," << milliseconds << "," << gflops << std::endl;
   cudaFree(d_A);
   cudaEventDestroy(start);
   cudaEventDestroy(stop);
   cudaStreamDestroy(stream);
   cublasDestroy(handle);
-  std::cerr << cudaGetErrorString(cudaGetLastError()) << std::endl;
+
+  cu_err = cudaGetLastError();
+  if (cu_err != cudaSuccess)
+    std::cerr << cudaGetErrorString(cu_err) << std::endl;
   return 0;
 }

@@ -19,6 +19,10 @@ namespace device {
   // rectangle copy :: no limits
   // conversion :: [all] to [all] is okay
 
+  void cublas_preload_real(cublasHandle_t handle);
+
+  void cublas_preload_complex(cublasHandle_t handle);
+
   void convert_and_copy(cudaStream_t stream, int32_t M, int32_t N, const void* A, int32_t lda, Precision precA, void* B, int32_t ldb, Precision precB);
 
   void copy_permute(cudaStream_t stream, int32_t sc0ga1, int32_t M, int32_t N, const int32_t* jpiv, const void* A, int32_t lda, void* B, int32_t ldb, Precision prec);
