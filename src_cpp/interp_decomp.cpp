@@ -24,13 +24,11 @@ inline void interp_pp_real(cudaStream_t stream, cublasHandle_t handle, int32_t M
     strided_identity(stream, M, M, M + 1, A, lda, precA);
     copy_permute(stream, 0, M, N, ipiv, A, lda, X, ldx, precA);
   }
-  else if (precA == device::Precision::FP32 && precX == device::Precision::FP64) {
+  else if (precA == device::Precision::FP32) {
     cublas_trsm_real(handle, M, N, A, lda, device::Precision::FP32);
-    float* A1 = &((float*)A)[M * lda];
-    double* X1 = &((double*)work)[M * ldx];
-    convert_and_copy(stream, M, N - M, A1, lda, device::Precision::FP32, X1, lda, device::Precision::FP64);
-    strided_identity(stream, M, M, M + 1, work, lda, device::Precision::FP64);
-    copy_permute(stream, 0, M, N, ipiv, work, lda, X, ldx, device::Precision::FP64);
+    strided_identity(stream, M, M, M + 1, A, lda, device::Precision::FP32);
+    copy_permute(stream, 0, M, N, ipiv, A, lda, work, lda, device::Precision::FP32);
+    convert_and_copy(stream, M, N, work, lda, device::Precision::FP32, X, ldx, precX);
   }
   else {
     convert_and_copy(stream, M, N, A, lda, precA, work, lda, precX);
@@ -109,13 +107,11 @@ inline void interp_pp_complex(cudaStream_t stream, cublasHandle_t handle, int32_
     strided_identity(stream, 2 * M, M, 2 * M + 2, A, 2 * lda, precA);
     copy_permute(stream, 0, 2 * M, N, ipiv, A, 2 * lda, X, 2 * ldx, precA);
   }
-  else if (precA == device::Precision::FP32 && precX == device::Precision::FP64) {
+  else if (precA == device::Precision::FP32) {
     cublas_trsm_complex(handle, M, N, A, lda, device::Precision::FP32);
-    std::complex<float>* A1 = &((std::complex<float>*)A)[M * lda];
-    std::complex<double>* X1 = &((std::complex<double>*)work)[M * ldx];
-    convert_and_copy(stream, 2 * M, N - M, A1, 2 * lda, device::Precision::FP32, X1, 2 * lda, device::Precision::FP64);
-    strided_identity(stream, 2 * M, M, 2 * M + 2, work, 2 * lda, device::Precision::FP64);
-    copy_permute(stream, 0, 2 * M, N, ipiv, work, 2 * lda, X, 2 * ldx, device::Precision::FP64);
+    strided_identity(stream, 2 * M, M, 2 * M + 2, A, 2 * lda, device::Precision::FP32);
+    copy_permute(stream, 0, 2 * M, N, ipiv, A, 2 * lda, work, 2 * lda, device::Precision::FP32);
+    convert_and_copy(stream, 2 * M, N, work, 2 * lda, device::Precision::FP32, X, 2 * ldx, precX);
   }
   else {
     convert_and_copy(stream, 2 * M, N, A, 2 * lda, precA, work, 2 * lda, precX);
