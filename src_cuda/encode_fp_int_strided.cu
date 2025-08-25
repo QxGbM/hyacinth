@@ -17,15 +17,11 @@ template <class real_t, class matrix_t> struct encode_func {
     A(A), vec_expon(vec_expon), B(B), order(order), M(M), lda(lda), ldb(ldb), strideB(int64_t(N) * int64_t(ldb)) {}
 
   __device__ __forceinline__ void encode(double f, int32_t vec_e, uint32_t (&code)[4]) {
-    int32_t e;
-    device::int8::encode_double<device::Config::exp_base>(f, e, code);
-    device::int8::align_expon(code, e - vec_e);
+    device::int8::encode_double_align<device::Config::exp_base>(f, vec_e, code);
   }
 
   __device__ __forceinline__ void encode(float f, int32_t vec_e, uint32_t (&code)[2]) {
-    int32_t e;
-    device::int8::encode_float<device::Config::exp_base>(f, e, code);
-    device::int8::align_expon(code, e - vec_e);
+    device::int8::encode_float_align<device::Config::exp_base>(f, vec_e, code);
   }
 
   __device__ __forceinline__ void operator()(int64_t i) {
