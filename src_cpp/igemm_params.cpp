@@ -23,7 +23,7 @@ void device::MixPrecAHA::rATA_params_query(gemm_params* param, double epi, int32
 
   int32_t acc_bits = std::max(1, int32_t(std::ceil(2 * epi)));
   Precision f128 = device_igemm_behavior();
-  param->iter_k = 65536 << (14 - 2 * Config::exp_base);
+  param->iter_k = 131072 << (14 - 2 * Config::exp_base);
   param->precC = acc_bits <= 24 ? Precision::FP32 : (acc_bits <= 53 ? Precision::FP64 : f128);
   param->C_elem_bytes = acc_bits <= 24 ? 4 : (acc_bits <= 53 ? 8 : 16);
 
@@ -53,7 +53,7 @@ void device::MixPrecAHA::cAHA_params_query(gemm_params* param, double epi, int32
 
   int32_t acc_bits = std::max(1, int32_t(std::ceil(2 * epi)));
   Precision f128 = device_igemm_behavior();
-  param->iter_k = 65536 << (14 - 2 * Config::exp_base);
+  param->iter_k = 131072 << (14 - 2 * Config::exp_base);
   param->precC = acc_bits <= 24 ? Precision::FP32 : (acc_bits <= 53 ? Precision::FP64 : f128);
   param->C_elem_bytes = acc_bits <= 24 ? 8 : (acc_bits <= 53 ? 16 : 32);
 
