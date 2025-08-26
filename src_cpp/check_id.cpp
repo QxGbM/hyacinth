@@ -20,7 +20,7 @@ void device::check_interp_decomp_f64(cudaStream_t stream, cublasHandle_t handle,
 
   double nrm = 0., err = 0.;
   cublasDnrm2_64(handle, strideA, dA, int64_t(1), &nrm);
-  cublasDgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, rank, &minus_one, dC, M, X, ldx, &one, dA, lda);
+  cublasDgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, rank, &minus_one, dC, M, X, ldx, &one, dA, M);
   cublasDnrm2_64(handle, strideA, dA, int64_t(1), &err);
 
   cudaStreamSynchronize(stream);
@@ -47,7 +47,7 @@ void device::check_interp_decomp_f32(cudaStream_t stream, cublasHandle_t handle,
 
   float nrm = 0.f, err = 0.f;
   cublasSnrm2_64(handle, strideA, dA, int64_t(1), &nrm);
-  cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, rank, &minus_one, dC, M, X, ldx, &one, dA, lda);
+  cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, rank, &minus_one, dC, M, X, ldx, &one, dA, M);
   cublasSnrm2_64(handle, strideA, dA, int64_t(1), &err);
 
   cudaStreamSynchronize(stream);
@@ -74,7 +74,7 @@ void device::check_interp_decomp_cf64(cudaStream_t stream, cublasHandle_t handle
 
   double nrm = 0., err = 0.;
   cublasDznrm2_64(handle, strideA, dA, int64_t(1), &nrm);
-  cublasZgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, rank, (cuDoubleComplex*)&minus_one, dC, M, (const cuDoubleComplex*)X, ldx, (cuDoubleComplex*)&one, dA, lda);
+  cublasZgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, rank, (cuDoubleComplex*)&minus_one, dC, M, (const cuDoubleComplex*)X, ldx, (cuDoubleComplex*)&one, dA, M);
   cublasDznrm2_64(handle, strideA, dA, int64_t(1), &err);
 
   cudaStreamSynchronize(stream);
@@ -101,7 +101,7 @@ void device::check_interp_decomp_cf32(cudaStream_t stream, cublasHandle_t handle
 
   float nrm = 0., err = 0.;
   cublasScnrm2_64(handle, strideA, dA, int64_t(1), &nrm);
-  cublasCgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, rank, (cuComplex*)&minus_one, dC, M, (const cuComplex*)X, ldx, (cuComplex*)&one, dA, lda);
+  cublasCgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, rank, (cuComplex*)&minus_one, dC, M, (const cuComplex*)X, ldx, (cuComplex*)&one, dA, M);
   cublasScnrm2_64(handle, strideA, dA, int64_t(1), &err);
 
   cudaStreamSynchronize(stream);
