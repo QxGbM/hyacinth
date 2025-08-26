@@ -18,7 +18,7 @@ void device::MixPrecAHA::rATA_params_query(gemm_params* param, double epi, int32
   epi = -std::log2(std::min(1., std::max(epi, machine_epi)));
 
   param->M = M; param->N = N; param->precA = precA;
-  param->algnM = (M + 63) & (~63); param->algnN = (N + 63) & (~63);
+  param->algnM = (M + 127) & (~127); param->algnN = (N + 63) & (~63);
   param->orderA = std::max(1, 1 + int32_t(std::ceil(epi / Config::exp_base)));
 
   int32_t acc_bits = std::max(1, int32_t(std::ceil(2 * epi)));
@@ -48,7 +48,7 @@ void device::MixPrecAHA::cAHA_params_query(gemm_params* param, double epi, int32
   epi = -std::log2(std::min(1., std::max(epi, machine_epi)));
 
   param->M = M; param->N = N; param->precA = precA;
-  param->algnM = (M + 63) & (~63); param->algnN = (N + 63) & (~63);
+  param->algnM = (M + 127) & (~127); param->algnN = (N + 63) & (~63);
   param->orderA = std::max(1, 1 + int32_t(std::ceil(epi / Config::exp_base)));
 
   int32_t acc_bits = std::max(1, int32_t(std::ceil(2 * epi)));

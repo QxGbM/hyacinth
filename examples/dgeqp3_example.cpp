@@ -44,6 +44,7 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaMalloc((void**)(&d_A), M * N * sizeof(double));
   cudaMemcpy(d_A, matA.data(), M * N * sizeof(double), cudaMemcpyHostToDevice);
 
+  device::cublas_preload_real(handle);
   cudaEventRecord(start, stream);
   int32_t ret = device::dgeqp3_ronly(stream, handle, epi, M, N, d_A, M, ipiv.data());
   cudaEventRecord(stop, stream);

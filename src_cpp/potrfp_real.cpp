@@ -86,7 +86,7 @@ inline int32_t real_potrfp(cudaStream_t stream, double epi, int32_t iters, int32
   real_t* scale = (real_t*)(&jpiv[algnN]), *diag = (real_t*)(&A[uint64_t(N) * uint64_t(lda)]);
   double s0 = std::numeric_limits<double>::infinity();
   std::iota(jpiv, &jpiv[N], 1);
-  cudaMemcpy2DAsync(diag, sizeof(real_t), A, (lda + 1) * sizeof(real_t), sizeof(real_t), N, cudaMemcpyDeviceToDevice, stream);
+  device::convert_and_copy(stream, 1, N, A, lda + 1, prec, diag, 1, prec);
 
   for (int32_t i = 0; i < iters; ++i) {
     uint64_t A_diag = uint64_t(i) * uint64_t(lda + 1);
