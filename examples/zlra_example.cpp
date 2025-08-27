@@ -62,7 +62,8 @@ int32_t main(int32_t argc, char* argv[]) {
 
   float milliseconds = 0.0f;
   cudaEventElapsedTime(&milliseconds, start, stop);
-  int64_t qr_flops = (int64_t(N) * int64_t(N) * int64_t(N) * -2 / 3) + (int64_t(M) * int64_t(N) * int64_t(N) * 2);
+  // QR flops = 2mnk - nk^2 + 1/3k^3 + k(n-k)
+  int64_t qr_flops = (int64_t(M) * int64_t(N) * int64_t(rank) * 2) - (int64_t(N) * int64_t(rank) * int64_t(rank)) + (int64_t(rank) * int64_t(rank) * int64_t(rank) / 3) + (int64_t(rank) * int64_t(N - rank));
   int64_t trsm_flops = int64_t(N) * int64_t(rank) * int64_t(rank);
   double gflops = double(qr_flops + trsm_flops) * 1.e-6 / milliseconds;
 
