@@ -27,7 +27,7 @@ inline void interp_pp_real(cudaStream_t stream, cublasHandle_t handle, int32_t M
     copy_permute(stream, 0, M, N, ipiv, A, lda, X, ldx, precA);
   }
   else if (precA == device::Precision::FP32) {
-    cublas_trsm_real<precX>(handle, M, N, A, lda);
+    cublas_trsm_real<device::Precision::FP32>(handle, M, N, A, lda);
     strided_identity(stream, M, M, M + 1, A, lda, device::Precision::FP32);
     copy_permute(stream, 0, M, N, ipiv, A, lda, work, lda, device::Precision::FP32);
     convert_and_copy(stream, M, N, work, lda, device::Precision::FP32, X, ldx, precX);
@@ -52,7 +52,7 @@ int32_t device::interp_decomp_f64(cudaStream_t stream, cublasHandle_t handle, do
   cudaMallocHost((void**)(&dpiv), (N + 12) * sizeof(int32_t));
 
   MixPrecAHA::rATA(stream, handle, param, A, lda, work);
-  rank = Cholesky::rpotrfp(stream, epi, 0, rank, N, work, algnN, param.precC, dpiv);
+  rank = Cholesky::rpotrfp(stream, handle, epi, 0, rank, N, work, algnN, param.precC, dpiv);
   if (0 < rank)
     interp_pp_real<Precision::FP64>(stream, handle, rank, N, work, algnN, dpiv, param.precC, X, ldx, &((int8_t*)work)[param.acc_bytes]);
 
@@ -75,7 +75,7 @@ int32_t device::interp_decomp_f32(cudaStream_t stream, cublasHandle_t handle, do
   cudaMallocHost((void**)(&dpiv), (N + 12) * sizeof(int32_t));
 
   MixPrecAHA::rATA(stream, handle, param, A, lda, work);
-  rank = Cholesky::rpotrfp(stream, epi, 0, rank, N, work, algnN, param.precC, dpiv);
+  rank = Cholesky::rpotrfp(stream, handle, epi, 0, rank, N, work, algnN, param.precC, dpiv);
   if (0 < rank)
     interp_pp_real<Precision::FP32>(stream, handle, rank, N, work, algnN, dpiv, param.precC, X, ldx, &((int8_t*)work)[param.acc_bytes]);
 
@@ -112,7 +112,7 @@ inline void interp_pp_complex(cudaStream_t stream, cublasHandle_t handle, int32_
     copy_permute(stream, 0, 2 * M, N, ipiv, A, 2 * lda, X, 2 * ldx, precA);
   }
   else if (precA == device::Precision::FP32) {
-    cublas_trsm_complex<precX>(handle, M, N, A, lda);
+    cublas_trsm_complex<device::Precision::FP32>(handle, M, N, A, lda);
     strided_identity(stream, 2 * M, M, 2 * M + 2, A, 2 * lda, device::Precision::FP32);
     copy_permute(stream, 0, 2 * M, N, ipiv, A, 2 * lda, work, 2 * lda, device::Precision::FP32);
     convert_and_copy(stream, 2 * M, N, work, 2 * lda, device::Precision::FP32, X, 2 * ldx, precX);
@@ -137,7 +137,7 @@ int32_t device::interp_decomp_cf64(cudaStream_t stream, cublasHandle_t handle, d
   cudaMallocHost((void**)(&dpiv), (N + 12) * sizeof(int32_t));
 
   MixPrecAHA::cAHA(stream, handle, param, A, lda, work);
-  rank = Cholesky::cpotrfp(stream, epi, 0, rank, N, work, algnN, param.precC, dpiv);
+  rank = Cholesky::cpotrfp(stream, handle, epi, 0, rank, N, work, algnN, param.precC, dpiv);
   if (0 < rank)
     interp_pp_complex<Precision::FP64>(stream, handle, rank, N, work, algnN, dpiv, param.precC, X, ldx, &((int8_t*)work)[param.acc_bytes]);
 
@@ -160,7 +160,7 @@ int32_t device::interp_decomp_cf32(cudaStream_t stream, cublasHandle_t handle, d
   cudaMallocHost((void**)(&dpiv), (N + 12) * sizeof(int32_t));
 
   MixPrecAHA::cAHA(stream, handle, param, A, lda, work);
-  rank = Cholesky::cpotrfp(stream, epi, 0, rank, N, work, algnN, param.precC, dpiv);
+  rank = Cholesky::cpotrfp(stream, handle, epi, 0, rank, N, work, algnN, param.precC, dpiv);
   if (0 < rank)
     interp_pp_complex<Precision::FP32>(stream, handle, rank, N, work, algnN, dpiv, param.precC, X, ldx, &((int8_t*)work)[param.acc_bytes]);
 

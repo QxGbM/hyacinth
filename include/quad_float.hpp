@@ -88,10 +88,6 @@ namespace device::qf {
     return normalize(make_float4(c1, c23.x, c23.y, c4));
   }
 
-  __host__ __device__ __forceinline__ float4 fma(float4 a, float4 b, float4 c) {
-    return add(c, mul(a, b));
-  }
-
   __host__ __device__ __forceinline__ float4 fscalbn(float4 a, int32_t exp) {
 #ifndef __CUDA_ARCH__
     using std::scalbnf;
@@ -107,6 +103,26 @@ namespace device::qf {
     fadd2_err(make_float2(a0.y, a.z), a1, a0, a1);
     fadd_err(a0.y, a1.x, a0.y, a1.x);
     return normalize(make_float4(r0, a0.x, a0.y, a.w + a1.y + a1.x));
+  }
+
+  __host__ __device__ __forceinline__ float4 mul_float2(float2 a, float2 b) {
+#ifndef __CUDA_ARCH__
+    using std::fmaf;
+#endif
+    float2 prod, err;
+    fmul2_err(make_float2(a.x, a.y), make_float2(b.x, b.y), prod, err);
+    float c1 = prod.x;
+    float c4 = err.y;
+    float2 c23 = make_float2(err.x, prod.y);
+
+    fmul2_err(make_float2(a.y, a.x), make_float2(b.x, b.y), prod, err);
+    fadd2_err(c23, make_float2(prod.x, err.x), c23, a);
+    fadd2_err(c23, make_float2(prod.y, err.y), c23, b);
+    fadd_err(a.x, b.x, a.x, b.x);
+    fadd_err(c23.y, a.x, c23.y, a.x);
+    c4 += (a.x + a.y) + (b.x + b.y);
+
+    return normalize(make_float4(c1, c23.x, c23.y, c4));
   }
 
   __host__ __device__ __forceinline__ float4 frsqrt(float4 a) {
@@ -195,16 +211,6 @@ namespace device::qf {
 
   __host__ __device__ __forceinline__ complex_float4 add(complex_float4 a, complex_float4 b) {
     return make_complex_float4(add(a.real, b.real), add(a.imag, b.imag));
-  }
-
-  __host__ __device__ __forceinline__ complex_float4 mul(complex_float4 a, complex_float4 b) {
-    return make_complex_float4(fma(a.real, b.real, mul(negate(a.imag), b.imag)),
-      fma(a.real, b.imag, mul(a.imag, b.real)));
-  }
-
-  __host__ __device__ __forceinline__ complex_float4 fma(complex_float4 a, complex_float4 b, complex_float4 c) {
-    return make_complex_float4(fma(a.real, b.real, fma(negate(a.imag), b.imag, c.real)),
-      fma(a.real, b.imag, fma(a.imag, b.real, c.imag)));
   }
 
 };

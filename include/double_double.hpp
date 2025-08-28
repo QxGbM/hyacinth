@@ -86,10 +86,6 @@ namespace device::dd {
     return make_double2(s, d.y + delta);
   }
 
-  __host__ __device__ __forceinline__ double2 fma(double2 a, double2 b, double2 c) {
-    return add(c, mul(a, b));
-  }
-
   __host__ __device__ __forceinline__ double2 fscalbn(double2 a, int32_t exp) {
 #ifndef __CUDA_ARCH__
     using std::scalbn;
@@ -104,6 +100,15 @@ namespace device::dd {
     double s = c.x + c.y;
     double delta = c.x - s;
     return make_double2(s, c.y + delta);
+  }
+  
+  __host__ __device__ __forceinline__ double2 mul_double(double a, double b) {
+#ifndef __CUDA_ARCH__
+    using std::fma;
+#endif
+    double hi = a * b;
+    double lo = fma(a, b, -hi);
+    return make_double2(hi, lo);
   }
 
   __host__ __device__ __forceinline__ double2 frsqrt(double2 a) {
@@ -185,16 +190,6 @@ namespace device::dd {
 
   __host__ __device__ __forceinline__ complex_double2 add(complex_double2 a, complex_double2 b) {
     return make_complex_double2(add(a.real, b.real), add(a.imag, b.imag));
-  }
-
-  __host__ __device__ __forceinline__ complex_double2 mul(complex_double2 a, complex_double2 b) {
-    return make_complex_double2(fma(a.real, b.real, mul(negate(a.imag), b.imag)),
-      fma(a.real, b.imag, mul(a.imag, b.real)));
-  }
-
-  __host__ __device__ __forceinline__ complex_double2 fma(complex_double2 a, complex_double2 b, complex_double2 c) {
-    return make_complex_double2(fma(a.real, b.real, fma(negate(a.imag), b.imag, c.real)),
-      fma(a.real, b.imag, fma(a.imag, b.real, c.imag)));
   }
 
 };

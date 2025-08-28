@@ -28,10 +28,10 @@ struct scal_a_function {
     float e = c_conj = c = s * a; d = fmaf(-e, e, d);
   }
   __device__ __forceinline__ void operator()(double2 s, double2 a, double2& c, double2& c_conj, double2& d) {
-    double2 e = c_conj = c = device::dd::mul(s, a); d = device::dd::fma(device::dd::negate(e), e, d);
+    double2 e = c_conj = c = device::dd::mul(s, a); d = device::dd::add(device::dd::mul(device::dd::negate(e), e), d);
   }
   __device__ __forceinline__ void operator()(float4 s, float4 a, float4& c, float4& c_conj, float4& d) {
-    float4 e = c_conj = c = device::qf::mul(s, a); d = device::qf::fma(device::qf::negate(e), e, d);
+    float4 e = c_conj = c = device::qf::mul(s, a); d = device::qf::add(device::qf::mul(device::qf::negate(e), e), d);
   }
 
   __device__ __forceinline__ void operator()(double s, cuDoubleComplex a, cuDoubleComplex& c, cuDoubleComplex& c_conj, double& d) {
@@ -45,14 +45,16 @@ struct scal_a_function {
     d = fmaf(-e.x, e.x, fmaf(-e.y, e.y, d));
   }
   __device__ __forceinline__ void operator()(double2 s, complex_double2 a, complex_double2& c, complex_double2& c_conj, double2& d) {
-    complex_double2 e = c = device::dd::make_complex_double2(device::dd::mul(s, a.real), device::dd::mul(s, a.imag));
-    c_conj = device::dd::make_complex_double2(e.real, device::dd::negate(e.imag));
-    d = device::dd::fma(device::dd::negate(e.real), e.real, device::dd::fma(device::dd::negate(e.imag), e.imag, d));
+    using device::dd::add, device::dd::mul, device::dd::negate;
+    complex_double2 e = c = device::dd::make_complex_double2(mul(s, a.real), mul(s, a.imag));
+    c_conj = device::dd::make_complex_double2(e.real, negate(e.imag));
+    d = add(mul(negate(e.real), e.real), add(mul(negate(e.imag), e.imag), d));
   }
   __device__ __forceinline__ void operator()(float4 s, complex_float4 a, complex_float4& c, complex_float4& c_conj, float4& d) {
-    complex_float4 e = c = device::qf::make_complex_float4(device::qf::mul(s, a.real), device::qf::mul(s, a.imag));
-    c_conj = device::qf::make_complex_float4(e.real, device::qf::negate(e.imag));
-    d = device::qf::fma(device::qf::negate(e.real), e.real, device::qf::fma(device::qf::negate(e.imag), e.imag, d));
+    using device::qf::add, device::qf::mul, device::qf::negate;
+    complex_float4 e = c = device::qf::make_complex_float4(mul(s, a.real), mul(s, a.imag));
+    c_conj = device::qf::make_complex_float4(e.real, negate(e.imag));
+    d = add(mul(device::qf::negate(e.real), e.real), add(mul(negate(e.imag), e.imag), d));
   }
 };
 
@@ -134,7 +136,6 @@ __global__ void fix_N_reduce_kernel(real_t sq, real_t rsq, int32_t M, matrix_ptr
       scal_func(rsq, threadA[k], threadA[k], threadB[k], threadD[k]);
 
     if (small_load_pred) {
-      block_store.Store(&A[i], threadA, M);
       block_store_rl.Store(&D[i], threadD, M);
 
       #pragma unroll
@@ -145,7 +146,6 @@ __global__ void fix_N_reduce_kernel(real_t sq, real_t rsq, int32_t M, matrix_ptr
       }
     }
     else {
-      block_store.Store(&A[i], threadA);
       block_store_rl.Store(&D[i], threadD);
 
       #pragma unroll
@@ -179,6 +179,8 @@ inline void reduce_scal_dispatcher(cudaStream_t stream, real_t* scale, int32_t M
       case 1: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, warp_threads, items_per_thread, 1>
         <<< grid, dim3(warp_threads, 1, 1), 0, stream >>> (sq, rsq, rem, A, lda, D); break;
       case 2: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, warp_threads, items_per_thread, 2>
+        <<< grid, dim3(warp_threads, 1, 1), 0, stream >>> (sq, rsq, rem, A, lda, D); break;
+      case 3: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, warp_threads, items_per_thread, 3>
         <<< grid, dim3(warp_threads, 1, 1), 0, stream >>> (sq, rsq, rem, A, lda, D); break;
       case 4: fix_N_reduce_kernel <real_t, real_ptr, matrix_t, matrix_ptr, warp_threads, items_per_thread, 4>
         <<< grid, dim3(warp_threads, 1, 1), 0, stream >>> (sq, rsq, rem, A, lda, D); break;

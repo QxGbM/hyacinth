@@ -6,61 +6,78 @@
 #include <cuComplex.h>
 #include <cub/cub.cuh>
 
-struct fma_real {
+template <int32_t FAST_F128_MUL> struct fma_real {
   __device__ __forceinline__ double operator()(double a, double b) { return -a * b; }
   __device__ __forceinline__ float operator()(float a, float b) { return -a * b; }
-  __device__ __forceinline__ double2 operator()(double2 a, double2 b) { return device::dd::mul(device::dd::negate(a), b); }
-  __device__ __forceinline__ float4 operator()(float4 a, float4 b) { return device::qf::mul(device::qf::negate(a), b); }
+  __device__ __forceinline__ double2 operator()(double2 a, double2 b) {
+    if constexpr(FAST_F128_MUL)
+      return device::dd::mul_double(-a.x, b.x);
+    else
+      return device::dd::mul(device::dd::negate(a), b);
+  }
+  __device__ __forceinline__ float4 operator()(float4 a, float4 b) {
+    if constexpr(FAST_F128_MUL)
+      return device::qf::mul_float2(make_float2(-a.x, -a.y), make_float2(b.x, b.y));
+    else
+      return device::qf::mul(device::qf::negate(a), b);
+  }
   __device__ __forceinline__ double operator()(double a, double b, double c) { return fma(-a, b, c); }
   __device__ __forceinline__ float operator()(float a, float b, float c) { return fmaf(-a, b, c); }
-  __device__ __forceinline__ double2 operator()(double2 a, double2 b, double2 c) { return device::dd::fma(device::dd::negate(a), b, c); }
-  __device__ __forceinline__ float4 operator()(float4 a, float4 b, float4 c) { return device::qf::fma(device::qf::negate(a), b, c); }
+  __device__ __forceinline__ double2 operator()(double2 a, double2 b, double2 c) { return device::dd::add(c, operator()(a, b)); }
+  __device__ __forceinline__ float4 operator()(float4 a, float4 b, float4 c) { return device::qf::add(c, operator()(a, b)); }
 };
 
-struct fma_complex {
+template <int32_t FAST_F128_MUL> struct fma_complex {
   __device__ __forceinline__ cuDoubleComplex operator()(cuDoubleComplex a, cuDoubleComplex b) {
     return make_cuDoubleComplex(fma(-a.x, b.x, -a.y * b.y), fma(-a.x, b.y, a.y * b.x)); }
   __device__ __forceinline__ cuComplex operator()(cuComplex a, cuComplex b) {
     return make_cuComplex(fmaf(-a.x, b.x, -a.y * b.y), fmaf(-a.x, b.y, a.y * b.x)); }
-  __device__ __forceinline__ complex_double2 operator()(complex_double2 a, complex_double2 b) { 
-    return device::dd::mul(device::dd::make_complex_double2(device::dd::negate(a.real), a.imag), b); }
-  __device__ __forceinline__ complex_float4 operator()(complex_float4 a, complex_float4 b) { 
-    return device::qf::mul(device::qf::make_complex_float4(device::qf::negate(a.real), a.imag), b); }
+  __device__ __forceinline__ complex_double2 operator()(complex_double2 a, complex_double2 b) {
+    fma_real<FAST_F128_MUL> real_mul;
+    return device::dd::make_complex_double2(real_mul(a.real, b.real, real_mul(a.imag, b.imag)), 
+      real_mul(a.real, b.imag, real_mul(device::dd::negate(a.imag), b.real)));
+  }
+  __device__ __forceinline__ complex_float4 operator()(complex_float4 a, complex_float4 b) {
+    fma_real<FAST_F128_MUL> real_mul;
+    return device::qf::make_complex_float4(real_mul(a.real, b.real, real_mul(a.imag, b.imag)), 
+      real_mul(a.real, b.imag, real_mul(device::qf::negate(a.imag), b.real)));
+  }
   __device__ __forceinline__ cuDoubleComplex operator()(cuDoubleComplex a, cuDoubleComplex b, cuDoubleComplex c) {
     return make_cuDoubleComplex(fma(-a.x, b.x, fma(-a.y, b.y, c.x)), fma(-a.x, b.y, fma(a.y, b.x, c.y))); }
   __device__ __forceinline__ cuComplex operator()(cuComplex a, cuComplex b, cuComplex c) {
     return make_cuComplex(fmaf(-a.x, b.x, fmaf(-a.y, b.y, c.x)), fmaf(-a.x, b.y, fmaf(a.y, b.x, c.y))); }
   __device__ __forceinline__ complex_double2 operator()(complex_double2 a, complex_double2 b, complex_double2 c) { 
-    return device::dd::fma(device::dd::make_complex_double2(device::dd::negate(a.real), a.imag), b, c); }
+    return device::dd::add(c, operator()(a, b)); }
   __device__ __forceinline__ complex_float4 operator()(complex_float4 a, complex_float4 b, complex_float4 c) { 
-    return device::qf::fma(device::qf::make_complex_float4(device::qf::negate(a.real), a.imag), b, c); }
+    return device::qf::add(c, operator()(a, b)); }
 };
 
-template <int32_t FMA, int32_t COMPLEX, class matrix_t, int32_t ITEMS_PER_THREAD>
+template <int32_t ALG, class matrix_t, int32_t ITEMS_PER_THREAD>
 __device__ void array_fma(matrix_t const (&a)[ITEMS_PER_THREAD], matrix_t const (&b)[ITEMS_PER_THREAD], matrix_t (&c)[ITEMS_PER_THREAD]) {
-  if constexpr(FMA && COMPLEX) {
-    fma_complex fma_func;
-    #pragma unroll
-    for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
-      c[i] = fma_func(a[i], b[i], c[i]);
-  }
-  else if constexpr(COMPLEX) {
-    fma_complex fma_func;
+  constexpr int32_t FAST_F128_MUL = ALG & 1;
+  if constexpr(ALG == 0 || ALG == 1) {
+    fma_real<FAST_F128_MUL> fma_func;
     #pragma unroll
     for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
       c[i] = fma_func(a[i], b[i]);
   }
-  else if constexpr(FMA) {
-    fma_real fma_func;
+  else if constexpr(ALG == 2 || ALG == 3) {
+    fma_real<FAST_F128_MUL> fma_func;
     #pragma unroll
     for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
       c[i] = fma_func(a[i], b[i], c[i]);
   }
-  else {
-    fma_real fma_func;
+  else if constexpr(ALG == 4 || ALG == 5) {
+    fma_complex<FAST_F128_MUL> fma_func;
     #pragma unroll
     for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
       c[i] = fma_func(a[i], b[i]);
+  }
+  else if constexpr(ALG == 6 || ALG == 7) {
+    fma_complex<FAST_F128_MUL> fma_func;
+    #pragma unroll
+    for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
+      c[i] = fma_func(a[i], b[i], c[i]);
   }
 }
 
@@ -80,7 +97,8 @@ struct add_complex {
 
 template <class real_t, class matrix_t, class matrix_ptr, class matrix_const_ptr, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD>
 __global__ void gemv_kernel(int32_t M, int32_t N, int32_t split_N, matrix_const_ptr A, int32_t lda, matrix_ptr B) {
-  constexpr int32_t COMPLEX = (sizeof(real_t) < sizeof(matrix_t));
+  constexpr int32_t COMPLEX = int32_t(sizeof(real_t) < sizeof(matrix_t));
+  constexpr int32_t MUL = COMPLEX * 4, FMA = COMPLEX * 4 + 2;
   constexpr int32_t block_warps = BLOCK_THREADS / 32;
   constexpr int32_t elements = ITEMS_PER_THREAD * 32;
   int32_t inc_row = block_warps * gridDim.x;
@@ -103,18 +121,18 @@ __global__ void gemv_kernel(int32_t M, int32_t N, int32_t split_N, matrix_const_
 
     warp_load.Load(A_i, threadA, N1, matrix_t());
     warp_load.Load(A, threadX, N1, matrix_t());
-    array_fma<0, COMPLEX>(threadA, threadX, threadB);
+    array_fma<MUL>(threadA, threadX, threadB);
 
     for (int32_t k = elements; k < N1; k += elements) {
       warp_load.Load(&A_i[k], threadA);
       warp_load.Load(&A[k], threadX);
-      array_fma<1, COMPLEX>(threadA, threadX, threadB);
+      array_fma<FMA>(threadA, threadX, threadB);
     }
 
     if (0 < N2) {
       warp_load.Load(&A_i[N1], threadA, N2, matrix_t());
       warp_load.Load(&A[N1], threadX, N2, matrix_t());
-      array_fma<1, COMPLEX>(threadA, threadX, threadB);
+      array_fma<FMA>(threadA, threadX, threadB);
     }
 
     matrix_t block_res;
@@ -155,18 +173,6 @@ inline int32_t gemv_dispatcher(cudaStream_t stream, int32_t M, int32_t N, matrix
   return grid_y + 1;
 }
 
-void internal::Cholesky::gemv_scal_f64(cudaStream_t stream, double* scale, int32_t M, int32_t N, const double* A, int32_t lda, double* B, double* D) {
-  int32_t reduce = N < 1 || M < 2 ? 1 :
-    gemv_dispatcher<double, double, double* __restrict__, const double* __restrict__>(stream, M, N, A, lda, B);
-  reduce_scal_f64(stream, scale, M, reduce, B, lda, D);
-}
-
-void internal::Cholesky::gemv_scal_f32(cudaStream_t stream, float* scale, int32_t M, int32_t N, const float* A, int32_t lda, float* B, float* D) {
-  int32_t reduce = N < 1 || M < 2 ? 1 :
-    gemv_dispatcher<float, float, float* __restrict__, const float* __restrict__>(stream, M, N, A, lda, B);
-  reduce_scal_f32(stream, scale, M, reduce, B, lda, D);
-}
-
 void internal::Cholesky::gemv_scal_f128_dd(cudaStream_t stream, double2* scale, int32_t M, int32_t N, const double2* A, int32_t lda, double2* B, double2* D) {
   int32_t reduce = N < 1 || M < 2 ? 1 :
     gemv_dispatcher<double2, double2, double2* __restrict__, const double2* __restrict__>(stream, M, N, A, lda, B);
@@ -177,18 +183,6 @@ void internal::Cholesky::gemv_scal_f128_qf(cudaStream_t stream, float4* scale, i
   int32_t reduce = N < 1 || M < 2 ? 1 :
     gemv_dispatcher<float4, float4, float4* __restrict__, const float4* __restrict__>(stream, M, N, A, lda, B);
   reduce_scal_f128_qf(stream, scale, M, reduce, B, lda, D);
-}
-
-void internal::Cholesky::gemv_scal_cf64(cudaStream_t stream, double* scale, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, std::complex<double>* B, double* D) {
-  int32_t reduce = N < 1 || M < 2 ? 1 :
-    gemv_dispatcher<double, cuDoubleComplex, cuDoubleComplex* __restrict__, const cuDoubleComplex* __restrict__>(stream, M, N, (const cuDoubleComplex*)A, lda, (cuDoubleComplex*)B);
-  reduce_scal_cf64(stream, scale, M, reduce, B, lda, D);
-}
-
-void internal::Cholesky::gemv_scal_cf32(cudaStream_t stream, float* scale, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, std::complex<float>* B, float* D) {
-  int32_t reduce = N < 1 || M < 2 ? 1 :
-    gemv_dispatcher<float, cuComplex, cuComplex* __restrict__, const cuComplex* __restrict__>(stream, M, N, (const cuComplex*)A, lda, (cuComplex*)B);
-  reduce_scal_cf32(stream, scale, M, reduce, B, lda, D);
 }
 
 void internal::Cholesky::gemv_scal_cf128_dd(cudaStream_t stream, double2* scale, int32_t M, int32_t N, const complex_double2* A, int32_t lda, complex_double2* B, double2* D) {
