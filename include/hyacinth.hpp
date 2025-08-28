@@ -76,15 +76,15 @@ namespace device {
     // jpiv :: host page-locked, minimal length N + 12, 16 byte aligned
     // A :: device, minimal length lda * (N + 1), 16 byte aligned
     // epi :: Early termination by relative error, truncated to [0., 1.];
-    // iters :: Early termination by fix rank, truncated to [1, N];
-    // epi = 0. && iters = N, Will not terminate early, unless divided-by-0 occurs at diagonal
+    // [start,end] :: control indices for partial factorization;
+    // epi = 0. && end = N, Will not terminate early, unless divided-by-0 occurs at diagonal
 
     // Return :: Number of iterations [0, N] = matrix rank
     //           The last interation is on the fly when function returns, will need synchronization to access
 
-    int32_t rpotrfp(cudaStream_t stream, double epi, int32_t iters, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv);
+    int32_t rpotrfp(cudaStream_t stream, double epi, int32_t start, int32_t end, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv);
 
-    int32_t cpotrfp(cudaStream_t stream, double epi, int32_t iters, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv);
+    int32_t cpotrfp(cudaStream_t stream, double epi, int32_t start, int32_t end, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv);
 
   };
 

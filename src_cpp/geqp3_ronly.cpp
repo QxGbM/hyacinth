@@ -12,7 +12,7 @@ int32_t device::dgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double 
   cudaMallocHost((void**)(&dpiv), (N + 12) * sizeof(int32_t));
 
   MixPrecAHA::rATA(stream, handle, param, A, lda, work);
-  int32_t ret = Cholesky::rpotrfp(stream, 0., N, N, work, param.algnN, param.precC, dpiv);
+  int32_t ret = Cholesky::rpotrfp(stream, 0., 0, N, N, work, param.algnN, param.precC, dpiv);
   convert_and_copy(stream, N, N, work, param.algnN, param.precC, A, lda, param.precA);
 
   cudaStreamSynchronize(stream);
@@ -32,7 +32,7 @@ int32_t device::sgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double 
   cudaMallocHost((void**)(&dpiv), (N + 12) * sizeof(int32_t));
 
   MixPrecAHA::rATA(stream, handle, param, A, lda, work);
-  int32_t ret = Cholesky::rpotrfp(stream, 0., N, N, work, param.algnN, param.precC, dpiv);
+  int32_t ret = Cholesky::rpotrfp(stream, 0., 0, N, N, work, param.algnN, param.precC, dpiv);
   convert_and_copy(stream, N, N, work, param.algnN, param.precC, A, lda, param.precA);
 
   cudaStreamSynchronize(stream);
@@ -52,7 +52,7 @@ int32_t device::zgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double 
   cudaMallocHost((void**)(&dpiv), (N + 12) * sizeof(int32_t));
 
   MixPrecAHA::cAHA(stream, handle, param, A, lda, work);
-  int32_t ret = Cholesky::cpotrfp(stream, 0., N, N, work, param.algnN, param.precC, dpiv);
+  int32_t ret = Cholesky::cpotrfp(stream, 0., 0, N, N, work, param.algnN, param.precC, dpiv);
   convert_and_copy(stream, 2 * N, N, work, 2 * param.algnN, param.precC, A, 2 * lda, param.precA);
 
   cudaStreamSynchronize(stream);
@@ -72,7 +72,7 @@ int32_t device::cgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double 
   cudaMallocHost((void**)(&dpiv), (N + 12) * sizeof(int32_t));
 
   MixPrecAHA::cAHA(stream, handle, param, A, lda, work);
-  int32_t ret = Cholesky::cpotrfp(stream, 0., N, N, work, param.algnN, param.precC, dpiv);
+  int32_t ret = Cholesky::cpotrfp(stream, 0., 0, N, N, work, param.algnN, param.precC, dpiv);
   convert_and_copy(stream, 2 * N, N, work, 2 * param.algnN, param.precC, A, 2 * lda, param.precA);
 
   cudaStreamSynchronize(stream);
