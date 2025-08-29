@@ -38,8 +38,8 @@ __device__ __forceinline__ void array_sum(matrix_t (&a)[ITEMS_PER_THREAD], matri
   }
 }
 
-__host__ __device__ __forceinline__ double cast_f64(double2 a) { return a.x + a.y; }
-__host__ __device__ __forceinline__ double cast_f64(float4 a) { return (double(a.x) + double(a.y)) + (double(a.z) + double(a.w)); }
+__host__ __device__ __forceinline__ double cast_f64(double2 a) { return device::dd::dd2double(a); }
+__host__ __device__ __forceinline__ double cast_f64(float4 a) { return device::qf::qf2double(a); }
 __host__ __device__ __forceinline__ cuDoubleComplex cast_f64(complex_double2 a) { return make_cuDoubleComplex(cast_f64(a.real), cast_f64(a.imag)); }
 __host__ __device__ __forceinline__ cuDoubleComplex cast_f64(complex_float4 a) { return make_cuDoubleComplex(cast_f64(a.real), cast_f64(a.imag)); }
 
@@ -55,16 +55,14 @@ struct scal_a_function {
     d = device::dd::add(device::dd::mul(device::dd::negate(e), e), d);
   }
   __device__ __forceinline__ void operator()(double2 s, double2 a, double& c_conj_f64, double2& d) {
-    double2 e; operator()(s, a, e, d);
-    c_conj_f64 = cast_f64(e);
+    double2 e; operator()(s, a, e, d); c_conj_f64 = cast_f64(e);
   }
   __device__ __forceinline__ void operator()(float4 s, float4 a, float4& c_conj, float4& d) {
     float4 e = c_conj = device::qf::mul(s, a);
     d = device::qf::add(device::qf::mul(device::qf::negate(e), e), d);
   }
   __device__ __forceinline__ void operator()(float4 s, float4 a, double& c_conj_f64, float4& d) {
-    float4 e; operator()(s, a, e, d);
-    c_conj_f64 = cast_f64(e);
+    float4 e; operator()(s, a, e, d); c_conj_f64 = cast_f64(e);
   }
 
   __device__ __forceinline__ void operator()(double s, cuDoubleComplex a, cuDoubleComplex& c_conj, double& d) {
@@ -81,8 +79,7 @@ struct scal_a_function {
     d = add(mul(negate(e.real), e.real), add(mul(negate(e.imag), e.imag), d));
   }
   __device__ __forceinline__ void operator()(double2 s, complex_double2 a, cuDoubleComplex& c_conj_f64, double2& d) {
-    complex_double2 e; operator()(s, a, e, d);
-    c_conj_f64 = cast_f64(e);
+    complex_double2 e; operator()(s, a, e, d); c_conj_f64 = cast_f64(e);
   }
   __device__ __forceinline__ void operator()(float4 s, complex_float4 a, complex_float4& c_conj, float4& d) {
     using device::qf::add, device::qf::mul, device::qf::negate;
@@ -90,8 +87,7 @@ struct scal_a_function {
     d = add(mul(device::qf::negate(e.real), e.real), add(mul(negate(e.imag), e.imag), d));
   }
   __device__ __forceinline__ void operator()(float4 s, complex_float4 a, cuDoubleComplex& c_conj_f64, float4& d) {
-    complex_float4 e; operator()(s, a, e, d);
-    c_conj_f64 = cast_f64(e);
+    complex_float4 e; operator()(s, a, e, d); c_conj_f64 = cast_f64(e);
   }
 };
 
@@ -252,4 +248,20 @@ void internal::Cholesky::reduce_scal_cf128_dd(cudaStream_t stream, double2* scal
 
 void internal::Cholesky::reduce_scal_cf128_qf(cudaStream_t stream, float4* scale, int32_t M, int32_t N, const complex_float4* A, int32_t lda, complex_float4* X, int32_t incx, float4* D) {
   reduce_scal_dispatcher<float4, float4* __restrict__, complex_float4, const complex_float4* __restrict__, complex_float4, complex_float4* __restrict__>(stream, scale, M, N, A, lda, X, incx, D);
+}
+
+void internal::Cholesky::reduce_scal_f128_dd_f64(cudaStream_t stream, double2* scale, int32_t M, int32_t N, const double2* A, int32_t lda, double* X, int32_t incx, double2* D) {
+  reduce_scal_dispatcher<double2, double2* __restrict__, double2, const double2* __restrict__, double, double* __restrict__>(stream, scale, M, N, A, lda, X, incx, D);
+}
+
+void internal::Cholesky::reduce_scal_f128_qf_f64(cudaStream_t stream, float4* scale, int32_t M, int32_t N, const float4* A, int32_t lda, double* X, int32_t incx, float4* D) {
+  reduce_scal_dispatcher<float4, float4* __restrict__, float4, const float4* __restrict__, double, double* __restrict__>(stream, scale, M, N, A, lda, X, incx, D);
+}
+
+void internal::Cholesky::reduce_scal_cf128_dd_cf64(cudaStream_t stream, double2* scale, int32_t M, int32_t N, const complex_double2* A, int32_t lda, std::complex<double>* X, int32_t incx, double2* D) {
+  reduce_scal_dispatcher<double2, double2* __restrict__, complex_double2, const complex_double2* __restrict__, cuDoubleComplex, cuDoubleComplex* __restrict__>(stream, scale, M, N, A, lda, (cuDoubleComplex*)X, incx, D);
+}
+
+void internal::Cholesky::reduce_scal_cf128_qf_cf64(cudaStream_t stream, float4* scale, int32_t M, int32_t N, const complex_float4* A, int32_t lda, std::complex<double>* X, int32_t incx, float4* D) {
+  reduce_scal_dispatcher<float4, float4* __restrict__, complex_float4, const complex_float4* __restrict__, cuDoubleComplex, cuDoubleComplex* __restrict__>(stream, scale, M, N, A, lda, (cuDoubleComplex*)X, incx, D);
 }

@@ -13,7 +13,7 @@ int32_t device::dgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double 
 
   MixPrecAHA::rATA(stream, handle, param, A, lda, work);
   int32_t ret = Cholesky::rpotrfp(stream, handle, 0., 0, N, N, work, param.algnN, param.precC, dpiv);
-  convert_and_copy(stream, N, N, work, param.algnN, param.precC, A, lda, param.precA);
+  convert_and_copy(stream, N, N, work, param.algnN, param.precC, 0, A, lda, param.precA);
 
   cudaStreamSynchronize(stream);
   cudaMemcpy(jpiv, dpiv, sizeof(int32_t) * N, cudaMemcpyDefault);
@@ -33,7 +33,7 @@ int32_t device::sgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double 
 
   MixPrecAHA::rATA(stream, handle, param, A, lda, work);
   int32_t ret = Cholesky::rpotrfp(stream, handle, 0., 0, N, N, work, param.algnN, param.precC, dpiv);
-  convert_and_copy(stream, N, N, work, param.algnN, param.precC, A, lda, param.precA);
+  convert_and_copy(stream, N, N, work, param.algnN, param.precC, 0, A, lda, param.precA);
 
   cudaStreamSynchronize(stream);
   cudaMemcpy(jpiv, dpiv, sizeof(int32_t) * N, cudaMemcpyDefault);
@@ -53,7 +53,7 @@ int32_t device::zgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double 
 
   MixPrecAHA::cAHA(stream, handle, param, A, lda, work);
   int32_t ret = Cholesky::cpotrfp(stream, handle, 0., 0, N, N, work, param.algnN, param.precC, dpiv);
-  convert_and_copy(stream, 2 * N, N, work, 2 * param.algnN, param.precC, A, 2 * lda, param.precA);
+  convert_and_copy(stream, 2 * N, N, work, 2 * param.algnN, param.precC, 0, A, 2 * lda, param.precA);
 
   cudaStreamSynchronize(stream);
   cudaMemcpy(jpiv, dpiv, sizeof(int32_t) * N, cudaMemcpyDefault);
@@ -73,7 +73,7 @@ int32_t device::cgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double 
 
   MixPrecAHA::cAHA(stream, handle, param, A, lda, work);
   int32_t ret = Cholesky::cpotrfp(stream, handle, 0., 0, N, N, work, param.algnN, param.precC, dpiv);
-  convert_and_copy(stream, 2 * N, N, work, 2 * param.algnN, param.precC, A, 2 * lda, param.precA);
+  convert_and_copy(stream, 2 * N, N, work, 2 * param.algnN, param.precC, 0, A, 2 * lda, param.precA);
 
   cudaStreamSynchronize(stream);
   cudaMemcpy(jpiv, dpiv, sizeof(int32_t) * N, cudaMemcpyDefault);

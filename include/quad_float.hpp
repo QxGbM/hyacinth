@@ -171,6 +171,16 @@ namespace device::qf {
     return res;
   }
 
+  __host__ __device__ __forceinline__ double qf2double(float4 a) {
+    return (double(a.x) + double(a.y)) + (double(a.z) + double(a.w));
+  }
+
+  __host__ __device__ __forceinline__ float4 double2qf(double a) {
+    float a0 = float(a); a = a - double(a0);
+    float a1 = float(a);
+    return make_float4(a0, a1, a - double(a1), 0.f);
+  }
+
   __host__ __device__ __forceinline__ float4 dd2qf(double2 a) {
     float a0 = float(a.x); a.x = a.x - double(a0);
     float a1 = float(a.x); a.y = a.y + (a.x - double(a1));

@@ -26,21 +26,29 @@ namespace internal::Cholesky {
 
   void imax_cf128_qf(cudaStream_t stream, int32_t N, float4* X, complex_float4* C, int32_t ldc, int32_t* piv, float4* diag);
 
-  void gemv_scal_f64(cudaStream_t stream, cublasHandle_t handle, double* scale, int32_t M, int32_t N, const double* A, int32_t lda, double* B, double* D);
+  void gemv_cublas_f64(cudaStream_t stream, cublasHandle_t handle, double* scale, int32_t M, int32_t N, double* A, int32_t lda, double* D);
 
-  void gemv_scal_f32(cudaStream_t stream, cublasHandle_t handle, float* scale, int32_t M, int32_t N, const float* A, int32_t lda, float* B, float* D);
+  void gemv_cublas_f32(cudaStream_t stream, cublasHandle_t handle, float* scale, int32_t M, int32_t N, float* A, int32_t lda, float* D);
 
-  void gemv_scal_f128_dd(cudaStream_t stream, double2* scale, int32_t M, int32_t N, const double2* A, int32_t lda, double2* B, double2* D);
+  void gemv_cublas_cf64(cudaStream_t stream, cublasHandle_t handle, double* scale, int32_t M, int32_t N, std::complex<double>* A, int32_t lda, double* D);
 
-  void gemv_scal_f128_qf(cudaStream_t stream, float4* scale, int32_t M, int32_t N, const float4* A, int32_t lda, float4* B, float4* D);
+  void gemv_cublas_cf32(cudaStream_t stream, cublasHandle_t handle, float* scale, int32_t M, int32_t N, std::complex<float>* A, int32_t lda, float* D);
 
-  void gemv_scal_cf64(cudaStream_t stream, cublasHandle_t handle, double* scale, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, std::complex<double>* B, double* D);
+  void gemv_scal_f128_dd(cudaStream_t stream, double2* scale, int32_t M, int32_t N, double2* A, int32_t lda, double2* D);
 
-  void gemv_scal_cf32(cudaStream_t stream, cublasHandle_t handle, float* scale, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, std::complex<float>* B, float* D);
+  void gemv_scal_f128_qf(cudaStream_t stream, float4* scale, int32_t M, int32_t N, float4* A, int32_t lda, float4* D);
 
-  void gemv_scal_cf128_dd(cudaStream_t stream, double2* scale, int32_t M, int32_t N, const complex_double2* A, int32_t lda, complex_double2* B, double2* D);
+  void gemv_scal_cf128_dd(cudaStream_t stream, double2* scale, int32_t M, int32_t N, complex_double2* A, int32_t lda, double2* D);
 
-  void gemv_scal_cf128_qf(cudaStream_t stream, float4* scale, int32_t M, int32_t N, const complex_float4* A, int32_t lda, complex_float4* B, float4* D);
+  void gemv_scal_cf128_qf(cudaStream_t stream, float4* scale, int32_t M, int32_t N, complex_float4* A, int32_t lda, float4* D);
+
+  void gemv_scal_f128_dd_f64(cudaStream_t stream, cublasHandle_t handle, double2* scale, int32_t M, int32_t Nq, int32_t Nd, double2* A, int32_t lda, double2* D);
+
+  void gemv_scal_f128_qf_f64(cudaStream_t stream, cublasHandle_t handle, float4* scale, int32_t M, int32_t Nq, int32_t Nd, float4* A, int32_t lda, float4* D);
+
+  void gemv_scal_cf128_dd_cf64(cudaStream_t stream, cublasHandle_t handle, double2* scale, int32_t M, int32_t Nq, int32_t Nd, complex_double2* A, int32_t lda, double2* D);
+
+  void gemv_scal_cf128_qf_cf64(cudaStream_t stream, cublasHandle_t handle, float4* scale, int32_t M, int32_t Nq, int32_t Nd, complex_float4* A, int32_t lda, float4* D);
 
   void reduce_scal_f64(cudaStream_t stream, double* scale, int32_t M, int32_t N, const double* A, int32_t lda, double* X, int32_t incx, double* D);
 
@@ -57,6 +65,14 @@ namespace internal::Cholesky {
   void reduce_scal_cf128_dd(cudaStream_t stream, double2* scale, int32_t M, int32_t N, const complex_double2* A, int32_t lda, complex_double2* X, int32_t incx, double2* D);
 
   void reduce_scal_cf128_qf(cudaStream_t stream, float4* scale, int32_t M, int32_t N, const complex_float4* A, int32_t lda, complex_float4* X, int32_t incx, float4* D);
+
+  void reduce_scal_f128_dd_f64(cudaStream_t stream, double2* scale, int32_t M, int32_t N, const double2* A, int32_t lda, double* X, int32_t incx, double2* D);
+
+  void reduce_scal_f128_qf_f64(cudaStream_t stream, float4* scale, int32_t M, int32_t N, const float4* A, int32_t lda, double* X, int32_t incx, float4* D);
+
+  void reduce_scal_cf128_dd_cf64(cudaStream_t stream, double2* scale, int32_t M, int32_t N, const complex_double2* A, int32_t lda, std::complex<double>* X, int32_t incx, double2* D);
+
+  void reduce_scal_cf128_qf_cf64(cudaStream_t stream, float4* scale, int32_t M, int32_t N, const complex_float4* A, int32_t lda, std::complex<double>* X, int32_t incx, float4* D);
 
   void swap_cols_f64(cudaStream_t stream, int32_t i, int32_t j, int32_t N, double* A, int32_t lda);
 

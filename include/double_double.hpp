@@ -161,6 +161,14 @@ namespace device::dd {
     return res;
   }
 
+  __host__ __device__ __forceinline__ double dd2double(double2 a) {
+    return a.x + a.y;
+  }
+
+  __host__ __device__ __forceinline__ double2 double2dd(double a) {
+    return make_double2(a, 0.);
+  }
+
   __host__ __device__ __forceinline__ float4 dd2qf(double2 a) {
     float a0 = float(a.x); a.x = a.x - double(a0);
     float a1 = float(a.x); a.y = a.y + (a.x - double(a1));

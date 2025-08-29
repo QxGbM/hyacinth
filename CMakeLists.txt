@@ -17,7 +17,6 @@ set(CPP_SOURCES
   src_cpp/igemm_params.cpp
   src_cpp/igemm.cpp
   src_cpp/interp_decomp.cpp
-  src_cpp/potrfp_complex.cpp
   src_cpp/potrfp_uniform.cpp
 )
 

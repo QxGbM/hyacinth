@@ -2,6 +2,8 @@
 #include <hyacinth.hpp>
 #include <internal.hpp>
 #include <cuComplex.h>
+#include <double_double.hpp>
+#include <quad_float.hpp>
 
 void device::cublas_preload_real(cublasHandle_t handle) {
   cudaStream_t stream = nullptr;
@@ -9,13 +11,13 @@ void device::cublas_preload_real(cublasHandle_t handle) {
 
   double* A = nullptr;
   constexpr int32_t N = 2048;
-  cudaMalloc((void**)&A, N * N * sizeof(double));
+  cudaMalloc((void**)&A, N * N * sizeof(double) * 2);
 
   double2 scale[2]{};
-  device::convert_and_copy(stream, N, N, A, N, device::Precision::FP32, A, N, device::Precision::FP32);
+  device::convert_and_copy(stream, N, N, A, N, device::Precision::FP32, 0, A, N, device::Precision::FP32);
   internal::Cholesky::imax_f32(stream, N, (float*)A, (float*)A, N, (int32_t*)A, (float*)A);
   internal::Cholesky::swap_cols_f32(stream, 0, 1, N, (float*)A, N);
-  internal::Cholesky::gemv_scal_f128_dd(stream, scale, 2, 2, (double2*)A, 2, (double2*)&A[4], (double2*)A);
+  internal::Cholesky::gemv_scal_f128_dd(stream, scale, 2, 2, &((double2*)A)[8], 4, (double2*)A);
 
   internal::int8::vexp_f32(stream, 1, N, N, (float*)A, N, (int32_t*)A);
   internal::int8::encode_f32(stream, 1, N, N, (float*)A, N, (int32_t*)A, (int8_t*)A, N);
@@ -48,10 +50,10 @@ void device::cublas_preload_complex(cublasHandle_t handle) {
   cudaMalloc((void**)&A, N * N * sizeof(cuDoubleComplex));
 
   double2 scale[2]{};
-  device::convert_and_copy(stream, N, N, A, N, device::Precision::FP32, A, N, device::Precision::FP32);
+  device::convert_and_copy(stream, N, N, A, N, device::Precision::FP32, 0, A, N, device::Precision::FP32);
   internal::Cholesky::imax_f32(stream, N, (float*)A, (float*)A, N, (int32_t*)A, (float*)A);
   internal::Cholesky::swap_cols_f32(stream, 0, 1, N, (float*)A, N);
-  internal::Cholesky::gemv_scal_f128_dd(stream, scale, 2, 2, (double2*)A, 2, (double2*)&A[4], (double2*)A);
+  internal::Cholesky::gemv_scal_f128_dd(stream, scale, 2, 2, &((double2*)A)[8], 4, (double2*)A);
 
   internal::int8::vexp_f32(stream, 1, N, N, (float*)A, N, (int32_t*)A);
   internal::int8::encode_f32(stream, 1, N, N, (float*)A, N, (int32_t*)A, (int8_t*)A, N);

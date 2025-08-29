@@ -1,4 +1,5 @@
 
+#include <hyacinth.hpp>
 #include <internal.hpp>
 #include <quad_float.hpp>
 #include <double_double.hpp>
@@ -50,7 +51,7 @@ struct add_f128 {
     return device::qf::make_complex_float4(operator()(a.real, b.real), operator()(a.imag, b.imag)); }
 };
 
-template <class real_t, class matrix_t, class matrix_ptr, class matrix_const_ptr, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD>
+template <class matrix_t, class matrix_ptr, class matrix_const_ptr, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD>
 __global__ void gemv_kernel(int32_t M, int32_t N, int32_t split_N, matrix_const_ptr A, int32_t lda, matrix_ptr B) {
   constexpr int32_t block_warps = BLOCK_THREADS / 32;
   constexpr int32_t elements = ITEMS_PER_THREAD * 32;
@@ -104,7 +105,7 @@ constexpr int32_t gridy_max = 6; // 2^6 = 64; maximum length of split-k reductio
 constexpr int32_t target_blocks = 10; // 2^10 = 1024; ideal grid size for gemv
 constexpr int32_t minimal_k = 8; // 2^8 = 256; minimal length of k in each split
 
-template <class real_t, class matrix_t, class matrix_ptr, class matrix_const_ptr>
+template <class matrix_t, class matrix_ptr, class matrix_const_ptr>
 inline int32_t gemv_dispatcher(cudaStream_t stream, int32_t M, int32_t N, matrix_const_ptr A, int32_t lda, matrix_ptr B) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(matrix_t);
 
@@ -118,31 +119,103 @@ inline int32_t gemv_dispatcher(cudaStream_t stream, int32_t M, int32_t N, matrix
 
   int64_t offset = int64_t(-grid_y) * int64_t(lda);
   int32_t split_N = N / grid_y;
-  gemv_kernel <real_t, matrix_t, matrix_ptr, matrix_const_ptr, block_threads, items_per_thread>
+  gemv_kernel <matrix_t, matrix_ptr, matrix_const_ptr, block_threads, items_per_thread>
     <<< dim3(grid_x, grid_y, 1), dim3(32, block_warps, 1), 0, stream >>> (M, N, split_N, A, lda, &B[offset]);
   return grid_y + 1;
 }
 
-void internal::Cholesky::gemv_scal_f128_dd(cudaStream_t stream, double2* scale, int32_t M, int32_t N, const double2* A, int32_t lda, double2* B, double2* D) {
-  int32_t reduce = N < 1 || M < 2 ? 1 :
-    gemv_dispatcher<double2, double2, double2* __restrict__, const double2* __restrict__>(stream, M, N, A, lda, B);
+void internal::Cholesky::gemv_scal_f128_dd(cudaStream_t stream, double2* scale, int32_t M, int32_t N, double2* A, int32_t lda, double2* D) {
+  double2* B = &A[N];
+  int32_t reduce = 1;
+  if (1 <= N && 2 <= M)
+    reduce = gemv_dispatcher<double2, double2* __restrict__, const double2* __restrict__>(stream, M, N, A, lda, B);
   reduce_scal_f128_dd(stream, scale, M, reduce, &B[int64_t(1) + int64_t(1 - reduce) * int64_t(lda)], lda, B, lda, &D[1]);
 }
 
-void internal::Cholesky::gemv_scal_f128_qf(cudaStream_t stream, float4* scale, int32_t M, int32_t N, const float4* A, int32_t lda, float4* B, float4* D) {
-  int32_t reduce = N < 1 || M < 2 ? 1 :
-    gemv_dispatcher<float4, float4, float4* __restrict__, const float4* __restrict__>(stream, M, N, A, lda, B);
+void internal::Cholesky::gemv_scal_f128_qf(cudaStream_t stream, float4* scale, int32_t M, int32_t N, float4* A, int32_t lda, float4* D) {
+  float4* B = &A[N];
+  int32_t reduce = 1;
+  if (1 <= N && 2 <= M)
+    reduce = gemv_dispatcher<float4, float4* __restrict__, const float4* __restrict__>(stream, M, N, A, lda, B);
   reduce_scal_f128_qf(stream, scale, M, reduce, &B[int64_t(1) + int64_t(1 - reduce) * int64_t(lda)], lda, B, lda, &D[1]);
 }
 
-void internal::Cholesky::gemv_scal_cf128_dd(cudaStream_t stream, double2* scale, int32_t M, int32_t N, const complex_double2* A, int32_t lda, complex_double2* B, double2* D) {
-  int32_t reduce = N < 1 || M < 2 ? 1 :
-    gemv_dispatcher<double2, complex_double2, complex_double2* __restrict__, const complex_double2* __restrict__>(stream, M, N, A, lda, B);
+void internal::Cholesky::gemv_scal_cf128_dd(cudaStream_t stream, double2* scale, int32_t M, int32_t N, complex_double2* A, int32_t lda, double2* D) {
+  complex_double2* B = &A[N];
+  int32_t reduce = 1;
+  if (1 <= N && 2 <= M)
+    reduce = gemv_dispatcher<complex_double2, complex_double2* __restrict__, const complex_double2* __restrict__>(stream, M, N, A, lda, B);
   reduce_scal_cf128_dd(stream, scale, M, reduce, &B[int64_t(1) + int64_t(1 - reduce) * int64_t(lda)], lda, B, lda, &D[1]);
 }
 
-void internal::Cholesky::gemv_scal_cf128_qf(cudaStream_t stream, float4* scale, int32_t M, int32_t N, const complex_float4* A, int32_t lda, complex_float4* B, float4* D) {
-  int32_t reduce = N < 1 || M < 2 ? 1 :
-    gemv_dispatcher<float4, complex_float4, complex_float4* __restrict__, const complex_float4* __restrict__>(stream, M, N, A, lda, B);
+void internal::Cholesky::gemv_scal_cf128_qf(cudaStream_t stream, float4* scale, int32_t M, int32_t N, complex_float4* A, int32_t lda, float4* D) {
+  complex_float4* B = &A[N];
+  int32_t reduce = 1;
+  if (1 <= N && 2 <= M)
+    reduce = gemv_dispatcher<complex_float4, complex_float4* __restrict__, const complex_float4* __restrict__>(stream, M, N, A, lda, B);
   reduce_scal_cf128_qf(stream, scale, M, reduce, &B[int64_t(1) + int64_t(1 - reduce) * int64_t(lda)], lda, B, lda, &D[1]);
+}
+
+void internal::Cholesky::gemv_scal_f128_dd_f64(cudaStream_t stream, cublasHandle_t handle, double2* scale, int32_t M, int32_t Nq, int32_t Nd, double2* A, int32_t lda, double2* D) {
+  int32_t reduce = 1, ld_f64 = 2 * lda;
+  double* A_f64 = (double*)&A[Nq], *B_f64 = &A_f64[Nd];
+  double2* B = &A[Nq + Nd];
+
+  if (1 <= Nd && 2 <= M) {
+    double minus_one = -1., zero = 0.;
+    cublasDgemv(handle, CUBLAS_OP_T, Nd, M - 1, &minus_one, &A_f64[ld_f64], ld_f64, A_f64, 1, &zero, (double*)&B[1 - lda], 1);
+    device::convert_and_copy(stream, M - 1, 1, &B[1 - lda], M - 1, device::Precision::FP64, 1, &B[1], M - 1, device::Precision::FP128_DD);
+  }
+
+  if (1 <= Nq && 2 <= M)
+    reduce = gemv_dispatcher<double2, double2* __restrict__, const double2* __restrict__>(stream, M, Nq, A, lda, B);
+  reduce_scal_f128_dd_f64(stream, scale, M, reduce, &B[int64_t(1) + int64_t(1 - reduce) * int64_t(lda)], lda, B_f64, ld_f64, &D[1]);
+}
+
+void internal::Cholesky::gemv_scal_f128_qf_f64(cudaStream_t stream, cublasHandle_t handle, float4* scale, int32_t M, int32_t Nq, int32_t Nd, float4* A, int32_t lda, float4* D) {
+  int32_t reduce = 1, ld_f64 = 2 * lda;
+  double* A_f64 = (double*)&A[Nq], *B_f64 = &A_f64[Nd];
+  float4* B = &A[Nq + Nd];
+
+  if (1 <= Nd && 2 <= M) {
+    double minus_one = -1., zero = 0.;
+    cublasDgemv(handle, CUBLAS_OP_T, Nd, M - 1, &minus_one, &A_f64[ld_f64], ld_f64, A_f64, 1, &zero, (double*)&B[1 - lda], 1);
+    device::convert_and_copy(stream, M - 1, 1, &B[1 - lda], M - 1, device::Precision::FP64, 1, &B[1], M - 1, device::Precision::FP128_QF);
+  }
+
+  if (1 <= Nq && 2 <= M)
+    reduce = gemv_dispatcher<float4, float4* __restrict__, const float4* __restrict__>(stream, M, Nq, A, lda, B);
+  reduce_scal_f128_qf_f64(stream, scale, M, reduce, &B[int64_t(1) + int64_t(1 - reduce) * int64_t(lda)], lda, B_f64, ld_f64, &D[1]);
+}
+
+void internal::Cholesky::gemv_scal_cf128_dd_cf64(cudaStream_t stream, cublasHandle_t handle, double2* scale, int32_t M, int32_t Nq, int32_t Nd, complex_double2* A, int32_t lda, double2* D) {
+  int32_t reduce = 1, ld_f64 = 2 * lda;
+  std::complex<double>* A_f64 = (std::complex<double>*)&A[Nq], *B_f64 = &A_f64[Nd];
+  complex_double2* B = &A[Nq + Nd];
+
+  if (1 <= Nd && 2 <= M) {
+    std::complex<double> minus_one(-1., 0.), zero(0., 0.);
+    cublasZgemv(handle, CUBLAS_OP_C, Nd, M - 1, (cuDoubleComplex*)&minus_one, (const cuDoubleComplex*)&A[lda], lda, (const cuDoubleComplex*)A, 1, (cuDoubleComplex*)&zero, (cuDoubleComplex*)&B[1 - lda], 1);
+    device::convert_and_copy(stream, 2 * M - 2, 1, &B[1 - lda], 2 * M - 2, device::Precision::FP64, 1, &B[1], 2 * M - 2, device::Precision::FP128_DD);
+  }
+
+  if (1 <= Nq && 2 <= M)
+    reduce = gemv_dispatcher<complex_double2, complex_double2* __restrict__, const complex_double2* __restrict__>(stream, M, Nq, A, lda, B);
+  reduce_scal_cf128_dd_cf64(stream, scale, M, reduce, &B[int64_t(1) + int64_t(1 - reduce) * int64_t(lda)], lda, B_f64, ld_f64, &D[1]);
+}
+
+void internal::Cholesky::gemv_scal_cf128_qf_cf64(cudaStream_t stream, cublasHandle_t handle, float4* scale, int32_t M, int32_t Nq, int32_t Nd, complex_float4* A, int32_t lda, float4* D) {
+  int32_t reduce = 1, ld_f64 = 2 * lda;
+  std::complex<double>* A_f64 = (std::complex<double>*)&A[Nq], *B_f64 = &A_f64[Nd];
+  complex_float4* B = &A[Nq + Nd];
+
+  if (1 <= Nd && 2 <= M) {
+    std::complex<double> minus_one(-1., 0.), zero(0., 0.);
+    cublasZgemv(handle, CUBLAS_OP_C, Nd, M - 1, (cuDoubleComplex*)&minus_one, (const cuDoubleComplex*)&A[lda], lda, (const cuDoubleComplex*)A, 1, (cuDoubleComplex*)&zero, (cuDoubleComplex*)&B[1 - lda], 1);
+    device::convert_and_copy(stream, 2 * M - 2, 1, &B[1 - lda], 2 * M - 2, device::Precision::FP64, 1, &B[1], 2 * M - 2, device::Precision::FP128_QF);
+  }
+
+  if (1 <= Nq && 2 <= M)
+    reduce = gemv_dispatcher<complex_float4, complex_float4* __restrict__, const complex_float4* __restrict__>(stream, M, Nq, A, lda, B);
+  reduce_scal_cf128_qf_cf64(stream, scale, M, reduce, &B[int64_t(1) + int64_t(1 - reduce) * int64_t(lda)], lda, B_f64, ld_f64, &D[1]);
 }

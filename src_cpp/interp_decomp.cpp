@@ -30,10 +30,10 @@ inline void interp_pp_real(cudaStream_t stream, cublasHandle_t handle, int32_t M
     cublas_trsm_real<device::Precision::FP32>(handle, M, N, A, lda);
     strided_identity(stream, M, M, M + 1, A, lda, device::Precision::FP32);
     copy_permute(stream, 0, M, N, ipiv, A, lda, work, lda, device::Precision::FP32);
-    convert_and_copy(stream, M, N, work, lda, device::Precision::FP32, X, ldx, precX);
+    convert_and_copy(stream, M, N, work, lda, device::Precision::FP32, 0, X, ldx, precX);
   }
   else {
-    convert_and_copy(stream, M, N, A, lda, precA, work, lda, precX);
+    convert_and_copy(stream, M, N, A, lda, precA, 0, work, lda, precX);
     cublas_trsm_real<precX>(handle, M, N, work, lda);
     strided_identity(stream, M, M, M + 1, work, lda, precX);
     copy_permute(stream, 0, M, N, ipiv, work, lda, X, ldx, precX);
@@ -115,10 +115,10 @@ inline void interp_pp_complex(cudaStream_t stream, cublasHandle_t handle, int32_
     cublas_trsm_complex<device::Precision::FP32>(handle, M, N, A, lda);
     strided_identity(stream, 2 * M, M, 2 * M + 2, A, 2 * lda, device::Precision::FP32);
     copy_permute(stream, 0, 2 * M, N, ipiv, A, 2 * lda, work, 2 * lda, device::Precision::FP32);
-    convert_and_copy(stream, 2 * M, N, work, 2 * lda, device::Precision::FP32, X, 2 * ldx, precX);
+    convert_and_copy(stream, 2 * M, N, work, 2 * lda, device::Precision::FP32, 0, X, 2 * ldx, precX);
   }
   else {
-    convert_and_copy(stream, 2 * M, N, A, 2 * lda, precA, work, 2 * lda, precX);
+    convert_and_copy(stream, 2 * M, N, A, 2 * lda, precA, 0, work, 2 * lda, precX);
     cublas_trsm_complex<precX>(handle, M, N, work, lda);
     strided_identity(stream, 2 * M, M, 2 * M + 2, work, 2 * lda, precX);
     copy_permute(stream, 0, 2 * M, N, ipiv, work, 2 * lda, X, 2 * ldx, precX);
