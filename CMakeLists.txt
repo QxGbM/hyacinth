@@ -18,14 +18,14 @@ set(CPP_SOURCES
   src_cpp/igemm.cpp
   src_cpp/interp_decomp.cpp
   src_cpp/potrfp_complex.cpp
-  src_cpp/potrfp_real.cpp
+  src_cpp/potrfp_uniform.cpp
 )
 
 set(CU_SOURCES
   src_cuda/decode_strided_i32.cu
   src_cuda/encode_fp_int_strided.cu
   src_cuda/fp_exponent.cu
-  src_cuda/gemv_scal.cu
+  src_cuda/gemv_scal_f128.cu
   src_cuda/igemm_normalize.cu
   src_cuda/igemm_pp.cu
   src_cuda/imax_diag.cu

@@ -105,26 +105,6 @@ namespace device::qf {
     return normalize(make_float4(r0, a0.x, a0.y, a.w + a1.y + a1.x));
   }
 
-  __host__ __device__ __forceinline__ float4 mul_float2(float2 a, float2 b) {
-#ifndef __CUDA_ARCH__
-    using std::fmaf;
-#endif
-    float2 prod, err;
-    fmul2_err(make_float2(a.x, a.y), make_float2(b.x, b.y), prod, err);
-    float c1 = prod.x;
-    float c4 = err.y;
-    float2 c23 = make_float2(err.x, prod.y);
-
-    fmul2_err(make_float2(a.y, a.x), make_float2(b.x, b.y), prod, err);
-    fadd2_err(c23, make_float2(prod.x, err.x), c23, a);
-    fadd2_err(c23, make_float2(prod.y, err.y), c23, b);
-    fadd_err(a.x, b.x, a.x, b.x);
-    fadd_err(c23.y, a.x, c23.y, a.x);
-    c4 += (a.x + a.y) + (b.x + b.y);
-
-    return normalize(make_float4(c1, c23.x, c23.y, c4));
-  }
-
   __host__ __device__ __forceinline__ float4 frsqrt(float4 a) {
     float rsq; int32_t p;
 #ifndef __CUDA_ARCH__
@@ -207,10 +187,6 @@ namespace device::qf {
     double s1 = s0.x + s0.y;
     double delta1 = s0.y + (s0.x - s1);
     return make_double2(s1, delta0 + delta1);
-  }
-
-  __host__ __device__ __forceinline__ complex_float4 add(complex_float4 a, complex_float4 b) {
-    return make_complex_float4(add(a.real, b.real), add(a.imag, b.imag));
   }
 
 };

@@ -94,7 +94,7 @@ inline int32_t complex_potrfp(cudaStream_t stream, cublasHandle_t handle, double
 
     epi = epi * diag_f64;
     if (!(std::isnormal(diag_f64) && epi <= diag_f64 && 0 <= j))
-      return 0;
+      return 1;
     start = 1;
   }
 
@@ -115,12 +115,12 @@ inline int32_t complex_potrfp(cudaStream_t stream, cublasHandle_t handle, double
     complex_gemv_dispatcher<prec>(stream, handle, scale, N - i, i, &A[A_col], lda, &A[A_diag], &diag[i]);
 
     if (!(std::isnormal(diag_f64) && epi <= diag_f64 && 0 <= *pivot_i))
-      end = i;
+      return i + 1;
   }
   return end;
 }
 
-int32_t device::Cholesky::cpotrfp(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t start, int32_t end, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv) {
+/*int32_t device::Cholesky::cpotrfp(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t start, int32_t end, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv) {
   epi = std::min(1., std::max(0., epi));
   start = std::min(N, std::max(0, start));
   end = std::min(N, std::max(start, end));
@@ -137,4 +137,4 @@ int32_t device::Cholesky::cpotrfp(cudaStream_t stream, cublasHandle_t handle, do
         return complex_potrfp<Precision::FP128_QF, float4, complex_float4>(stream, handle, epi, start, end, N, (complex_float4*)A, lda, jpiv);
     }
   return -1;
-}
+}*/

@@ -101,15 +101,6 @@ namespace device::dd {
     double delta = c.x - s;
     return make_double2(s, c.y + delta);
   }
-  
-  __host__ __device__ __forceinline__ double2 mul_double(double a, double b) {
-#ifndef __CUDA_ARCH__
-    using std::fma;
-#endif
-    double hi = a * b;
-    double lo = fma(a, b, -hi);
-    return make_double2(hi, lo);
-  }
 
   __host__ __device__ __forceinline__ double2 frsqrt(double2 a) {
     double rsq; int32_t p;
@@ -186,10 +177,6 @@ namespace device::dd {
     double s1 = s0.x + s0.y;
     double delta1 = s0.y + (s0.x - s1);
     return make_double2(s1, delta0 + delta1);
-  }
-
-  __host__ __device__ __forceinline__ complex_double2 add(complex_double2 a, complex_double2 b) {
-    return make_complex_double2(add(a.real, b.real), add(a.imag, b.imag));
   }
 
 };
