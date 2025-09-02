@@ -105,6 +105,12 @@ namespace device::qf {
     return normalize(make_float4(r0, a0.x, a0.y, a.w + a1.y + a1.x));
   }
 
+  __host__ __device__ __forceinline__ float4 add_double(float4 a, double b) {
+    float b0 = float(b); b = b - double(b0);
+    float b1 = float(b);
+    return add(a, make_float4(b0, b1, b - double(b1), 0.f));
+  }
+
   __host__ __device__ __forceinline__ float4 frsqrt(float4 a) {
     float rsq; int32_t p;
 #ifndef __CUDA_ARCH__

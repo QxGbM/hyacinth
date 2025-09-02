@@ -52,7 +52,7 @@ int32_t device::interp_decomp_f64(cudaStream_t stream, cublasHandle_t handle, do
   cudaMallocHost((void**)(&dpiv), (N + 12) * sizeof(int32_t));
 
   MixPrecAHA::rATA(stream, handle, param, A, lda, work);
-  rank = Cholesky::rpotrfp(stream, handle, epi, 0, rank, N, work, algnN, param.precC, dpiv);
+  Cholesky::rpotrfp(stream, handle, epi, &rank, N, work, algnN, param.precC, dpiv);
   if (0 < rank)
     interp_pp_real<Precision::FP64>(stream, handle, rank, N, work, algnN, dpiv, param.precC, X, ldx, &((int8_t*)work)[param.acc_bytes]);
 
@@ -75,7 +75,7 @@ int32_t device::interp_decomp_f32(cudaStream_t stream, cublasHandle_t handle, do
   cudaMallocHost((void**)(&dpiv), (N + 12) * sizeof(int32_t));
 
   MixPrecAHA::rATA(stream, handle, param, A, lda, work);
-  rank = Cholesky::rpotrfp(stream, handle, epi, 0, rank, N, work, algnN, param.precC, dpiv);
+  Cholesky::rpotrfp(stream, handle, epi, &rank, N, work, algnN, param.precC, dpiv);
   if (0 < rank)
     interp_pp_real<Precision::FP32>(stream, handle, rank, N, work, algnN, dpiv, param.precC, X, ldx, &((int8_t*)work)[param.acc_bytes]);
 
@@ -137,7 +137,7 @@ int32_t device::interp_decomp_cf64(cudaStream_t stream, cublasHandle_t handle, d
   cudaMallocHost((void**)(&dpiv), (N + 12) * sizeof(int32_t));
 
   MixPrecAHA::cAHA(stream, handle, param, A, lda, work);
-  rank = Cholesky::cpotrfp(stream, handle, epi, 0, rank, N, work, algnN, param.precC, dpiv);
+  Cholesky::cpotrfp(stream, handle, epi, &rank, N, work, algnN, param.precC, dpiv);
   if (0 < rank)
     interp_pp_complex<Precision::FP64>(stream, handle, rank, N, work, algnN, dpiv, param.precC, X, ldx, &((int8_t*)work)[param.acc_bytes]);
 
@@ -160,7 +160,7 @@ int32_t device::interp_decomp_cf32(cudaStream_t stream, cublasHandle_t handle, d
   cudaMallocHost((void**)(&dpiv), (N + 12) * sizeof(int32_t));
 
   MixPrecAHA::cAHA(stream, handle, param, A, lda, work);
-  rank = Cholesky::cpotrfp(stream, handle, epi, 0, rank, N, work, algnN, param.precC, dpiv);
+  Cholesky::cpotrfp(stream, handle, epi, &rank, N, work, algnN, param.precC, dpiv);
   if (0 < rank)
     interp_pp_complex<Precision::FP32>(stream, handle, rank, N, work, algnN, dpiv, param.precC, X, ldx, &((int8_t*)work)[param.acc_bytes]);
 

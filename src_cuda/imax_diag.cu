@@ -33,19 +33,11 @@ template <class real_t> struct real_pair_max {
   }
 };
 
-struct conj_complex {
-  __device__ __forceinline__ cuDoubleComplex operator()(cuDoubleComplex c) {
-    return make_cuDoubleComplex(c.x, -c.y);
-  }
-  __device__ __forceinline__ cuComplex operator()(cuComplex c) {
-    return make_cuComplex(c.x, -c.y);
-  }
-  __device__ __forceinline__ complex_double2 operator()(complex_double2 c) {
-    return device::dd::make_complex_double2(c.real, device::dd::negate(c.imag));
-  }
-  __device__ __forceinline__ complex_float4 operator()(complex_float4 c) {
-    return device::qf::make_complex_float4(c.real, device::qf::negate(c.imag));
-  }
+struct conj {
+  __device__ __forceinline__ cuDoubleComplex operator()(cuDoubleComplex f) { return make_cuDoubleComplex(f.x, -f.y); }
+  __device__ __forceinline__ cuComplex operator()(cuComplex f) { return make_cuComplex(f.x, -f.y); }
+  __device__ __forceinline__ complex_double2 operator()(complex_double2 f) { return device::dd::make_complex_double2(f.real, device::dd::negate(f.imag)); }
+  __device__ __forceinline__ complex_float4 operator()(complex_float4 f) { return device::qf::make_complex_float4(f.real, device::qf::negate(f.imag)); }
 };
 
 template <class real_t, class real_ptr, class complex_t, class complex_ptr, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD>
@@ -54,38 +46,38 @@ __global__ void imax_kernel(int32_t N, real_ptr X, complex_ptr C, int32_t ldc, i
   int32_t rem = N & (elements - 1), div = N - rem;
   int32_t N1 = max(div, rem), N2 = min(div, rem);
 
-  __shared__ typename cub::BlockLoad<real_t, BLOCK_THREADS, ITEMS_PER_THREAD>::TempStorage temp_load;
+  __shared__ typename cub::BlockLoad<real_t, BLOCK_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_STRIPED>::TempStorage temp_load;
   __shared__ typename cub::BlockReduce<real_pair<real_t>, BLOCK_THREADS>::TempStorage temp_reduce;
   real_t thread_data[ITEMS_PER_THREAD];
   real_pair<real_t> thread_pair[ITEMS_PER_THREAD];
+  int32_t thread_locs[ITEMS_PER_THREAD];
 
-  cub::BlockLoad<real_t, BLOCK_THREADS, ITEMS_PER_THREAD> block_load(temp_load);
+  cub::BlockLoad<real_t, BLOCK_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_STRIPED> block_load(temp_load);
   cub::BlockReduce<real_pair<real_t>, BLOCK_THREADS> block_reduce(temp_reduce);
   real_pair_max<real_t> cmp_max;
 
-  int32_t thread_loc = threadIdx.x * ITEMS_PER_THREAD;
   block_load.Load(X, thread_data, N1, real_t());
-
   #pragma unroll
-  for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
-    thread_pair[i] = real_pair<real_t>({ thread_data[i], thread_loc + i });
+  for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i) {
+    int32_t thread_loc_i = int32_t(threadIdx.x) + i * BLOCK_THREADS;
+    thread_pair[i] = real_pair<real_t>({ thread_data[i], thread_loc_i });
+    thread_locs[i] = thread_loc_i;
+  }
 
   for (int32_t i = elements; i < N1; i += elements) {
-    int32_t thread_loc_i = thread_loc + i;
     block_load.Load(&X[i], thread_data);
 
     #pragma unroll
     for (int32_t j = 0; j < ITEMS_PER_THREAD; ++j)
-      thread_pair[j] = cmp_max(thread_pair[j], real_pair<real_t>({ thread_data[j], thread_loc_i + j }));
+      thread_pair[j] = cmp_max(thread_pair[j], real_pair<real_t>({ thread_data[j], i + thread_locs[j] }));
   }
 
   if (0 < N2) {
-    int32_t thread_loc_n = thread_loc + N1;
     block_load.Load(&X[N1], thread_data, N2, real_t());
 
     #pragma unroll
     for (int32_t j = 0; j < ITEMS_PER_THREAD; ++j)
-      thread_pair[j] = cmp_max(thread_pair[j], real_pair<real_t>({ thread_data[j], thread_loc_n + j }));
+      thread_pair[j] = cmp_max(thread_pair[j], real_pair<real_t>({ thread_data[j], N1 + thread_locs[j] }));
   }
 
   real_pair<real_t> block_res = block_reduce.Reduce(thread_pair, cmp_max);
@@ -93,7 +85,7 @@ __global__ void imax_kernel(int32_t N, real_ptr X, complex_ptr C, int32_t ldc, i
   __syncthreads();
   if (threadIdx.x == 0 && block_res.idx < N) {
     if constexpr(sizeof(real_t) < sizeof(complex_t)) {
-      conj_complex conj_f;
+      conj conj_f;
       complex_t cp = C[0] = C[block_res.idx];
       C[block_res.idx * uint64_t(ldc + 1)] = conj_f(cp);
     }

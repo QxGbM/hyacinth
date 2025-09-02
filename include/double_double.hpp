@@ -10,7 +10,6 @@ struct __align__(32) complex_double2 {
 };
 
 namespace device::dd {
-  constexpr int32_t use_pred_fast_sum = 1;
 
   __host__ __device__ __forceinline__ complex_double2 make_complex_double2(double2 real, double2 imag) {
     return complex_double2({ real, imag });
@@ -22,39 +21,18 @@ namespace device::dd {
 
   __host__ __device__ __forceinline__ void fadd_err(double a, double b, double& sum, double& err) {
     sum = a + b;
-    if constexpr(use_pred_fast_sum) {
-      union { double fp; uint64_t in; } va{a}, vb{b};
-      int32_t pred = (va.in << 1) < (vb.in << 1);
-
-      a = pred ? vb.fp : va.fp;
-      b = pred ? va.fp : vb.fp;
-      err = b + (a - sum);
-    }
-    else {
-      double delta = a - sum;
-      double s_delta = sum + delta;
-      double b_delta = b + delta;
-      err = (a - s_delta) + b_delta;
-    }
+    double delta = a - sum;
+    double s_delta = sum + delta;
+    double b_delta = b + delta;
+    err = (a - s_delta) + b_delta;
   }
 
   __host__ __device__ __forceinline__ void fadd2_err(double2 a, double2 b, double2& sum, double2& err) {
     sum = make_double2(a.x + b.x, a.y + b.y);
-    if constexpr(use_pred_fast_sum) {
-      union { double2 fp; uint64_t in[2]; } va{a}, vb{b};
-      int32_t pred_x = (va.in[0] << 1) < (vb.in[0] << 1);
-      int32_t pred_y = (va.in[1] << 1) < (vb.in[1] << 1);
-
-      a = make_double2(pred_x ? vb.fp.x : va.fp.x, pred_y ? vb.fp.y : va.fp.y);
-      b = make_double2(pred_x ? va.fp.x : vb.fp.x, pred_y ? va.fp.y : vb.fp.y);
-      err = make_double2(b.x + (a.x - sum.x), b.y + (a.y - sum.y));
-    }
-    else {
-      double2 delta = make_double2(a.x - sum.x, a.y - sum.y);
-      double2 s_delta = make_double2(sum.x + delta.x, sum.y + delta.y);
-      double2 b_delta = make_double2(b.x + delta.x, b.y + delta.y);
-      err = make_double2((a.x - s_delta.x) + b_delta.x, (a.y - s_delta.y) + b_delta.y);
-    }
+    double2 delta = make_double2(a.x - sum.x, a.y - sum.y);
+    double2 s_delta = make_double2(sum.x + delta.x, sum.y + delta.y);
+    double2 b_delta = make_double2(b.x + delta.x, b.y + delta.y);
+    err = make_double2((a.x - s_delta.x) + b_delta.x, (a.y - s_delta.y) + b_delta.y);
   }
 
   __host__ __device__ __forceinline__ double2 normalize(double2 a) {
@@ -75,13 +53,12 @@ namespace device::dd {
 #ifndef __CUDA_ARCH__
     using std::fma;
 #endif
+    double s = fma(a.x, b.y, a.y * b.x);
     double2 d;
     d.x = a.x * b.x;
-    d.y = fma(a.x, b.x, -d.x);
-    d.y = fma(a.x, b.y, d.y);
-    d.y = fma(a.y, b.x, d.y);
+    d.y = s + fma(a.x, b.x, -d.x);
 
-    double s = d.x + d.y;
+    s = d.x + d.y;
     double delta = d.x - s;
     return make_double2(s, d.y + delta);
   }

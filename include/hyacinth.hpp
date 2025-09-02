@@ -82,9 +82,9 @@ namespace device {
     // Return :: Number of iterations [0, N] = matrix rank
     //           The last interation is on the fly when function returns, will need synchronization to access
 
-    int32_t rpotrfp(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t start, int32_t end, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv);
+    void rpotrfp(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t* iters, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv);
 
-    int32_t cpotrfp(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t start, int32_t end, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv);
+    void cpotrfp(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t* iters, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv);
 
   };
 
