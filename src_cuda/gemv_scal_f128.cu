@@ -90,9 +90,9 @@ __global__ void gemv_kernel(int32_t M, int32_t N, int32_t split_N, matrix_const_
     B = &B[uint64_t(blockIdx.y) * uint64_t(lda)];
   }
 
-  __shared__ typename cub::BlockLoad<matrix_t, WARP_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_STRIPED>::TempStorage ts_load[block_warps];
+  __shared__ typename cub::BlockLoad<matrix_t, WARP_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_STRIPED>::TempStorage temp_load[block_warps];
   __shared__ typename cub::BlockReduce<matrix_t, WARP_THREADS>::TempStorage temp_reduce[block_warps];
-  cub::BlockLoad<matrix_t, WARP_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_STRIPED> block_load(ts_load[threadIdx.y]);
+  cub::BlockLoad<matrix_t, WARP_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_STRIPED> block_load(temp_load[threadIdx.y]);
   cub::BlockReduce<matrix_t, WARP_THREADS> block_reduce(temp_reduce[threadIdx.y]);
   matrix_t threadA[ITEMS_PER_THREAD], threadX[ITEMS_PER_THREAD], threadB[ITEMS_PER_THREAD];
 
@@ -136,14 +136,14 @@ constexpr int32_t gridy_max = 64; // maximum length of split-k reduction
 constexpr int32_t target_blocks = 512; // ideal grid size for gemv
 
 template <class matrix_ptr, class matrix_const_ptr, class real_t, class matrix_t>
-inline int32_t gemv_dispatcher(cudaStream_t stream, real_t* scale, int32_t M, int32_t N, const matrix_t* A, int32_t lda, matrix_t* B, matrix_t* X, int32_t incx, real_t* D) {
+inline int32_t gemv_dispatcher(cudaStream_t stream, real_t* scale, int32_t M, int32_t N, const matrix_t* A, int32_t lda, matrix_t* B, real_t* D) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(matrix_t);
   constexpr int32_t warp_threads[4] { 64, 128, 256, 512 };
   constexpr int32_t warp_reduces[4] { 128 * items_per_thread, 256 * items_per_thread, 512 * items_per_thread, 1024 * items_per_thread };
   constexpr int32_t block_threads = warp_threads[3];
   constexpr int32_t minimal_k = warp_reduces[3];
   int32_t grid[3] { (M + 7) >> 3, (M + 3) >> 2, (M + 1) >> 1 };
-  fused_scal_a<real_t, matrix_t> scal_func(scale[0], scale[1], X, incx, D);
+  fused_scal_a<real_t, matrix_t> scal_func(scale[0], scale[1], B, lda, D);
 
   if (target_blocks <= grid[0] || N < warp_reduces[0]) {
     gemv_kernel <matrix_ptr, matrix_const_ptr, warp_threads[0], block_threads, items_per_thread, 1>
@@ -182,38 +182,42 @@ inline int32_t gemv_dispatcher(cudaStream_t stream, real_t* scale, int32_t M, in
   }
 }
 
-void internal::Cholesky::gemv_scal_f128_dd(cudaStream_t stream, double2* scale, int32_t M, int32_t N, double2* A, int32_t lda, double2* D) {
+void internal::Cholesky::gemv_scal_f128_dd(cudaStream_t stream, double2* scale, int32_t j, int32_t M, int32_t N, double2* A, int32_t lda, double2* D) {
+  swap_cols_f128_dd(stream, j, N, M, A, lda);
   double2* B = &A[N];
   int32_t reduce = 1;
   if (1 <= N && 2 <= M)
-    reduce = gemv_dispatcher<double2* __restrict__, const double2* __restrict__>(stream, scale, M, N, A, lda, B, B, lda, D);
+    reduce = gemv_dispatcher<double2* __restrict__, const double2* __restrict__>(stream, scale, M, N, A, lda, B, D);
   if (reduce)
     reduce_scal_f128_dd(stream, scale, M, reduce, &B[int64_t(1) + int64_t(1 - reduce) * int64_t(lda)], lda, B, lda, D);
 }
 
-void internal::Cholesky::gemv_scal_f128_qf(cudaStream_t stream, float4* scale, int32_t M, int32_t N, float4* A, int32_t lda, float4* D) {
+void internal::Cholesky::gemv_scal_f128_qf(cudaStream_t stream, float4* scale, int32_t j, int32_t M, int32_t N, float4* A, int32_t lda, float4* D) {
+  swap_cols_f128_qf(stream, j, N, M, A, lda);
   float4* B = &A[N];
   int32_t reduce = 1;
   if (1 <= N && 2 <= M)
-    reduce = gemv_dispatcher<float4* __restrict__, const float4* __restrict__>(stream, scale, M, N, A, lda, B, B, lda, D);
+    reduce = gemv_dispatcher<float4* __restrict__, const float4* __restrict__>(stream, scale, M, N, A, lda, B, D);
   if (reduce)
     reduce_scal_f128_qf(stream, scale, M, reduce, &B[int64_t(1) + int64_t(1 - reduce) * int64_t(lda)], lda, B, lda, D);
 }
 
-void internal::Cholesky::gemv_scal_cf128_dd(cudaStream_t stream, double2* scale, int32_t M, int32_t N, complex_double2* A, int32_t lda, double2* D) {
+void internal::Cholesky::gemv_scal_cf128_dd(cudaStream_t stream, double2* scale, int32_t j, int32_t M, int32_t N, complex_double2* A, int32_t lda, double2* D) {
+  swap_cols_cf128_dd(stream, j, N, M, A, lda);
   complex_double2* B = &A[N];
   int32_t reduce = 1;
   if (1 <= N && 2 <= M)
-    reduce = gemv_dispatcher<complex_double2* __restrict__, const complex_double2* __restrict__>(stream, scale, M, N, A, lda, B, B, lda, D);
+    reduce = gemv_dispatcher<complex_double2* __restrict__, const complex_double2* __restrict__>(stream, scale, M, N, A, lda, B, D);
   if (reduce)
     reduce_scal_cf128_dd(stream, scale, M, reduce, &B[int64_t(1) + int64_t(1 - reduce) * int64_t(lda)], lda, B, lda, D);
 }
 
-void internal::Cholesky::gemv_scal_cf128_qf(cudaStream_t stream, float4* scale, int32_t M, int32_t N, complex_float4* A, int32_t lda, float4* D) {
+void internal::Cholesky::gemv_scal_cf128_qf(cudaStream_t stream, float4* scale, int32_t j, int32_t M, int32_t N, complex_float4* A, int32_t lda, float4* D) {
+  swap_cols_cf128_qf(stream, j, N, M, A, lda);
   complex_float4* B = &A[N];
   int32_t reduce = 1;
   if (1 <= N && 2 <= M)
-    reduce = gemv_dispatcher<complex_float4* __restrict__, const complex_float4* __restrict__>(stream, scale, M, N, A, lda, B, B, lda, D);
+    reduce = gemv_dispatcher<complex_float4* __restrict__, const complex_float4* __restrict__>(stream, scale, M, N, A, lda, B, D);
   if (reduce)
     reduce_scal_cf128_qf(stream, scale, M, reduce, &B[int64_t(1) + int64_t(1 - reduce) * int64_t(lda)], lda, B, lda, D);
 }

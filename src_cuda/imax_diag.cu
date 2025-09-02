@@ -9,35 +9,28 @@
 template <class real_t> struct real_pair { real_t real; int32_t idx; };
 
 template <class real_t> struct real_pair_max {
-  __device__ __forceinline__ void cmp_less_w_parity(double a, double b, bool& less, bool& par) {
+  __host__ __device__ __forceinline__ void cmp_less_w_parity(double a, double b, bool& less, bool& par) {
     less = a < b; par = a == b; }
-  __device__ __forceinline__ void cmp_less_w_parity(float a, float b, bool& less, bool& par) {
+  __host__ __device__ __forceinline__ void cmp_less_w_parity(float a, float b, bool& less, bool& par) {
     less = a < b; par = a == b; }
-  __device__ __forceinline__ void cmp_less_w_parity(double2 a, double2 b, bool& less, bool& par) {
+  __host__ __device__ __forceinline__ void cmp_less_w_parity(double2 a, double2 b, bool& less, bool& par) {
     bool l1 = a.x < b.x, l2 = a.y < b.y;
     bool p1 = a.x == b.x;
     less = l1 || (p1 && l2); par = p1 && (a.y == b.y); 
   }
-  __device__ __forceinline__ void cmp_less_w_parity(float4 a, float4 b, bool& less, bool& par) {
+  __host__ __device__ __forceinline__ void cmp_less_w_parity(float4 a, float4 b, bool& less, bool& par) {
     bool l1 = a.x < b.x, l2 = a.y < b.y, l3 = a.z < b.z, l4 = a.w < b.w;
     bool p1 = a.x == b.x, p2 = p1 && (a.y == b.y), p3 = p2 && (a.z == b.z);
     less = l1 || (p1 && l2) || (p2 && l3) || (p3 && l4); par = p3 && (a.w == b.w);
   }
 
-  __device__ __forceinline__ real_pair<real_t> operator()(real_pair<real_t> e1, real_pair<real_t> e2) {
+  __host__ __device__ __forceinline__ real_pair<real_t> operator()(real_pair<real_t> e1, real_pair<real_t> e2) {
     bool less, par;
     cmp_less_w_parity(e1.real, e2.real, less, par);
     real_pair<real_t> val = less ? e2 : e1;
     int32_t id_tie = min(e1.idx, e2.idx);
     return real_pair<real_t>({ val.real, par ? id_tie : val.idx });
   }
-};
-
-struct conj {
-  __device__ __forceinline__ cuDoubleComplex operator()(cuDoubleComplex f) { return make_cuDoubleComplex(f.x, -f.y); }
-  __device__ __forceinline__ cuComplex operator()(cuComplex f) { return make_cuComplex(f.x, -f.y); }
-  __device__ __forceinline__ complex_double2 operator()(complex_double2 f) { return device::dd::make_complex_double2(f.real, device::dd::negate(f.imag)); }
-  __device__ __forceinline__ complex_float4 operator()(complex_float4 f) { return device::qf::make_complex_float4(f.real, device::qf::negate(f.imag)); }
 };
 
 template <class real_t, class real_ptr, class complex_t, class complex_ptr, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD>
@@ -84,14 +77,6 @@ __global__ void imax_kernel(int32_t N, real_ptr X, complex_ptr C, int32_t ldc, i
 
   __syncthreads();
   if (threadIdx.x == 0 && block_res.idx < N) {
-    if constexpr(sizeof(real_t) < sizeof(complex_t)) {
-      conj conj_f;
-      complex_t cp = C[0] = C[block_res.idx];
-      C[block_res.idx * uint64_t(ldc + 1)] = conj_f(cp);
-    }
-    else
-      C[0] = C[block_res.idx * uint64_t(ldc + 1)] = C[block_res.idx];
-
     *i_out = block_res.idx;
     *d_out = block_res.real;
     X[block_res.idx] = X[0];

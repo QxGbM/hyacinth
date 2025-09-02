@@ -28,48 +28,26 @@ inline void imax_dispatcher(cudaStream_t stream, int32_t N, real_t* X, matrix_t*
     imax_f128_qf(stream, N, X, C, ldc, piv, diag);
 }
 
-template <int32_t COMPLEX, device::Precision prec, class matrix_t>
-inline void swap_cols_dispatcher(cudaStream_t stream, int32_t i, int32_t j, int32_t N, matrix_t* A, int32_t lda) {
-  using namespace internal::Cholesky;
-
-  if constexpr(COMPLEX && prec == device::Precision::FP64)
-    swap_cols_cf64(stream, i, j, N, A, lda);
-  else if constexpr(COMPLEX && prec == device::Precision::FP32)
-    swap_cols_cf32(stream, i, j, N, A, lda);
-  else if constexpr(COMPLEX && prec == device::Precision::FP128_DD)
-    swap_cols_cf128_dd(stream, i, j, N, A, lda);
-  else if constexpr(COMPLEX && prec == device::Precision::FP128_QF)
-    swap_cols_cf128_qf(stream, i, j, N, A, lda);
-  else if constexpr(prec == device::Precision::FP64)
-    swap_cols_f64(stream, i, j, N, A, lda);
-  else if constexpr(prec == device::Precision::FP32)
-    swap_cols_f32(stream, i, j, N, A, lda);
-  else if constexpr(prec == device::Precision::FP128_DD)
-    swap_cols_f128_dd(stream, i, j, N, A, lda);
-  else if constexpr(prec == device::Precision::FP128_QF)
-    swap_cols_f128_qf(stream, i, j, N, A, lda);
-}
-
 template <int32_t COMPLEX, device::Precision prec, class real_t, class matrix_t>
-inline void gemv_dispatcher(cudaStream_t stream, cublasHandle_t handle, real_t* scale, int32_t M, int32_t N, matrix_t* A, int32_t lda, real_t* D) {
+inline void gemv_dispatcher(cudaStream_t stream, cublasHandle_t handle, real_t* scale, int32_t j, int32_t M, int32_t N, matrix_t* A, int32_t lda, real_t* D) {
   using namespace internal::Cholesky;
 
   if constexpr(COMPLEX && prec == device::Precision::FP64)
-    gemv_cublas_cf64(stream, handle, scale, M, N, A, lda, D);
+    gemv_cublas_cf64(stream, handle, scale, j, M, N, A, lda, D);
   else if constexpr(COMPLEX && prec == device::Precision::FP32)
-    gemv_cublas_cf32(stream, handle, scale, M, N, A, lda, D);
+    gemv_cublas_cf32(stream, handle, scale, j, M, N, A, lda, D);
   else if constexpr(prec == device::Precision::FP64)
-    gemv_cublas_f64(stream, handle, scale, M, N, A, lda, D);
+    gemv_cublas_f64(stream, handle, scale, j, M, N, A, lda, D);
   else if constexpr(prec == device::Precision::FP32)
-    gemv_cublas_f32(stream, handle, scale, M, N, A, lda, D);
+    gemv_cublas_f32(stream, handle, scale, j, M, N, A, lda, D);
   else if constexpr(COMPLEX && prec == device::Precision::FP128_DD)
-    gemv_scal_cf128_dd(stream, scale, M, N, A, lda, D);
+    gemv_scal_cf128_dd(stream, scale, j, M, N, A, lda, D);
   else if constexpr(COMPLEX && prec == device::Precision::FP128_QF)
-    gemv_scal_cf128_qf(stream, scale, M, N, A, lda, D);
+    gemv_scal_cf128_qf(stream, scale, j, M, N, A, lda, D);
   else if constexpr(prec == device::Precision::FP128_DD)
-    gemv_scal_f128_dd(stream, scale, M, N, A, lda, D);
+    gemv_scal_f128_dd(stream, scale, j, M, N, A, lda, D);
   else if constexpr(prec == device::Precision::FP128_QF)
-    gemv_scal_f128_qf(stream, scale, M, N, A, lda, D);
+    gemv_scal_f128_qf(stream, scale, j, M, N, A, lda, D);
 }
 
 template <device::Precision prec, class real_t>
@@ -98,21 +76,18 @@ inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, double epi, in
   int32_t algnN = (N + 3) & (~3), *pivot_i = &jpiv[algnN + 8];
   real_t* scale = (real_t*)(&jpiv[algnN]), *diag = (real_t*)(&A[uint64_t(N) * uint64_t(lda)]);
 
-  // initialize
   std::iota(jpiv, &jpiv[N], 1);
   cudaMemcpy2DAsync(diag, sizeof(real_t), A, sizeof(matrix_t) * uint64_t(lda + 1), sizeof(real_t), N, cudaMemcpyDeviceToDevice, stream);
   imax_dispatcher<COMPLEX, prec>(stream, N, diag, A, lda, pivot_i, scale);
   cudaStreamSynchronize(stream);
 
   int32_t j = *pivot_i;
-  if (0 < j) {
+  if (0 < j)
     std::iter_swap(&jpiv[0], &jpiv[j]);
-    swap_cols_dispatcher<COMPLEX, prec>(stream, 0, j, N, A, lda);
-  }
 
   rsqrt_real<prec>(scale[0], scale[1]);
   double diag_f64 = conv_f64<prec>(scale[0]);
-  gemv_dispatcher<COMPLEX, prec>(stream, handle, scale, N, 0, A, lda, diag);
+  gemv_dispatcher<COMPLEX, prec>(stream, handle, scale, j, N, 0, A, lda, diag);
 
   epi = epi * diag_f64;
   if (!(std::isnormal(diag_f64) && epi <= diag_f64 && 0 <= j))
@@ -124,17 +99,15 @@ inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, double epi, in
     imax_dispatcher<COMPLEX, prec>(stream, N - i, &diag[i], &A[A_diag], lda, pivot_i, scale);
     cudaStreamSynchronize(stream);
 
-    if (0 < *pivot_i) {
-      int32_t j = *pivot_i + i;
-      std::iter_swap(&jpiv[i], &jpiv[j]);
-      swap_cols_dispatcher<COMPLEX, prec>(stream, i, j, N, A, lda);
-    }
+    int32_t j = *pivot_i;
+    if (0 < j)
+      std::iter_swap(&jpiv[i], &jpiv[i + j]);
 
     rsqrt_real<prec>(scale[0], scale[1]);
     double diag_f64 = conv_f64<prec>(scale[0]);
-    gemv_dispatcher<COMPLEX, prec>(stream, handle, scale, N - i, i, &A[A_col], lda, &diag[i]);
+    gemv_dispatcher<COMPLEX, prec>(stream, handle, scale, j, N - i, i, &A[A_col], lda, &diag[i]);
 
-    if (!(std::isnormal(diag_f64) && epi <= diag_f64 && 0 <= *pivot_i))
+    if (!(std::isnormal(diag_f64) && epi <= diag_f64 && 0 <= j))
       return i + 1;
   }
   return iters;

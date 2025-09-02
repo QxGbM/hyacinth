@@ -87,7 +87,7 @@ template <class real_t, class matrix_t> struct fused_scal_a {
 template <class matrix_const_ptr, int32_t WARP_THREADS, int32_t ITEMS_PER_THREAD, int32_t N, class real_t, class matrix_t>
 __global__ void fix_N_reduce_kernel(int32_t M, matrix_const_ptr A, int64_t lda, fused_scal_a<real_t, matrix_t> scal_func) {
   constexpr int32_t COMPLEX = (sizeof(real_t) < sizeof(matrix_t));
-  constexpr int32_t block_warps = (N + 7) / 8;
+  constexpr int32_t block_warps = N <= 0 ? 1 : ((N + 7) / 8);
   constexpr int32_t elements_thread = N < 8 ? N : 8;
   constexpr int32_t elements_warp = ITEMS_PER_THREAD * WARP_THREADS;
   int32_t small_load_pred = int32_t(blockIdx.x + 1 == gridDim.x && 0 < M);
@@ -106,16 +106,24 @@ __global__ void fix_N_reduce_kernel(int32_t M, matrix_const_ptr A, int64_t lda, 
   cub::BlockLoad<real_t, WARP_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_STRIPED> block_load_rl(temp_load_rl[threadIdx.y]);
 
   int32_t i = blockIdx.x * elements_warp;
-  matrix_const_ptr A_i = &A[uint64_t(i) + uint64_t(threadIdx.y << 3) * lda];
-  if (small_load_pred)
-    block_load.Load(A_i, threadA, M);
-  else
-    block_load.Load(A_i, threadA);
-
-  #pragma unroll
-  for (int32_t k = 1; k < elements_thread; ++k) {
-    block_load.Load(&A_i[uint64_t(k) * lda], threadB);
-    array_sum<COMPLEX>(threadA, threadB);
+  if constexpr(0 < N) {
+    matrix_const_ptr A_i = &A[uint64_t(i) + uint64_t(threadIdx.y << 3) * lda];
+    if (small_load_pred) {
+      block_load.Load(A_i, threadA, M);
+      #pragma unroll
+      for (int32_t k = 1; k < elements_thread; ++k) {
+        block_load.Load(&A_i[uint64_t(k) * lda], threadB, M);
+        array_sum<COMPLEX>(threadA, threadB);
+      }
+    }
+    else {
+      block_load.Load(A_i, threadA);
+      #pragma unroll
+      for (int32_t k = 1; k < elements_thread; ++k) {
+        block_load.Load(&A_i[uint64_t(k) * lda], threadB);
+        array_sum<COMPLEX>(threadA, threadB);
+      }
+    }
   }
 
   if constexpr(8 < N) {
@@ -165,6 +173,8 @@ inline void reduce_scal_dispatcher(cudaStream_t stream, real_t* scale, int32_t M
     int32_t rem = (M - 1) & (elements_warp - 1);
 
     switch (N) {
+      case 0: fix_N_reduce_kernel <matrix_const_ptr, warp_threads, items_per_thread, 0>
+        <<< grid, dim3(warp_threads, 1, 1), 0, stream >>> (rem, A, lda, scal_func); break;
       case 1: fix_N_reduce_kernel <matrix_const_ptr, warp_threads, items_per_thread, 1>
         <<< grid, dim3(warp_threads, 1, 1), 0, stream >>> (rem, A, lda, scal_func); break;
       case 2: fix_N_reduce_kernel <matrix_const_ptr, warp_threads, items_per_thread, 2>
