@@ -52,7 +52,7 @@ namespace device::qf {
     float r0 = a0.x;
     fadd2_err(make_float2(a0.y, a.z), a1, a0, a1); // 2233 - 2334, 4@a1.y
     fadd_err(a0.y, a1.x, a0.y, a1.x); // 33 - 34, 4@a1.x
-    return normalize(make_float4(r0, a0.x, a0.y, a.w + b.w + b.z + a1.y + a1.x));
+    return normalize(make_float4(r0, a0.x, a0.y, a.w + (b.w + b.z) + (a1.y + a1.x)));
   }
 
   __host__ __device__ __forceinline__ void fmul2_err(float2 a, float2 b, float2& prod, float2& err) {
@@ -103,12 +103,6 @@ namespace device::qf {
     fadd2_err(make_float2(a0.y, a.z), a1, a0, a1);
     fadd_err(a0.y, a1.x, a0.y, a1.x);
     return normalize(make_float4(r0, a0.x, a0.y, a.w + a1.y + a1.x));
-  }
-
-  __host__ __device__ __forceinline__ float4 add_double(float4 a, double b) {
-    float b0 = float(b); b = b - double(b0);
-    float b1 = float(b);
-    return add(a, make_float4(b0, b1, b - double(b1), 0.f));
   }
 
   __host__ __device__ __forceinline__ float4 frsqrt(float4 a) {

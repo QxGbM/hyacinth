@@ -79,7 +79,6 @@ __global__ void imax_kernel(int32_t N, real_ptr X, int32_t* __restrict__ i_out, 
   if (threadIdx.x == 0 && block_res.idx < N) {
     *i_out = block_res.idx;
     *d_out = block_res.real;
-    X[block_res.idx] = X[0];
   }
   else if (threadIdx.x == 0)
     *i_out = -1;

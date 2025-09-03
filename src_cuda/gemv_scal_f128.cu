@@ -183,7 +183,7 @@ inline int32_t gemv_dispatcher(cudaStream_t stream, real_t* scale, int32_t M, in
 }
 
 void internal::Cholesky::gemv_scal_f128_dd(cudaStream_t stream, double2* scale, int32_t j, int32_t M, int32_t N, double2* A, int32_t lda, double2* D) {
-  swap_cols_f128_dd(stream, j, N, M, A, lda);
+  swap_cols_f128_dd(stream, j, N, M, A, lda, D);
   double2* B = &A[N];
   int32_t reduce = 1;
   if (1 <= N && 2 <= M)
@@ -193,7 +193,7 @@ void internal::Cholesky::gemv_scal_f128_dd(cudaStream_t stream, double2* scale, 
 }
 
 void internal::Cholesky::gemv_scal_f128_qf(cudaStream_t stream, float4* scale, int32_t j, int32_t M, int32_t N, float4* A, int32_t lda, float4* D) {
-  swap_cols_f128_qf(stream, j, N, M, A, lda);
+  swap_cols_f128_qf(stream, j, N, M, A, lda, D);
   float4* B = &A[N];
   int32_t reduce = 1;
   if (1 <= N && 2 <= M)
@@ -203,7 +203,7 @@ void internal::Cholesky::gemv_scal_f128_qf(cudaStream_t stream, float4* scale, i
 }
 
 void internal::Cholesky::gemv_scal_cf128_dd(cudaStream_t stream, double2* scale, int32_t j, int32_t M, int32_t N, complex_double2* A, int32_t lda, double2* D) {
-  swap_cols_cf128_dd(stream, j, N, M, A, lda);
+  swap_cols_cf128_dd(stream, j, N, M, A, lda, D);
   complex_double2* B = &A[N];
   int32_t reduce = 1;
   if (1 <= N && 2 <= M)
@@ -213,7 +213,7 @@ void internal::Cholesky::gemv_scal_cf128_dd(cudaStream_t stream, double2* scale,
 }
 
 void internal::Cholesky::gemv_scal_cf128_qf(cudaStream_t stream, float4* scale, int32_t j, int32_t M, int32_t N, complex_float4* A, int32_t lda, float4* D) {
-  swap_cols_cf128_qf(stream, j, N, M, A, lda);
+  swap_cols_cf128_qf(stream, j, N, M, A, lda, D);
   complex_float4* B = &A[N];
   int32_t reduce = 1;
   if (1 <= N && 2 <= M)

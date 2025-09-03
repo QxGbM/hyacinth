@@ -27,14 +27,6 @@ namespace device::dd {
     err = (a - s_delta) + b_delta;
   }
 
-  __host__ __device__ __forceinline__ void fadd2_err(double2 a, double2 b, double2& sum, double2& err) {
-    sum = make_double2(a.x + b.x, a.y + b.y);
-    double2 delta = make_double2(a.x - sum.x, a.y - sum.y);
-    double2 s_delta = make_double2(sum.x + delta.x, sum.y + delta.y);
-    double2 b_delta = make_double2(b.x + delta.x, b.y + delta.y);
-    err = make_double2((a.x - s_delta.x) + b_delta.x, (a.y - s_delta.y) + b_delta.y);
-  }
-
   __host__ __device__ __forceinline__ double2 normalize(double2 a) {
     fadd_err(a.x, a.y, a.x, a.y);
     return a;

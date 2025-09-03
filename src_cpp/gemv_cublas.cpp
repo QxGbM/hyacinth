@@ -6,17 +6,27 @@
 #include <cuComplex.h>
 
 void internal::Cholesky::gemv_cublas_f64(cudaStream_t stream, cublasHandle_t handle, double* scale, int32_t j, int32_t M, int32_t N, double* A, int32_t lda, double* D) {
-  swap_cols_f64(stream, j, N, M, A, lda);
+  swap_cols_f64(stream, j, N, M, A, lda, D);
   double* B = &A[N];
   if (1 <= N && 2 <= M) {
     double minus_one = -1., one = 1.;
     cublasDgemv(handle, CUBLAS_OP_T, N, M - 1, &minus_one, &A[lda], lda, A, 1, &one, &B[1], 1);
   }
   reduce_scal_f64(stream, scale, M, 1, &B[1], lda, B, lda, D);
+
+  /*double* B = &A[N];
+  if (1 <= N && 1 <= M) {
+    double minus_one = -1., one = 1.;
+    cublasDgemv(handle, CUBLAS_OP_T, N, M, &minus_one, A, lda, &A[uint64_t(j) * uint64_t(lda)], 1, &one, &A[uint64_t(N) + uint64_t(j) * uint64_t(lda)], 1);
+    //cublasDgemv(handle, CUBLAS_OP_T, N, M, &minus_one, A, lda, A, 1, &one, B, 1);
+  }
+  swap_cols_f64(stream, j, N, M, A, lda);
+  cudaMemcpyAsync(&A[j + N], &A[uint64_t(N) + uint64_t(j) * uint64_t(lda)], sizeof(double), cudaMemcpyDeviceToDevice, stream);
+  reduce_scal_f64(stream, scale, M, 1, &B[1], lda, B, lda, D);*/
 }
 
 void internal::Cholesky::gemv_cublas_f32(cudaStream_t stream, cublasHandle_t handle, float* scale, int32_t j, int32_t M, int32_t N, float* A, int32_t lda, float* D) {
-  swap_cols_f32(stream, j, N, M, A, lda);
+  swap_cols_f32(stream, j, N, M, A, lda, D);
   float* B = &A[N];
   if (1 <= N && 2 <= M) {
     float minus_one = -1.f, one = 1.f;
@@ -26,7 +36,7 @@ void internal::Cholesky::gemv_cublas_f32(cudaStream_t stream, cublasHandle_t han
 }
 
 void internal::Cholesky::gemv_cublas_cf64(cudaStream_t stream, cublasHandle_t handle, double* scale, int32_t j, int32_t M, int32_t N, std::complex<double>* A, int32_t lda, double* D) {
-  swap_cols_cf64(stream, j, N, M, A, lda);
+  swap_cols_cf64(stream, j, N, M, A, lda, D);
   std::complex<double>* B = &A[N];
   if (1 <= N && 2 <= M) {
     std::complex<double> minus_one(-1., 0.), one(1., 0.);
@@ -36,7 +46,7 @@ void internal::Cholesky::gemv_cublas_cf64(cudaStream_t stream, cublasHandle_t ha
 }
 
 void internal::Cholesky::gemv_cublas_cf32(cudaStream_t stream, cublasHandle_t handle, float* scale, int32_t j, int32_t M, int32_t N, std::complex<float>* A, int32_t lda, float* D) {
-  swap_cols_cf32(stream, j, N, M, A, lda);
+  swap_cols_cf32(stream, j, N, M, A, lda, D);
   std::complex<float>* B = &A[N];
   if (1 <= N && 2 <= M) {
     std::complex<float> minus_one(-1.f, 0.f), one(1.f, 0.f);
