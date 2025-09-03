@@ -10,21 +10,13 @@ struct complex_float4;
 
 namespace internal::Cholesky {
 
-  void imax_f64(cudaStream_t stream, int32_t N, double* X, double* C, int32_t ldc, int32_t* piv, double* diag);
+  void imax_f64(cudaStream_t stream, int32_t N, double* X, int32_t* piv, double* diag);
 
-  void imax_f32(cudaStream_t stream, int32_t N, float* X, float* C, int32_t ldc, int32_t* piv, float* diag);
+  void imax_f32(cudaStream_t stream, int32_t N, float* X, int32_t* piv, float* diag);
 
-  void imax_f128_dd(cudaStream_t stream, int32_t N, double2* X, double2* C, int32_t ldc, int32_t* piv, double2* diag);
+  void imax_f128_dd(cudaStream_t stream, int32_t N, double2* X, int32_t* piv, double2* diag);
 
-  void imax_f128_qf(cudaStream_t stream, int32_t N, float4* X, float4* C, int32_t ldc, int32_t* piv, float4* diag);
-
-  void imax_cf64(cudaStream_t stream, int32_t N, double* X, std::complex<double>* C, int32_t ldc, int32_t* piv, double* diag);
-
-  void imax_cf32(cudaStream_t stream, int32_t N, float* X, std::complex<float>* C, int32_t ldc, int32_t* piv, float* diag);
-
-  void imax_cf128_dd(cudaStream_t stream, int32_t N, double2* X, complex_double2* C, int32_t ldc, int32_t* piv, double2* diag);
-
-  void imax_cf128_qf(cudaStream_t stream, int32_t N, float4* X, complex_float4* C, int32_t ldc, int32_t* piv, float4* diag);
+  void imax_f128_qf(cudaStream_t stream, int32_t N, float4* X, int32_t* piv, float4* diag);
 
   void gemv_cublas_f64(cudaStream_t stream, cublasHandle_t handle, double* scale, int32_t j, int32_t M, int32_t N, double* A, int32_t lda, double* D);
 

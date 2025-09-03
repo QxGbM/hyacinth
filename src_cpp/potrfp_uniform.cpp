@@ -6,26 +6,18 @@
 
 #include <numeric>
 
-template <int32_t COMPLEX, device::Precision prec, class real_t, class matrix_t>
-inline void imax_dispatcher(cudaStream_t stream, int32_t N, real_t* X, matrix_t* C, int32_t ldc, int32_t* piv, real_t* diag) {
+template <device::Precision prec, class real_t>
+inline void imax_dispatcher(cudaStream_t stream, int32_t N, real_t* X, int32_t* piv, real_t* diag) {
   using namespace internal::Cholesky;
 
-  if constexpr(COMPLEX && prec == device::Precision::FP64)
-    imax_cf64(stream, N, X, C, ldc, piv, diag);
-  else if constexpr(COMPLEX && prec == device::Precision::FP32)
-    imax_cf32(stream, N, X, C, ldc, piv, diag);
-  else if constexpr(COMPLEX && prec == device::Precision::FP128_DD)
-    imax_cf128_dd(stream, N, X, C, ldc, piv, diag);
-  else if constexpr(COMPLEX && prec == device::Precision::FP128_QF)
-    imax_cf128_qf(stream, N, X, C, ldc, piv, diag);
-  else if constexpr(prec == device::Precision::FP64)
-    imax_f64(stream, N, X, C, ldc, piv, diag);
+  if constexpr(prec == device::Precision::FP64)
+    imax_f64(stream, N, X, piv, diag);
   else if constexpr(prec == device::Precision::FP32)
-    imax_f32(stream, N, X, C, ldc, piv, diag);
+    imax_f32(stream, N, X, piv, diag);
   else if constexpr(prec == device::Precision::FP128_DD)
-    imax_f128_dd(stream, N, X, C, ldc, piv, diag);
+    imax_f128_dd(stream, N, X, piv, diag);
   else if constexpr(prec == device::Precision::FP128_QF)
-    imax_f128_qf(stream, N, X, C, ldc, piv, diag);
+    imax_f128_qf(stream, N, X, piv, diag);
 }
 
 template <int32_t COMPLEX, device::Precision prec, class real_t, class matrix_t>
@@ -78,7 +70,7 @@ inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, double epi, in
 
   std::iota(jpiv, &jpiv[N], 1);
   cudaMemcpy2DAsync(diag, sizeof(real_t), A, sizeof(matrix_t) * uint64_t(lda + 1), sizeof(real_t), N, cudaMemcpyDeviceToDevice, stream);
-  imax_dispatcher<COMPLEX, prec>(stream, N, diag, A, lda, pivot_i, scale);
+  imax_dispatcher<prec>(stream, N, diag, pivot_i, scale);
   cudaStreamSynchronize(stream);
 
   int32_t j = *pivot_i;
@@ -94,9 +86,8 @@ inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, double epi, in
     return 1;
 
   for (int32_t i = 1; i < iters; ++i) {
-    uint64_t A_diag = uint64_t(i) * uint64_t(lda + 1);
     uint64_t A_col = uint64_t(i) * uint64_t(lda);
-    imax_dispatcher<COMPLEX, prec>(stream, N - i, &diag[i], &A[A_diag], lda, pivot_i, scale);
+    imax_dispatcher<prec>(stream, N - i, &diag[i], pivot_i, scale);
     cudaStreamSynchronize(stream);
 
     int32_t j = *pivot_i;

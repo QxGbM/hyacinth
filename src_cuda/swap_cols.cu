@@ -14,12 +14,12 @@ struct conj {
 };
 
 template <int32_t COMPLEX, class matrix_t, int32_t ITEMS_PER_THREAD>
-__device__ __forceinline__ void pred_conj(matrix_t (&a)[ITEMS_PER_THREAD]) {
+__device__ __forceinline__ void pred_conj(matrix_t (&a)[ITEMS_PER_THREAD], matrix_t (&b)[ITEMS_PER_THREAD]) {
   if constexpr (COMPLEX) {
     conj conj_func;
     #pragma unroll
     for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
-      a[i] = conj_func(a[i]);
+    { a[i] = conj_func(a[i]); b[i] = conj_func(b[i]); }
   }
 }
 
@@ -27,17 +27,17 @@ template <class matrix_t, class matrix_ptr, int32_t GRID_BLOCKS, int32_t BLOCK_T
 __global__ void swap_cols_kernel(int32_t j, int32_t M, int32_t N, matrix_ptr A, int64_t lda) {
   constexpr int32_t elements_block = BLOCK_THREADS * ITEMS_PER_THREAD;
   constexpr int32_t elements = GRID_BLOCKS * elements_block;
-  int32_t block_offset = blockIdx.x * elements_block;
+  constexpr int32_t thread_mask = BLOCK_THREADS - 1;
+  constexpr int32_t block_mask = ~(elements_block - 1) & (elements - 1);
+
+  int32_t col_j = j - M, block_offset = int32_t(blockIdx.x) * elements_block;
   int32_t M2 = (M + N) & (elements_block - 1), M1 = (M + N) - M2;
-  int32_t i_thread = M & (BLOCK_THREADS - 1);
-  int32_t j_thread = j & (BLOCK_THREADS - 1);
 
   __shared__ typename cub::BlockLoad<matrix_t, BLOCK_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_STRIPED>::TempStorage temp_load;
   __shared__ typename cub::BlockStore<matrix_t, BLOCK_THREADS, ITEMS_PER_THREAD, cub::BLOCK_STORE_STRIPED>::TempStorage temp_store;
   __shared__ matrix_t Aij[2];
   matrix_t thread_i[ITEMS_PER_THREAD], thread_j[ITEMS_PER_THREAD];
-  matrix_ptr A_col_j = &A[uint64_t(j - M) * lda];
-  matrix_ptr A_row_j = &A[j];
+  matrix_ptr A_col_j = &A[uint64_t(col_j) * lda], A_row_i = &A[M], A_row_j = &A[j];
   int32_t thread_locs[ITEMS_PER_THREAD];
 
   cub::BlockLoad<matrix_t, BLOCK_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_STRIPED> block_load(temp_load);
@@ -47,11 +47,11 @@ __global__ void swap_cols_kernel(int32_t j, int32_t M, int32_t N, matrix_ptr A, 
     { conj conj_func; Aij[0] = conj_func(A_col_j[M]); Aij[1] = conj_func(A_row_j[0]); }
     else
     { Aij[0] = A_col_j[M]; Aij[1] = A_row_j[0]; }
-  __syncthreads();
 
   #pragma unroll
   for (int32_t l = 0; l < ITEMS_PER_THREAD; ++l)
     thread_locs[l] = (int32_t(threadIdx.x) - M) + l * BLOCK_THREADS;
+  __syncthreads();
 
   for (int32_t k = block_offset; k < M1; k += elements) {
     block_load.Load(&A[k], thread_i);
@@ -59,41 +59,42 @@ __global__ void swap_cols_kernel(int32_t j, int32_t M, int32_t N, matrix_ptr A, 
 
     block_store.Store(&A_col_j[k], thread_i);
     block_store.Store(&A[k], thread_j);
-    pred_conj<COMPLEX>(thread_i);
+    pred_conj<COMPLEX>(thread_i, thread_j);
 
     #pragma unroll
     for (int32_t l = 0; l < ITEMS_PER_THREAD; ++l) {
       int32_t col = k + thread_locs[l];
-      if (1 <= col)
-        A_row_j[uint64_t(col) * lda] = thread_i[l];
+      if (1 <= col && col != col_j) {
+        int64_t col_idx = uint64_t(col) * lda;
+        A_row_i[col_idx] = thread_j[l];
+        A_row_j[col_idx] = thread_i[l];
+      }
     }
-
-    if (threadIdx.x == i_thread && k <= M && M < (k + elements_block))
-      A_col_j[M] = Aij[0];
-    if (threadIdx.x == j_thread && k <= j && j < (k + elements_block))
-      A_row_j[0] = Aij[1];
   }
 
-  if (0 < M2 && blockIdx.x == 0) {
+  if (0 < M2 && block_offset == (M1 & block_mask)) {
     block_load.Load(&A[M1], thread_i, M2);
     block_load.Load(&A_col_j[M1], thread_j, M2);
 
     block_store.Store(&A_col_j[M1], thread_i, M2);
     block_store.Store(&A[M1], thread_j, M2);
-    pred_conj<COMPLEX>(thread_i);
+    pred_conj<COMPLEX>(thread_i, thread_j);
 
     #pragma unroll
     for (int32_t l = 0; l < ITEMS_PER_THREAD; ++l) {
       int32_t col = M1 + thread_locs[l];
-      if (1 <= col && col < N)
-        A_row_j[uint64_t(col) * lda] = thread_i[l];
+      if (1 <= col && col != col_j && col < N) {
+        int64_t col_idx = uint64_t(col) * lda;
+        A_row_i[col_idx] = thread_j[l];
+        A_row_j[col_idx] = thread_i[l];
+      }
     }
-
-    if (threadIdx.x == i_thread && M1 <= M)
-      A_col_j[M] = Aij[0];
-    if (threadIdx.x == j_thread && M1 <= j)
-      A_row_j[0] = Aij[1];
   }
+
+  if (threadIdx.x == (M & thread_mask) && block_offset == (M & block_mask))
+    A_col_j[M] = Aij[0];
+  if (threadIdx.x == (j & thread_mask) && block_offset == (j & block_mask))
+    A_row_j[0] = Aij[1];
 }
 
 constexpr int32_t grid_blocks = 128;

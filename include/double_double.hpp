@@ -41,12 +41,11 @@ namespace device::dd {
   }
 
   __host__ __device__ __forceinline__ double2 add(double2 a, double2 b) {
-    fadd2_err(a, b, a, b);
+    fadd_err(a.x, b.x, a.x, b.x);
     a.y += b.x + b.y;
-
-    double s = a.x + a.y;
-    double delta = a.x - s;
-    return make_double2(s, a.y + delta);
+    b.x = a.x + a.y;
+    b.y = a.y + (a.x - b.x);
+    return b;
   }
 
   __host__ __device__ __forceinline__ double2 mul(double2 a, double2 b) {
@@ -54,13 +53,11 @@ namespace device::dd {
     using std::fma;
 #endif
     double s = fma(a.x, b.y, a.y * b.x);
-    double2 d;
-    d.x = a.x * b.x;
-    d.y = s + fma(a.x, b.x, -d.x);
-
-    s = d.x + d.y;
-    double delta = d.x - s;
-    return make_double2(s, d.y + delta);
+    a.y = a.x * b.x;
+    s += fma(a.x, b.x, -a.y);
+    b.x = a.y + s;
+    b.y = s + (a.y - b.x);
+    return b;
   }
 
   __host__ __device__ __forceinline__ double2 fscalbn(double2 a, int32_t exp) {
@@ -71,12 +68,11 @@ namespace device::dd {
   }
 
   __host__ __device__ __forceinline__ double2 add_double(double2 a, double b) {
-    double2 c = normalize(make_double2(a.x, b));
-    c.y += a.y;
-
-    double s = c.x + c.y;
-    double delta = c.x - s;
-    return make_double2(s, c.y + delta);
+    fadd_err(a.x, b, a.x, b);
+    a.y += b;
+    double s = a.x + a.y;
+    b = a.x - s;
+    return make_double2(s, a.y + b);
   }
 
   __host__ __device__ __forceinline__ double2 frsqrt(double2 a) {
