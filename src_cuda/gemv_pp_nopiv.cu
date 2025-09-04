@@ -1,5 +1,4 @@
 
-#include <hyacinth.hpp>
 #include <internal.hpp>
 #include <double_double.hpp>
 #include <quad_float.hpp>
@@ -45,10 +44,8 @@ template <class real_t, class matrix_t> struct gemv_pp_nopiv {
   }
 
   __device__ __forceinline__ void operator()(int64_t i) const {
-    if (0 < i)
-      update_x(X[i], X[i * incx], D[i]);
-    else
-      X[0] = x0;
+    if (0 < i) update_x(X[i], X[i * incx], D[i]);
+      else X[0] = x0;
   }
 };
 

@@ -123,6 +123,12 @@ namespace device::qf {
     return fscalbn(x, p);
   }
 
+  __host__ __device__ __forceinline__ void cmp_less_w_parity(float4 a, float4 b, bool& less, bool& par) {
+    bool l1 = a.x < b.x, l2 = a.y < b.y, l3 = a.z < b.z, l4 = a.w < b.w;
+    bool p1 = a.x == b.x, p2 = p1 && (a.y == b.y), p3 = p2 && (a.z == b.z);
+    less = l1 || (p1 && l2) || (p2 && l3) || (p3 && l4); par = p3 && (a.w == b.w);
+  }
+
   __host__ __device__ __forceinline__ float2 conv_i31_f32(uint32_t i, int32_t expon) {
 #ifndef __CUDA_ARCH__
     using std::scalbnf;

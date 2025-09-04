@@ -83,6 +83,11 @@ namespace device::dd {
     return fscalbn(x, p);
   }
 
+  __host__ __device__ __forceinline__ void cmp_less_w_parity(double2 a, double2 b, bool& less, bool& par) {
+    bool l1 = a.x < b.x, l2 = a.y < b.y, p1 = a.x == b.x;
+    less = l1 || (p1 && l2); par = p1 && (a.y == b.y); 
+  }
+
   __host__ __device__ __forceinline__ double conv_i31_f64(uint32_t i, int32_t expon) {
 #ifndef __CUDA_ARCH__
     using std::scalbn;

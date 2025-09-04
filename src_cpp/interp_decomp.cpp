@@ -49,7 +49,7 @@ int32_t device::interp_decomp_f64(cudaStream_t stream, cublasHandle_t handle, do
   void* work = nullptr;
   int32_t* dpiv = nullptr, algnN = param.algnN;
   cudaMalloc(&work, param.C_bytes);
-  cudaMallocHost((void**)(&dpiv), (N + 12) * sizeof(int32_t));
+  cudaMallocHost((void**)(&dpiv), (N + 24) * sizeof(int32_t));
 
   MixPrecAHA::rATA(stream, handle, param, A, lda, work);
   Cholesky::rpotrfp(stream, handle, epi, &rank, N, work, algnN, param.precC, dpiv);
@@ -72,7 +72,7 @@ int32_t device::interp_decomp_f32(cudaStream_t stream, cublasHandle_t handle, do
   void* work = nullptr;
   int32_t* dpiv = nullptr, algnN = param.algnN;
   cudaMalloc(&work, param.C_bytes);
-  cudaMallocHost((void**)(&dpiv), (N + 12) * sizeof(int32_t));
+  cudaMallocHost((void**)(&dpiv), (N + 24) * sizeof(int32_t));
 
   MixPrecAHA::rATA(stream, handle, param, A, lda, work);
   Cholesky::rpotrfp(stream, handle, epi, &rank, N, work, algnN, param.precC, dpiv);
@@ -134,7 +134,7 @@ int32_t device::interp_decomp_cf64(cudaStream_t stream, cublasHandle_t handle, d
   void* work = nullptr;
   int32_t* dpiv = nullptr, algnN = param.algnN;
   cudaMalloc(&work, param.C_bytes);
-  cudaMallocHost((void**)(&dpiv), (N + 12) * sizeof(int32_t));
+  cudaMallocHost((void**)(&dpiv), (N + 24) * sizeof(int32_t));
 
   MixPrecAHA::cAHA(stream, handle, param, A, lda, work);
   Cholesky::cpotrfp(stream, handle, epi, &rank, N, work, algnN, param.precC, dpiv);
@@ -157,7 +157,7 @@ int32_t device::interp_decomp_cf32(cudaStream_t stream, cublasHandle_t handle, d
   void* work = nullptr;
   int32_t* dpiv = nullptr, algnN = param.algnN;
   cudaMalloc(&work, param.C_bytes);
-  cudaMallocHost((void**)(&dpiv), (N + 12) * sizeof(int32_t));
+  cudaMallocHost((void**)(&dpiv), (N + 24) * sizeof(int32_t));
 
   MixPrecAHA::cAHA(stream, handle, param, A, lda, work);
   Cholesky::cpotrfp(stream, handle, epi, &rank, N, work, algnN, param.precC, dpiv);

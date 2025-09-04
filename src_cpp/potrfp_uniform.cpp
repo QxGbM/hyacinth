@@ -7,17 +7,17 @@
 #include <numeric>
 
 template <device::Precision prec, class real_t>
-inline void imax_dispatcher(cudaStream_t stream, int32_t N, real_t* X, int32_t* piv, real_t* diag) {
+inline void imax_dispatcher(cudaStream_t stream, int32_t N, real_t* X, real_t* diag_piv) {
   using namespace internal::Cholesky;
 
   if constexpr(prec == device::Precision::FP64)
-    imax_f64(stream, N, X, piv, diag);
+    imax_f64(stream, N, X, diag_piv);
   else if constexpr(prec == device::Precision::FP32)
-    imax_f32(stream, N, X, piv, diag);
+    imax_f32(stream, N, X, diag_piv);
   else if constexpr(prec == device::Precision::FP128_DD)
-    imax_f128_dd(stream, N, X, piv, diag);
+    imax_f128_dd(stream, N, X, diag_piv);
   else if constexpr(prec == device::Precision::FP128_QF)
-    imax_f128_qf(stream, N, X, piv, diag);
+    imax_f128_qf(stream, N, X, diag_piv);
 }
 
 template <int32_t COMPLEX, device::Precision prec, class real_t, class matrix_t>
@@ -65,13 +65,12 @@ inline double conv_f64(real_t r) {
 template <device::Precision prec, class real_t, class matrix_t>
 inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t iters, int32_t N, matrix_t* A, int32_t lda, int32_t* jpiv) {
   constexpr int32_t COMPLEX = int32_t(sizeof(real_t) < sizeof(matrix_t));
-  int32_t algnN = (N + 3) & (~3), *pivot_i = &jpiv[algnN + 8];
-  real_t* scale = (real_t*)(&jpiv[algnN]), *diag = (real_t*)(&A[uint64_t(N) * uint64_t(lda)]);
+  real_t* scale = (real_t*)(&jpiv[(N + 7) & (~7)]), *diag = (real_t*)(&A[uint64_t(N) * uint64_t(lda)]);
+  int32_t* pivot_i = (int32_t*)&scale[1];
 
   std::iota(jpiv, &jpiv[N], 1);
   cudaMemcpy2DAsync(diag, sizeof(real_t), A, sizeof(matrix_t) * uint64_t(lda + 1), sizeof(real_t), N, cudaMemcpyDeviceToDevice, stream);
-  imax_dispatcher<prec>(stream, N, diag, pivot_i, scale);
-  cudaStreamSynchronize(stream);
+  imax_dispatcher<prec>(stream, N, diag, scale);
 
   int32_t j = *pivot_i;
   if (0 < j)
@@ -87,8 +86,7 @@ inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, double epi, in
 
   for (int32_t i = 1; i < iters; ++i) {
     uint64_t A_col = uint64_t(i) * uint64_t(lda);
-    imax_dispatcher<prec>(stream, N - i, &diag[i], pivot_i, scale);
-    cudaStreamSynchronize(stream);
+    imax_dispatcher<prec>(stream, N - i, &diag[i], scale);
 
     int32_t j = *pivot_i;
     if (0 < j)
