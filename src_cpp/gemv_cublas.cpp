@@ -6,51 +6,47 @@
 #include <cuComplex.h>
 
 void internal::Cholesky::gemv_cublas_f64(cudaStream_t stream, cublasHandle_t handle, double* scale, int32_t j, int32_t M, int32_t N, double* A, int32_t lda, double* D) {
-  swap_cols_f64(stream, j, N, M, A, lda, D);
-  double* B = &A[N];
-  if (1 <= N && 2 <= M) {
-    double minus_one = -1., one = 1.;
-    cublasDgemv(handle, CUBLAS_OP_T, N, M - 1, &minus_one, &A[lda], lda, A, 1, &one, &B[1], 1);
+  if (1 <= M) {
+    double rsq = scale[1], minus_rsq = -rsq;
+    if (1 <= N)
+      cublasDgemv(handle, CUBLAS_OP_T, N, M, &minus_rsq, A, lda, &A[uint64_t(j) * uint64_t(lda)], 1, &rsq, &A[uint64_t(N) + uint64_t(j) * uint64_t(lda)], 1);
+    else
+      cublasDscal(handle, M, &rsq, &A[uint64_t(N) + uint64_t(j) * uint64_t(lda)], 1);
   }
-  reduce_scal_f64(stream, scale, M, 1, &B[1], lda, B, lda, D);
-
-  /*double* B = &A[N];
-  if (1 <= N && 1 <= M) {
-    double minus_one = -1., one = 1.;
-    cublasDgemv(handle, CUBLAS_OP_T, N, M, &minus_one, A, lda, &A[uint64_t(j) * uint64_t(lda)], 1, &one, &A[uint64_t(N) + uint64_t(j) * uint64_t(lda)], 1);
-    //cublasDgemv(handle, CUBLAS_OP_T, N, M, &minus_one, A, lda, A, 1, &one, B, 1);
-  }
-  swap_cols_f64(stream, j, N, M, A, lda);
-  cudaMemcpyAsync(&A[j + N], &A[uint64_t(N) + uint64_t(j) * uint64_t(lda)], sizeof(double), cudaMemcpyDeviceToDevice, stream);
-  reduce_scal_f64(stream, scale, M, 1, &B[1], lda, B, lda, D);*/
+  swap_cols_f64(stream, j, N, M, scale[0], A, lda, D);
 }
 
 void internal::Cholesky::gemv_cublas_f32(cudaStream_t stream, cublasHandle_t handle, float* scale, int32_t j, int32_t M, int32_t N, float* A, int32_t lda, float* D) {
-  swap_cols_f32(stream, j, N, M, A, lda, D);
-  float* B = &A[N];
-  if (1 <= N && 2 <= M) {
-    float minus_one = -1.f, one = 1.f;
-    cublasSgemv(handle, CUBLAS_OP_T, N, M - 1, &minus_one, &A[lda], lda, A, 1, &one, &B[1], 1);
+  if (1 <= M) {
+    float rsq = scale[1], minus_rsq = -rsq;
+    if (1 <= N)
+      cublasSgemv(handle, CUBLAS_OP_T, N, M, &minus_rsq, A, lda, &A[uint64_t(j) * uint64_t(lda)], 1, &rsq, &A[uint64_t(N) + uint64_t(j) * uint64_t(lda)], 1);
+    else
+      cublasSscal(handle, M, &rsq, &A[uint64_t(N) + uint64_t(j) * uint64_t(lda)], 1);
   }
-  reduce_scal_f32(stream, scale, M, 1, &B[1], lda, B, lda, D);
+  swap_cols_f32(stream, j, N, M, scale[0], A, lda, D);
 }
 
 void internal::Cholesky::gemv_cublas_cf64(cudaStream_t stream, cublasHandle_t handle, double* scale, int32_t j, int32_t M, int32_t N, std::complex<double>* A, int32_t lda, double* D) {
-  swap_cols_cf64(stream, j, N, M, A, lda, D);
-  std::complex<double>* B = &A[N];
-  if (1 <= N && 2 <= M) {
-    std::complex<double> minus_one(-1., 0.), one(1., 0.);
-    cublasZgemv(handle, CUBLAS_OP_C, N, M - 1, (cuDoubleComplex*)&minus_one, (const cuDoubleComplex*)&A[lda], lda, (const cuDoubleComplex*)A, 1, (cuDoubleComplex*)&one, (cuDoubleComplex*)&B[1], 1);
+  if (1 <= M) {
+    std::complex<double> rsq(scale[1], 0.), minus_rsq(-rsq.real(), 0.);
+    if (1 <= N)
+      cublasZgemv(handle, CUBLAS_OP_C, N, M, (cuDoubleComplex*)&minus_rsq, (cuDoubleComplex*)A, lda, 
+        (cuDoubleComplex*)&A[uint64_t(j) * uint64_t(lda)], 1, (cuDoubleComplex*)&rsq, (cuDoubleComplex*)&A[uint64_t(N) + uint64_t(j) * uint64_t(lda)], 1);
+    else
+      cublasZdscal(handle, M, (double*)&rsq, (cuDoubleComplex*)&A[uint64_t(N) + uint64_t(j) * uint64_t(lda)], 1);
   }
-  reduce_scal_cf64(stream, scale, M, 1, &B[1], lda, B, lda, D);
+  swap_cols_cf64(stream, j, N, M, scale[0], A, lda, D);
 }
 
 void internal::Cholesky::gemv_cublas_cf32(cudaStream_t stream, cublasHandle_t handle, float* scale, int32_t j, int32_t M, int32_t N, std::complex<float>* A, int32_t lda, float* D) {
-  swap_cols_cf32(stream, j, N, M, A, lda, D);
-  std::complex<float>* B = &A[N];
-  if (1 <= N && 2 <= M) {
-    std::complex<float> minus_one(-1.f, 0.f), one(1.f, 0.f);
-    cublasCgemv(handle, CUBLAS_OP_C, N, M - 1, (cuComplex*)&minus_one, (const cuComplex*)&A[lda], lda, (const cuComplex*)A, 1, (cuComplex*)&one, (cuComplex*)&B[1], 1);
+  if (1 <= M) {
+    std::complex<float> rsq(scale[1], 0.), minus_rsq(-rsq.real(), 0.);
+    if (1 <= N)
+      cublasCgemv(handle, CUBLAS_OP_C, N, M, (cuComplex*)&minus_rsq, (cuComplex*)A, lda, 
+        (cuComplex*)&A[uint64_t(j) * uint64_t(lda)], 1, (cuComplex*)&rsq, (cuComplex*)&A[uint64_t(N) + uint64_t(j) * uint64_t(lda)], 1);
+    else
+      cublasCsscal(handle, M, (float*)&rsq, (cuComplex*)&A[uint64_t(N) + uint64_t(j) * uint64_t(lda)], 1);
   }
-  reduce_scal_cf32(stream, scale, M, 1, &B[1], lda, B, lda, D);
+  swap_cols_cf32(stream, j, N, M, scale[0], A, lda, D);
 }
