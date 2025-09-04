@@ -24,12 +24,12 @@ set(CU_SOURCES
   src_cuda/decode_strided_i32.cu
   src_cuda/encode_fp_int_strided.cu
   src_cuda/fp_exponent.cu
+  src_cuda/gemv_pp_nopiv.cu
+  src_cuda/gemv_pp.cu
   src_cuda/gemv_scal_f128.cu
   src_cuda/igemm_normalize.cu
   src_cuda/igemm_pp.cu
   src_cuda/imax_diag.cu
-  src_cuda/reduce_scal.cu
-  src_cuda/swap_cols.cu
   src_cuda/utils.cu
 )
 

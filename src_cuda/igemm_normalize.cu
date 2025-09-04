@@ -7,7 +7,7 @@
 #include <thrust/execution_policy.h>
 
 template <uint32_t beta, uint32_t N> struct normalize_i32 {
-  int4* A;
+  int4* __restrict__ A;
   uint64_t stride;
   normalize_i32(uint64_t M, int32_t* A) : A((int4*)A), stride(M >> 2) {}
 
@@ -25,16 +25,8 @@ template <uint32_t beta, uint32_t N> struct normalize_i32 {
       int4 A_k = A[j];
       int4 val = make_int4(A_i.x + A_k.x, A_i.y + A_k.y, A_i.z + A_k.z, A_i.w + A_k.w);
 
-      A_k.x = val.x & iBASE;
-      A_k.y = val.y & iBASE;
-      A_k.z = val.z & iBASE;
-      A_k.w = val.w & iBASE;
-      A[j] = A_k;
-
-      A_i.x = val.x >> BASE;
-      A_i.y = val.y >> BASE;
-      A_i.z = val.z >> BASE;
-      A_i.w = val.w >> BASE;
+      A[j] = make_int4(val.x & iBASE, val.y & iBASE, val.z & iBASE, val.w & iBASE);
+      A_i = make_int4(val.x >> BASE, val.y >> BASE, val.z >> BASE, val.w >> BASE);
     }
 
     uint64_t j = i + uint64_t(N) * stride;

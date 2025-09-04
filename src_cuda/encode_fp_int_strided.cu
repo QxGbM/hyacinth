@@ -8,9 +8,9 @@
 #include <thrust/execution_policy.h>
 
 template <class real_t, class matrix_t> struct encode_func {
-  const matrix_t* A;
-  const int32_t* vec_expon;
-  int8_t* B;
+  const matrix_t* __restrict__ A;
+  const int32_t* __restrict__ vec_expon;
+  int8_t* __restrict__ B;
   int32_t order;
   int64_t M, lda, ldb, strideB;
   encode_func(int32_t order, int32_t M, int32_t N, const matrix_t* A, int32_t lda, const int32_t* vec_expon, int8_t* B, int32_t ldb) :

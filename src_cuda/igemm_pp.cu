@@ -10,8 +10,8 @@
 #include <thrust/execution_policy.h>
 
 template <class real_t> struct scalbn_func {
-  real_t* A;
-  const int32_t* vec_expon;
+  real_t* __restrict__ A;
+  const int32_t* __restrict__ vec_expon;
   int32_t gemm_expon;
   int64_t N, lda;
   scalbn_func(int32_t N, real_t* A, int32_t lda, int32_t gemm_expon, const int32_t* vec_expon) :
@@ -63,9 +63,9 @@ void internal::int8::scal_exponent_f128_qf(cudaStream_t stream, int32_t N, float
 }
 
 template <class real_t, class complex_t> struct convert_func {
-  const real_t* A;
-  const int32_t* vec_expon;
-  complex_t* B;
+  const real_t* __restrict__ A;
+  const int32_t* __restrict__ vec_expon;
+  complex_t* __restrict__ B;
   int32_t gemm_expon;
   int64_t N, lda, strideA, ldb;
   convert_func(int32_t N, const real_t* A, int32_t lda, int32_t gemm_expon, const int32_t* vec_expon, complex_t* B, int32_t ldb) :

@@ -31,8 +31,8 @@ struct convert_fp {
 };
 
 template <int32_t beta, class typeA, class typeB> struct rect_conv_copy {
-  const typeA* A;
-  typeB* B;
+  const typeA* __restrict__ A;
+  typeB* __restrict__ B;
   uint64_t M, lda, ldb;
   rect_conv_copy(int32_t M, const typeA* A, int32_t lda, typeB* B, int32_t ldb) :
     A(A), B(B), M(M), lda(lda), ldb(ldb) {}
@@ -83,8 +83,8 @@ void device::convert_and_copy(cudaStream_t stream, int32_t M, int32_t N, const v
 }
 
 template <int32_t sc0ga1, class real_t> struct permute_copy {
-  const real_t* A;
-  real_t* B;
+  const real_t* __restrict__ A;
+  real_t* __restrict__ B;
   const int32_t* jpiv;
   uint64_t M, lda, ldb;
   permute_copy(int32_t M, const int32_t* jpiv, const real_t* A, int32_t lda, real_t* B, int32_t ldb) :
@@ -123,7 +123,8 @@ void device::copy_permute(cudaStream_t stream, int32_t sc0ga1, int32_t M, int32_
 }
 
 template <class real_t> struct identity {
-  real_t* A, zero, one;
+  real_t* __restrict__ A;
+  real_t zero, one;
   uint64_t M, lda, strideD;
   identity(real_t zero, real_t one, int32_t M, real_t* A, int32_t lda, int32_t strideD) :
     A(A), zero(zero), one(one), M(M), lda(lda), strideD(strideD) {}
