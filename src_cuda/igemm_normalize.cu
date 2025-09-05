@@ -34,8 +34,7 @@ template <uint32_t beta, uint32_t N> struct normalize_i32 {
       int4 A_k = A[j];
       A[j] = make_int4(A_i.x + A_k.x, A_i.y + A_k.y, A_i.z + A_k.z, A_i.w + A_k.w);
     }
-    else
-      A[j] = A_i;
+      else A[j] = A_i;
   }
 };
 

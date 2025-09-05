@@ -89,13 +89,12 @@ namespace device::dd {
   }
 
   __host__ __device__ __forceinline__ double2_idx double2_max(double2_idx a, double2_idx b) {
-#ifndef __CUDA_ARCH__
-    using std::min;
-#endif
     bool l1 = a.real.x < b.real.x, l2 = a.real.y < b.real.y, p1 = a.real.x == b.real.x;
     bool less = l1 || (p1 && l2), par = p1 && (a.real.y == b.real.y);
     double2 val = less ? b.real : a.real;
-    int32_t id = less ? b.idx : par ? min(a.idx, b.idx) : a.idx;
+    int32_t idx_min = a.idx < b.idx ? a.idx : b.idx;
+    int32_t idx_ab = less ? b.idx : a.idx;
+    int32_t id = par ? idx_min : idx_ab;
     return double2_idx({ val, id });
   }
 

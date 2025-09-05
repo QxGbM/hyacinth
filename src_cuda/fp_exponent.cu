@@ -50,7 +50,6 @@ __global__ void vector_exponent_kernel(int32_t order, int32_t M, int32_t N, real
     }
 
     int32_t block_res = block_reduce.Reduce(threadB, expon_f);
-    __syncthreads();
 
     if (threadIdx.x == 0) {
       int32_t vec_e;

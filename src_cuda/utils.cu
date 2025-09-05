@@ -45,10 +45,8 @@ template <int32_t beta, class typeA, class typeB> struct rect_conv_copy {
   __device__ __forceinline__ void operator()(uint64_t i) {
     uint64_t x = i / M, y = i - x * M;
     convert_fp conv;
-    if constexpr(beta) 
-    { typeB a; conv(A[y + x * lda], a); add(a, B[y + x * ldb]); }
-    else
-    conv(A[y + x * lda], B[y + x * ldb]);
+    if constexpr(beta) { typeB a; conv(A[y + x * lda], a); add(a, B[y + x * ldb]); }
+      else conv(A[y + x * lda], B[y + x * ldb]);
   }
 };
 
@@ -93,10 +91,8 @@ template <int32_t sc0ga1, class real_t> struct permute_copy {
   __device__ __forceinline__ void operator()(uint64_t i) {
     uint64_t x = i / M, y = i - x * M;
     uint64_t px = uint64_t(jpiv[x] - 1);
-    if constexpr(sc0ga1)
-      B[y + x * ldb] = A[y + px * lda];
-    else
-      B[y + px * ldb] = A[y + x * lda];
+    if constexpr(sc0ga1) B[y + x * ldb] = A[y + px * lda];
+      else B[y + px * ldb] = A[y + x * lda];
   }
 };
 

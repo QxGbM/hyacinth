@@ -74,7 +74,7 @@ namespace device {
     // epi :: Early termination by relative error, truncated to [0., 1.];
     // [start,end] :: control indices for partial factorization;
     // epi = 0. && end = N, Will not terminate early, unless divided-by-0 occurs at diagonal
-    // pinned_work :: host page-locked memory, minimal length is 4kb (4096 bytes), used in hybrid reduction for pivoting
+    // pinned_work :: host page-locked memory, minimal length is 8kb (8192 bytes), used in hybrid reduction for pivoting
 
     // Return :: Number of iterations [0, N] = matrix rank
     //           The last interation is on the fly when function returns, will need synchronization to access

@@ -137,7 +137,9 @@ namespace device::qf {
     bool less = l1 || (p1 && l2) || (p2 && l3) || (p3 && l4); 
     bool par = p3 && (a.real.w == b.real.w);
     float4 val = less ? b.real : a.real;
-    int32_t id = less ? b.idx : par ? min(a.idx, b.idx) : a.idx;
+    int32_t idx_min = a.idx < b.idx ? a.idx : b.idx;
+    int32_t idx_ab = less ? b.idx : a.idx;
+    int32_t id = par ? idx_min : idx_ab;
     return float4_idx({ val, id });
   }
 

@@ -6,6 +6,7 @@
 #include <cuComplex.h>
 #include <cub/cub.cuh>
 #include <numeric>
+#include <execution>
 
 struct gemv_pp_fused {
   __device__ __forceinline__ void operator()(double c, double& c_conj, double& d) {
@@ -45,13 +46,17 @@ struct real_max {
   __host__ __device__ __forceinline__ double_idx operator()(double_idx a, double_idx b) {
     bool less = a.real < b.real, par = a.real == b.real;
     double val = less ? b.real : a.real;
-    int32_t id = less ? b.idx : par ? min(a.idx, b.idx) : a.idx;
+    int32_t idx_min = a.idx < b.idx ? a.idx : b.idx;
+    int32_t idx_ab = less ? b.idx : a.idx;
+    int32_t id = par ? idx_min : idx_ab;
     return double_idx({ val, id });
   }
   __host__ __device__ __forceinline__ float_idx operator()(float_idx a, float_idx b) {
     bool less = a.real < b.real, par = a.real == b.real;
     float val = less ? b.real : a.real;
-    int32_t id = less ? b.idx : par ? min(a.idx, b.idx) : a.idx;
+    int32_t idx_min = a.idx < b.idx ? a.idx : b.idx;
+    int32_t idx_ab = less ? b.idx : a.idx;
+    int32_t id = par ? idx_min : idx_ab;
     return float_idx({ val, id });
   }
   __host__ __device__ __forceinline__ double2_idx operator()(double2_idx a, double2_idx b) { return device::dd::double2_max(a, b); }
@@ -150,98 +155,114 @@ __global__ void gemv_pp_nopiv_kernel(int32_t N, matrix_t sq, matrix_ptr A, int64
   }
 }
 
-constexpr int32_t grid_blocks = 128;
-constexpr int32_t block_threads = 128;
+constexpr int32_t grid_blocks = 256;
+constexpr int32_t block_threads = 256;
 constexpr int32_t thread_bytes = 32;
 
 void internal::Cholesky::gemv_pp_nopiv_f64(cudaStream_t stream, int32_t M, int32_t N, double sq, double* A, int32_t lda, double* D, double* diag_piv) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(double);
+  constexpr int32_t elements_block = block_threads * items_per_thread;
   double_idx* p = (double_idx*)diag_piv, init({ 0., -1 });
   gemv_pp_nopiv_kernel <double, double* __restrict__, double* __restrict__, double_idx, double_idx* __restrict__, grid_blocks, block_threads, items_per_thread> 
     <<< grid_blocks, block_threads, 0, stream >>> (N - 1, sq, &A[M + 1], lda, &D[1], p);
 
+  int32_t len = std::min(grid_blocks, (N + elements_block - 1) / elements_block);
   cudaStreamSynchronize(stream);
-  double_idx res = std::reduce(p, &p[grid_blocks], init, real_max());
+  double_idx res = std::reduce(std::execution::unseq, p, &p[len], init, real_max());
   p[0] = (0 <= res.idx && res.idx < (N - 1)) ? res : init;
 }
 
 void internal::Cholesky::gemv_pp_nopiv_f32(cudaStream_t stream, int32_t M, int32_t N, float sq, float* A, int32_t lda, float* D, float* diag_piv) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(float);
+  constexpr int32_t elements_block = block_threads * items_per_thread;
   float_idx* p = (float_idx*)diag_piv, init({ 0.f, -1 });
   gemv_pp_nopiv_kernel <float, float* __restrict__, float* __restrict__, float_idx, float_idx* __restrict__, grid_blocks, block_threads, items_per_thread> 
     <<< grid_blocks, block_threads, 0, stream >>> (N - 1, sq, &A[M + 1], lda, &D[1], p);
 
+  int32_t len = std::min(grid_blocks, (N + elements_block - 1) / elements_block);
   cudaStreamSynchronize(stream);
-  float_idx res = std::reduce(p, &p[grid_blocks], init, real_max());
+  float_idx res = std::reduce(std::execution::unseq, p, &p[len], init, real_max());
   p[0] = (0 <= res.idx && res.idx < (N - 1)) ? res : init;
 }
 
 void internal::Cholesky::gemv_pp_nopiv_f128_dd(cudaStream_t stream, int32_t M, int32_t N, double2 sq, double2* A, int32_t lda, double2* D, double2* diag_piv) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(double2);
+  constexpr int32_t elements_block = block_threads * items_per_thread;
   double2_idx* p = (double2_idx*)diag_piv, init({ make_double2(0., 0.), -1 });
   gemv_pp_nopiv_kernel <double2, double2* __restrict__, double2* __restrict__, double2_idx, double2_idx* __restrict__, grid_blocks, block_threads, items_per_thread> 
     <<< grid_blocks, block_threads, 0, stream >>> (N - 1, sq, &A[M + 1], lda, &D[1], p);
 
+  int32_t len = std::min(grid_blocks, (N + elements_block - 1) / elements_block);
   cudaStreamSynchronize(stream);
-  double2_idx res = std::reduce(p, &p[grid_blocks], init, real_max());
+  double2_idx res = std::reduce(std::execution::unseq, p, &p[len], init, real_max());
   p[0] = (0 <= res.idx && res.idx < (N - 1)) ? res : init;
 }
 
 void internal::Cholesky::gemv_pp_nopiv_f128_qf(cudaStream_t stream, int32_t M, int32_t N, float4 sq, float4* A, int32_t lda, float4* D, float4* diag_piv) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(float4);
+  constexpr int32_t elements_block = block_threads * items_per_thread;
   float4_idx* p = (float4_idx*)diag_piv, init({ make_float4(0.f, 0.f, 0.f, 0.f), -1 });
   gemv_pp_nopiv_kernel <float4, float4* __restrict__, float4* __restrict__, float4_idx, float4_idx* __restrict__, grid_blocks, block_threads, items_per_thread> 
     <<< grid_blocks, block_threads, 0, stream >>> (N - 1, sq, &A[M + 1], lda, &D[1], p);
 
+  int32_t len = std::min(grid_blocks, (N + elements_block - 1) / elements_block);
   cudaStreamSynchronize(stream);
-  float4_idx res = std::reduce(p, &p[grid_blocks], init, real_max());
+  float4_idx res = std::reduce(std::execution::unseq, p, &p[len], init, real_max());
   p[0] = (0 <= res.idx && res.idx < (N - 1)) ? res : init;
 }
 
 void internal::Cholesky::gemv_pp_nopiv_cf64(cudaStream_t stream, int32_t M, int32_t N, double sq, std::complex<double>* A, int32_t lda, double* D, double* diag_piv) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(std::complex<double>);
+  constexpr int32_t elements_block = block_threads * items_per_thread;
   cuDoubleComplex sqc = make_cuDoubleComplex(sq, 0.);
   double_idx* p = (double_idx*)diag_piv, init({ 0., -1 });
   gemv_pp_nopiv_kernel <double, double* __restrict__, cuDoubleComplex* __restrict__, double_idx, double_idx* __restrict__, grid_blocks, block_threads, items_per_thread> 
     <<< grid_blocks, block_threads, 0, stream >>> (N - 1, sqc, (cuDoubleComplex*)&A[M + 1], lda, &D[1], p);
 
+  int32_t len = std::min(grid_blocks, (N + elements_block - 1) / elements_block);
   cudaStreamSynchronize(stream);
-  double_idx res = std::reduce(p, &p[grid_blocks], init, real_max());
+  double_idx res = std::reduce(std::execution::unseq, p, &p[len], init, real_max());
   p[0] = (0 <= res.idx && res.idx < (N - 1)) ? res : init;
 }
 
 void internal::Cholesky::gemv_pp_nopiv_cf32(cudaStream_t stream, int32_t M, int32_t N, float sq, std::complex<float>* A, int32_t lda, float* D, float* diag_piv) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(std::complex<float>);
+  constexpr int32_t elements_block = block_threads * items_per_thread;
   cuComplex sqc = make_cuComplex(sq, 0.f);
   float_idx* p = (float_idx*)diag_piv, init({ 0.f, -1 });
   gemv_pp_nopiv_kernel <float, float* __restrict__, cuComplex* __restrict__, float_idx, float_idx* __restrict__, grid_blocks, block_threads, items_per_thread> 
     <<< grid_blocks, block_threads, 0, stream >>> (N - 1, sqc, (cuComplex*)&A[M + 1], lda, &D[1], p);
 
+  int32_t len = std::min(grid_blocks, (N + elements_block - 1) / elements_block);
   cudaStreamSynchronize(stream);
-  float_idx res = std::reduce(p, &p[grid_blocks], init, real_max());
+  float_idx res = std::reduce(std::execution::unseq, p, &p[len], init, real_max());
   p[0] = (0 <= res.idx && res.idx < (N - 1)) ? res : init;
 }
 
 void internal::Cholesky::gemv_pp_nopiv_cf128_dd(cudaStream_t stream, int32_t M, int32_t N, double2 sq, complex_double2* A, int32_t lda, double2* D, double2* diag_piv) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(complex_double2);
+  constexpr int32_t elements_block = block_threads * items_per_thread;
   complex_double2 sqc = device::dd::make_complex_double2(sq, make_double2(0., 0.));
   double2_idx* p = (double2_idx*)diag_piv, init({ make_double2(0., 0.), -1 });
   gemv_pp_nopiv_kernel <double2, double2* __restrict__, complex_double2* __restrict__, double2_idx, double2_idx* __restrict__, grid_blocks, block_threads, items_per_thread> 
     <<< grid_blocks, block_threads, 0, stream >>> (N - 1, sqc, &A[M + 1], lda, &D[1], p);
 
+  int32_t len = std::min(grid_blocks, (N + elements_block - 1) / elements_block);
   cudaStreamSynchronize(stream);
-  double2_idx res = std::reduce(p, &p[grid_blocks], init, real_max());
+  double2_idx res = std::reduce(std::execution::unseq, p, &p[len], init, real_max());
   p[0] = (0 <= res.idx && res.idx < (N - 1)) ? res : init;
 }
 
 void internal::Cholesky::gemv_pp_nopiv_cf128_qf(cudaStream_t stream, int32_t M, int32_t N, float4 sq, complex_float4* A, int32_t lda, float4* D, float4* diag_piv) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(complex_float4);
+  constexpr int32_t elements_block = block_threads * items_per_thread;
   complex_float4 sqc = device::qf::make_complex_float4(sq, make_float4(0.f, 0.f, 0.f, 0.f));
   float4_idx* p = (float4_idx*)diag_piv, init({ make_float4(0.f, 0.f, 0.f, 0.f), -1 });
   gemv_pp_nopiv_kernel <float4, float4* __restrict__, complex_float4* __restrict__, float4_idx, float4_idx* __restrict__, grid_blocks, block_threads, items_per_thread> 
     <<< grid_blocks, block_threads, 0, stream >>> (N - 1, sqc, &A[M + 1], lda, &D[1], p);
 
+  int32_t len = std::min(grid_blocks, (N + elements_block - 1) / elements_block);
   cudaStreamSynchronize(stream);
-  float4_idx res = std::reduce(p, &p[grid_blocks], init, real_max());
+  float4_idx res = std::reduce(std::execution::unseq, p, &p[len], init, real_max());
   p[0] = (0 <= res.idx && res.idx < (N - 1)) ? res : init;
 }
