@@ -21,25 +21,25 @@ inline void imax_dispatcher(cudaStream_t stream, int32_t N, real_t* X, real_t* d
 }
 
 template <int32_t COMPLEX, device::Precision prec, class real_t, class matrix_t>
-inline void gemv_dispatcher(cudaStream_t stream, cublasHandle_t handle, real_t* scale, int32_t j, int32_t M, int32_t N, matrix_t* A, int32_t lda, real_t* D) {
+inline void gemv_dispatcher(cudaStream_t stream, cublasHandle_t handle, real_t* scale, int32_t j, int32_t M, int32_t N, matrix_t* A, int32_t lda, real_t* D, real_t* diag_piv) {
   using namespace internal::Cholesky;
 
   if constexpr(COMPLEX && prec == device::Precision::FP64)
-    gemv_cublas_cf64(stream, handle, scale, j, M, N, A, lda, D);
+    gemv_cublas_cf64(stream, handle, scale, j, M, N, A, lda, D, diag_piv);
   else if constexpr(COMPLEX && prec == device::Precision::FP32)
-    gemv_cublas_cf32(stream, handle, scale, j, M, N, A, lda, D);
+    gemv_cublas_cf32(stream, handle, scale, j, M, N, A, lda, D, diag_piv);
   else if constexpr(prec == device::Precision::FP64)
-    gemv_cublas_f64(stream, handle, scale, j, M, N, A, lda, D);
+    gemv_cublas_f64(stream, handle, scale, j, M, N, A, lda, D, diag_piv);
   else if constexpr(prec == device::Precision::FP32)
-    gemv_cublas_f32(stream, handle, scale, j, M, N, A, lda, D);
+    gemv_cublas_f32(stream, handle, scale, j, M, N, A, lda, D, diag_piv);
   else if constexpr(COMPLEX && prec == device::Precision::FP128_DD)
-    gemv_scal_cf128_dd(stream, scale, j, M, N, A, lda, D);
+    gemv_scal_cf128_dd(stream, scale, j, M, N, A, lda, D, diag_piv);
   else if constexpr(COMPLEX && prec == device::Precision::FP128_QF)
-    gemv_scal_cf128_qf(stream, scale, j, M, N, A, lda, D);
+    gemv_scal_cf128_qf(stream, scale, j, M, N, A, lda, D, diag_piv);
   else if constexpr(prec == device::Precision::FP128_DD)
-    gemv_scal_f128_dd(stream, scale, j, M, N, A, lda, D);
+    gemv_scal_f128_dd(stream, scale, j, M, N, A, lda, D, diag_piv);
   else if constexpr(prec == device::Precision::FP128_QF)
-    gemv_scal_f128_qf(stream, scale, j, M, N, A, lda, D);
+    gemv_scal_f128_qf(stream, scale, j, M, N, A, lda, D, diag_piv);
 }
 
 template <device::Precision prec, class real_t>
@@ -78,7 +78,7 @@ inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, double epi, in
 
   rsqrt_real<prec>(scale[0], scale[1]);
   double diag_f64 = conv_f64<prec>(scale[0]);
-  gemv_dispatcher<COMPLEX, prec>(stream, handle, scale, j, N, 0, A, lda, diag);
+  gemv_dispatcher<COMPLEX, prec>(stream, handle, scale, j, N, 0, A, lda, diag, scale);
 
   epi = epi * diag_f64;
   if (!(std::isnormal(diag_f64) && epi <= diag_f64 && 0 <= j))
@@ -86,15 +86,13 @@ inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, double epi, in
 
   for (int32_t i = 1; i < iters; ++i) {
     uint64_t A_col = uint64_t(i) * uint64_t(lda);
-    imax_dispatcher<prec>(stream, N - i, &diag[i], scale);
-
     int32_t j = *pivot_i;
     if (0 < j)
       std::iter_swap(&jpiv[i], &jpiv[i + j]);
 
     rsqrt_real<prec>(scale[0], scale[1]);
     double diag_f64 = conv_f64<prec>(scale[0]);
-    gemv_dispatcher<COMPLEX, prec>(stream, handle, scale, j, N - i, i, &A[A_col], lda, &diag[i]);
+    gemv_dispatcher<COMPLEX, prec>(stream, handle, scale, j, N - i, i, &A[A_col], lda, &diag[i], scale);
 
     if (!(std::isnormal(diag_f64) && epi <= diag_f64 && 0 <= j))
       return i + 1;

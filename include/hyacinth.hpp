@@ -73,11 +73,12 @@ namespace device {
     int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, const int32_t* jpiv, const std::complex<float>* X, int32_t ldx, double* rel_err);
 
   namespace Cholesky {
-    // jpiv :: host page-locked, minimal length N + 12, 16 byte aligned
+    // jpiv :: host minimal length N
     // A :: device, minimal length lda * (N + 1), 16 byte aligned
     // epi :: Early termination by relative error, truncated to [0., 1.];
     // [start,end] :: control indices for partial factorization;
     // epi = 0. && end = N, Will not terminate early, unless divided-by-0 occurs at diagonal
+    // pinned_work :: host page-locked memory, minimal length is 4kb (4096 bytes), used in hybrid reduction for pivoting
 
     // Return :: Number of iterations [0, N] = matrix rank
     //           The last interation is on the fly when function returns, will need synchronization to access

@@ -16,8 +16,8 @@ void device::cublas_preload_real(cublasHandle_t handle) {
   double2 scale[256]{};
   device::convert_and_copy(stream, N, N, A, N, device::Precision::FP32, 0, A, N, device::Precision::FP32);
   internal::Cholesky::imax_f32(stream, 0, (float*)A, (float*)scale);
-  internal::Cholesky::gemv_scal_f128_dd(stream, scale, 1, 2, 2, &((double2*)A)[8], 4, (double2*)A);
-  internal::Cholesky::gemv_scal_f128_dd(stream, scale, 0, 2, 0, &((double2*)A)[8], 4, (double2*)A);
+  internal::Cholesky::gemv_scal_f128_dd(stream, scale, 1, 2, 2, &((double2*)A)[8], 4, (double2*)A, (double2*)scale);
+  internal::Cholesky::gemv_scal_f128_dd(stream, scale, 0, 2, 0, &((double2*)A)[8], 4, (double2*)A, (double2*)scale);
 
   internal::int8::vexp_f32(stream, 1, N, N, (float*)A, N, (int32_t*)A);
   internal::int8::encode_f32(stream, 1, N, N, (float*)A, N, (int32_t*)A, (int8_t*)A, N);
@@ -57,8 +57,8 @@ void device::cublas_preload_complex(cublasHandle_t handle) {
   double2 scale[256]{};
   device::convert_and_copy(stream, N, N, A, N, device::Precision::FP32, 0, A, N, device::Precision::FP32);
   internal::Cholesky::imax_f32(stream, 0, (float*)A, (float*)scale);
-  internal::Cholesky::gemv_scal_f128_dd(stream, scale, 1, 2, 2, &((double2*)A)[8], 4, (double2*)A);
-  internal::Cholesky::gemv_scal_f128_dd(stream, scale, 0, 2, 0, &((double2*)A)[8], 4, (double2*)A);
+  internal::Cholesky::gemv_scal_f128_dd(stream, scale, 1, 2, 2, &((double2*)A)[8], 4, (double2*)A, (double2*)scale);
+  internal::Cholesky::gemv_scal_f128_dd(stream, scale, 0, 2, 0, &((double2*)A)[8], 4, (double2*)A, (double2*)scale);
 
   internal::int8::vexp_f32(stream, 1, N, N, (float*)A, N, (int32_t*)A);
   internal::int8::encode_f32(stream, 1, N, N, (float*)A, N, (int32_t*)A, (int8_t*)A, N);

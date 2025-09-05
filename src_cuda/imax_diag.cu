@@ -3,9 +3,9 @@
 #include <quad_float.hpp>
 #include <double_double.hpp>
 
-#include <numeric>
 #include <cub/cub.cuh>
 #include <cuComplex.h>
+#include <numeric>
 
 struct __align__(8) float_idx { float real; int32_t idx; };
 struct __align__(16) double_idx { double real; int32_t idx; };
@@ -83,12 +83,10 @@ __global__ void imax_kernel(int32_t N, real_const_ptr X, idx_ptr idx) {
     }
   }
 
-  idx_t block_res;
-  cmp_max.init(block_res);
+  idx_t block_res; cmp_max.init(block_res);
   if (block_offset < N)
     block_res = block_reduce.Reduce(thread_i, cmp_max);
 
-  __syncthreads();
   if (threadIdx.x == 0)
     idx[blockIdx.x] = block_res;
 }

@@ -18,53 +18,53 @@ namespace internal::Cholesky {
 
   void imax_f128_qf(cudaStream_t stream, int32_t N, float4* X, float4* diag_piv);
 
-  void gemv_cublas_f64(cudaStream_t stream, cublasHandle_t handle, double* scale, int32_t j, int32_t M, int32_t N, double* A, int32_t lda, double* D);
+  void gemv_cublas_f64(cudaStream_t stream, cublasHandle_t handle, double* scale, int32_t j, int32_t M, int32_t N, double* A, int32_t lda, double* D, double* diag_piv);
 
-  void gemv_cublas_f32(cudaStream_t stream, cublasHandle_t handle, float* scale, int32_t j, int32_t M, int32_t N, float* A, int32_t lda, float* D);
+  void gemv_cublas_f32(cudaStream_t stream, cublasHandle_t handle, float* scale, int32_t j, int32_t M, int32_t N, float* A, int32_t lda, float* D, float* diag_piv);
 
-  void gemv_cublas_cf64(cudaStream_t stream, cublasHandle_t handle, double* scale, int32_t j, int32_t M, int32_t N, std::complex<double>* A, int32_t lda, double* D);
+  void gemv_cublas_cf64(cudaStream_t stream, cublasHandle_t handle, double* scale, int32_t j, int32_t M, int32_t N, std::complex<double>* A, int32_t lda, double* D, double* diag_piv);
 
-  void gemv_cublas_cf32(cudaStream_t stream, cublasHandle_t handle, float* scale, int32_t j, int32_t M, int32_t N, std::complex<float>* A, int32_t lda, float* D);
+  void gemv_cublas_cf32(cudaStream_t stream, cublasHandle_t handle, float* scale, int32_t j, int32_t M, int32_t N, std::complex<float>* A, int32_t lda, float* D, float* diag_piv);
 
-  void gemv_scal_f128_dd(cudaStream_t stream, double2* scale, int32_t j, int32_t M, int32_t N, double2* A, int32_t lda, double2* D);
+  void gemv_scal_f128_dd(cudaStream_t stream, double2* scale, int32_t j, int32_t M, int32_t N, double2* A, int32_t lda, double2* D, double2* diag_piv);
 
-  void gemv_scal_f128_qf(cudaStream_t stream, float4* scale, int32_t j, int32_t M, int32_t N, float4* A, int32_t lda, float4* D);
+  void gemv_scal_f128_qf(cudaStream_t stream, float4* scale, int32_t j, int32_t M, int32_t N, float4* A, int32_t lda, float4* D, float4* diag_piv);
 
-  void gemv_scal_cf128_dd(cudaStream_t stream, double2* scale, int32_t j, int32_t M, int32_t N, complex_double2* A, int32_t lda, double2* D);
+  void gemv_scal_cf128_dd(cudaStream_t stream, double2* scale, int32_t j, int32_t M, int32_t N, complex_double2* A, int32_t lda, double2* D, double2* diag_piv);
 
-  void gemv_scal_cf128_qf(cudaStream_t stream, float4* scale, int32_t j, int32_t M, int32_t N, complex_float4* A, int32_t lda, float4* D);
+  void gemv_scal_cf128_qf(cudaStream_t stream, float4* scale, int32_t j, int32_t M, int32_t N, complex_float4* A, int32_t lda, float4* D, float4* diag_piv);
 
-  void gemv_pp_f64(cudaStream_t stream, int32_t j, int32_t M, int32_t N, double sq, double* A, int32_t lda, double* D);
+  void gemv_pp_f64(cudaStream_t stream, int32_t j, int32_t M, int32_t N, double sq, double* A, int32_t lda, double* D, double* diag_piv);
 
-  void gemv_pp_f32(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float sq, float* A, int32_t lda, float* D);
+  void gemv_pp_f32(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float sq, float* A, int32_t lda, float* D, float* diag_piv);
 
-  void gemv_pp_f128_dd(cudaStream_t stream, int32_t j, int32_t M, int32_t N, double2 sq, double2* A, int32_t lda, double2* D);
+  void gemv_pp_f128_dd(cudaStream_t stream, int32_t j, int32_t M, int32_t N, double2 sq, double2* A, int32_t lda, double2* D, double2* diag_piv);
 
-  void gemv_pp_f128_qf(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float4 sq, float4* A, int32_t lda, float4* D);
+  void gemv_pp_f128_qf(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float4 sq, float4* A, int32_t lda, float4* D, float4* diag_piv);
 
-  void gemv_pp_cf64(cudaStream_t stream, int32_t j, int32_t M, int32_t N, double sq, std::complex<double>* A, int32_t lda, double* D);
+  void gemv_pp_cf64(cudaStream_t stream, int32_t j, int32_t M, int32_t N, double sq, std::complex<double>* A, int32_t lda, double* D, double* diag_piv);
 
-  void gemv_pp_cf32(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float sq, std::complex<float>* A, int32_t lda, float* D);
+  void gemv_pp_cf32(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float sq, std::complex<float>* A, int32_t lda, float* D, float* diag_piv);
 
-  void gemv_pp_cf128_dd(cudaStream_t stream, int32_t j, int32_t M, int32_t N, double2 sq, complex_double2* A, int32_t lda, double2* D);
+  void gemv_pp_cf128_dd(cudaStream_t stream, int32_t j, int32_t M, int32_t N, double2 sq, complex_double2* A, int32_t lda, double2* D, double2* diag_piv);
 
-  void gemv_pp_cf128_qf(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float4 sq, complex_float4* A, int32_t lda, float4* D);
+  void gemv_pp_cf128_qf(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float4 sq, complex_float4* A, int32_t lda, float4* D, float4* diag_piv);
 
-  void gemv_pp_nopiv_f64(cudaStream_t stream, int32_t M, int32_t N, double sq, double* A, int32_t lda, double* D);
+  void gemv_pp_nopiv_f64(cudaStream_t stream, int32_t M, int32_t N, double sq, double* A, int32_t lda, double* D, double* diag_piv);
 
-  void gemv_pp_nopiv_f32(cudaStream_t stream, int32_t M, int32_t N, float sq, float* A, int32_t lda, float* D);
+  void gemv_pp_nopiv_f32(cudaStream_t stream, int32_t M, int32_t N, float sq, float* A, int32_t lda, float* D, float* diag_piv);
 
-  void gemv_pp_nopiv_f128_dd(cudaStream_t stream, int32_t M, int32_t N, double2 sq, double2* A, int32_t lda, double2* D);
+  void gemv_pp_nopiv_f128_dd(cudaStream_t stream, int32_t M, int32_t N, double2 sq, double2* A, int32_t lda, double2* D, double2* diag_piv);
 
-  void gemv_pp_nopiv_f128_qf(cudaStream_t stream, int32_t M, int32_t N, float4 sq, float4* A, int32_t lda, float4* D);
+  void gemv_pp_nopiv_f128_qf(cudaStream_t stream, int32_t M, int32_t N, float4 sq, float4* A, int32_t lda, float4* D, float4* diag_piv);
 
-  void gemv_pp_nopiv_cf64(cudaStream_t stream, int32_t M, int32_t N, double sq, std::complex<double>* A, int32_t lda, double* D);
+  void gemv_pp_nopiv_cf64(cudaStream_t stream, int32_t M, int32_t N, double sq, std::complex<double>* A, int32_t lda, double* D, double* diag_piv);
 
-  void gemv_pp_nopiv_cf32(cudaStream_t stream, int32_t M, int32_t N, float sq, std::complex<float>* A, int32_t lda, float* D);
+  void gemv_pp_nopiv_cf32(cudaStream_t stream, int32_t M, int32_t N, float sq, std::complex<float>* A, int32_t lda, float* D, float* diag_piv);
 
-  void gemv_pp_nopiv_cf128_dd(cudaStream_t stream, int32_t M, int32_t N, double2 sq, complex_double2* A, int32_t lda, double2* D);
+  void gemv_pp_nopiv_cf128_dd(cudaStream_t stream, int32_t M, int32_t N, double2 sq, complex_double2* A, int32_t lda, double2* D, double2* diag_piv);
 
-  void gemv_pp_nopiv_cf128_qf(cudaStream_t stream, int32_t M, int32_t N, float4 sq, complex_float4* A, int32_t lda, float4* D);
+  void gemv_pp_nopiv_cf128_qf(cudaStream_t stream, int32_t M, int32_t N, float4 sq, complex_float4* A, int32_t lda, float4* D, float4* diag_piv);
 
 };
 
