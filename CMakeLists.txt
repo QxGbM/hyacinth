@@ -5,13 +5,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_BUILD_TYPE Release)
 
 project ("hyacinth" LANGUAGES CXX CUDA)
-set(SM_TARGETS "80;90;100;120")
+set(SM_TARGETS "80;86;89;90;100;120")
 
 find_package(CUDAToolkit REQUIRED)
 
 set(CPP_SOURCES
   src_cpp/check_id.cpp
-  src_cpp/cublas_preload.cpp
   src_cpp/gemv_cublas.cpp
   src_cpp/geqp3_ronly.cpp
   src_cpp/igemm_params.cpp

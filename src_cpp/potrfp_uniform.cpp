@@ -7,7 +7,7 @@
 #include <numeric>
 
 template <device::Precision prec, class real_t>
-inline void imax_dispatcher(cudaStream_t stream, int32_t N, real_t* X, real_t* diag_piv) {
+inline void imax_dispatcher(cudaStream_t stream, int32_t N, const real_t* X, real_t* diag_piv) {
   using namespace internal::Cholesky;
 
   if constexpr(prec == device::Precision::FP64)

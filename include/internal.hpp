@@ -10,13 +10,13 @@ struct complex_float4;
 
 namespace internal::Cholesky {
 
-  void imax_f64(cudaStream_t stream, int32_t N, double* X, double* diag_piv);
+  void imax_f64(cudaStream_t stream, int32_t N, const double* X, double* diag_piv);
 
-  void imax_f32(cudaStream_t stream, int32_t N, float* X, float* diag_piv);
+  void imax_f32(cudaStream_t stream, int32_t N, const float* X, float* diag_piv);
 
-  void imax_f128_dd(cudaStream_t stream, int32_t N, double2* X, double2* diag_piv);
+  void imax_f128_dd(cudaStream_t stream, int32_t N, const double2* X, double2* diag_piv);
 
-  void imax_f128_qf(cudaStream_t stream, int32_t N, float4* X, float4* diag_piv);
+  void imax_f128_qf(cudaStream_t stream, int32_t N, const float4* X, float4* diag_piv);
 
   void gemv_cublas_f64(cudaStream_t stream, cublasHandle_t handle, double* scale, int32_t j, int32_t M, int32_t N, double* A, int32_t lda, double* D, double* diag_piv);
 
