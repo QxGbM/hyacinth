@@ -9,6 +9,11 @@ struct __align__(32) complex_double2 {
   double2 imag;
 };
 
+struct __align__(32) double2_idx {
+  double2 real;
+  int32_t idx;
+};
+
 namespace device::dd {
 
   __host__ __device__ __forceinline__ complex_double2 make_complex_double2(double2 real, double2 imag) {
@@ -83,9 +88,15 @@ namespace device::dd {
     return fscalbn(x, p);
   }
 
-  __host__ __device__ __forceinline__ void cmp_less_w_parity(double2 a, double2 b, bool& less, bool& par) {
-    bool l1 = a.x < b.x, l2 = a.y < b.y, p1 = a.x == b.x;
-    less = l1 || (p1 && l2); par = p1 && (a.y == b.y); 
+  __host__ __device__ __forceinline__ double2_idx double2_max(double2_idx a, double2_idx b) {
+#ifndef __CUDA_ARCH__
+    using std::min;
+#endif
+    bool l1 = a.real.x < b.real.x, l2 = a.real.y < b.real.y, p1 = a.real.x == b.real.x;
+    bool less = l1 || (p1 && l2), par = p1 && (a.real.y == b.real.y);
+    double2 val = less ? b.real : a.real;
+    int32_t id = less ? b.idx : par ? min(a.idx, b.idx) : a.idx;
+    return double2_idx({ val, id });
   }
 
   __host__ __device__ __forceinline__ double conv_i31_f64(uint32_t i, int32_t expon) {

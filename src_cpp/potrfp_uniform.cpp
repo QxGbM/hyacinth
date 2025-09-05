@@ -63,9 +63,9 @@ inline double conv_f64(real_t r) {
 }
 
 template <device::Precision prec, class real_t, class matrix_t>
-inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t iters, int32_t N, matrix_t* A, int32_t lda, int32_t* jpiv) {
+inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t iters, int32_t N, matrix_t* A, int32_t lda, int32_t* jpiv, void* pinned_work) {
   constexpr int32_t COMPLEX = int32_t(sizeof(real_t) < sizeof(matrix_t));
-  real_t* scale = (real_t*)(&jpiv[(N + 7) & (~7)]), *diag = (real_t*)(&A[uint64_t(N) * uint64_t(lda)]);
+  real_t* scale = (real_t*)(pinned_work), *diag = (real_t*)(&A[uint64_t(N) * uint64_t(lda)]);
   int32_t* pivot_i = (int32_t*)&scale[1];
 
   std::iota(jpiv, &jpiv[N], 1);
@@ -102,37 +102,37 @@ inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, double epi, in
   return iters;
 }
 
-void device::Cholesky::rpotrfp(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t* iters, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv) {
+void device::Cholesky::rpotrfp(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t* iters, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv, void* pinned_work) {
   epi = std::min(1., std::max(0., epi));
   int32_t rank = std::min(N, std::max(0, *iters));
   
   switch (precA) {
     case Precision::FP64:
-      *iters = potrfp<Precision::FP64, double, double>(stream, handle, epi, rank, N, (double*)A, lda, jpiv); break;
+      *iters = potrfp<Precision::FP64, double, double>(stream, handle, epi, rank, N, (double*)A, lda, jpiv, pinned_work); break;
     case Precision::FP32:
-      *iters = potrfp<Precision::FP32, float, float>(stream, handle, epi, rank, N, (float*)A, lda, jpiv); break;
+      *iters = potrfp<Precision::FP32, float, float>(stream, handle, epi, rank, N, (float*)A, lda, jpiv, pinned_work); break;
     case Precision::FP128_DD:
-      *iters = potrfp<Precision::FP128_DD, double2, double2>(stream, handle, epi, rank, N, (double2*)A, lda, jpiv); break;
+      *iters = potrfp<Precision::FP128_DD, double2, double2>(stream, handle, epi, rank, N, (double2*)A, lda, jpiv, pinned_work); break;
     case Precision::FP128_QF:
-      *iters = potrfp<Precision::FP128_QF, float4, float4>(stream, handle, epi, rank, N, (float4*)A, lda, jpiv); break;
+      *iters = potrfp<Precision::FP128_QF, float4, float4>(stream, handle, epi, rank, N, (float4*)A, lda, jpiv, pinned_work); break;
     default:
       *iters = -1; break;
   }
 }
 
-void device::Cholesky::cpotrfp(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t* iters, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv) {
+void device::Cholesky::cpotrfp(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t* iters, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv, void* pinned_work) {
   epi = std::min(1., std::max(0., epi));
   int32_t rank = std::min(N, std::max(0, *iters));
 
   switch (precA) {
     case Precision::FP64:
-      *iters = potrfp<Precision::FP64, double, std::complex<double>>(stream, handle, epi, rank, N, (std::complex<double>*)A, lda, jpiv); break;
+      *iters = potrfp<Precision::FP64, double, std::complex<double>>(stream, handle, epi, rank, N, (std::complex<double>*)A, lda, jpiv, pinned_work); break;
     case Precision::FP32:
-      *iters = potrfp<Precision::FP32, float, std::complex<float>>(stream, handle, epi, rank, N, (std::complex<float>*)A, lda, jpiv); break;
+      *iters = potrfp<Precision::FP32, float, std::complex<float>>(stream, handle, epi, rank, N, (std::complex<float>*)A, lda, jpiv, pinned_work); break;
     case Precision::FP128_DD:
-      *iters = potrfp<Precision::FP128_DD, double2, complex_double2>(stream, handle, epi, rank, N, (complex_double2*)A, lda, jpiv); break;
+      *iters = potrfp<Precision::FP128_DD, double2, complex_double2>(stream, handle, epi, rank, N, (complex_double2*)A, lda, jpiv, pinned_work); break;
     case Precision::FP128_QF:
-      *iters = potrfp<Precision::FP128_QF, float4, complex_float4>(stream, handle, epi, rank, N, (complex_float4*)A, lda, jpiv); break;
+      *iters = potrfp<Precision::FP128_QF, float4, complex_float4>(stream, handle, epi, rank, N, (complex_float4*)A, lda, jpiv, pinned_work); break;
     default:
       *iters = -1; break;
   }

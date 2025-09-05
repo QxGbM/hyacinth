@@ -1,6 +1,7 @@
 
 #include <hyacinth.hpp>
 #include <internal.hpp>
+#include <vector>
 
 int32_t device::dgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t M, int32_t N, double* A, int32_t lda, int32_t* jpiv) {
   MixPrecAHA::gemm_params param;
@@ -9,15 +10,16 @@ int32_t device::dgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double 
   void* work = nullptr;
   int32_t* dpiv = nullptr;
   cudaMalloc(&work, param.C_bytes);
-  cudaMallocHost((void**)(&dpiv), (N + 24) * sizeof(int32_t));
+  cudaMallocHost((void**)(&dpiv), 8192);
+  std::vector<int32_t> hpiv(N);
 
   int32_t iters = N; 
   MixPrecAHA::rATA(stream, handle, param, A, lda, work);
-  Cholesky::rpotrfp(stream, handle, 0., &iters, N, work, param.algnN, param.precC, dpiv);
+  Cholesky::rpotrfp(stream, handle, 0., &iters, N, work, param.algnN, param.precC, &hpiv[0], dpiv);
   convert_and_copy(stream, N, N, work, param.algnN, param.precC, 0, A, lda, param.precA);
 
   cudaStreamSynchronize(stream);
-  cudaMemcpy(jpiv, dpiv, sizeof(int32_t) * N, cudaMemcpyDefault);
+  cudaMemcpy(jpiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyDefault);
   cudaFree(work);
   cudaFreeHost(dpiv);
   return iters == N ? 0 : (1 + iters);
@@ -30,15 +32,16 @@ int32_t device::sgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double 
   void* work = nullptr;
   int32_t* dpiv = nullptr;
   cudaMalloc(&work, param.C_bytes);
-  cudaMallocHost((void**)(&dpiv), (N + 24) * sizeof(int32_t));
+  cudaMallocHost((void**)(&dpiv), 8192);
+  std::vector<int32_t> hpiv(N);
 
   int32_t iters = N; 
   MixPrecAHA::rATA(stream, handle, param, A, lda, work);
-  Cholesky::rpotrfp(stream, handle, 0., &iters, N, work, param.algnN, param.precC, dpiv);
+  Cholesky::rpotrfp(stream, handle, 0., &iters, N, work, param.algnN, param.precC, &hpiv[0], dpiv);
   convert_and_copy(stream, N, N, work, param.algnN, param.precC, 0, A, lda, param.precA);
 
   cudaStreamSynchronize(stream);
-  cudaMemcpy(jpiv, dpiv, sizeof(int32_t) * N, cudaMemcpyDefault);
+  cudaMemcpy(jpiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyDefault);
   cudaFree(work);
   cudaFreeHost(dpiv);
   return iters == N ? 0 : (1 + iters);
@@ -51,15 +54,16 @@ int32_t device::zgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double 
   void* work = nullptr;
   int32_t* dpiv = nullptr;
   cudaMalloc(&work, param.C_bytes);
-  cudaMallocHost((void**)(&dpiv), (N + 24) * sizeof(int32_t));
+  cudaMallocHost((void**)(&dpiv), 8192);
+  std::vector<int32_t> hpiv(N);
 
   int32_t iters = N; 
   MixPrecAHA::cAHA(stream, handle, param, A, lda, work);
-  Cholesky::cpotrfp(stream, handle, 0., &iters, N, work, param.algnN, param.precC, dpiv);
+  Cholesky::cpotrfp(stream, handle, 0., &iters, N, work, param.algnN, param.precC, &hpiv[0], dpiv);
   convert_and_copy(stream, 2 * N, N, work, 2 * param.algnN, param.precC, 0, A, 2 * lda, param.precA);
 
   cudaStreamSynchronize(stream);
-  cudaMemcpy(jpiv, dpiv, sizeof(int32_t) * N, cudaMemcpyDefault);
+  cudaMemcpy(jpiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyDefault);
   cudaFree(work);
   cudaFreeHost(dpiv);
   return iters == N ? 0 : (1 + iters);
@@ -72,15 +76,16 @@ int32_t device::cgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double 
   void* work = nullptr;
   int32_t* dpiv = nullptr;
   cudaMalloc(&work, param.C_bytes);
-  cudaMallocHost((void**)(&dpiv), (N + 24) * sizeof(int32_t));
+  cudaMallocHost((void**)(&dpiv), 8192);
+  std::vector<int32_t> hpiv(N);
 
   int32_t iters = N; 
   MixPrecAHA::cAHA(stream, handle, param, A, lda, work);
-  Cholesky::cpotrfp(stream, handle, 0., &iters, N, work, param.algnN, param.precC, dpiv);
+  Cholesky::cpotrfp(stream, handle, 0., &iters, N, work, param.algnN, param.precC, &hpiv[0], dpiv);
   convert_and_copy(stream, 2 * N, N, work, 2 * param.algnN, param.precC, 0, A, 2 * lda, param.precA);
 
   cudaStreamSynchronize(stream);
-  cudaMemcpy(jpiv, dpiv, sizeof(int32_t) * N, cudaMemcpyDefault);
+  cudaMemcpy(jpiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyDefault);
   cudaFree(work);
   cudaFreeHost(dpiv);
   return iters == N ? 0 : (1 + iters);
