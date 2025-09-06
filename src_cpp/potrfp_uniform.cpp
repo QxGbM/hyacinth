@@ -73,29 +73,23 @@ inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, double epi, in
   imax_dispatcher<prec>(stream, N, diag, scale);
 
   int32_t j = *pivot_i;
-  if (0 < j)
-    std::iter_swap(&jpiv[0], &jpiv[j]);
-
   rsqrt_real<prec>(scale[0], scale[1]);
   double diag_f64 = conv_f64<prec>(scale[0]);
-  gemv_dispatcher<COMPLEX, prec>(stream, handle, scale, j, N, 0, A, lda, diag, scale);
-
   epi = epi * diag_f64;
-  if (!(std::isnormal(diag_f64) && epi <= diag_f64 && 0 <= j))
-    return 1;
+
+  if (!(std::isnormal(diag_f64) && epi <= diag_f64 && 0 <= j)) return 0;
+    else if (0 < j) std::iter_swap(&jpiv[0], &jpiv[j]);
+  gemv_dispatcher<COMPLEX, prec>(stream, handle, scale, j, N, 0, A, lda, diag, scale);
 
   for (int32_t i = 1; i < iters; ++i) {
     int64_t A_col = int64_t(i) * int64_t(lda);
     int32_t j = *pivot_i;
-    if (0 < j)
-      std::iter_swap(&jpiv[i], &jpiv[i + j]);
-
     rsqrt_real<prec>(scale[0], scale[1]);
     double diag_f64 = conv_f64<prec>(scale[0]);
-    gemv_dispatcher<COMPLEX, prec>(stream, handle, scale, j, N - i, i, &A[A_col], lda, &diag[i], scale);
 
-    if (!(std::isnormal(diag_f64) && epi <= diag_f64 && 0 <= j))
-      return i + 1;
+    if (!(std::isnormal(diag_f64) && epi <= diag_f64 && 0 <= j)) return i;
+      else if (0 < j) std::iter_swap(&jpiv[i], &jpiv[i + j]);
+    gemv_dispatcher<COMPLEX, prec>(stream, handle, scale, j, N - i, i, &A[A_col], lda, &diag[i], scale);
   }
   return iters;
 }
@@ -114,7 +108,7 @@ void device::Cholesky::rpotrfp(cudaStream_t stream, cublasHandle_t handle, doubl
     case Precision::FP128_QF:
       *iters = potrfp<Precision::FP128_QF, float4, float4>(stream, handle, epi, rank, N, (float4*)A, lda, jpiv, pinned_work); break;
     default:
-      *iters = -1; break;
+      *iters = 0; break;
   }
 }
 
@@ -132,7 +126,7 @@ void device::Cholesky::cpotrfp(cudaStream_t stream, cublasHandle_t handle, doubl
     case Precision::FP128_QF:
       *iters = potrfp<Precision::FP128_QF, float4, complex_float4>(stream, handle, epi, rank, N, (complex_float4*)A, lda, jpiv, pinned_work); break;
     default:
-      *iters = -1; break;
+      *iters = 0; break;
   }
 }
 

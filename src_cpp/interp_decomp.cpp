@@ -45,7 +45,7 @@ int32_t device::interp_decomp_f64(cudaStream_t stream, cublasHandle_t handle, do
   int32_t M, int32_t N, const double* A, int32_t lda, int32_t* jpiv, double* X, int32_t ldx) {
   
   MixPrecAHA::gemm_params param;
-  MixPrecAHA::rATA_params_query(&param, epi, M, N, Precision::FP64);
+  MixPrecAHA::rATA_params_query(&param, &epi, M, N, Precision::FP64);
 
   void* work = nullptr;
   int32_t* dpiv = nullptr, algnN = param.algnN;
@@ -73,7 +73,7 @@ int32_t device::interp_decomp_f32(cudaStream_t stream, cublasHandle_t handle, do
   int32_t M, int32_t N, const float* A, int32_t lda, int32_t* jpiv, float* X, int32_t ldx) {
 
   MixPrecAHA::gemm_params param;
-  MixPrecAHA::rATA_params_query(&param, epi, M, N, Precision::FP32);
+  MixPrecAHA::rATA_params_query(&param, &epi, M, N, Precision::FP32);
 
   void* work = nullptr;
   int32_t* dpiv = nullptr, algnN = param.algnN;
@@ -140,7 +140,7 @@ int32_t device::interp_decomp_cf64(cudaStream_t stream, cublasHandle_t handle, d
   int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int32_t* jpiv, std::complex<double>* X, int32_t ldx) {
 
   MixPrecAHA::gemm_params param;
-  MixPrecAHA::cAHA_params_query(&param, epi, M, N, Precision::FP64);
+  MixPrecAHA::cAHA_params_query(&param, &epi, M, N, Precision::FP64);
 
   void* work = nullptr;
   int32_t* dpiv = nullptr, algnN = param.algnN;
@@ -168,7 +168,7 @@ int32_t device::interp_decomp_cf32(cudaStream_t stream, cublasHandle_t handle, d
   int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int32_t* jpiv, std::complex<float>* X, int32_t ldx) {
 
   MixPrecAHA::gemm_params param;
-  MixPrecAHA::cAHA_params_query(&param, epi, M, N, Precision::FP32);
+  MixPrecAHA::cAHA_params_query(&param, &epi, M, N, Precision::FP32);
 
   void* work = nullptr;
   int32_t* dpiv = nullptr, algnN = param.algnN;

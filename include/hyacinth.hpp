@@ -93,6 +93,9 @@ namespace device {
     //           C is [param.N] by [param.N] with stride [param.algnN]
     //           Precision used is [param.precC], with [param.C_elem_bytes] sized elements
 
+    // Query :: params [out] is written with specified dimensions and accuracy
+    //       :: epi [in/out] contain the accuracy used to compute at output
+
     struct gemm_params {
       Precision precA;
       int32_t M;
@@ -112,9 +115,9 @@ namespace device {
       int64_t C_bytes;
     };
 
-    void rATA_params_query(gemm_params* param, double epi, int32_t M, int32_t N, Precision precA);
+    void rATA_params_query(gemm_params* param, double* epi, int32_t M, int32_t N, Precision precA);
 
-    void cAHA_params_query(gemm_params* param, double epi, int32_t M, int32_t N, Precision precA);
+    void cAHA_params_query(gemm_params* param, double* epi, int32_t M, int32_t N, Precision precA);
 
     void rATA(cudaStream_t stream, cublasHandle_t handle, gemm_params param, const void* A, int32_t lda, void* C);
 

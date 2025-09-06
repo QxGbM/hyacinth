@@ -5,7 +5,7 @@
 
 int32_t device::dgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t M, int32_t N, double* A, int32_t lda, int32_t* jpiv) {
   MixPrecAHA::gemm_params param;
-  MixPrecAHA::rATA_params_query(&param, epi, M, N, Precision::FP64);
+  MixPrecAHA::rATA_params_query(&param, &epi, M, N, Precision::FP64);
 
   void* work = nullptr;
   int32_t* dpiv = nullptr;
@@ -22,12 +22,12 @@ int32_t device::dgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double 
   cudaMemcpy(jpiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyDefault);
   cudaFree(work);
   cudaFreeHost(dpiv);
-  return iters == N ? 0 : (1 + iters);
+  return iters == N ? 0 : (iters + 1);
 }
 
 int32_t device::sgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t M, int32_t N, float* A, int32_t lda, int32_t* jpiv) {
   MixPrecAHA::gemm_params param;
-  MixPrecAHA::rATA_params_query(&param, epi, M, N, Precision::FP32);
+  MixPrecAHA::rATA_params_query(&param, &epi, M, N, Precision::FP32);
 
   void* work = nullptr;
   int32_t* dpiv = nullptr;
@@ -44,12 +44,12 @@ int32_t device::sgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double 
   cudaMemcpy(jpiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyDefault);
   cudaFree(work);
   cudaFreeHost(dpiv);
-  return iters == N ? 0 : (1 + iters);
+  return iters == N ? 0 : (iters + 1);
 }
 
 int32_t device::zgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t M, int32_t N, std::complex<double>* A, int32_t lda, int32_t* jpiv) {
   MixPrecAHA::gemm_params param;
-  MixPrecAHA::cAHA_params_query(&param, epi, M, N, Precision::FP64);
+  MixPrecAHA::cAHA_params_query(&param, &epi, M, N, Precision::FP64);
 
   void* work = nullptr;
   int32_t* dpiv = nullptr;
@@ -66,12 +66,12 @@ int32_t device::zgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double 
   cudaMemcpy(jpiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyDefault);
   cudaFree(work);
   cudaFreeHost(dpiv);
-  return iters == N ? 0 : (1 + iters);
+  return iters == N ? 0 : (iters + 1);
 }
 
 int32_t device::cgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t M, int32_t N, std::complex<float>* A, int32_t lda, int32_t* jpiv) {
   MixPrecAHA::gemm_params param;
-  MixPrecAHA::cAHA_params_query(&param, epi, M, N, Precision::FP32);
+  MixPrecAHA::cAHA_params_query(&param, &epi, M, N, Precision::FP32);
 
   void* work = nullptr;
   int32_t* dpiv = nullptr;
@@ -88,6 +88,6 @@ int32_t device::cgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double 
   cudaMemcpy(jpiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyDefault);
   cudaFree(work);
   cudaFreeHost(dpiv);
-  return iters == N ? 0 : (1 + iters);
+  return iters == N ? 0 : (iters + 1);
 }
 
