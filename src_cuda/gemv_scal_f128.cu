@@ -72,10 +72,10 @@ __global__ void gemv_kernel(int32_t j, int32_t M, int32_t N, matrix_const_ptr A,
   cub::BlockLoad<matrix_t, WARP_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_STRIPED> block_load(temp_load[threadIdx.y]);
   cub::BlockReduce<matrix_t, WARP_THREADS> block_reduce(temp_reduce[threadIdx.y]);
   matrix_t threadA[ITEMS_PER_THREAD], threadX[ITEMS_PER_THREAD], threadB[ITEMS_PER_THREAD];
-  matrix_const_ptr A_j = &A[uint64_t(j) * uint64_t(lda)];
+  matrix_const_ptr A_j = &A[int64_t(j) * int64_t(lda)];
 
   for (int32_t i = (block_warps * blockIdx.x + threadIdx.y); i < M; i += inc_row) {
-    matrix_const_ptr A_i = &A[uint64_t(i) * uint64_t(lda)];
+    matrix_const_ptr A_i = &A[int64_t(i) * int64_t(lda)];
     
     for (int32_t k = 0; k < N1; k += elements) {
       block_load.Load(&A_i[k], threadA);
@@ -113,7 +113,7 @@ inline void gemv_dispatcher(cudaStream_t stream, real_t scale, int32_t j, int32_
   constexpr int32_t block_threads = 512;
   int32_t grid[4] { (M + 15) >> 4, (M + 7) >> 3, (M + 3) >> 2, (M + 1) >> 1 };
   scal_f128<real_t, matrix_t> scal_func(scale);
-  matrix_t* B = &A[uint64_t(N) + uint64_t(j) * uint64_t(lda)];
+  matrix_t* B = &A[int64_t(N) + int64_t(j) * int64_t(lda)];
 
   if (N <= 0) {
     thrust::device_ptr<matrix_t> Bptr(B);

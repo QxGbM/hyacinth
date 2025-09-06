@@ -82,7 +82,7 @@ __global__ void gemv_pp_kernel(int32_t j, int32_t M, int32_t N, matrix_t sq, mat
   __shared__ matrix_t Aij[2];
   matrix_t thread_i[ITEMS_PER_THREAD], thread_j[ITEMS_PER_THREAD]; real_t thread_c[ITEMS_PER_THREAD];
   idx_t thread_x[ITEMS_PER_THREAD]; int32_t thread_locs[ITEMS_PER_THREAD];
-  matrix_ptr A_i = &A[M], A_col_j = &A[uint64_t(M) + uint64_t(j) * lda], A_row_j = &A[j + M];
+  matrix_ptr A_i = &A[M], A_col_j = &A[int64_t(M) + int64_t(j) * lda], A_row_j = &A[j + M];
 
   cub::BlockLoad<real_t, BLOCK_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_STRIPED> block_load_rl(temp_load1);
   cub::BlockLoad<matrix_t, BLOCK_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_STRIPED> block_load(temp_load2);
@@ -114,7 +114,7 @@ __global__ void gemv_pp_kernel(int32_t j, int32_t M, int32_t N, matrix_t sq, mat
       elem_transform(thread_i[i], thread_j[i], thread_c[i]);
       if (col != j) {
         if (0 < col) {
-          int64_t col_idx = uint64_t(col) * lda;
+          int64_t col_idx = int64_t(col) * lda;
           A_i[col_idx] = thread_j[i];
           A_row_j[col_idx] = thread_i[i];
         }
@@ -148,7 +148,7 @@ __global__ void gemv_pp_kernel(int32_t j, int32_t M, int32_t N, matrix_t sq, mat
       if (col != j && col < N) {
         elem_transform(thread_i[i], thread_j[i], thread_c[i]);
         if (0 < col) {
-          int64_t col_idx = uint64_t(col) * lda;
+          int64_t col_idx = int64_t(col) * lda;
           A_i[col_idx] = thread_j[i];
           A_row_j[col_idx] = thread_i[i];
         }
@@ -180,7 +180,7 @@ __global__ void gemv_pp_kernel(int32_t j, int32_t M, int32_t N, matrix_t sq, mat
     { A_col_j[0] = Aij[0]; A_i[0] = Aij[1]; D[j] = D[0]; }
   }
 
-  A_col_j = &A[uint64_t(j) * lda];
+  A_col_j = &A[int64_t(j) * lda];
   N2 = M & (elements_block - 1); N1 = M - N2;
 
   for (int32_t k = block_offset; k < N1; k += elements) {

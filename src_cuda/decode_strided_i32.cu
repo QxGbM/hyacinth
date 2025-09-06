@@ -29,11 +29,11 @@ struct acc_func {
 };
 
 template <class real_t, class real_ptr, int32_t GRID_BLOCKS, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD, int32_t ORDER>
-__global__ void decode_kernel(uint64_t M, int32_t expon, real_ptr A, uint64_t strideA, const int32_t* __restrict__ B) {
+__global__ void decode_kernel(int64_t M, int32_t expon, real_ptr A, int64_t strideA, const int32_t* __restrict__ B) {
   constexpr int32_t acc_bits = 31;
   constexpr int32_t acc_order = 1 + ((ORDER * device::Config::exp_base) + (acc_bits - 1)) / acc_bits;
-  constexpr uint64_t elements_block = ITEMS_PER_THREAD * BLOCK_THREADS;
-  constexpr uint64_t elements = GRID_BLOCKS * elements_block;
+  constexpr int64_t elements_block = ITEMS_PER_THREAD * BLOCK_THREADS;
+  constexpr int64_t elements = GRID_BLOCKS * elements_block;
 
   __shared__ typename cub::BlockLoad<int32_t, BLOCK_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_STRIPED>::TempStorage temp_load;
   __shared__ typename cub::BlockLoad<real_t, BLOCK_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_STRIPED>::TempStorage temp_load_real;
@@ -46,13 +46,13 @@ __global__ void decode_kernel(uint64_t M, int32_t expon, real_ptr A, uint64_t st
   real_t val[ITEMS_PER_THREAD];
   acc_func acc_f;
 
-  for (uint64_t row = (blockIdx.x * elements_block); row < M; row += elements) {
+  for (int64_t row = (blockIdx.x * elements_block); row < M; row += elements) {
     uint32_t acc[ITEMS_PER_THREAD][acc_order]{};
 
     #pragma unroll
     for (int32_t col = 0; col < ORDER; ++col) {
       int32_t e = device::Config::exp_base * col;
-      uint64_t A_col = row + uint64_t(col) * M;
+      int64_t A_col = row + int64_t(col) * M;
       block_load.Load(&B[A_col], threadA);
       
       #pragma unroll
@@ -60,7 +60,7 @@ __global__ void decode_kernel(uint64_t M, int32_t expon, real_ptr A, uint64_t st
         device::int8::add_shifted(acc[i], threadA[i], e);
     }
 
-    uint64_t num_items = min(elements, M - row);
+    int64_t num_items = min(elements, M - row);
     block_load_real.Load(&A[row], val, num_items);
 
     #pragma unroll
@@ -78,8 +78,8 @@ template <class real_t, class real_ptr>
 inline void decode_dispatcher(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t N, real_ptr A, const int32_t* B, int32_t ld) {
   int32_t order = order_hi - order_lo;
   int32_t expon = device::Config::exp_base * order_lo;
-  uint64_t M = uint64_t(N) * uint64_t(ld);
-  uint64_t strideA = M * uint64_t(order);
+  int64_t M = int64_t(N) * int64_t(ld);
+  int64_t strideA = M * int64_t(order);
 
   switch (order) {
     case 1: decode_kernel <real_t, real_ptr, grid_blocks, block_threads, items_per_thread, 1>
@@ -128,7 +128,6 @@ inline void decode_dispatcher(cudaStream_t stream, int32_t order_lo, int32_t ord
       default: break;
     }
   }
-  
 }
 
 void internal::int8::decode_f64_strided_i32(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t N, double* A, const int32_t* B, int32_t ld) {

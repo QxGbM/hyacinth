@@ -8,10 +8,10 @@
 
 template <uint32_t beta, uint32_t N> struct normalize_i32 {
   int4* __restrict__ A;
-  uint64_t stride;
-  normalize_i32(uint64_t M, int32_t* A) : A((int4*)A), stride(M >> 2) {}
+  int64_t stride;
+  normalize_i32(int64_t M, int32_t* A) : A((int4*)A), stride(M >> 2) {}
 
-  __device__ __forceinline__ void operator()(uint64_t i) {
+  __device__ __forceinline__ void operator()(int64_t i) {
     constexpr uint32_t BASE = device::Config::exp_base;
     constexpr uint32_t iBASE = (uint32_t(1) << BASE) - 1;
 
@@ -21,7 +21,7 @@ template <uint32_t beta, uint32_t N> struct normalize_i32 {
 
     #pragma unroll
     for (uint32_t k = 1; k < N; ++k) {
-      uint64_t j = i + uint64_t(k) * stride;
+      int64_t j = i + int64_t(k) * stride;
       int4 A_k = A[j];
       int4 val = make_int4(A_i.x + A_k.x, A_i.y + A_k.y, A_i.z + A_k.z, A_i.w + A_k.w);
 
@@ -29,7 +29,7 @@ template <uint32_t beta, uint32_t N> struct normalize_i32 {
       A_i = make_int4(val.x >> BASE, val.y >> BASE, val.z >> BASE, val.w >> BASE);
     }
 
-    uint64_t j = i + uint64_t(N) * stride;
+    int64_t j = i + int64_t(N) * stride;
     if constexpr (beta) {
       int4 A_k = A[j];
       A[j] = make_int4(A_i.x + A_k.x, A_i.y + A_k.y, A_i.z + A_k.z, A_i.w + A_k.w);
@@ -39,8 +39,8 @@ template <uint32_t beta, uint32_t N> struct normalize_i32 {
 };
 
 template <uint32_t order>
-void normalization_dispatcher(cudaStream_t stream, uint64_t M, int32_t beta, int32_t* A) {
-  thrust::counting_iterator<uint64_t> iter(0);
+inline void normalization_dispatcher(cudaStream_t stream, int64_t M, int32_t beta, int32_t* A) {
+  thrust::counting_iterator<int64_t> iter(0);
   if (beta) {
     normalize_i32<1, order> normalize(M, A);
     thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, normalize.stride, normalize);
@@ -51,7 +51,7 @@ void normalization_dispatcher(cudaStream_t stream, uint64_t M, int32_t beta, int
   }
 }
 
-void internal::int8::i32_normalization(cudaStream_t stream, uint64_t M, int32_t order, int32_t beta, int32_t* A) {
+void internal::int8::i32_normalization(cudaStream_t stream, int64_t M, int32_t order, int32_t beta, int32_t* A) {
   switch(order) {
     case 1: normalization_dispatcher<1>(stream, M, beta, A); break;
     case 2: normalization_dispatcher<2>(stream, M, beta, A); break;

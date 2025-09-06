@@ -18,8 +18,8 @@ int32_t main(int32_t argc, char* argv[]) {
   if (cu_err != cudaSuccess)
   { std::cerr << cudaGetErrorString(cu_err) << std::endl; return -1; }
 
-  int64_t M = 1 < argc ? std::atoi(argv[1]) : 1024;
-  int64_t N = 2 < argc ? std::atoi(argv[2]) : 128;
+  int64_t M = 1 < argc ? std::atoi(argv[1]) : 2048;
+  int64_t N = 2 < argc ? std::atoi(argv[2]) : 2048;
   N = std::min(M, N);
 
   double epi = 3 < argc ? std::atof(argv[3]) : 1.e-6;

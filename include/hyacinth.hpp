@@ -105,11 +105,11 @@ namespace device {
       int32_t algnN;
       int32_t C_elem_bytes;
 
-      uint64_t acc_bytes;
-      uint64_t i8_bytes;
-      uint64_t exp_bytes;
-      uint64_t scratch_bytes;
-      uint64_t C_bytes;
+      int64_t acc_bytes;
+      int64_t i8_bytes;
+      int64_t exp_bytes;
+      int64_t scratch_bytes;
+      int64_t C_bytes;
     };
 
     void rATA_params_query(gemm_params* param, double epi, int32_t M, int32_t N, Precision precA);

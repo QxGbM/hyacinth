@@ -6,30 +6,6 @@
 
 namespace device::int8 {
 
-  __host__ __device__ __forceinline__ int32_t get_double_top_exp(double value) {
-    constexpr uint32_t i11 = (uint32_t(1) << 11) - 1;
-    union { double d; uint64_t u; } v {value};
-    return (int32_t(v.u >> 52) & i11) - 1023;
-  }
-
-  __host__ __device__ __forceinline__ int32_t get_float_top_exp(float value) {
-    constexpr uint32_t i8 = (uint32_t(1) << 8) - 1;
-    union { float d; uint32_t u; } v {value};
-    return (int32_t(v.u >> 23) & i8) - 127;
-  }
-
-  template <uint32_t div>
-  __host__ __device__ __forceinline__ void fast_division_i32(int32_t x, int32_t& quo, int32_t& rem) {
-    constexpr uint32_t m_num = uint32_t((uint64_t(1) << 32) / uint64_t(div));
-    int32_t sign_m_num = m_num + (uint32_t(~x) >> 31); // x-:floor(2^32 / div) x+: ceil(2^32 / div)
-#ifdef __CUDA_ARCH__
-    quo = __mulhi(x, sign_m_num);
-#else
-    quo = int32_t(uint64_t(int64_t(x) * int64_t(sign_m_num)) >> 32);
-#endif
-    rem = x - quo * div;
-  }
-
   template <uint32_t BASE>
   __host__ __device__ __forceinline__ uint32_t pack_4x_int(uint32_t a, uint32_t sign) {
     constexpr uint32_t iBASE = (uint32_t(1) << BASE) - 1;
@@ -99,6 +75,18 @@ namespace device::int8 {
 
     code[0] = pack_4x_int<BASE>(uint32_t(fr_lo), sign);
     code[1] = pack_4x_int<BASE>(uint32_t(fr_hi), sign);
+  }
+
+  template <uint32_t div>
+  __host__ __device__ __forceinline__ void fast_division_i32(int32_t x, int32_t& quo, int32_t& rem) {
+    constexpr uint32_t m_num = uint32_t((uint64_t(1) << 32) / uint64_t(div));
+    int32_t sign_m_num = m_num + (uint32_t(~x) >> 31); // x-:floor(2^32 / div) x+: ceil(2^32 / div)
+#ifdef __CUDA_ARCH__
+    quo = __mulhi(x, sign_m_num);
+#else
+    quo = int32_t(uint64_t(int64_t(x) * int64_t(sign_m_num)) >> 32);
+#endif
+    rem = x - quo * div;
   }
 
   __host__ __device__ __forceinline__ int32_t clamp_i32(int32_t x, int32_t lo, int32_t hi) 

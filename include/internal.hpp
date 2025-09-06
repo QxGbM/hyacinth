@@ -86,7 +86,7 @@ namespace internal::int8 {
 
   void encode_cf32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<float>* C, int32_t ldc, const int32_t* vec_expon, int8_t* A, int32_t lda);
 
-  void i32_normalization(cudaStream_t stream, uint64_t M, int32_t order, int32_t beta, int32_t* A);
+  void i32_normalization(cudaStream_t stream, int64_t M, int32_t order, int32_t beta, int32_t* A);
 
   void scal_exponent_f64(cudaStream_t stream, int32_t N, double* A, int32_t lda, int32_t gemm_expon, const int32_t* vec_expon);
 

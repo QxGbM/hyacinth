@@ -8,9 +8,9 @@ void internal::Cholesky::gemv_cublas_f64(cudaStream_t stream, cublasHandle_t han
   if (2 <= M) {
     double rsq = scale[1], minus_rsq = -rsq;
     if (1 <= N)
-      cublasDgemv(handle, CUBLAS_OP_T, N, M, &minus_rsq, A, lda, &A[uint64_t(j) * uint64_t(lda)], 1, &rsq, &A[uint64_t(N) + uint64_t(j) * uint64_t(lda)], 1);
+      cublasDgemv(handle, CUBLAS_OP_T, N, M, &minus_rsq, A, lda, &A[int64_t(j) * int64_t(lda)], 1, &rsq, &A[int64_t(N) + int64_t(j) * int64_t(lda)], 1);
     else
-      cublasDscal(handle, M, &rsq, &A[uint64_t(N) + uint64_t(j) * uint64_t(lda)], 1);
+      cublasDscal(handle, M, &rsq, &A[int64_t(N) + int64_t(j) * int64_t(lda)], 1);
     gemv_pp_f64(stream, j, N, M, scale[0], A, lda, D, diag_piv);
   }
   else if (1 == M)
@@ -21,9 +21,9 @@ void internal::Cholesky::gemv_cublas_f32(cudaStream_t stream, cublasHandle_t han
   if (2 <= M) {
     float rsq = scale[1], minus_rsq = -rsq;
     if (1 <= N)
-      cublasSgemv(handle, CUBLAS_OP_T, N, M, &minus_rsq, A, lda, &A[uint64_t(j) * uint64_t(lda)], 1, &rsq, &A[uint64_t(N) + uint64_t(j) * uint64_t(lda)], 1);
+      cublasSgemv(handle, CUBLAS_OP_T, N, M, &minus_rsq, A, lda, &A[int64_t(j) * int64_t(lda)], 1, &rsq, &A[int64_t(N) + int64_t(j) * int64_t(lda)], 1);
     else
-      cublasSscal(handle, M, &rsq, &A[uint64_t(N) + uint64_t(j) * uint64_t(lda)], 1);
+      cublasSscal(handle, M, &rsq, &A[int64_t(N) + int64_t(j) * int64_t(lda)], 1);
     gemv_pp_f32(stream, j, N, M, scale[0], A, lda, D, diag_piv);
   }
   else if (1 == M)
@@ -35,9 +35,9 @@ void internal::Cholesky::gemv_cublas_cf64(cudaStream_t stream, cublasHandle_t ha
     std::complex<double> rsq(scale[1], 0.), minus_rsq(-rsq.real(), 0.);
     if (1 <= N)
       cublasZgemv(handle, CUBLAS_OP_C, N, M, (cuDoubleComplex*)&minus_rsq, (cuDoubleComplex*)A, lda, 
-        (cuDoubleComplex*)&A[uint64_t(j) * uint64_t(lda)], 1, (cuDoubleComplex*)&rsq, (cuDoubleComplex*)&A[uint64_t(N) + uint64_t(j) * uint64_t(lda)], 1);
+        (cuDoubleComplex*)&A[int64_t(j) * int64_t(lda)], 1, (cuDoubleComplex*)&rsq, (cuDoubleComplex*)&A[int64_t(N) + int64_t(j) * int64_t(lda)], 1);
     else
-      cublasZdscal(handle, M, (double*)&rsq, (cuDoubleComplex*)&A[uint64_t(N) + uint64_t(j) * uint64_t(lda)], 1);
+      cublasZdscal(handle, M, (double*)&rsq, (cuDoubleComplex*)&A[int64_t(N) + int64_t(j) * int64_t(lda)], 1);
     gemv_pp_cf64(stream, j, N, M, scale[0], A, lda, D, diag_piv);
   }
   else if (1 == M) {
@@ -51,9 +51,9 @@ void internal::Cholesky::gemv_cublas_cf32(cudaStream_t stream, cublasHandle_t ha
     std::complex<float> rsq(scale[1], 0.), minus_rsq(-rsq.real(), 0.);
     if (1 <= N)
       cublasCgemv(handle, CUBLAS_OP_C, N, M, (cuComplex*)&minus_rsq, (cuComplex*)A, lda, 
-        (cuComplex*)&A[uint64_t(j) * uint64_t(lda)], 1, (cuComplex*)&rsq, (cuComplex*)&A[uint64_t(N) + uint64_t(j) * uint64_t(lda)], 1);
+        (cuComplex*)&A[int64_t(j) * int64_t(lda)], 1, (cuComplex*)&rsq, (cuComplex*)&A[int64_t(N) + int64_t(j) * int64_t(lda)], 1);
     else
-      cublasCsscal(handle, M, (float*)&rsq, (cuComplex*)&A[uint64_t(N) + uint64_t(j) * uint64_t(lda)], 1);
+      cublasCsscal(handle, M, (float*)&rsq, (cuComplex*)&A[int64_t(N) + int64_t(j) * int64_t(lda)], 1);
     gemv_pp_cf32(stream, j, N, M, scale[0], A, lda, D, diag_piv);
   }
   else if (1 == M) {

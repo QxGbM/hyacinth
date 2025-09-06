@@ -16,14 +16,14 @@ inline void decode_dispatcher(cudaStream_t stream, int32_t order_lo, int32_t ord
 
 template <device::Precision prec>
 void i8gemm_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32_t iter_k, int32_t algnN, int32_t algnK, const int8_t* AT, const int8_t* A, int32_t orderA, void* C, int32_t* workspace) {
-  uint64_t strideA = uint64_t(algnK) * uint64_t(N);
-  uint64_t strideC = uint64_t(algnN) * uint64_t(N);
+  int64_t strideA = int64_t(algnK) * int64_t(N);
+  int64_t strideC = int64_t(algnN) * int64_t(N);
   int32_t one = 1;
   
   if (algnK <= iter_k) {
     int32_t zero = 0;
     for (int32_t i = 0; i < orderA; ++i) {
-      uint64_t AT_i = uint64_t(i) * strideA;
+      int64_t AT_i = int64_t(i) * strideA;
       cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * orderA, algnK, &one, 
         &AT[AT_i], CUDA_R_8I, algnK, A, CUDA_R_8I, algnK, &zero, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
       decode_dispatcher<prec>(stream, i - orderA, i, N, C, workspace, algnN);
@@ -36,7 +36,7 @@ void i8gemm_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t N, in
     int32_t range_k = algnK - rem;
 
     for (int32_t i = 0; i < orderA; ++i) {
-      uint64_t AT_i = uint64_t(i) * strideA;
+      int64_t AT_i = int64_t(i) * strideA;
       int32_t beta = int32_t(0 != range_k);
       if (beta) {
         int32_t zero = 0;
@@ -46,22 +46,22 @@ void i8gemm_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t N, in
       }
 
       for (int32_t k = iter_k; k < range_k; k += iter_k) {
-        const int8_t* AT_k = &AT[uint64_t(k) + AT_i];
-        const int8_t* AN_k = &A[uint64_t(k)];
+        const int8_t* AT_k = &AT[int64_t(k) + AT_i];
+        const int8_t* AN_k = &A[int64_t(k)];
 
         cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * orderA, iter_k, &one, 
           AT_k, CUDA_R_8I, algnK, AN_k, CUDA_R_8I, algnK, &one, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
         internal::int8::i32_normalization(stream, strideC, orderA, 1, workspace);
       }
 
-      const int8_t* AT_k = &AT[uint64_t(range_k) + AT_i];
-      const int8_t* AN_k = &A[uint64_t(range_k)];
+      const int8_t* AT_k = &AT[int64_t(range_k) + AT_i];
+      const int8_t* AN_k = &A[int64_t(range_k)];
       if (rem <= iter_k)
         cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * orderA, rem, &one, 
           AT_k, CUDA_R_8I, algnK, AN_k, CUDA_R_8I, algnK, &beta, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
       else {
-        const int8_t* AT_k2 = &AT[uint64_t(range_k + iter_h) + AT_i];
-        const int8_t* AN_k2 = &A[uint64_t(range_k + iter_h)];
+        const int8_t* AT_k2 = &AT[int64_t(range_k + iter_h) + AT_i];
+        const int8_t* AN_k2 = &A[int64_t(range_k + iter_h)];
 
         cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * orderA, iter_h, &one, 
           AT_k, CUDA_R_8I, algnK, AN_k, CUDA_R_8I, algnK, &beta, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
@@ -132,8 +132,8 @@ void device::MixPrecAHA::cAHA(cudaStream_t stream, cublasHandle_t handle, gemm_p
 
   int8_t* iA = (int8_t*)(C), *workspace = &iA[param.i8_bytes];
   int8_t* acc = &workspace[param.scratch_bytes], *v_exp = &acc[param.acc_bytes];
-  int8_t* iA_imag = &iA[uint64_t(orderA) * uint64_t(algnM) * uint64_t(N)];
-  int8_t* acc_imag = &acc[uint64_t(param.C_elem_bytes >> 1) * uint64_t(algnN) * uint64_t(N)];
+  int8_t* iA_imag = &iA[int64_t(orderA) * int64_t(algnM) * int64_t(N)];
+  int8_t* acc_imag = &acc[int64_t(param.C_elem_bytes >> 1) * int64_t(algnN) * int64_t(N)];
   cudaMemsetAsync(iA, 0, param.i8_bytes, stream);
   cudaMemsetAsync(acc, 0, param.acc_bytes, stream);
   encode_dispatcher_complex(stream, orderA, M, N, A, lda, param.precA, (int32_t*)v_exp, iA, algnM);

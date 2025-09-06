@@ -65,11 +65,11 @@ inline double conv_f64(real_t r) {
 template <device::Precision prec, class real_t, class matrix_t>
 inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t iters, int32_t N, matrix_t* A, int32_t lda, int32_t* jpiv, void* pinned_work) {
   constexpr int32_t COMPLEX = int32_t(sizeof(real_t) < sizeof(matrix_t));
-  real_t* scale = (real_t*)(pinned_work), *diag = (real_t*)(&A[uint64_t(N) * uint64_t(lda)]);
+  real_t* scale = (real_t*)(pinned_work), *diag = (real_t*)(&A[int64_t(N) * int64_t(lda)]);
   int32_t* pivot_i = (int32_t*)&scale[1];
 
   std::iota(jpiv, &jpiv[N], 1);
-  cudaMemcpy2DAsync(diag, sizeof(real_t), A, sizeof(matrix_t) * uint64_t(lda + 1), sizeof(real_t), N, cudaMemcpyDeviceToDevice, stream);
+  cudaMemcpy2DAsync(diag, sizeof(real_t), A, sizeof(matrix_t) * int64_t(lda + 1), sizeof(real_t), N, cudaMemcpyDeviceToDevice, stream);
   imax_dispatcher<prec>(stream, N, diag, scale);
 
   int32_t j = *pivot_i;
@@ -85,7 +85,7 @@ inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, double epi, in
     return 1;
 
   for (int32_t i = 1; i < iters; ++i) {
-    uint64_t A_col = uint64_t(i) * uint64_t(lda);
+    int64_t A_col = int64_t(i) * int64_t(lda);
     int32_t j = *pivot_i;
     if (0 < j)
       std::iter_swap(&jpiv[i], &jpiv[i + j]);
