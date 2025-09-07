@@ -9,11 +9,6 @@ struct __align__(32) complex_double2 {
   double2 imag;
 };
 
-struct __align__(32) double2_idx {
-  double2 real;
-  int32_t idx;
-};
-
 namespace device::dd {
 
   __host__ __device__ __forceinline__ complex_double2 make_complex_double2(double2 real, double2 imag) {
@@ -86,16 +81,6 @@ namespace device::dd {
     x = mul(x, add_double(mul(x, mul(a, x)), 1.5));
     x = mul(x, add_double(mul(x, mul(a, x)), 1.5));
     return fscalbn(x, p);
-  }
-
-  __host__ __device__ __forceinline__ double2_idx double2_max(double2_idx a, double2_idx b) {
-    bool l1 = a.real.x < b.real.x, l2 = a.real.y < b.real.y, p1 = a.real.x == b.real.x;
-    bool less = l1 || (p1 && l2), par = p1 && (a.real.y == b.real.y);
-    double2 val = less ? b.real : a.real;
-    int32_t idx_min = a.idx < b.idx ? a.idx : b.idx;
-    int32_t idx_ab = less ? b.idx : a.idx;
-    int32_t id = par ? idx_min : idx_ab;
-    return double2_idx({ val, id });
   }
 
   __host__ __device__ __forceinline__ double conv_i31_f64(uint32_t i, int32_t expon) {

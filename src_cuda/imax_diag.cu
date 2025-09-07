@@ -1,35 +1,15 @@
 
 #include <internal.hpp>
-#include <quad_float.hpp>
-#include <double_double.hpp>
+#include <float_max.hpp>
 
 #include <cub/cub.cuh>
 #include <cuComplex.h>
-#include <numeric>
-#include <execution>
-
-struct __align__(8) float_idx { float real; int32_t idx; };
-struct __align__(16) double_idx { double real; int32_t idx; };
 
 struct real_max {
-  __host__ __device__ __forceinline__ double_idx operator()(double_idx a, double_idx b) {
-    bool less = a.real < b.real, par = a.real == b.real;
-    double val = less ? b.real : a.real;
-    int32_t idx_min = a.idx < b.idx ? a.idx : b.idx;
-    int32_t idx_ab = less ? b.idx : a.idx;
-    int32_t id = par ? idx_min : idx_ab;
-    return double_idx({ val, id });
-  }
-  __host__ __device__ __forceinline__ float_idx operator()(float_idx a, float_idx b) {
-    bool less = a.real < b.real, par = a.real == b.real;
-    float val = less ? b.real : a.real;
-    int32_t idx_min = a.idx < b.idx ? a.idx : b.idx;
-    int32_t idx_ab = less ? b.idx : a.idx;
-    int32_t id = par ? idx_min : idx_ab;
-    return float_idx({ val, id });
-  }
-  __host__ __device__ __forceinline__ double2_idx operator()(double2_idx a, double2_idx b) { return device::dd::double2_max(a, b); }
-  __host__ __device__ __forceinline__ float4_idx operator()(float4_idx a, float4_idx b) { return device::qf::float4_max(a, b); }
+  __host__ __device__ __forceinline__ double_idx operator()(double_idx a, double_idx b) { return device::cmp::double_max(a, b); }
+  __host__ __device__ __forceinline__ float_idx operator()(float_idx a, float_idx b) { return device::cmp::float_max(a, b); }
+  __host__ __device__ __forceinline__ double2_idx operator()(double2_idx a, double2_idx b) { return device::cmp::double2_max(a, b); }
+  __host__ __device__ __forceinline__ float4_idx operator()(float4_idx a, float4_idx b) { return device::cmp::float4_max(a, b); }
 
   __host__ __device__ __forceinline__ void init(double_idx& a) { a = double_idx({ 0., -1 }); }
   __host__ __device__ __forceinline__ void init(float_idx& a) { a = float_idx({ 0.f, -1 }); }
@@ -100,54 +80,34 @@ constexpr int32_t grid_blocks = 256;
 constexpr int32_t block_threads = 256;
 constexpr int32_t thread_bytes = 32;
 
-void internal::Cholesky::imax_f64(cudaStream_t stream, int32_t N, const double* X, double* diag_piv) {
+void internal::Cholesky::imax_f64(cudaStream_t stream, int32_t N, const double* X, double* scale) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(double);
   constexpr int32_t elements_block = block_threads * items_per_thread;
-  double_idx* p = (double_idx*)diag_piv, init({ 0., -1 });
   imax_kernel <double, const double* __restrict__, double_idx, double_idx* __restrict__, grid_blocks, block_threads, items_per_thread>
-    <<< grid_blocks, block_threads, 0, stream >>> (N, X, p);
-  
-  int32_t len = std::min(grid_blocks, (N + elements_block - 1) / elements_block);
-  cudaStreamSynchronize(stream);
-  double_idx res = std::reduce(std::execution::unseq, p, &p[len], init, real_max());
-  p[0] = (0 <= res.idx && res.idx < N) ? res : init;
+    <<< grid_blocks, block_threads, 0, stream >>> (N, X, (double_idx*)scale);
+  imax_f64_host_sync(stream, N, std::min(grid_blocks, (N + elements_block - 1) / elements_block), scale);
 }
 
-void internal::Cholesky::imax_f32(cudaStream_t stream, int32_t N, const float* X, float* diag_piv) {
+void internal::Cholesky::imax_f32(cudaStream_t stream, int32_t N, const float* X, float* scale) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(float);
   constexpr int32_t elements_block = block_threads * items_per_thread;
-  float_idx* p = (float_idx*)diag_piv, init({ 0.f, -1 });
   imax_kernel <float, const float* __restrict__, float_idx, float_idx* __restrict__, grid_blocks, block_threads, items_per_thread>
-    <<< grid_blocks, block_threads, 0, stream >>> (N, X, p);
-  
-  int32_t len = std::min(grid_blocks, (N + elements_block - 1) / elements_block);
-  cudaStreamSynchronize(stream);
-  float_idx res = std::reduce(std::execution::unseq, p, &p[len], init, real_max());
-  p[0] = (0 <= res.idx && res.idx < N) ? res : init;
+    <<< grid_blocks, block_threads, 0, stream >>> (N, X, (float_idx*)scale);
+  imax_f32_host_sync(stream, N, std::min(grid_blocks, (N + elements_block - 1) / elements_block), scale);
 }
 
-void internal::Cholesky::imax_f128_dd(cudaStream_t stream, int32_t N, const double2* X, double2* diag_piv) {
+void internal::Cholesky::imax_f128_dd(cudaStream_t stream, int32_t N, const double2* X, double2* scale) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(double2);
   constexpr int32_t elements_block = block_threads * items_per_thread;
-  double2_idx* p = (double2_idx*)diag_piv, init({ make_double2(0., 0.), -1 });
   imax_kernel <double2, const double2* __restrict__, double2_idx, double2_idx* __restrict__, grid_blocks, block_threads, items_per_thread>
-    <<< grid_blocks, block_threads, 0, stream >>> (N, X, p);
-
-  int32_t len = std::min(grid_blocks, (N + elements_block - 1) / elements_block);
-  cudaStreamSynchronize(stream);
-  double2_idx res = std::reduce(std::execution::unseq, p, &p[len], init, real_max());
-  p[0] = (0 <= res.idx && res.idx < N) ? res : init;
+    <<< grid_blocks, block_threads, 0, stream >>> (N, X, (double2_idx*)scale);
+  imax_f128_dd_host_sync(stream, N, std::min(grid_blocks, (N + elements_block - 1) / elements_block), scale);
 }
 
-void internal::Cholesky::imax_f128_qf(cudaStream_t stream, int32_t N, const float4* X, float4* diag_piv) {
+void internal::Cholesky::imax_f128_qf(cudaStream_t stream, int32_t N, const float4* X, float4* scale) {
   constexpr int32_t items_per_thread = thread_bytes / sizeof(float4);
   constexpr int32_t elements_block = block_threads * items_per_thread;
-  float4_idx* p = (float4_idx*)diag_piv, init({ make_float4(0.f, 0.f, 0.f, 0.f), -1 });
   imax_kernel <float4, const float4* __restrict__, float4_idx, float4_idx* __restrict__, grid_blocks, block_threads, items_per_thread>
-    <<< grid_blocks, block_threads, 0, stream >>> (N, X, p);
-
-  int32_t len = std::min(grid_blocks, (N + elements_block - 1) / elements_block);
-  cudaStreamSynchronize(stream);
-  float4_idx res = std::reduce(std::execution::unseq, p, &p[len], init, real_max());
-  p[0] = (0 <= res.idx && res.idx < N) ? res : init;
+    <<< grid_blocks, block_threads, 0, stream >>> (N, X, (float4_idx*)scale);
+  imax_f128_qf_host_sync(stream, N, std::min(grid_blocks, (N + elements_block - 1) / elements_block), scale);
 }

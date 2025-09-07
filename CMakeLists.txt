@@ -15,6 +15,7 @@ set(CPP_SOURCES
   src_cpp/geqp3_ronly.cpp
   src_cpp/igemm_params.cpp
   src_cpp/igemm.cpp
+  src_cpp/imax_host.cpp
   src_cpp/interp_decomp.cpp
   src_cpp/potrfp_uniform.cpp
 )
@@ -33,9 +34,9 @@ set(CU_SOURCES
 )
 
 set_source_files_properties(${CPP_SOURCES} PROPERTIES COMPILE_OPTIONS 
-  "-Wall;-Wextra;-fexceptions")
+  "-march=native;-Wall;-Wextra;-fexceptions")
 set_source_files_properties(${CU_SOURCES} PROPERTIES COMPILE_OPTIONS 
-  "-Xcompiler=-Wall;-Xcompiler=-Wextra;-Xcompiler=-fexceptions")
+  "-Xcompiler=-march=native;-Xcompiler=-Wall;-Xcompiler=-Wextra;-Xcompiler=-fexceptions")
 
 add_library(hyacinth SHARED ${CPP_SOURCES} ${CU_SOURCES})
 set_property(TARGET hyacinth PROPERTY CUDA_ARCHITECTURES ${SM_TARGETS})
