@@ -31,10 +31,11 @@ namespace device::int8 {
 #endif
   }
 
-  template <uint32_t BASE>
-  __host__ __device__ __forceinline__ void encode_double_align(double value, int32_t expon, uint32_t (&code)[4]) {
+  template <uint32_t BASE, uint32_t ORDER>
+  __host__ __device__ __forceinline__ void encode_double_align(double value, int32_t expon, uint32_t (&code)[ORDER]) {
     static_assert(4 <= BASE && BASE <= 7, "Integer quantization base need to be in [2^4,2^7].");
-    constexpr uint32_t BASE4x = 4 * BASE;
+    static_assert(1 <= ORDER && ORDER <= 4, "Integer quantization order need to be in [1,4] for FP64.");
+    constexpr int32_t BASE4x = 4 * BASE;
 
 #ifdef __CUDA_ARCH__
     uint32_t sign = uint32_t(uint64_t(__double_as_longlong(value)) >> 63);
@@ -44,37 +45,55 @@ namespace device::int8 {
     uint32_t sign = uint32_t(v.u >> 63);
 #endif
     value = scalbn(fabs(value), -expon * BASE);
-    double fr_hi = floor(scalbn(value, -2 * int32_t(BASE4x)));
-    double fr_lo = value - scalbn(fr_hi, 2 * BASE4x);
-    uint64_t ir_hi = uint64_t(fr_hi);
-    uint64_t ir_lo = uint64_t(fr_lo);
 
-    code[0] = pack_4x_int<BASE>(uint32_t(ir_lo), sign);
-    code[1] = pack_4x_int<BASE>(uint32_t(ir_lo >> BASE4x), sign);
-    code[2] = pack_4x_int<BASE>(uint32_t(ir_hi), sign);
-    code[3] = pack_4x_int<BASE>(uint32_t(ir_hi >> BASE4x), sign);
+    if constexpr(1 <= ORDER && ORDER <= 2) {
+      uint64_t ir_hi = uint64_t(value);
+      code[0] = pack_4x_int<BASE>(uint32_t(ir_hi), sign);
+      if constexpr(2 == ORDER)
+        code[1] = pack_4x_int<BASE>(uint32_t(ir_hi >> BASE4x), sign);
+    }
+    else {
+      double fr_hi = floor(scalbn(value, -2 * BASE4x));
+      double fr_lo = value - scalbn(fr_hi, 2 * BASE4x);
+      uint64_t ir_hi = uint64_t(fr_hi);
+      uint64_t ir_lo = uint64_t(fr_lo);
+
+      code[0] = pack_4x_int<BASE>(uint32_t(ir_lo), sign);
+      code[1] = pack_4x_int<BASE>(uint32_t(ir_lo >> BASE4x), sign);
+      code[2] = pack_4x_int<BASE>(uint32_t(ir_hi), sign);
+      if constexpr(4 == ORDER)
+        code[3] = pack_4x_int<BASE>(uint32_t(ir_hi >> BASE4x), sign);
+    }
   }
 
-  template <uint32_t BASE>
-  __host__ __device__ __forceinline__ void encode_float_align(float value, int32_t expon, uint32_t (&code)[2]) {
+  template <uint32_t BASE, uint32_t ORDER>
+  __host__ __device__ __forceinline__ void encode_float_align(float value, int32_t expon, uint32_t (&code)[ORDER]) {
     static_assert(4 <= BASE && BASE <= 7, "Integer quantization base need to be in [2^4,2^7].");
-    constexpr uint32_t BASE4x = 4 * BASE;
+    static_assert(1 <= ORDER && ORDER <= 2, "Integer quantization order need to be in [1,2] for FP32.");
+    constexpr int32_t BASE4x = 4 * BASE;
 
 #ifdef __CUDA_ARCH__
     uint32_t sign = uint32_t(__float_as_uint(value)) >> 31;
     value = scalbnf(fabsf(value), -expon * BASE);
-    float fr_hi = floorf(scalbnf(value, -int32_t(BASE4x)));
-    float fr_lo = value - scalbnf(fr_hi, BASE4x);
 #else
     union { float f; uint32_t u; } v {value};
     uint32_t sign = v.u >> 31;
-    value = std::scalbnf(std::fabs(value), -expon * BASE);
-    float fr_hi = std::floor(std::scalbnf(value, -int32_t(BASE4x)));
-    float fr_lo = value - std::scalbnf(fr_hi, BASE4x);
+    value = scalbnf(std::fabs(value), -expon * BASE);
 #endif
 
-    code[0] = pack_4x_int<BASE>(uint32_t(fr_lo), sign);
-    code[1] = pack_4x_int<BASE>(uint32_t(fr_hi), sign);
+    if constexpr(ORDER == 1)
+      code[0] = pack_4x_int<BASE>(uint32_t(value), sign);
+    else {
+#ifdef __CUDA_ARCH__
+      float fr_hi = floorf(scalbnf(value, -BASE4x));
+      float fr_lo = value - scalbnf(fr_hi, BASE4x);
+#else
+      float fr_hi = std::floor(std::scalbnf(value, -BASE4x));
+      float fr_lo = value - std::scalbnf(fr_hi, BASE4x);
+#endif
+      code[0] = pack_4x_int<BASE>(uint32_t(fr_lo), sign);
+      code[1] = pack_4x_int<BASE>(uint32_t(fr_hi), sign);
+    }
   }
 
   template <uint32_t div>

@@ -105,7 +105,7 @@ inline void decode_dispatcher(cudaStream_t stream, int32_t order_lo, int32_t ord
     default: break;
   }
 
-  if constexpr (device::Config::exp_base < 7) {
+  if constexpr (device::Config::exp_base < 7)
     switch (order) {
       case 11: decode_kernel <real_t, real_ptr, grid_blocks, block_threads, items_per_thread, 11>
         <<< grid_blocks, block_threads, 0, stream >>> (M, expon, A, strideA, B); break;
@@ -115,9 +115,8 @@ inline void decode_dispatcher(cudaStream_t stream, int32_t order_lo, int32_t ord
         <<< grid_blocks, block_threads, 0, stream >>> (M, expon, A, strideA, B); break;
       default: break;
     }
-  }
 
-  if constexpr (device::Config::exp_base < 5) {
+  if constexpr (device::Config::exp_base < 5)
     switch (order) {
       case 14: decode_kernel <real_t, real_ptr, grid_blocks, block_threads, items_per_thread, 14>
         <<< grid_blocks, block_threads, 0, stream >>> (M, expon, A, strideA, B); break;
@@ -127,7 +126,6 @@ inline void decode_dispatcher(cudaStream_t stream, int32_t order_lo, int32_t ord
         <<< grid_blocks, block_threads, 0, stream >>> (M, expon, A, strideA, B); break;
       default: break;
     }
-  }
 }
 
 void internal::int8::decode_f64_strided_i32(cudaStream_t stream, int32_t order_lo, int32_t order_hi, int32_t N, double* A, const int32_t* B, int32_t ld) {
