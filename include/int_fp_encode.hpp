@@ -108,8 +108,12 @@ namespace device::int8 {
     rem = x - quo * div;
   }
 
-  __host__ __device__ __forceinline__ int32_t clamp_i32(int32_t x, int32_t lo, int32_t hi) 
-  { return x < lo ? lo : (x < hi ? x : hi); };
+  template<int32_t i>
+  __host__ __device__ __forceinline__ uint32_t u32_selector(int32_t x, uint4 b) {
+    constexpr int32_t i1 = i - 1, i2 = i - 2, i3 = i - 3;
+    uint4 sel = make_uint4(-(uint32_t)(i <= x), -(uint32_t)(i1 == x), -(uint32_t)(i2 == x), -(uint32_t)(x <= i3));
+    return ((b.x & sel.x) | (b.y & sel.y)) | ((b.z & sel.z) | (b.w & sel.w));
+  }
 
   template <uint32_t ORDER>
   __host__ __device__ __forceinline__ void add_shifted(uint32_t (&a)[ORDER], int32_t i, int32_t expon) {
@@ -118,14 +122,14 @@ namespace device::int8 {
     constexpr uint32_t i31 = ~(uint32_t(1) << 31);
     int32_t quo, rem;
     fast_division_i32<31>(expon, quo, rem);
-    uint32_t b[4]{ 0, (uint32_t(i) << rem) & i31, uint32_t(i >> (31 - rem)) & i31, -(uint32_t(i) >> 31) & i31 };
-    
-    a[0] += b[clamp_i32(1 - quo, 0, 3)];
-    if constexpr(1 < ORDER) a[1] += b[clamp_i32(2 - quo, 0, 3)] + (a[0] >> 31);
-    if constexpr(2 < ORDER) a[2] += b[clamp_i32(3 - quo, 0, 3)] + (a[1] >> 31);
-    if constexpr(3 < ORDER) a[3] += b[clamp_i32(4 - quo, 0, 3)] + (a[2] >> 31);
-    if constexpr(4 < ORDER) a[4] += b[clamp_i32(5 - quo, 0, 3)] + (a[3] >> 31);
-    if constexpr(5 < ORDER) a[5] += b[clamp_i32(6 - quo, 0, 3)] + (a[4] >> 31);
+
+    uint4 b = make_uint4(0, (uint32_t(i) << rem) & i31, uint32_t(i >> (31 - rem)) & i31, -(uint32_t(i) >> 31) & i31);
+    a[0] += u32_selector<1>(quo, b);
+    if constexpr(1 < ORDER) a[1] += u32_selector<2>(quo, b) + (a[0] >> 31);
+    if constexpr(2 < ORDER) a[2] += u32_selector<3>(quo, b) + (a[1] >> 31);
+    if constexpr(3 < ORDER) a[3] += u32_selector<4>(quo, b) + (a[2] >> 31);
+    if constexpr(4 < ORDER) a[4] += u32_selector<5>(quo, b) + (a[3] >> 31);
+    if constexpr(5 < ORDER) a[5] += u32_selector<6>(quo, b) + (a[4] >> 31);
     
     a[0] = a[0] & i31;
     if constexpr(1 < ORDER) a[1] = a[1] & i31;

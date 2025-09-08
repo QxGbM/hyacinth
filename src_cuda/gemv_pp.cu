@@ -14,25 +14,36 @@ struct conj {
   __device__ __forceinline__ complex_float4 operator()(complex_float4 f) { return device::qf::make_complex_float4(f.real, device::qf::negate(f.imag)); }
 };
 
-struct subtract_norm {
-  __device__ __forceinline__ double operator()(double a, double c) { return fma(-a, a, c); }
-  __device__ __forceinline__ float operator()(float a, float c) { return fmaf(-a, a, c); }
-  __device__ __forceinline__ double2 operator()(double2 a, double2 c) { return device::dd::add(c, device::dd::mul(device::dd::negate(a), a)); }
-  __device__ __forceinline__ float4 operator()(float4 a, float4 c) { return device::qf::add(c, device::qf::mul(device::qf::negate(a), a)); }
-
-  __device__ __forceinline__ double operator()(cuDoubleComplex a, double c) { return operator()(a.x, operator()(a.y, c)); }
-  __device__ __forceinline__ float operator()(cuComplex a, float c) { return operator()(a.x, operator()(a.y, c)); }
-  __device__ __forceinline__ double2 operator()(complex_double2 a, double2 c) { return operator()(a.real, operator()(a.imag, c)); }
-  __device__ __forceinline__ float4 operator()(complex_float4 a, float4 c) { return operator()(a.real, operator()(a.imag, c)); }
+struct gemv_pp_fused {
+  __device__ __forceinline__ void operator()(double c, double& c_conj, double& d) {
+    c_conj = c; d = fma(-c, c, d);
+  }
+  __device__ __forceinline__ void operator()(float c, float& c_conj, float& d) {
+    c_conj = c; d = fmaf(-c, c, d);
+  }
+  __device__ __forceinline__ void operator()(double2 c, double2& c_conj, double2& d) {
+    c_conj = c; d = device::dd::add(device::dd::mul(device::dd::negate(c), c), d);
+  }
+  __device__ __forceinline__ void operator()(float4 c, float4& c_conj, float4& d) {
+    c_conj = c; d = device::qf::add(device::qf::mul(device::qf::negate(c), c), d);
+  }
+  __device__ __forceinline__ void operator()(cuDoubleComplex c, cuDoubleComplex& c_conj, double& d) {
+    c_conj = make_cuDoubleComplex(c.x, -c.y); d = fma(-c.x, c.x, fma(-c.y, c.y, d));
+  }
+  __device__ __forceinline__ void operator()(cuComplex c, cuComplex& c_conj, float& d) {
+    c_conj = make_cuComplex(c.x, -c.y); d = fmaf(-c.x, c.x, fmaf(-c.y, c.y, d));
+  }
+  __device__ __forceinline__ void operator()(complex_double2 c, complex_double2& c_conj, double2& d) {
+    using device::dd::add, device::dd::mul, device::dd::negate;
+    c_conj = device::dd::make_complex_double2(c.real, negate(c.imag));
+    d = add(mul(negate(c.real), c.real), add(mul(negate(c.imag), c.imag), d));
+  }
+  __device__ __forceinline__ void operator()(complex_float4 c, complex_float4& c_conj, float4& d) {
+    using device::qf::add, device::qf::mul, device::qf::negate;
+    c_conj = device::qf::make_complex_float4(c.real, negate(c.imag));
+    d = add(mul(negate(c.real), c.real), add(mul(negate(c.imag), c.imag), d));
+  }
 };
-
-template <class real_t, class matrix_t>
-__device__ __forceinline__ void elem_transform(matrix_t &a, matrix_t &b, real_t &c) {
-  constexpr int32_t COMPLEX = int32_t(sizeof(real_t) < sizeof(matrix_t));
-  subtract_norm fma_func; conj conj_func;
-  if constexpr (COMPLEX) { matrix_t bs = b; a = conj_func(a); b = conj_func(bs); c = fma_func(bs, c); }
-    else { c = fma_func(b, c); }
-}
 
 struct real_max {
   __host__ __device__ __forceinline__ double_idx operator()(double_idx a, double_idx b) { return device::cmp::double_max(a, b); }
@@ -46,239 +57,178 @@ struct real_max {
   __host__ __device__ __forceinline__ void init(float4_idx& a) { a = float4_idx({ make_float4(0.f, 0.f, 0.f, 0.f), -1 }); }
 };
 
-template <class real_t, class real_ptr, class matrix_ptr, class idx_t, class idx_ptr, int32_t GRID_BLOCKS, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD, class matrix_t>
+template <class real_t, class real_ptr, class matrix_ptr, class idx_t, class idx_ptr, int32_t GRID_BLOCKS, int32_t BLOCK_THREADS, class matrix_t>
 __global__ void gemv_pp_kernel(int32_t j, int32_t M, int32_t N, matrix_t sq, matrix_ptr A, int64_t lda, real_ptr D, idx_ptr idx) {
   constexpr int32_t COMPLEX = int32_t(sizeof(real_t) < sizeof(matrix_t));
-  constexpr int32_t elements_block = BLOCK_THREADS * ITEMS_PER_THREAD;
-  constexpr int32_t elements = GRID_BLOCKS * elements_block;
-  constexpr int32_t block_mask = ~(elements_block - 1) & (elements - 1);
-
-  int32_t block_offset = int32_t(blockIdx.x) * elements_block;
-  int32_t N2 = N & (elements_block - 1), N1 = N - N2;
-
-  __shared__ typename cub::BlockLoad<real_t, BLOCK_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_STRIPED>::TempStorage temp_load1;
-  __shared__ typename cub::BlockLoad<matrix_t, BLOCK_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_STRIPED>::TempStorage temp_load2;
-  __shared__ typename cub::BlockStore<matrix_t, BLOCK_THREADS, ITEMS_PER_THREAD, cub::BLOCK_STORE_STRIPED>::TempStorage temp_store2;
-  __shared__ typename cub::BlockReduce<idx_t, BLOCK_THREADS>::TempStorage temp_reduce;
+  constexpr int32_t elements = GRID_BLOCKS * BLOCK_THREADS;
+  constexpr int32_t block_mask = ~(BLOCK_THREADS - 1) & (elements - 1);
+  int32_t block_offset = int32_t(blockIdx.x) * BLOCK_THREADS;
+  int32_t N2 = N & (BLOCK_THREADS - 1), N1 = N - N2;
+  matrix_ptr A_i = &A[M], A_col_j = &A[int64_t(M) + int64_t(j) * lda], A_row_j = &A[j + M];
+  idx_t thread_x;
 
   __shared__ matrix_t Aij[2];
-  matrix_t thread_i[ITEMS_PER_THREAD], thread_j[ITEMS_PER_THREAD]; real_t thread_c[ITEMS_PER_THREAD];
-  idx_t thread_x[ITEMS_PER_THREAD]; int32_t thread_locs[ITEMS_PER_THREAD];
-  matrix_ptr A_i = &A[M], A_col_j = &A[int64_t(M) + int64_t(j) * lda], A_row_j = &A[j + M];
-
-  cub::BlockLoad<real_t, BLOCK_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_STRIPED> block_load_rl(temp_load1);
-  cub::BlockLoad<matrix_t, BLOCK_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_STRIPED> block_load(temp_load2);
-  cub::BlockStore<matrix_t, BLOCK_THREADS, ITEMS_PER_THREAD, cub::BLOCK_STORE_STRIPED> block_store(temp_store2);
+  __shared__ typename cub::BlockReduce<idx_t, BLOCK_THREADS>::TempStorage temp_reduce;
   cub::BlockReduce<idx_t, BLOCK_THREADS> block_reduce(temp_reduce);
-  real_max cmp_max;
+  conj conj_func; gemv_pp_fused pp_func; real_max cmp_max;
+  cmp_max.init(thread_x);
 
   if (threadIdx.x == 0 && block_offset == 0) {
-    conj conj_func;
     if constexpr(COMPLEX) Aij[0] = conj_func(A_col_j[0]);
       else Aij[0] = A_col_j[0];
     Aij[1] = sq;
   }
-
-  #pragma unroll
-  for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
-    thread_locs[i] = int32_t(threadIdx.x) + i * BLOCK_THREADS;
   __syncthreads();
 
   for (int32_t k = block_offset; k < N1; k += elements) {
-    block_load.Load(&A_i[k], thread_i);
-    block_load.Load(&A_col_j[k], thread_j);
-    block_store.Store(&A_col_j[k], thread_i);
-    block_load_rl.Load(&D[k], thread_c);
+    int32_t i = k + int32_t(threadIdx.x);
+    matrix_t thread_i = A_i[i], thread_j = A_col_j[i];
+    real_t thread_c = D[i];
+    A_col_j[i] = thread_i;
 
-    #pragma unroll
-    for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i) {
-      int32_t col = k + thread_locs[i];
-      elem_transform(thread_i[i], thread_j[i], thread_c[i]);
-      if (col != j) {
-        if (0 < col) {
-          int64_t col_idx = int64_t(col) * lda;
-          A_i[col_idx] = thread_j[i];
-          A_row_j[col_idx] = thread_i[i];
-        }
-        D[col] = thread_c[i];
+    if constexpr(COMPLEX)
+      thread_i = conj_func(thread_i);
+    pp_func(thread_j, thread_j, thread_c);
+
+    if (i != j) {
+      if (0 < i) {
+        int64_t col_idx = int64_t(i) * lda;
+        A_i[col_idx] = thread_j;
+        A_row_j[col_idx] = thread_i;
       }
-      else
-        thread_c[i] = real_t();
+      D[i] = thread_c;
     }
-
-    if (k == block_offset) {
-      #pragma unroll
-      for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
-        thread_x[i] = idx_t({ thread_c[i], k + thread_locs[i] });
-    }
-    else {
-      #pragma unroll
-      for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
-        thread_x[i] = cmp_max(thread_x[i], idx_t({ thread_c[i], k + thread_locs[i] }));
-    }
+    idx_t thread_y = idx_t({ (i == j) ? real_t() : thread_c, i });
+    thread_x = (N1 == block_offset) ? thread_y : cmp_max(thread_x, thread_y);
   }
 
-  if (0 < N2 && block_offset == (N1 & block_mask)) {
-    block_load.Load(&A_i[N1], thread_i, N2);
-    block_load.Load(&A_col_j[N1], thread_j, N2);
-    block_store.Store(&A_col_j[N1], thread_i, N2);
-    block_load_rl.Load(&D[N1], thread_c, N2);
+  if (threadIdx.x < N2 && block_offset == (N1 & block_mask)) {
+    int32_t i = N1 + int32_t(threadIdx.x);
+    matrix_t thread_i = A_i[i], thread_j = A_col_j[i];
+    real_t thread_c = D[i];
+    A_col_j[i] = thread_i;
 
-    #pragma unroll
-    for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i) {
-      int32_t col = N1 + thread_locs[i];
-      if (col != j && col < N) {
-        elem_transform(thread_i[i], thread_j[i], thread_c[i]);
-        if (0 < col) {
-          int64_t col_idx = int64_t(col) * lda;
-          A_i[col_idx] = thread_j[i];
-          A_row_j[col_idx] = thread_i[i];
-        }
-        D[col] = thread_c[i];
+    if constexpr(COMPLEX)
+      thread_i = conj_func(thread_i);
+    pp_func(thread_j, thread_j, thread_c);
+
+    if (i != j) {
+      if (0 < i) {
+        int64_t col_idx = int64_t(i) * lda;
+        A_i[col_idx] = thread_j;
+        A_row_j[col_idx] = thread_i;
       }
-      else
-        thread_c[i] = real_t();
+      D[i] = thread_c;
     }
-
-    if (N1 == block_offset) {
-      #pragma unroll
-      for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
-        thread_x[i] = idx_t({ thread_c[i], N1 + thread_locs[i] });
-    }
-    else {
-      #pragma unroll
-      for (int32_t i = 0; i < ITEMS_PER_THREAD; ++i)
-        thread_x[i] = cmp_max(thread_x[i], idx_t({ thread_c[i], N1 + thread_locs[i] }));
-    }
+    idx_t thread_y = idx_t({ (i == j) ? real_t() : thread_c, i });
+    thread_x = (N1 == block_offset) ? thread_y : cmp_max(thread_x, thread_y);
   }
 
-  idx_t block_res; cmp_max.init(block_res);
   if (block_offset < N)
-    block_res = block_reduce.Reduce(thread_x, cmp_max);
+    thread_x = block_reduce.Reduce(thread_x, cmp_max);
 
   if (threadIdx.x == 0) {
-    idx[blockIdx.x] = idx_t({ block_res.real, (block_res.idx == 0 ? j : block_res.idx) - 1 });
+    idx[blockIdx.x] = idx_t({ thread_x.real, (thread_x.idx == 0 ? j : thread_x.idx) - 1 });
     if (blockIdx.x == 0)
     { A_col_j[0] = Aij[0]; A_i[0] = Aij[1]; D[j] = D[0]; }
   }
 
   A_col_j = &A[int64_t(j) * lda];
-  N2 = M & (elements_block - 1); N1 = M - N2;
+  N2 = M & (BLOCK_THREADS - 1); N1 = M - N2;
 
   for (int32_t k = block_offset; k < N1; k += elements) {
-    block_load.Load(&A[k], thread_i);
-    block_load.Load(&A_col_j[k], thread_j);
-    block_store.Store(&A_col_j[k], thread_i);
-    block_store.Store(&A[k], thread_j);
+    int32_t i = k + int32_t(threadIdx.x);
+    matrix_t a = A[i]; A[i] = A_col_j[i]; A_col_j[i] = a;
   }
 
-  if (0 < N2 && block_offset == (N1 & block_mask)) {
-    block_load.Load(&A[N1], thread_i, N2);
-    block_load.Load(&A_col_j[N1], thread_j, N2);
-    block_store.Store(&A_col_j[N1], thread_i, N2);
-    block_store.Store(&A[N1], thread_j, N2);
+  if (threadIdx.x < N2 && block_offset == (N1 & block_mask)) {
+    int32_t i = N1 + int32_t(threadIdx.x);
+    matrix_t a = A[i]; A[i] = A_col_j[i]; A_col_j[i] = a;
   }
 }
 
 constexpr int32_t grid_blocks = 256;
 constexpr int32_t block_threads = 256;
-constexpr int32_t thread_bytes = 32;
 
 void internal::Cholesky::gemv_pp_f64(cudaStream_t stream, int32_t j, int32_t M, int32_t N, double* sq, double* A, int32_t lda, double* D) {
-  constexpr int32_t items_per_thread = thread_bytes / sizeof(double);
-  constexpr int32_t elements_block = block_threads * items_per_thread;
   if (0 < j) {
-    gemv_pp_kernel <double, double* __restrict__, double* __restrict__, double_idx, double_idx* __restrict__, grid_blocks, block_threads, items_per_thread>
+    gemv_pp_kernel <double, double* __restrict__, double* __restrict__, double_idx, double_idx* __restrict__, grid_blocks, block_threads>
       <<< grid_blocks, block_threads, 0, stream >>> (j, M, N, *sq, A, lda, D, (double_idx*)sq);
-    imax_f64_host_sync(stream, N - 1, std::min(grid_blocks, (N + elements_block - 1) / elements_block), sq);
+    imax_f64_host_sync(stream, N - 1, std::min(grid_blocks, (N + block_threads - 1) / block_threads), sq);
   }
   else
     gemv_pp_nopiv_f64(stream, M, N, sq, A, lda, D);
 }
 
 void internal::Cholesky::gemv_pp_f32(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float* sq, float* A, int32_t lda, float* D) {
-  constexpr int32_t items_per_thread = thread_bytes / sizeof(float);
-  constexpr int32_t elements_block = block_threads * items_per_thread;
   if (0 < j) {
-    gemv_pp_kernel <float, float* __restrict__, float* __restrict__, float_idx, float_idx* __restrict__, grid_blocks, block_threads, items_per_thread>
+    gemv_pp_kernel <float, float* __restrict__, float* __restrict__, float_idx, float_idx* __restrict__, grid_blocks, block_threads>
       <<< grid_blocks, block_threads, 0, stream >>> (j, M, N, *sq, A, lda, D, (float_idx*)sq);
-    imax_f32_host_sync(stream, N - 1, std::min(grid_blocks, (N + elements_block - 1) / elements_block), sq);
+    imax_f32_host_sync(stream, N - 1, std::min(grid_blocks, (N + block_threads - 1) / block_threads), sq);
   }
   else
     gemv_pp_nopiv_f32(stream, M, N, sq, A, lda, D);
 }
 
 void internal::Cholesky::gemv_pp_f128_dd(cudaStream_t stream, int32_t j, int32_t M, int32_t N, double2* sq, double2* A, int32_t lda, double2* D) {
-  constexpr int32_t items_per_thread = thread_bytes / sizeof(double2);
-  constexpr int32_t elements_block = block_threads * items_per_thread;
   if (0 < j) {
-    gemv_pp_kernel <double2, double2* __restrict__, double2* __restrict__, double2_idx, double2_idx* __restrict__, grid_blocks, block_threads, items_per_thread>
+    gemv_pp_kernel <double2, double2* __restrict__, double2* __restrict__, double2_idx, double2_idx* __restrict__, grid_blocks, block_threads>
       <<< grid_blocks, block_threads, 0, stream >>> (j, M, N, *sq, A, lda, D, (double2_idx*)sq);
-    imax_f128_dd_host_sync(stream, N - 1, std::min(grid_blocks, (N + elements_block - 1) / elements_block), sq);
+    imax_f128_dd_host_sync(stream, N - 1, std::min(grid_blocks, (N + block_threads - 1) / block_threads), sq);
   }
   else
     gemv_pp_nopiv_f128_dd(stream, M, N, sq, A, lda, D);
 }
 
 void internal::Cholesky::gemv_pp_f128_qf(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float4* sq, float4* A, int32_t lda, float4* D) {
-  constexpr int32_t items_per_thread = thread_bytes / sizeof(float4);
-  constexpr int32_t elements_block = block_threads * items_per_thread;
   if (0 < j) {
-    gemv_pp_kernel <float4, float4* __restrict__, float4* __restrict__, float4_idx, float4_idx* __restrict__, grid_blocks, block_threads, items_per_thread>
+    gemv_pp_kernel <float4, float4* __restrict__, float4* __restrict__, float4_idx, float4_idx* __restrict__, grid_blocks, block_threads>
       <<< grid_blocks, block_threads, 0, stream >>> (j, M, N, *sq, A, lda, D, (float4_idx*)sq);
-    imax_f128_qf_host_sync(stream, N - 1, std::min(grid_blocks, (N + elements_block - 1) / elements_block), sq);
+    imax_f128_qf_host_sync(stream, N - 1, std::min(grid_blocks, (N + block_threads - 1) / block_threads), sq);
   }
   else
     gemv_pp_nopiv_f128_qf(stream, M, N, sq, A, lda, D);
 }
 
 void internal::Cholesky::gemv_pp_cf64(cudaStream_t stream, int32_t j, int32_t M, int32_t N, double* sq, std::complex<double>* A, int32_t lda, double* D) {
-  constexpr int32_t items_per_thread = thread_bytes / sizeof(std::complex<double>);
-  constexpr int32_t elements_block = block_threads * items_per_thread;
   if (0 < j) {
     cuDoubleComplex sqc = make_cuDoubleComplex(*sq, 0.);
-    gemv_pp_kernel <double, double* __restrict__, cuDoubleComplex* __restrict__, double_idx, double_idx* __restrict__, grid_blocks, block_threads, items_per_thread>
+    gemv_pp_kernel <double, double* __restrict__, cuDoubleComplex* __restrict__, double_idx, double_idx* __restrict__, grid_blocks, block_threads>
       <<< grid_blocks, block_threads, 0, stream >>> (j, M, N, sqc, (cuDoubleComplex*)A, lda, D, (double_idx*)sq);
-    imax_f64_host_sync(stream, N - 1, std::min(grid_blocks, (N + elements_block - 1) / elements_block), sq);
+    imax_f64_host_sync(stream, N - 1, std::min(grid_blocks, (N + block_threads - 1) / block_threads), sq);
   }
   else
     gemv_pp_nopiv_cf64(stream, M, N, sq, A, lda, D);
 }
 
 void internal::Cholesky::gemv_pp_cf32(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float* sq, std::complex<float>* A, int32_t lda, float* D) {
-  constexpr int32_t items_per_thread = thread_bytes / sizeof(std::complex<float>);
-  constexpr int32_t elements_block = block_threads * items_per_thread;
   if (0 < j) {
     cuComplex sqc = make_cuComplex(*sq, 0.f);
-    gemv_pp_kernel <float, float* __restrict__, cuComplex* __restrict__, float_idx, float_idx* __restrict__, grid_blocks, block_threads, items_per_thread>
+    gemv_pp_kernel <float, float* __restrict__, cuComplex* __restrict__, float_idx, float_idx* __restrict__, grid_blocks, block_threads>
       <<< grid_blocks, block_threads, 0, stream >>> (j, M, N, sqc, (cuComplex*)A, lda, D, (float_idx*)sq);
-    imax_f32_host_sync(stream, N - 1, std::min(grid_blocks, (N + elements_block - 1) / elements_block), sq);
+    imax_f32_host_sync(stream, N - 1, std::min(grid_blocks, (N + block_threads - 1) / block_threads), sq);
   }
   else
     gemv_pp_nopiv_cf32(stream, M, N, sq, A, lda, D);
 }
 
 void internal::Cholesky::gemv_pp_cf128_dd(cudaStream_t stream, int32_t j, int32_t M, int32_t N, double2* sq, complex_double2* A, int32_t lda, double2* D) {
-  constexpr int32_t items_per_thread = thread_bytes / sizeof(complex_double2);
-  constexpr int32_t elements_block = block_threads * items_per_thread;
   if (0 < j) {
     complex_double2 sqc = device::dd::make_complex_double2(*sq, make_double2(0., 0.));
-    gemv_pp_kernel <double2, double2* __restrict__, complex_double2* __restrict__, double2_idx, double2_idx* __restrict__, grid_blocks, block_threads, items_per_thread>
+    gemv_pp_kernel <double2, double2* __restrict__, complex_double2* __restrict__, double2_idx, double2_idx* __restrict__, grid_blocks, block_threads>
       <<< grid_blocks, block_threads, 0, stream >>> (j, M, N, sqc, A, lda, D, (double2_idx*)sq);
-    imax_f128_dd_host_sync(stream, N - 1, std::min(grid_blocks, (N + elements_block - 1) / elements_block), sq);
+    imax_f128_dd_host_sync(stream, N - 1, std::min(grid_blocks, (N + block_threads - 1) / block_threads), sq);
   }
   else
     gemv_pp_nopiv_cf128_dd(stream, M, N, sq, A, lda, D);
 }
 
 void internal::Cholesky::gemv_pp_cf128_qf(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float4* sq, complex_float4* A, int32_t lda, float4* D) {
-  constexpr int32_t items_per_thread = thread_bytes / sizeof(complex_float4);
-  constexpr int32_t elements_block = block_threads * items_per_thread;
   if (0 < j) {
     complex_float4 sqc = device::qf::make_complex_float4(*sq, make_float4(0.f, 0.f, 0.f, 0.f));
-    gemv_pp_kernel <float4, float4* __restrict__, complex_float4* __restrict__, float4_idx, float4_idx* __restrict__, grid_blocks, block_threads, items_per_thread>
+    gemv_pp_kernel <float4, float4* __restrict__, complex_float4* __restrict__, float4_idx, float4_idx* __restrict__, grid_blocks, block_threads>
       <<< grid_blocks, block_threads, 0, stream >>> (j, M, N, sqc, A, lda, D, (float4_idx*)sq);
-    imax_f128_qf_host_sync(stream, N - 1, std::min(grid_blocks, (N + elements_block - 1) / elements_block), sq);
+    imax_f128_qf_host_sync(stream, N - 1, std::min(grid_blocks, (N + block_threads - 1) / block_threads), sq);
   }
   else
     gemv_pp_nopiv_cf128_qf(stream, M, N, sq, A, lda, D);

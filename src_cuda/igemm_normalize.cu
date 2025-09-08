@@ -7,48 +7,37 @@
 #include <thrust/execution_policy.h>
 
 template <uint32_t beta, uint32_t N> struct normalize_i32 {
-  int4* __restrict__ A;
-  int64_t stride;
-  normalize_i32(int64_t M, int32_t* A) : A((int4*)A), stride(M >> 2) {}
+  int32_t* __restrict__ A;
+  int64_t M;
+  normalize_i32(int64_t M, int32_t* A) : A(A), M(M) {}
 
   __device__ __forceinline__ void operator()(int64_t i) {
     constexpr uint32_t BASE = device::Config::exp_base;
     constexpr uint32_t iBASE = (uint32_t(1) << BASE) - 1;
 
-    int4 A_i = A[i];
-    A[i] = make_int4(A_i.x & iBASE, A_i.y & iBASE, A_i.z & iBASE, A_i.w & iBASE);
-    A_i = make_int4(A_i.x >> BASE, A_i.y >> BASE, A_i.z >> BASE, A_i.w >> BASE);
+    int32_t A_i = A[i];
+    A[i] = A_i & iBASE; A_i = A_i >> BASE;
 
     #pragma unroll
     for (uint32_t k = 1; k < N; ++k) {
-      int64_t j = i + int64_t(k) * stride;
-      int4 A_k = A[j];
-      int4 val = make_int4(A_i.x + A_k.x, A_i.y + A_k.y, A_i.z + A_k.z, A_i.w + A_k.w);
-
-      A[j] = make_int4(val.x & iBASE, val.y & iBASE, val.z & iBASE, val.w & iBASE);
-      A_i = make_int4(val.x >> BASE, val.y >> BASE, val.z >> BASE, val.w >> BASE);
+      int64_t j = i + int64_t(k) * M;
+      int32_t A_k = A[j], val = A_i + A_k;
+      A[j] = val & iBASE; A_i = val >> BASE;
     }
 
-    int64_t j = i + int64_t(N) * stride;
-    if constexpr (beta) {
-      int4 A_k = A[j];
-      A[j] = make_int4(A_i.x + A_k.x, A_i.y + A_k.y, A_i.z + A_k.z, A_i.w + A_k.w);
-    }
-      else A[j] = A_i;
+    int64_t j = i + int64_t(N) * M;
+    if constexpr (beta) { int32_t A_k = A[j]; A[j] = A_i + A_k; }
+      else { A[j] = A_i; }
   }
 };
 
 template <uint32_t order>
 inline void normalization_dispatcher(cudaStream_t stream, int64_t M, int32_t beta, int32_t* A) {
   thrust::counting_iterator<int64_t> iter(0);
-  if (beta) {
-    normalize_i32<1, order> normalize(M, A);
-    thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, normalize.stride, normalize);
-  }
-  else {
-    normalize_i32<0, order> normalize(M, A);
-    thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, normalize.stride, normalize);
-  }
+  if (beta)
+    thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, M, normalize_i32<1, order>(M, A));
+  else
+    thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, M, normalize_i32<0, order>(M, A));
 }
 
 void internal::int8::i32_normalization(cudaStream_t stream, int64_t M, int32_t order, int32_t beta, int32_t* A) {

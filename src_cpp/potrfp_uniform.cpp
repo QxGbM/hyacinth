@@ -60,18 +60,11 @@ inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, double epi, in
   cudaMemcpy2DAsync(diag, sizeof(real_t), A, sizeof(matrix_t) * int64_t(lda + 1), sizeof(real_t), N, cudaMemcpyDeviceToDevice, stream);
   imax_dispatcher<prec>(stream, N, diag, scale);
 
-  int32_t j = *pivot_i;
-  double diag_f64 = conv_f64<prec>(scale[0]);
-  epi = epi * diag_f64;
-
-  if (!(std::isnormal(diag_f64) && epi <= diag_f64 && 0 <= j)) return 0;
-    else if (0 < j) std::iter_swap(&jpiv[0], &jpiv[j]);
-  gemv_dispatcher<prec>(stream, handle, scale, j, N, 0, A, lda, diag);
-
-  for (int32_t i = 1; i < iters; ++i) {
+  for (int32_t i = 0; i < iters; ++i) {
     int64_t A_col = int64_t(i) * int64_t(lda);
     int32_t j = *pivot_i;
     double diag_f64 = conv_f64<prec>(scale[0]);
+    epi = 0 < i ? epi : (epi * diag_f64);
 
     if (!(std::isnormal(diag_f64) && epi <= diag_f64 && 0 <= j)) return i;
       else if (0 < j) std::iter_swap(&jpiv[i], &jpiv[i + j]);
