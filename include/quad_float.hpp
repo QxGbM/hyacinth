@@ -108,12 +108,12 @@ namespace device::qf {
   __host__ __device__ __forceinline__ float4 frsqrt(float4 a) {
     float rsq; int32_t p;
 #ifndef __CUDA_ARCH__
-    using std::frexp;
     rsq = 1. / std::sqrt(a.x);
+    float4 x = make_float4(std::frexp(rsq, &p), 0.f, 0.f, 0.f);
 #else
     rsq = rsqrtf(a.x);
+    float4 x = make_float4(frexpf(rsq, &p), 0.f, 0.f, 0.f);
 #endif
-    float4 x = make_float4(frexp(rsq, &p), 0.f, 0.f, 0.f);
     float2 c = make_float2(1.5f, 0.f);
     a = fscalbn(negate(a), (p << 1) - 1);
 
