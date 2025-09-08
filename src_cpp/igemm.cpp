@@ -116,11 +116,11 @@ void device::MixPrecAHA::rATA(cudaStream_t stream, cublasHandle_t handle, gemm_p
 
 inline void encode_dispatcher_complex(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const void* C, int32_t ldc, device::Precision prec, int32_t* vec_expon, int8_t* A, int32_t lda) {
   if (prec == device::Precision::FP64) {
-    internal::int8::vexp_cf64(stream, order, M, N, (const std::complex<double>*)C, ldc, vec_expon);
+    internal::int8::vexp_f64(stream, order, 2 * M, N, (const double*)C, 2 * ldc, vec_expon);
     internal::int8::encode_cf64(stream, order, M, N, (const std::complex<double>*)C, ldc, vec_expon, A, lda);
   }
   else if (prec == device::Precision::FP32) {
-    internal::int8::vexp_cf32(stream, order, M, N, (const std::complex<float>*)C, ldc, vec_expon);
+    internal::int8::vexp_f32(stream, order, 2 * M, N, (const float*)C, 2 * ldc, vec_expon);
     internal::int8::encode_cf32(stream, order, M, N, (const std::complex<float>*)C, ldc, vec_expon, A, lda);
   }
 }

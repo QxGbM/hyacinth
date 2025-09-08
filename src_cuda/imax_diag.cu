@@ -20,9 +20,7 @@ struct real_max {
 template <class idx_t, class idx_ptr, class real_const_ptr, int32_t GRID_BLOCKS, int32_t BLOCK_THREADS>
 __global__ void imax_kernel(int32_t N, real_const_ptr X, idx_ptr idx) {
   constexpr int32_t elements = GRID_BLOCKS *BLOCK_THREADS;
-  constexpr int32_t block_mask = ~(BLOCK_THREADS - 1) & (elements - 1);
   int32_t block_offset = int32_t(blockIdx.x) * BLOCK_THREADS;
-  int32_t N2 = N & (BLOCK_THREADS - 1), N1 = N - N2;
   idx_t thread_x;
 
   __shared__ typename cub::BlockReduce<idx_t, BLOCK_THREADS>::TempStorage temp_reduce;
@@ -30,17 +28,8 @@ __global__ void imax_kernel(int32_t N, real_const_ptr X, idx_ptr idx) {
   real_max cmp_max;
   cmp_max.init(thread_x);
 
-  for (int32_t k = block_offset; k < N1; k += elements) {
-    int32_t i = k + int32_t(threadIdx.x);
-    idx_t thread_y = idx_t({ X[i], i });
-    thread_x = (k == block_offset) ? thread_y : cmp_max(thread_x, thread_y);
-  }
-
-  if (threadIdx.x < N2 && block_offset == (N1 & block_mask)) {
-    int32_t i = N1 + int32_t(threadIdx.x);
-    idx_t thread_y = idx_t({ X[i], i });
-    thread_x = (N1 == block_offset) ? thread_y : cmp_max(thread_x, thread_y);
-  }
+  for (int32_t i = block_offset + int32_t(threadIdx.x); i < N; i += elements)
+    thread_x = cmp_max(thread_x, idx_t({ X[i], i }));
 
   if (block_offset < N)
     thread_x = block_reduce.Reduce(thread_x, cmp_max);
