@@ -59,14 +59,3 @@ void internal::int8::vexp_f32(cudaStream_t stream, int32_t order, int32_t M, int
   vector_exponent_kernel <float, const float* __restrict__, grid_blocks, block_threads>
     <<< grid_blocks, block_threads, 0, stream >>> (order, M, N, A, lda, vec_expon);
 }
-
-void internal::int8::vexp_cf64(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int32_t* vec_expon) {
-  vector_exponent_kernel <double, const double* __restrict__, grid_blocks, block_threads>
-    <<< grid_blocks, block_threads, 0, stream >>> (order, M * 2, N, (const double*)A, lda * 2, vec_expon);
-}
-
-void internal::int8::vexp_cf32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int32_t* vec_expon) {
-  vector_exponent_kernel <float, const float* __restrict__, grid_blocks, block_threads>
-    <<< grid_blocks, block_threads, 0, stream >>> (order, M * 2, N, (const float*)A, lda * 2, vec_expon);
-}
-
