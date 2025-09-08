@@ -85,21 +85,19 @@ __global__ void gemv_pp_kernel(int32_t j, int32_t M, int32_t N, matrix_t sq, mat
     matrix_t thread_i = A_i[i], thread_j = A_col_j[i];
     real_t thread_c = D[i];
     A_col_j[i] = thread_i;
-
-    if constexpr(COMPLEX)
-      thread_i = conj_func(thread_i);
     pp_func(thread_j, thread_j, thread_c);
 
     if (i != j) {
       if (0 < i) {
         int64_t col_idx = int64_t(i) * lda;
+        if constexpr(COMPLEX) A_row_j[col_idx] = conj_func(thread_i);
+          else A_row_j[col_idx] = thread_i;
         A_i[col_idx] = thread_j;
-        A_row_j[col_idx] = thread_i;
       }
       D[i] = thread_c;
     }
     idx_t thread_y = idx_t({ (i == j) ? real_t() : thread_c, i });
-    thread_x = (N1 == block_offset) ? thread_y : cmp_max(thread_x, thread_y);
+    thread_x = (k == block_offset) ? thread_y : cmp_max(thread_x, thread_y);
   }
 
   if (threadIdx.x < N2 && block_offset == (N1 & block_mask)) {
@@ -107,16 +105,14 @@ __global__ void gemv_pp_kernel(int32_t j, int32_t M, int32_t N, matrix_t sq, mat
     matrix_t thread_i = A_i[i], thread_j = A_col_j[i];
     real_t thread_c = D[i];
     A_col_j[i] = thread_i;
-
-    if constexpr(COMPLEX)
-      thread_i = conj_func(thread_i);
     pp_func(thread_j, thread_j, thread_c);
 
     if (i != j) {
       if (0 < i) {
         int64_t col_idx = int64_t(i) * lda;
+        if constexpr(COMPLEX) A_row_j[col_idx] = conj_func(thread_i);
+          else A_row_j[col_idx] = thread_i;
         A_i[col_idx] = thread_j;
-        A_row_j[col_idx] = thread_i;
       }
       D[i] = thread_c;
     }
