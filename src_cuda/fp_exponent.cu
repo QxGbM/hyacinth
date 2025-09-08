@@ -28,7 +28,7 @@ __global__ void vector_exponent_kernel(int32_t order, int32_t M, int32_t N, real
 
     for (int32_t i = 0; i < M1; i += BLOCK_THREADS) {
       real_t threadA = amax_func(A_i[i + threadIdx.x]);
-      threadB = (M1 == 0) ? threadA : amax_func(threadA, threadB);
+      threadB = (i == 0) ? threadA : amax_func(threadA, threadB);
     }
 
     if (threadIdx.x < M2) {
