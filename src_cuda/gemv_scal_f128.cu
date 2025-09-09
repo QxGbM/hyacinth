@@ -61,7 +61,7 @@ template <class real_t, class matrix_t> struct scal_f128 {
 };
 
 template <class matrix_ptr, class matrix_const_ptr, int32_t WARP_THREADS, int32_t BLOCK_THREADS, int32_t ITEMS_PER_THREAD, class real_t, class matrix_t>
-__global__ void gemv_kernel(int32_t j, int32_t M, int32_t N, matrix_const_ptr A, int32_t lda, matrix_ptr B, scal_f128<real_t, matrix_t> scal_func) {
+__global__ void gemv_kernel(int32_t j, int32_t M, int32_t N, matrix_const_ptr A, int64_t lda, matrix_ptr B, scal_f128<real_t, matrix_t> scal_func) {
   constexpr int32_t block_warps = BLOCK_THREADS / WARP_THREADS;
   constexpr int32_t elements = ITEMS_PER_THREAD * WARP_THREADS;
   int32_t N2 = N & (elements - 1), N1 = N - N2;
@@ -72,10 +72,10 @@ __global__ void gemv_kernel(int32_t j, int32_t M, int32_t N, matrix_const_ptr A,
   cub::BlockLoad<matrix_t, WARP_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_STRIPED> block_load(temp_load[threadIdx.y]);
   cub::BlockReduce<matrix_t, WARP_THREADS> block_reduce(temp_reduce[threadIdx.y]);
   matrix_t threadA[ITEMS_PER_THREAD], threadX[ITEMS_PER_THREAD], threadB[ITEMS_PER_THREAD];
-  matrix_const_ptr A_j = &A[int64_t(j) * int64_t(lda)];
+  matrix_const_ptr A_j = &A[int64_t(j) * lda];
 
   for (int32_t i = (block_warps * blockIdx.x + threadIdx.y); i < M; i += inc_row) {
-    matrix_const_ptr A_i = &A[int64_t(i) * int64_t(lda)];
+    matrix_const_ptr A_i = &A[int64_t(i) * lda];
     
     for (int32_t k = 0; k < N1; k += elements) {
       block_load.Load(&A_i[k], threadA);

@@ -32,7 +32,7 @@ namespace device::int8 {
   }
 
   template <uint32_t BASE, uint32_t ORDER>
-  __host__ __device__ __forceinline__ void encode_double_align(double value, int32_t expon, uint32_t (&code)[ORDER]) {
+  __host__ __device__ __forceinline__ void quantize_double_align(double value, int32_t expon, uint32_t (&code)[ORDER]) {
     static_assert(4 <= BASE && BASE <= 7, "Integer quantization base need to be in [2^4,2^7].");
     static_assert(1 <= ORDER && ORDER <= 4, "Integer quantization order need to be in [1,4] for FP64.");
     constexpr int32_t BASE4x = 4 * BASE;
@@ -64,7 +64,7 @@ namespace device::int8 {
   }
 
   template <uint32_t BASE, uint32_t ORDER>
-  __host__ __device__ __forceinline__ void encode_float_align(float value, int32_t expon, uint32_t (&code)[ORDER]) {
+  __host__ __device__ __forceinline__ void quantize_float_align(float value, int32_t expon, uint32_t (&code)[ORDER]) {
     static_assert(4 <= BASE && BASE <= 7, "Integer quantization base need to be in [2^4,2^7].");
     static_assert(1 <= ORDER && ORDER <= 2, "Integer quantization order need to be in [1,2] for FP32.");
     constexpr int32_t BASE4x = 4 * BASE;

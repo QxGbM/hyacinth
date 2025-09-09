@@ -34,7 +34,7 @@ template <int32_t beta, class typeA, class typeB> struct rect_conv_copy {
   const typeA* __restrict__ A;
   typeB* __restrict__ B;
   int64_t M, lda, ldb;
-  rect_conv_copy(int32_t M, const typeA* A, int32_t lda, typeB* B, int32_t ldb) :
+  rect_conv_copy(int64_t M, const typeA* A, int64_t lda, typeB* B, int64_t ldb) :
     A(A), B(B), M(M), lda(lda), ldb(ldb) {}
 
   __device__ __forceinline__ void add(double a, double& b) { b = a + b; }
@@ -85,7 +85,7 @@ template <int32_t sc0ga1, class real_t> struct permute_copy {
   real_t* __restrict__ B;
   const int32_t* jpiv;
   int64_t M, lda, ldb;
-  permute_copy(int32_t M, const int32_t* jpiv, const real_t* A, int32_t lda, real_t* B, int32_t ldb) :
+  permute_copy(int64_t M, const int32_t* jpiv, const real_t* A, int64_t lda, real_t* B, int64_t ldb) :
     A(A), B(B), jpiv(jpiv), M(M), lda(lda), ldb(ldb) {}
   
   __device__ __forceinline__ void operator()(int64_t i) {
@@ -122,7 +122,7 @@ template <class real_t> struct identity {
   real_t* __restrict__ A;
   real_t zero, one;
   int64_t M, lda, strideD;
-  identity(real_t zero, real_t one, int32_t M, real_t* A, int32_t lda, int32_t strideD) :
+  identity(real_t zero, real_t one, int64_t M, real_t* A, int64_t lda, int64_t strideD) :
     A(A), zero(zero), one(one), M(M), lda(lda), strideD(strideD) {}
   
   __device__ __forceinline__ void operator()(int64_t i) {

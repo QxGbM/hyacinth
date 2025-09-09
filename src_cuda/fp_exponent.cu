@@ -1,7 +1,7 @@
 
 #include <hyacinth.hpp>
 #include <internal.hpp>
-#include <int_fp_encode.hpp>
+#include <int_fp_quantize.hpp>
 #include <cub/cub.cuh>
 
 struct abs_max {
@@ -15,13 +15,13 @@ __device__ __forceinline__ int32_t fp_expon(double a) { int32_t expon; frexp(a, 
 __device__ __forceinline__ int32_t fp_expon(float a) { int32_t expon; frexpf(a, &expon); return expon - 1; }
 
 template <class real_t, class real_const_ptr, int32_t GRID_BLOCKS, int32_t BLOCK_THREADS>
-__global__ void vector_exponent_kernel(int32_t order, int32_t M, int32_t N, real_const_ptr A, int32_t lda, int32_t* __restrict__ vec_expon) {
+__global__ void vector_exponent_kernel(int32_t order, int32_t M, int32_t N, real_const_ptr A, int64_t lda, int32_t* __restrict__ vec_expon) {
   __shared__ typename cub::BlockReduce<real_t, BLOCK_THREADS>::TempStorage temp_reduce;
   cub::BlockReduce<real_t, BLOCK_THREADS> block_reduce(temp_reduce);
   abs_max amax_func;
 
   for (int32_t col = blockIdx.x; col < N; col += GRID_BLOCKS) {
-    real_const_ptr A_i = &A[int64_t(col) * int64_t(lda)];
+    real_const_ptr A_i = &A[int64_t(col) * lda];
     real_t threadB = real_t();
 
     for (int32_t i = threadIdx.x; i < M; i += BLOCK_THREADS)

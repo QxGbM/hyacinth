@@ -14,7 +14,7 @@ template <class real_t> struct scalbn_func {
   const int32_t* __restrict__ vec_expon;
   int32_t gemm_expon;
   int64_t N, lda;
-  scalbn_func(int32_t N, real_t* A, int32_t lda, int32_t gemm_expon, const int32_t* vec_expon) :
+  scalbn_func(int64_t N, real_t* A, int64_t lda, int32_t gemm_expon, const int32_t* vec_expon) :
     A(A), vec_expon(vec_expon), gemm_expon(gemm_expon), N(N), lda(lda) {}
 
   __device__ __forceinline__ double scal(int32_t expon, double f) {
@@ -68,8 +68,8 @@ template <class real_t, class complex_t> struct convert_func {
   complex_t* __restrict__ B;
   int32_t gemm_expon;
   int64_t N, lda, strideA, ldb;
-  convert_func(int32_t N, const real_t* A, int32_t lda, int32_t gemm_expon, const int32_t* vec_expon, complex_t* B, int32_t ldb) :
-    A(A), vec_expon(vec_expon), B(B), gemm_expon(gemm_expon), N(N), lda(lda), strideA(int64_t(N) * int64_t(lda)), ldb(ldb) {}
+  convert_func(int64_t N, const real_t* A, int64_t lda, int32_t gemm_expon, const int32_t* vec_expon, complex_t* B, int64_t ldb) :
+    A(A), vec_expon(vec_expon), B(B), gemm_expon(gemm_expon), N(N), lda(lda), strideA(N * lda), ldb(ldb) {}
 
   __device__ __forceinline__ cuDoubleComplex conv(int32_t expon, double real, double imagA, double imagAT) {
     return make_cuDoubleComplex(scalbn(real, expon), scalbn(imagA - imagAT, expon));

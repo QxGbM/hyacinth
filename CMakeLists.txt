@@ -22,11 +22,11 @@ set(CPP_SOURCES
 
 set(CU_SOURCES
   src_cuda/fp_exponent.cu
-  src_cuda/fp_i8_encode.cu
+  src_cuda/fp_i8_quantize.cu
   src_cuda/gemv_pp_nopiv.cu
   src_cuda/gemv_pp.cu
   src_cuda/gemv_scal_f128.cu
-  src_cuda/i32_fp_decode.cu
+  src_cuda/i32_fp_dequantize.cu
   src_cuda/igemm_pp.cu
   src_cuda/imax_diag.cu
   src_cuda/utils.cu
