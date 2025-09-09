@@ -87,19 +87,19 @@ void device::MixPrecAHA::rATA(cudaStream_t stream, cublasHandle_t handle, gemm_p
 
   if (param.precC == Precision::FP64) {
     i8gemm_dispatcher<Precision::FP64>(stream, handle, N, param.iter_k, algnN, algnM, iA, iA, orderA, acc, (int32_t*)workspace);
-    internal::int8::scal_exponent_f64(stream, N, (double*)acc, algnN, orderA, (int32_t*)v_exp);
+    internal::int8::scal_exponent_f64(stream, N, (double*)acc, algnN, device::Config::exp_base * orderA, (int32_t*)v_exp);
   }
   else if (param.precC == Precision::FP32) {
     i8gemm_dispatcher<Precision::FP32>(stream, handle, N, param.iter_k, algnN, algnM, iA, iA, orderA, acc, (int32_t*)workspace);
-    internal::int8::scal_exponent_f32(stream, N, (float*)acc, algnN, orderA, (int32_t*)v_exp);
+    internal::int8::scal_exponent_f32(stream, N, (float*)acc, algnN, device::Config::exp_base * orderA, (int32_t*)v_exp);
   }
   else if (param.precC == Precision::FP128_DD) {
     i8gemm_dispatcher<Precision::FP128_DD>(stream, handle, N, param.iter_k, algnN, algnM, iA, iA, orderA, acc, (int32_t*)workspace);
-    internal::int8::scal_exponent_f128_dd(stream, N, (double2*)acc, algnN, orderA, (int32_t*)v_exp);
+    internal::int8::scal_exponent_f128_dd(stream, N, (double2*)acc, algnN, device::Config::exp_base * orderA, (int32_t*)v_exp);
   }
   else if (param.precC == Precision::FP128_QF) {
     i8gemm_dispatcher<Precision::FP128_QF>(stream, handle, N, param.iter_k, algnN, algnM, iA, iA, orderA, acc, (int32_t*)workspace);
-    internal::int8::scal_exponent_f128_qf(stream, N, (float4*)acc, algnN, orderA, (int32_t*)v_exp);
+    internal::int8::scal_exponent_f128_qf(stream, N, (float4*)acc, algnN, device::Config::exp_base * orderA, (int32_t*)v_exp);
   }
 }
 
@@ -131,24 +131,24 @@ void device::MixPrecAHA::cAHA(cudaStream_t stream, cublasHandle_t handle, gemm_p
     i8gemm_dispatcher<Precision::FP64>(stream, handle, N, param.iter_k, algnN, algnM, iA, iA, orderA, acc, (int32_t*)workspace);
     i8gemm_dispatcher<Precision::FP64>(stream, handle, N, param.iter_k, algnN, algnM, iA_imag, iA_imag, orderA, acc, (int32_t*)workspace);
     i8gemm_dispatcher<Precision::FP64>(stream, handle, N, param.iter_k, algnN, algnM, iA, iA_imag, orderA, acc_imag, (int32_t*)workspace);
-    internal::int8::planar_to_interleave_f64(stream, N, (double*)acc, algnN, orderA, (int32_t*)v_exp, (std::complex<double>*)iA, algnN);
+    internal::int8::planar_to_interleave_f64(stream, N, (double*)acc, algnN, device::Config::exp_base * orderA, (int32_t*)v_exp, (std::complex<double>*)iA, algnN);
   }
   else if (param.precC == Precision::FP32) {
     i8gemm_dispatcher<Precision::FP32>(stream, handle, N, param.iter_k, algnN, algnM, iA, iA, orderA, acc, (int32_t*)workspace);
     i8gemm_dispatcher<Precision::FP32>(stream, handle, N, param.iter_k, algnN, algnM, iA_imag, iA_imag, orderA, acc, (int32_t*)workspace);
     i8gemm_dispatcher<Precision::FP32>(stream, handle, N, param.iter_k, algnN, algnM, iA, iA_imag, orderA, acc_imag, (int32_t*)workspace);
-    internal::int8::planar_to_interleave_f32(stream, N, (float*)acc, algnN, orderA, (int32_t*)v_exp, (std::complex<float>*)iA, algnN);
+    internal::int8::planar_to_interleave_f32(stream, N, (float*)acc, algnN, device::Config::exp_base * orderA, (int32_t*)v_exp, (std::complex<float>*)iA, algnN);
   }
   else if (param.precC == Precision::FP128_DD) {
     i8gemm_dispatcher<Precision::FP128_DD>(stream, handle, N, param.iter_k, algnN, algnM, iA, iA, orderA, acc, (int32_t*)workspace);
     i8gemm_dispatcher<Precision::FP128_DD>(stream, handle, N, param.iter_k, algnN, algnM, iA_imag, iA_imag, orderA, acc, (int32_t*)workspace);
     i8gemm_dispatcher<Precision::FP128_DD>(stream, handle, N, param.iter_k, algnN, algnM, iA, iA_imag, orderA, acc_imag, (int32_t*)workspace);
-    internal::int8::planar_to_interleave_f128_dd(stream, N, (double2*)acc, algnN, orderA, (int32_t*)v_exp, (complex_double2*)iA, algnN);
+    internal::int8::planar_to_interleave_f128_dd(stream, N, (double2*)acc, algnN, device::Config::exp_base * orderA, (int32_t*)v_exp, (complex_double2*)iA, algnN);
   }
   else if (param.precC == Precision::FP128_QF) {
     i8gemm_dispatcher<Precision::FP128_QF>(stream, handle, N, param.iter_k, algnN, algnM, iA, iA, orderA, acc, (int32_t*)workspace);
     i8gemm_dispatcher<Precision::FP128_QF>(stream, handle, N, param.iter_k, algnN, algnM, iA_imag, iA_imag, orderA, acc, (int32_t*)workspace);
     i8gemm_dispatcher<Precision::FP128_QF>(stream, handle, N, param.iter_k, algnN, algnM, iA, iA_imag, orderA, acc_imag, (int32_t*)workspace);
-    internal::int8::planar_to_interleave_f128_qf(stream, N, (float4*)acc, algnN, orderA, (int32_t*)v_exp, (complex_float4*)iA, algnN);
+    internal::int8::planar_to_interleave_f128_qf(stream, N, (float4*)acc, algnN, device::Config::exp_base * orderA, (int32_t*)v_exp, (complex_float4*)iA, algnN);
   }
 }

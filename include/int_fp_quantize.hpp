@@ -41,7 +41,7 @@ namespace device::int8 {
     using std::signbit, std::fabs, std::scalbn, std::floor;
 #endif
     uint32_t sign = signbit(value);
-    value = scalbn(fabs(value), -expon * BASE);
+    value = scalbn(fabs(value), -expon);
 
     if constexpr(1 <= ORDER && ORDER <= 2) {
       uint64_t ir_hi = uint64_t(value);
@@ -71,10 +71,10 @@ namespace device::int8 {
 
 #ifdef __CUDA_ARCH__
     uint32_t sign = uint32_t(signbit(value));
-    value = scalbnf(fabsf(value), -expon * BASE);
+    value = scalbnf(fabsf(value), -expon);
 #else
     uint32_t sign = uint32_t(std::signbit(value));
-    value = std::scalbnf(std::fabs(value), -expon * BASE);
+    value = std::scalbnf(std::fabs(value), -expon);
 #endif
 
     if constexpr(ORDER == 1)

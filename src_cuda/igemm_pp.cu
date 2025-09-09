@@ -1,5 +1,4 @@
 
-#include <hyacinth.hpp>
 #include <internal.hpp>
 #include <double_double.hpp>
 #include <quad_float.hpp>
@@ -33,7 +32,7 @@ template <class real_t> struct scalbn_func {
   __device__ __forceinline__ void operator()(int64_t i) {
     int64_t x = i / N, y = i - N * x;
     real_t f = A[y + x * lda];
-    int32_t expon = device::Config::exp_base * (vec_expon[x] + vec_expon[y] + gemm_expon);
+    int32_t expon = gemm_expon + vec_expon[x] + vec_expon[y];
     A[y + x * lda] = scal(expon, f);
   }
 };
@@ -89,7 +88,7 @@ template <class real_t, class complex_t> struct convert_func {
     real_t real = A[y + x * lda];
     real_t imagA = A[strideA + y + x * lda];
     real_t imagAT = A[strideA + x + y * lda];
-    int32_t expon = device::Config::exp_base * (vec_expon[x] + vec_expon[y] + gemm_expon);
+    int32_t expon = gemm_expon + vec_expon[x] + vec_expon[y];
     B[y + x * ldb] = conv(expon, real, imagA, imagAT);
   }
 };

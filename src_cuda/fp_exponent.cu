@@ -11,8 +11,8 @@ struct abs_max {
   __device__ __forceinline__ float operator()(float a, float b) { return fmaxf(a, b); }
 };
 
-__device__ __forceinline__ int32_t fp_expon(double a) { int32_t expon; frexp(a, &expon); return expon - 1; }
-__device__ __forceinline__ int32_t fp_expon(float a) { int32_t expon; frexpf(a, &expon); return expon - 1; }
+__device__ __forceinline__ int32_t fp_expon(double a) { int32_t expon; frexp(a, &expon); return expon; }
+__device__ __forceinline__ int32_t fp_expon(float a) { int32_t expon; frexpf(a, &expon); return expon; }
 
 template <class real_t, class real_const_ptr, int32_t GRID_BLOCKS, int32_t BLOCK_THREADS>
 __global__ void vector_exponent_kernel(int32_t order, int32_t M, int32_t N, real_const_ptr A, int64_t lda, int32_t* __restrict__ vec_expon) {
@@ -30,11 +30,8 @@ __global__ void vector_exponent_kernel(int32_t order, int32_t M, int32_t N, real
     if (0 < M)
       threadB = block_reduce.Reduce(threadB, amax_func);
 
-    if (threadIdx.x == 0) {
-      int32_t expon = fp_expon(threadB), vec_e;
-      device::int8::fast_division_i32<device::Config::exp_base>(expon, vec_e, expon);
-      vec_expon[col] = vec_e - order + 1;
-    }
+    if (threadIdx.x == 0)
+      vec_expon[col] = fp_expon(threadB) - device::Config::exp_base * order;
   }
 }
 
