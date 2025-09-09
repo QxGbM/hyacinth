@@ -1,5 +1,4 @@
 
-#include <hyacinth.hpp>
 #include <internal.hpp>
 #include <int_fp_quantize.hpp>
 #include <cub/cub.cuh>
@@ -15,7 +14,7 @@ __device__ __forceinline__ int32_t fp_expon(double a) { int32_t expon; frexp(a, 
 __device__ __forceinline__ int32_t fp_expon(float a) { int32_t expon; frexpf(a, &expon); return expon; }
 
 template <class real_t, class real_const_ptr, int32_t GRID_BLOCKS, int32_t BLOCK_THREADS>
-__global__ void vector_exponent_kernel(int32_t order, int32_t M, int32_t N, real_const_ptr A, int64_t lda, int32_t* __restrict__ vec_expon) {
+__global__ void vector_exponent_kernel(int32_t q_range, int32_t M, int32_t N, real_const_ptr A, int64_t lda, int32_t* __restrict__ vec_expon) {
   __shared__ typename cub::BlockReduce<real_t, BLOCK_THREADS>::TempStorage temp_reduce;
   cub::BlockReduce<real_t, BLOCK_THREADS> block_reduce(temp_reduce);
   abs_max amax_func;
@@ -31,19 +30,19 @@ __global__ void vector_exponent_kernel(int32_t order, int32_t M, int32_t N, real
       threadB = block_reduce.Reduce(threadB, amax_func);
 
     if (threadIdx.x == 0)
-      vec_expon[col] = fp_expon(threadB) - device::Config::exp_base * order;
+      vec_expon[col] = fp_expon(threadB) - q_range;
   }
 }
 
 constexpr int32_t block_threads = 512;
 constexpr int32_t grid_blocks = 512;
 
-void internal::int8::vexp_f64(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const double* A, int32_t lda, int32_t* vec_expon) {
+void internal::int8::vexp_f64(cudaStream_t stream, int32_t q_range, int32_t M, int32_t N, const double* A, int32_t lda, int32_t* vec_expon) {
   vector_exponent_kernel <double, const double* __restrict__, grid_blocks, block_threads>
-    <<< grid_blocks, block_threads, 0, stream >>> (order, M, N, A, lda, vec_expon);
+    <<< grid_blocks, block_threads, 0, stream >>> (q_range, M, N, A, lda, vec_expon);
 }
 
-void internal::int8::vexp_f32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const float* A, int32_t lda, int32_t* vec_expon) {
+void internal::int8::vexp_f32(cudaStream_t stream, int32_t q_range, int32_t M, int32_t N, const float* A, int32_t lda, int32_t* vec_expon) {
   vector_exponent_kernel <float, const float* __restrict__, grid_blocks, block_threads>
-    <<< grid_blocks, block_threads, 0, stream >>> (order, M, N, A, lda, vec_expon);
+    <<< grid_blocks, block_threads, 0, stream >>> (q_range, M, N, A, lda, vec_expon);
 }
