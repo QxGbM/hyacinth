@@ -64,20 +64,19 @@ template <class matrix_ptr, class matrix_const_ptr, int32_t WARP_THREADS, int32_
 __global__ void gemv_kernel(int32_t j, int32_t M, int32_t N, matrix_const_ptr A, int64_t lda, matrix_ptr B, scal_f128<real_t, matrix_t> scal_func) {
   constexpr int32_t block_warps = BLOCK_THREADS / WARP_THREADS;
   constexpr int32_t elements = ITEMS_PER_THREAD * WARP_THREADS;
-  int32_t N2 = N & (elements - 1), N1 = N - N2;
-  int32_t inc_row = block_warps * gridDim.x;
+  int32_t i = block_warps * blockIdx.x + threadIdx.y;
 
   __shared__ typename cub::BlockLoad<matrix_t, WARP_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_STRIPED>::TempStorage temp_load[block_warps];
   __shared__ typename cub::BlockReduce<matrix_t, WARP_THREADS>::TempStorage temp_reduce[block_warps];
   cub::BlockLoad<matrix_t, WARP_THREADS, ITEMS_PER_THREAD, cub::BLOCK_LOAD_STRIPED> block_load(temp_load[threadIdx.y]);
   cub::BlockReduce<matrix_t, WARP_THREADS> block_reduce(temp_reduce[threadIdx.y]);
-  matrix_t threadA[ITEMS_PER_THREAD], threadX[ITEMS_PER_THREAD], threadB[ITEMS_PER_THREAD];
-  matrix_const_ptr A_j = &A[int64_t(j) * lda];
 
-  for (int32_t i = (block_warps * blockIdx.x + threadIdx.y); i < M; i += inc_row) {
-    matrix_const_ptr A_i = &A[int64_t(i) * lda];
+  if (i < M) {
+    matrix_t threadA[ITEMS_PER_THREAD], threadX[ITEMS_PER_THREAD], threadB[ITEMS_PER_THREAD];
+    matrix_const_ptr A_i = &A[int64_t(i) * lda], A_j = &A[int64_t(j) * lda];
+    M = N & (elements - 1); N = N - M;
     
-    for (int32_t k = 0; k < N1; k += elements) {
+    for (int32_t k = 0; k < N; k += elements) {
       block_load.Load(&A_i[k], threadA);
       block_load.Load(&A_j[k], threadX);
       if (k == 0)
@@ -86,10 +85,10 @@ __global__ void gemv_kernel(int32_t j, int32_t M, int32_t N, matrix_const_ptr A,
         array_fma<1>(threadA, threadX, threadB);
     }
 
-    if (0 < N2) {
-      block_load.Load(&A_i[N1], threadA, N2, matrix_t());
-      block_load.Load(&A_j[N1], threadX, N2, matrix_t());
-      if (N1 == 0)
+    if (0 < M) {
+      block_load.Load(&A_i[N], threadA, M, matrix_t());
+      block_load.Load(&A_j[N], threadX, M, matrix_t());
+      if (N == 0)
         array_fma<0>(threadA, threadX, threadB);
       else
         array_fma<1>(threadA, threadX, threadB);
