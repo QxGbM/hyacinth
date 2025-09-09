@@ -37,7 +37,7 @@ void device::MixPrecAHA::rATA_params_query(gemm_params* param, double* epi, int3
   param->i8_bytes = int64_t(param->orderA) * strideA;
   param->i8_bytes = (param->i8_bytes + algn_i8) & (~algn_i8);
   param->exp_bytes = sizeof(int32_t) * int64_t(param->algnN);
-  param->scratch_bytes = sizeof(int32_t) * int64_t(param->orderA + 1) * strideC;
+  param->scratch_bytes = sizeof(int32_t) * int64_t(param->orderA) * strideC;
 
   int64_t A_elem_bytes = precA == Precision::FP32 ? sizeof(float) : sizeof(double);
   int64_t spare_space = std::max(param->i8_bytes + param->scratch_bytes, A_elem_bytes * strideC);
@@ -67,7 +67,7 @@ void device::MixPrecAHA::cAHA_params_query(gemm_params* param, double* epi, int3
   param->i8_bytes = int64_t(param->orderA) * strideA;
   param->i8_bytes = (param->i8_bytes + algn_i8) & (~algn_i8);
   param->exp_bytes = sizeof(int32_t) * int64_t(param->algnN);
-  param->scratch_bytes = sizeof(int32_t) * int64_t(param->orderA + 1) * strideC;
+  param->scratch_bytes = sizeof(int32_t) * int64_t(param->orderA) * strideC;
 
   int64_t spare_space = std::max(param->i8_bytes + param->scratch_bytes, param->acc_bytes);
   param->C_bytes = param->acc_bytes + param->exp_bytes + spare_space;
