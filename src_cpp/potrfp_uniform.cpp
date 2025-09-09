@@ -62,7 +62,7 @@ inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, double epi, in
 
   for (int32_t i = 0; i < iters; ++i) {
     int64_t A_col = int64_t(i) * int64_t(lda);
-    int32_t j = *pivot_i;
+    int32_t j = (*pivot_i) - 1;
     double diag_f64 = conv_f64<prec>(scale[0]);
     epi = 0 < i ? epi : (epi * diag_f64);
 

@@ -151,8 +151,10 @@ void internal::Cholesky::gemv_scal_f128_dd(cudaStream_t stream, double2* scale, 
 void internal::Cholesky::gemv_scal_f128_qf(cudaStream_t stream, float4* scale, int32_t j, int32_t M, int32_t N, float4* A, int32_t lda, float4* D) {
   if (2 <= M) {
     gemv_dispatcher<float4* __restrict__, const float4* __restrict__>(stream, scale[1], j, M, N, A, lda);
-    if (j) gemv_pp_f128_qf(stream, j, N, M, scale, A, lda, D);
-      else gemv_pp_nopiv_f128_qf(stream, N, M, scale, A, lda, D);
+    if (j)
+      gemv_pp_f128_qf(stream, j, N, M, scale, A, lda, D);
+    else
+      gemv_pp_nopiv_f128_qf(stream, N, M, scale, A, lda, D);
   }
   else if (1 == M)
     cudaMemcpyAsync(&A[N], scale, sizeof(float4), cudaMemcpyHostToDevice, stream);

@@ -16,8 +16,6 @@ __device__ __forceinline__ int32_t fp_expon(float a) { int32_t expon; frexpf(a, 
 
 template <class real_t, class real_const_ptr, int32_t GRID_BLOCKS, int32_t BLOCK_THREADS>
 __global__ void vector_exponent_kernel(int32_t order, int32_t M, int32_t N, real_const_ptr A, int32_t lda, int32_t* __restrict__ vec_expon) {
-  int32_t M2 = M & (BLOCK_THREADS - 1), M1 = M - M2;
-
   __shared__ typename cub::BlockReduce<real_t, BLOCK_THREADS>::TempStorage temp_reduce;
   cub::BlockReduce<real_t, BLOCK_THREADS> block_reduce(temp_reduce);
   abs_max amax_func;
@@ -26,15 +24,8 @@ __global__ void vector_exponent_kernel(int32_t order, int32_t M, int32_t N, real
     real_const_ptr A_i = &A[int64_t(col) * int64_t(lda)];
     real_t threadB = real_t();
 
-    for (int32_t i = 0; i < M1; i += BLOCK_THREADS) {
-      real_t threadA = amax_func(A_i[i + threadIdx.x]);
-      threadB = (i == 0) ? threadA : amax_func(threadA, threadB);
-    }
-
-    if (threadIdx.x < M2) {
-      real_t threadA = amax_func(A_i[M1 + threadIdx.x]);
-      threadB = (M1 == 0) ? threadA : amax_func(threadA, threadB);
-    }
+    for (int32_t i = threadIdx.x; i < M; i += BLOCK_THREADS)
+      threadB = amax_func(amax_func(A_i[i]), threadB);
 
     if (0 < M)
       threadB = block_reduce.Reduce(threadB, amax_func);

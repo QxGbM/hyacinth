@@ -50,11 +50,6 @@ struct real_max {
   __host__ __device__ __forceinline__ float_idx operator()(float_idx a, float_idx b) { return device::cmp::float_max(a, b); }
   __host__ __device__ __forceinline__ double2_idx operator()(double2_idx a, double2_idx b) { return device::cmp::double2_max(a, b); }
   __host__ __device__ __forceinline__ float4_idx operator()(float4_idx a, float4_idx b) { return device::cmp::float4_max(a, b); }
-
-  __host__ __device__ __forceinline__ void init(double_idx& a) { a = double_idx({ 0., -1 }); }
-  __host__ __device__ __forceinline__ void init(float_idx& a) { a = float_idx({ 0.f, -1 }); }
-  __host__ __device__ __forceinline__ void init(double2_idx& a) { a = double2_idx({ make_double2(0., 0.), -1 }); }
-  __host__ __device__ __forceinline__ void init(float4_idx& a) { a = float4_idx({ make_float4(0.f, 0.f, 0.f, 0.f), -1 }); }
 };
 
 template <class real_t, class real_ptr, class matrix_t, class matrix_ptr, class idx_t, class idx_ptr, int32_t GRID_BLOCKS, int32_t BLOCK_THREADS>
@@ -71,7 +66,7 @@ __global__ void gemv_pp_kernel(int32_t j, int32_t M, int32_t N, matrix_t sq, mat
   __shared__ typename cub::BlockReduce<idx_t, BLOCK_THREADS>::TempStorage temp_reduce;
   cub::BlockReduce<idx_t, BLOCK_THREADS> block_reduce(temp_reduce);
   conj conj_func; gemv_pp_fused pp_func; real_max cmp_max;
-  idx_t thread_x; cmp_max.init(thread_x);
+  idx_t thread_x = idx_t();
   if (block_offset == ((j - 1) & (elements - 1)))
   { A_col_j[j] = A_col_j[0]; D[j] = D[0]; }
 
@@ -103,28 +98,24 @@ void internal::Cholesky::gemv_pp_f64(cudaStream_t stream, int32_t j, int32_t M, 
   gemv_pp_kernel <double, double* __restrict__, double, double* __restrict__, double_idx, double_idx* __restrict__, grid_blocks, block_threads>
     <<< grid_blocks, block_threads, 0, stream >>> (j, M, N, *sq, A, lda, D, (double_idx*)sq);
   imax_f64_host_sync(stream, N, std::min(grid_blocks, (N + block_threads - 1) / block_threads), sq);
-  --(*(int32_t*)(&sq[2]));
 }
 
 void internal::Cholesky::gemv_pp_f32(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float* sq, float* A, int32_t lda, float* D) {
   gemv_pp_kernel <float, float* __restrict__, float, float* __restrict__, float_idx, float_idx* __restrict__, grid_blocks, block_threads>
     <<< grid_blocks, block_threads, 0, stream >>> (j, M, N, *sq, A, lda, D, (float_idx*)sq);
   imax_f32_host_sync(stream, N, std::min(grid_blocks, (N + block_threads - 1) / block_threads), sq);
-  --(*(int32_t*)(&sq[2]));
 }
 
 void internal::Cholesky::gemv_pp_f128_dd(cudaStream_t stream, int32_t j, int32_t M, int32_t N, double2* sq, double2* A, int32_t lda, double2* D) {
   gemv_pp_kernel <double2, double2* __restrict__, double2, double2* __restrict__, double2_idx, double2_idx* __restrict__, grid_blocks, block_threads>
     <<< grid_blocks, block_threads, 0, stream >>> (j, M, N, *sq, A, lda, D, (double2_idx*)sq);
   imax_f128_dd_host_sync(stream, N, std::min(grid_blocks, (N + block_threads - 1) / block_threads), sq);
-  --(*(int32_t*)(&sq[2]));
 }
 
 void internal::Cholesky::gemv_pp_f128_qf(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float4* sq, float4* A, int32_t lda, float4* D) {
   gemv_pp_kernel <float4, float4* __restrict__, float4, float4* __restrict__, float4_idx, float4_idx* __restrict__, grid_blocks, block_threads>
     <<< grid_blocks, block_threads, 0, stream >>> (j, M, N, *sq, A, lda, D, (float4_idx*)sq);
   imax_f128_qf_host_sync(stream, N, std::min(grid_blocks, (N + block_threads - 1) / block_threads), sq);
-  --(*(int32_t*)(&sq[2]));
 }
 
 void internal::Cholesky::gemv_pp_cf64(cudaStream_t stream, int32_t j, int32_t M, int32_t N, double* sq, std::complex<double>* A, int32_t lda, double* D) {
@@ -132,7 +123,6 @@ void internal::Cholesky::gemv_pp_cf64(cudaStream_t stream, int32_t j, int32_t M,
   gemv_pp_kernel <double, double* __restrict__, cuDoubleComplex, cuDoubleComplex* __restrict__, double_idx, double_idx* __restrict__, grid_blocks, block_threads>
     <<< grid_blocks, block_threads, 0, stream >>> (j, M, N, sqc, (cuDoubleComplex*)A, lda, D, (double_idx*)sq);
   imax_f64_host_sync(stream, N, std::min(grid_blocks, (N + block_threads - 1) / block_threads), sq);
-  --(*(int32_t*)(&sq[2]));
 }
 
 void internal::Cholesky::gemv_pp_cf32(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float* sq, std::complex<float>* A, int32_t lda, float* D) {
@@ -140,7 +130,6 @@ void internal::Cholesky::gemv_pp_cf32(cudaStream_t stream, int32_t j, int32_t M,
   gemv_pp_kernel <float, float* __restrict__, cuComplex, cuComplex* __restrict__, float_idx, float_idx* __restrict__, grid_blocks, block_threads>
     <<< grid_blocks, block_threads, 0, stream >>> (j, M, N, sqc, (cuComplex*)A, lda, D, (float_idx*)sq);
   imax_f32_host_sync(stream, N, std::min(grid_blocks, (N + block_threads - 1) / block_threads), sq);
-  --(*(int32_t*)(&sq[2]));
 }
 
 void internal::Cholesky::gemv_pp_cf128_dd(cudaStream_t stream, int32_t j, int32_t M, int32_t N, double2* sq, complex_double2* A, int32_t lda, double2* D) {
@@ -148,7 +137,6 @@ void internal::Cholesky::gemv_pp_cf128_dd(cudaStream_t stream, int32_t j, int32_
   gemv_pp_kernel <double2, double2* __restrict__, complex_double2, complex_double2* __restrict__, double2_idx, double2_idx* __restrict__, grid_blocks, block_threads>
     <<< grid_blocks, block_threads, 0, stream >>> (j, M, N, sqc, A, lda, D, (double2_idx*)sq);
   imax_f128_dd_host_sync(stream, N, std::min(grid_blocks, (N + block_threads - 1) / block_threads), sq);
-  --(*(int32_t*)(&sq[2]));
 }
 
 void internal::Cholesky::gemv_pp_cf128_qf(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float4* sq, complex_float4* A, int32_t lda, float4* D) {
@@ -156,5 +144,4 @@ void internal::Cholesky::gemv_pp_cf128_qf(cudaStream_t stream, int32_t j, int32_
   gemv_pp_kernel <float4, float4* __restrict__, complex_float4, complex_float4* __restrict__, float4_idx, float4_idx* __restrict__, grid_blocks, block_threads>
     <<< grid_blocks, block_threads, 0, stream >>> (j, M, N, sqc, A, lda, D, (float4_idx*)sq);
   imax_f128_qf_host_sync(stream, N, std::min(grid_blocks, (N + block_threads - 1) / block_threads), sq);
-  --(*(int32_t*)(&sq[2]));
 }

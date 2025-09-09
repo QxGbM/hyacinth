@@ -37,13 +37,10 @@ namespace device::int8 {
     static_assert(1 <= ORDER && ORDER <= 4, "Integer quantization order need to be in [1,4] for FP64.");
     constexpr int32_t BASE4x = 4 * BASE;
 
-#ifdef __CUDA_ARCH__
-    uint32_t sign = uint32_t(uint64_t(__double_as_longlong(value)) >> 63);
-#else
-    using std::fabs, std::scalbn, std::floor;
-    union { double d; uint64_t u; } v {value};
-    uint32_t sign = uint32_t(v.u >> 63);
+#ifndef __CUDA_ARCH__
+    using std::signbit, std::fabs, std::scalbn, std::floor;
 #endif
+    uint32_t sign = signbit(value);
     value = scalbn(fabs(value), -expon * BASE);
 
     if constexpr(1 <= ORDER && ORDER <= 2) {
@@ -73,12 +70,11 @@ namespace device::int8 {
     constexpr int32_t BASE4x = 4 * BASE;
 
 #ifdef __CUDA_ARCH__
-    uint32_t sign = uint32_t(__float_as_uint(value)) >> 31;
+    uint32_t sign = uint32_t(signbit(value));
     value = scalbnf(fabsf(value), -expon * BASE);
 #else
-    union { float f; uint32_t u; } v {value};
-    uint32_t sign = v.u >> 31;
-    value = scalbnf(std::fabs(value), -expon * BASE);
+    uint32_t sign = uint32_t(std::signbit(value));
+    value = std::scalbnf(std::fabs(value), -expon * BASE);
 #endif
 
     if constexpr(ORDER == 1)
