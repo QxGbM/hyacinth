@@ -27,7 +27,6 @@ set(CU_SOURCES
   src_cuda/gemv_pp.cu
   src_cuda/gemv_scal_f128.cu
   src_cuda/i32_fp_decode.cu
-  src_cuda/i32_normalize.cu
   src_cuda/igemm_pp.cu
   src_cuda/imax_diag.cu
   src_cuda/utils.cu

@@ -17,18 +17,15 @@ inline void decode_dispatcher(cudaStream_t stream, int32_t order_lo, int32_t ord
 template <device::Precision prec>
 void i8gemm_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32_t iter_k, int32_t algnN, int32_t algnK, const int8_t* AT, const int8_t* A, int32_t orderA, void* C, int32_t* workspace) {
   int64_t strideA = int64_t(algnK) * int64_t(N);
-  int64_t strideC = int64_t(algnN) * int64_t(N);
-  int32_t one = 1;
+  int32_t one = 1, zero = 0;
   
-  if (algnK <= iter_k) {
-    int32_t zero = 0;
+  if (algnK <= iter_k)
     for (int32_t i = 0; i < orderA; ++i) {
       int64_t AT_i = int64_t(i) * strideA;
       cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * orderA, algnK, &one, 
         &AT[AT_i], CUDA_R_8I, algnK, A, CUDA_R_8I, algnK, &zero, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
       decode_dispatcher<prec>(stream, i - orderA, i, N, C, workspace, algnN);
     }
-  }
   else {
     int32_t iter_h = iter_k >> 1;
     int32_t rem = algnK % iter_k;
@@ -37,40 +34,32 @@ void i8gemm_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t N, in
 
     for (int32_t i = 0; i < orderA; ++i) {
       int64_t AT_i = int64_t(i) * strideA;
-      int32_t beta = int32_t(0 != range_k);
-      if (beta) {
-        int32_t zero = 0;
-        cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * orderA, iter_k, &one, 
-          &AT[AT_i], CUDA_R_8I, algnK, A, CUDA_R_8I, algnK, &zero, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
-        internal::int8::i32_normalization(stream, strideC, orderA, 0, workspace);
-      }
-
-      for (int32_t k = iter_k; k < range_k; k += iter_k) {
+      for (int32_t k = 0; k < range_k; k += iter_k) {
         const int8_t* AT_k = &AT[int64_t(k) + AT_i];
         const int8_t* AN_k = &A[int64_t(k)];
 
         cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * orderA, iter_k, &one, 
-          AT_k, CUDA_R_8I, algnK, AN_k, CUDA_R_8I, algnK, &one, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
-        internal::int8::i32_normalization(stream, strideC, orderA, 1, workspace);
+          AT_k, CUDA_R_8I, algnK, AN_k, CUDA_R_8I, algnK, &zero, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+        decode_dispatcher<prec>(stream, i - orderA, i, N, C, workspace, algnN);
       }
 
       const int8_t* AT_k = &AT[int64_t(range_k) + AT_i];
       const int8_t* AN_k = &A[int64_t(range_k)];
       if (rem <= iter_k)
         cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * orderA, rem, &one, 
-          AT_k, CUDA_R_8I, algnK, AN_k, CUDA_R_8I, algnK, &beta, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+          AT_k, CUDA_R_8I, algnK, AN_k, CUDA_R_8I, algnK, &zero, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
       else {
         const int8_t* AT_k2 = &AT[int64_t(range_k + iter_h) + AT_i];
         const int8_t* AN_k2 = &A[int64_t(range_k + iter_h)];
 
         cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * orderA, iter_h, &one, 
-          AT_k, CUDA_R_8I, algnK, AN_k, CUDA_R_8I, algnK, &beta, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
-        internal::int8::i32_normalization(stream, strideC, orderA, beta, workspace);
+          AT_k, CUDA_R_8I, algnK, AN_k, CUDA_R_8I, algnK, &zero, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+        decode_dispatcher<prec>(stream, i - orderA, i, N, C, workspace, algnN);
 
         cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * orderA, rem - iter_h, &one, 
           AT_k2, CUDA_R_8I, algnK, AN_k2, CUDA_R_8I, algnK, &one, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
       }
-      decode_dispatcher<prec>(stream, i - orderA, i + 1, N, C, workspace, algnN);
+      decode_dispatcher<prec>(stream, i - orderA, i, N, C, workspace, algnN);
     }
   }
 }
