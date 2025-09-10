@@ -22,9 +22,9 @@ void device::MixPrecAHA::rATA_params_query(gemm_params* param, double* epi, int3
 
   param->M = M; param->N = N; param->precA = precA;
   param->algnM = (M + 127) & (~127); param->algnN = (N + 63) & (~63);
-  param->orderA = std::max(1, 1 + int32_t(std::ceil(machine_epi / Config::exp_base)));
+  param->orderA = 1 + int32_t(std::ceil(machine_epi / double(Config::exp_base)));
 
-  int32_t acc_bits = std::max(1, int32_t(std::ceil(2 * machine_epi)));
+  int32_t acc_bits = int32_t(std::ceil(2 * machine_epi));
   param->iter_k = 131072 << (14 - 2 * Config::exp_base);
   param->precC = acc_bits <= 24 ? Precision::FP32 : (acc_bits <= 53 ? Precision::FP64 : f128.first);
   param->C_elem_bytes = acc_bits <= 24 ? 4 : (acc_bits <= 53 ? 8 : 16);
@@ -52,9 +52,9 @@ void device::MixPrecAHA::cAHA_params_query(gemm_params* param, double* epi, int3
 
   param->M = M; param->N = N; param->precA = precA;
   param->algnM = (M + 127) & (~127); param->algnN = (N + 63) & (~63);
-  param->orderA = std::max(1, 1 + int32_t(std::ceil(machine_epi / Config::exp_base)));
+  param->orderA = 1 + int32_t(std::ceil(machine_epi / double(Config::exp_base)));
 
-  int32_t acc_bits = std::max(1, int32_t(std::ceil(2 * machine_epi)));
+  int32_t acc_bits = int32_t(std::ceil(2 * machine_epi));
   param->iter_k = 131072 << (14 - 2 * Config::exp_base);
   param->precC = acc_bits <= 24 ? Precision::FP32 : (acc_bits <= 53 ? Precision::FP64 : f128.first);
   param->C_elem_bytes = acc_bits <= 24 ? 8 : (acc_bits <= 53 ? 16 : 32);
