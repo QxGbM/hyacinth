@@ -25,9 +25,7 @@ __global__ void imax_kernel(int32_t N, real_const_ptr X, idx_ptr idx) {
   for (int32_t i = block_offset + int32_t(threadIdx.x); i < N; i += elements)
     thread_x = cmp_max(thread_x, idx_t({ X[i], i + 1 }));
 
-  if (block_offset < N)
-    thread_x = block_reduce.Reduce(thread_x, cmp_max);
-
+  thread_x = block_reduce.Reduce(thread_x, cmp_max);
   if (threadIdx.x == 0)
     idx[blockIdx.x] = thread_x;
 }
@@ -36,25 +34,29 @@ constexpr int32_t grid_blocks = 256;
 constexpr int32_t block_threads = 256;
 
 void internal::Cholesky::imax_f64(cudaStream_t stream, int32_t N, const double* X, double* scale) {
+  int32_t grid = std::min(grid_blocks, (N + block_threads - 1) / block_threads);
   imax_kernel <double_idx, double_idx* __restrict__, const double* __restrict__, grid_blocks, block_threads>
-    <<< grid_blocks, block_threads, 0, stream >>> (N, X, (double_idx*)scale);
-  imax_f64_host_sync(stream, N + 1, std::min(grid_blocks, (N + block_threads - 1) / block_threads), scale);
+    <<< grid, block_threads, 0, stream >>> (N, X, (double_idx*)scale);
+  imax_f64_host_sync(stream, N + 1, grid, scale);
 }
 
 void internal::Cholesky::imax_f32(cudaStream_t stream, int32_t N, const float* X, float* scale) {
+  int32_t grid = std::min(grid_blocks, (N + block_threads - 1) / block_threads);
   imax_kernel <float_idx, float_idx* __restrict__, const float* __restrict__, grid_blocks, block_threads>
-    <<< grid_blocks, block_threads, 0, stream >>> (N, X, (float_idx*)scale);
-  imax_f32_host_sync(stream, N + 1, std::min(grid_blocks, (N + block_threads - 1) / block_threads), scale);
+    <<< grid, block_threads, 0, stream >>> (N, X, (float_idx*)scale);
+  imax_f32_host_sync(stream, N + 1, grid, scale);
 }
 
 void internal::Cholesky::imax_f128_dd(cudaStream_t stream, int32_t N, const double2* X, double2* scale) {
+  int32_t grid = std::min(grid_blocks, (N + block_threads - 1) / block_threads);
   imax_kernel <double2_idx, double2_idx* __restrict__, const double2* __restrict__, grid_blocks, block_threads>
-    <<< grid_blocks, block_threads, 0, stream >>> (N, X, (double2_idx*)scale);
-  imax_f128_dd_host_sync(stream, N + 1, std::min(grid_blocks, (N + block_threads - 1) / block_threads), scale);
+    <<< grid, block_threads, 0, stream >>> (N, X, (double2_idx*)scale);
+  imax_f128_dd_host_sync(stream, N + 1, grid, scale);
 }
 
 void internal::Cholesky::imax_f128_qf(cudaStream_t stream, int32_t N, const float4* X, float4* scale) {
+  int32_t grid = std::min(grid_blocks, (N + block_threads - 1) / block_threads);
   imax_kernel <float4_idx, float4_idx* __restrict__, const float4* __restrict__, grid_blocks, block_threads>
-    <<< grid_blocks, block_threads, 0, stream >>> (N, X, (float4_idx*)scale);
-  imax_f128_qf_host_sync(stream, N + 1, std::min(grid_blocks, (N + block_threads - 1) / block_threads), scale);
+    <<< grid, block_threads, 0, stream >>> (N, X, (float4_idx*)scale);
+  imax_f128_qf_host_sync(stream, N + 1, grid, scale);
 }
