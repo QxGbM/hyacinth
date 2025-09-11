@@ -88,6 +88,25 @@ namespace device::qf {
     return normalize(make_float4(c1, c23.x, c23.y, c4));
   }
 
+  __host__ __device__ __forceinline__ float4 square(float4 a) {
+#ifndef __CUDA_ARCH__
+    using std::fmaf;
+#endif
+    float2 prod, err;
+    fmul2_err(make_float2(a.x, a.y), make_float2(a.x, a.y), prod, err);
+    float c1 = prod.x; a.x = a.x + a.x;
+    float c4 = fmaf(a.w, a.x, a.z * (a.y + a.y)) + err.y;
+    float2 c23 = make_float2(err.x, prod.y);
+
+    fmul2_err(make_float2(a.y, a.z), make_float2(a.x, a.x), prod, err);
+    fadd2_err(c23, prod, c23, prod);
+    fadd_err(prod.x, err.x, prod.x, err.x);
+    fadd_err(c23.y, prod.x, c23.y, prod.x);
+    c4 += (prod.x + prod.y) + (err.x + err.y);
+
+    return normalize(make_float4(c1, c23.x, c23.y, c4));
+  }
+
   __host__ __device__ __forceinline__ float4 fscalbn(float4 a, int32_t exp) {
 #ifndef __CUDA_ARCH__
     using std::scalbnf;

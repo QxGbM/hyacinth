@@ -52,6 +52,18 @@ namespace device::dd {
     return b;
   }
 
+  __host__ __device__ __forceinline__ double2 square(double2 a) {
+#ifndef __CUDA_ARCH__
+    using std::fma;
+#endif
+    double b = (a.x + a.x) * a.y;
+    a.y = a.x * a.x;
+    b += fma(a.x, a.x, -a.y);
+    a.x = a.y + b;
+    a.y = b + (a.y - a.x);
+    return a;
+  }
+
   __host__ __device__ __forceinline__ double2 fscalbn(double2 a, int32_t exp) {
 #ifndef __CUDA_ARCH__
     using std::scalbn;
