@@ -4,7 +4,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_BUILD_TYPE Release)
 
-project ("hyacinth" LANGUAGES CXX CUDA)
+project ("hyacin" LANGUAGES CXX CUDA)
 set(SM_TARGETS "80;86;89;90;100;120")
 
 find_package(CUDAToolkit REQUIRED)
@@ -37,11 +37,11 @@ set_source_files_properties(${CPP_SOURCES} PROPERTIES COMPILE_OPTIONS
 set_source_files_properties(${CU_SOURCES} PROPERTIES COMPILE_OPTIONS 
   "-Xcompiler=-march=native;-Xcompiler=-Wall;-Xcompiler=-Wextra;-Xcompiler=-fexceptions")
 
-add_library(hyacinth SHARED ${CPP_SOURCES} ${CU_SOURCES})
-set_property(TARGET hyacinth PROPERTY CUDA_ARCHITECTURES ${SM_TARGETS})
+add_library(hyacin SHARED ${CPP_SOURCES} ${CU_SOURCES})
+set_property(TARGET hyacin PROPERTY CUDA_ARCHITECTURES ${SM_TARGETS})
 
-target_include_directories(hyacinth PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_link_libraries(hyacinth PRIVATE CUDA::cudart CUDA::cublas)
+target_include_directories(hyacin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(hyacin PRIVATE CUDA::cudart CUDA::cublas)
 
 find_package(BLAS REQUIRED)
 find_package(LAPACK REQUIRED)
@@ -68,7 +68,7 @@ foreach (test ${TEST_SOURCES})
   add_test(NAME ${src}.app COMMAND ${src}.app)
 
   target_include_directories(${src}.app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-  target_link_libraries(${src}.app PRIVATE hyacinth BLAS::BLAS LAPACK::LAPACK CUDA::cudart CUDA::cublas)
+  target_link_libraries(${src}.app PRIVATE hyacin BLAS::BLAS LAPACK::LAPACK CUDA::cudart CUDA::cublas)
   if(BLAS_LIBS MATCHES "mkl")
     target_compile_options(${src}.app PRIVATE "-DUSE_MKL")
   else()

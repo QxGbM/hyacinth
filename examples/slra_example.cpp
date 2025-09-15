@@ -6,8 +6,9 @@
 #include <vector>
 
 void make_2D_oscillatory(double w, int32_t sep, int32_t M, int32_t N, float* A, int32_t lda) {
-  auto translate_2d = [](int64_t i) { int64_t x = i / 128, y = i - 128 * x; return std::complex<double>(x, y); };
-  sep = 128 * sep + ((M + 127) & (~127));
+  constexpr int32_t height = 128;
+  auto translate_2d = [](int64_t i) { int64_t x = i / height, y = i - height * x; return std::complex<double>(x, y); };
+  sep = height * sep + ((M + height - 1) & (~(height - 1)));
 
   for (int32_t j = 0; j < N; ++j) {
     auto vj = translate_2d(j + sep);
