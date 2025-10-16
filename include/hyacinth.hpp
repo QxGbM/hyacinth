@@ -5,6 +5,7 @@
 #include <complex>
 #include <cuda_runtime_api.h>
 #include <cublas_v2.h>
+#include <cusolverDn.h>
 
 namespace device {
   namespace Config {
@@ -102,16 +103,9 @@ namespace device {
       int32_t N;
       int32_t algnM;
       int32_t orderA;
-      int32_t iter_k;
 
       Precision precC;
       int32_t algnN;
-      int32_t C_elem_bytes;
-
-      int64_t acc_bytes;
-      int64_t i8_bytes;
-      int64_t exp_bytes;
-      int64_t scratch_bytes;
       int64_t C_bytes;
     };
 
