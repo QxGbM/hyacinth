@@ -53,7 +53,7 @@ int32_t device::interp_decomp_f64(cudaStream_t stream, cublasHandle_t handle, do
   cudaMallocHost((void**)(&dpiv), 8192);
   std::vector<int32_t> hpiv(N);
 
-  MixPrecAHA::rATA(stream, handle, param, A, lda, work);
+  MixPrecAHA::rATA(stream, handle, M, N, param.algnM, algnN, param.orderA, A, lda, Precision::FP64, work, param.precC);
   Cholesky::rpotrfp(stream, handle, epi, &rank, N, work, algnN, param.precC, &hpiv[0], dpiv);
   if (0 < rank) {
     int64_t elem_bytes = param.precC == Precision::FP32 ? sizeof(float) : (param.precC == Precision::FP64 ? sizeof(double) : sizeof(double2));
@@ -82,7 +82,7 @@ int32_t device::interp_decomp_f32(cudaStream_t stream, cublasHandle_t handle, do
   cudaMallocHost((void**)(&dpiv), 8192);
   std::vector<int32_t> hpiv(N);
 
-  MixPrecAHA::rATA(stream, handle, param, A, lda, work);
+  MixPrecAHA::rATA(stream, handle, M, N, param.algnM, algnN, param.orderA, A, lda, Precision::FP32, work, param.precC);
   Cholesky::rpotrfp(stream, handle, epi, &rank, N, work, algnN, param.precC, &hpiv[0], dpiv);
   if (0 < rank) {
     int64_t elem_bytes = param.precC == Precision::FP32 ? sizeof(float) : (param.precC == Precision::FP64 ? sizeof(double) : sizeof(double2));
@@ -150,7 +150,7 @@ int32_t device::interp_decomp_cf64(cudaStream_t stream, cublasHandle_t handle, d
   cudaMallocHost((void**)(&dpiv), 8192);
   std::vector<int32_t> hpiv(N);
 
-  MixPrecAHA::cAHA(stream, handle, param, A, lda, work);
+  MixPrecAHA::cAHA(stream, handle, M, N, param.algnM, algnN, param.orderA, A, lda, Precision::FP64, work, param.precC);
   Cholesky::cpotrfp(stream, handle, epi, &rank, N, work, algnN, param.precC, &hpiv[0], dpiv);
   if (0 < rank) {
     int64_t elem_bytes = param.precC == Precision::FP32 ? sizeof(float) : (param.precC == Precision::FP64 ? sizeof(double) : sizeof(double2));
@@ -179,7 +179,7 @@ int32_t device::interp_decomp_cf32(cudaStream_t stream, cublasHandle_t handle, d
   cudaMallocHost((void**)(&dpiv), 8192);
   std::vector<int32_t> hpiv(N);
 
-  MixPrecAHA::cAHA(stream, handle, param, A, lda, work);
+  MixPrecAHA::cAHA(stream, handle, M, N, param.algnM, algnN, param.orderA, A, lda, Precision::FP32, work, param.precC);
   Cholesky::cpotrfp(stream, handle, epi, &rank, N, work, algnN, param.precC, &hpiv[0], dpiv);
   if (0 < rank) {
     int64_t elem_bytes = param.precC == Precision::FP32 ? sizeof(float) : (param.precC == Precision::FP64 ? sizeof(double) : sizeof(double2));

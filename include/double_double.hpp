@@ -95,47 +95,28 @@ namespace device::dd {
     return fscalbn(x, p);
   }
 
-  __host__ __device__ __forceinline__ double conv_i31_f64(uint32_t i, int32_t expon) {
-#ifndef __CUDA_ARCH__
-    using std::scalbn;
-#endif
-    int32_t sign_i = int32_t(i) | (int32_t(i << 1) & (1 << 31));
-    return scalbn(double(sign_i), expon);
-  }
-
-  __host__ __device__ __forceinline__ double conv_u31_f64(uint32_t i, int32_t expon) {
-#ifndef __CUDA_ARCH__
-    using std::scalbn;
-#endif
-    return scalbn(double(i), expon);
-  }
-
   template <uint32_t ORDER>
   __host__ __device__ __forceinline__ double conv_a31_f64(uint32_t const (&a)[ORDER], int32_t expon) {
-    static_assert(1 <= ORDER && ORDER <= 6, "Integer 32 accumulation order must be in [1,6]");
+    static_assert(1 <= ORDER && ORDER <= 4, "Integer 32 accumulation order must be in [1,4]");
 #ifndef __CUDA_ARCH__
     using std::scalbn;
 #endif
-    double res = conv_i31_f64(a[ORDER - 1], expon);
-    if constexpr(5 < ORDER) res = scalbn(res, 31) + conv_u31_f64(a[4], expon);
-    if constexpr(4 < ORDER) res = scalbn(res, 31) + conv_u31_f64(a[3], expon);
-    if constexpr(3 < ORDER) res = scalbn(res, 31) + conv_u31_f64(a[2], expon);
-    if constexpr(2 < ORDER) res = scalbn(res, 31) + conv_u31_f64(a[1], expon);
-    if constexpr(1 < ORDER) res = scalbn(res, 31) + conv_u31_f64(a[0], expon);
-    return res;
+    double res = double(int32_t(a[ORDER - 1] | ((a[ORDER - 1] << 1) & 0xa0000000)));
+    if constexpr(3 < ORDER) res = scalbn(res, 31) + double(a[2]);
+    if constexpr(2 < ORDER) res = scalbn(res, 31) + double(a[1]);
+    if constexpr(1 < ORDER) res = scalbn(res, 31) + double(a[0]);
+    return scalbn(res, expon);
   }
 
   template <uint32_t ORDER>
   __host__ __device__ __forceinline__ double2 conv_a31_dd(uint32_t const (&a)[ORDER], int32_t expon) {
-    static_assert(1 <= ORDER && ORDER <= 6, "Integer 32 accumulation order must be in [1,6]");
+    static_assert(1 <= ORDER && ORDER <= 4, "Integer 32 accumulation order must be in [1,4]");
 
-    double2 res = make_double2(conv_i31_f64(a[ORDER - 1], expon), 0.);
-    if constexpr(5 < ORDER) res = add_double(fscalbn(res, 31), conv_u31_f64(a[4], expon));
-    if constexpr(4 < ORDER) res = add_double(fscalbn(res, 31), conv_u31_f64(a[3], expon));
-    if constexpr(3 < ORDER) res = add_double(fscalbn(res, 31), conv_u31_f64(a[2], expon));
-    if constexpr(2 < ORDER) res = add_double(fscalbn(res, 31), conv_u31_f64(a[1], expon));
-    if constexpr(1 < ORDER) res = add_double(fscalbn(res, 31), conv_u31_f64(a[0], expon));
-    return res;
+    double2 res = make_double2(int32_t(a[ORDER - 1] | ((a[ORDER - 1] << 1) & 0xa0000000)), 0.);
+    if constexpr(3 < ORDER) res = add_double(fscalbn(res, 31), double(a[2]));
+    if constexpr(2 < ORDER) res = add_double(fscalbn(res, 31), double(a[1]));
+    if constexpr(1 < ORDER) res = add_double(fscalbn(res, 31), double(a[0]));
+    return fscalbn(res, expon);
   }
 
   __host__ __device__ __forceinline__ double dd2double(double2 a) {

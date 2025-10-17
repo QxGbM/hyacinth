@@ -36,8 +36,8 @@ template <uint32_t depth, class real_t> struct dequantize_func {
   }
 
   __device__ __forceinline__ void operator()(int64_t i) {
-    constexpr int32_t acc_bits = 31;
-    constexpr int32_t acc_order = 1 + ((depth * device::Config::exp_base) + (acc_bits - 1)) / acc_bits;
+    // Bounded by 2 * INT_MAX(31-bits) * 2^(BASE * (D-1)). order = (32+B(D-1)+30) / 31
+    constexpr int32_t acc_order = (62 + (depth - 1) * device::Config::exp_base) / 31;
     uint32_t acc[acc_order]{};
 
     #pragma unroll

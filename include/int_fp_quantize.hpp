@@ -113,7 +113,7 @@ namespace device::int8 {
 
   template <uint32_t ORDER>
   __host__ __device__ __forceinline__ void add_shifted(uint32_t (&a)[ORDER], int32_t i, int32_t expon) {
-    static_assert(1 <= ORDER && ORDER <= 6, "Integer accumulation order must be in [1,6]");
+    static_assert(1 <= ORDER && ORDER <= 4, "Integer accumulation order must be in [1,4]");
 
     constexpr uint32_t i31 = ~(uint32_t(1) << 31);
     int32_t quo, rem;
@@ -124,15 +124,11 @@ namespace device::int8 {
     if constexpr(1 < ORDER) a[1] += u32_selector<2>(quo, b) + (a[0] >> 31);
     if constexpr(2 < ORDER) a[2] += u32_selector<3>(quo, b) + (a[1] >> 31);
     if constexpr(3 < ORDER) a[3] += u32_selector<4>(quo, b) + (a[2] >> 31);
-    if constexpr(4 < ORDER) a[4] += u32_selector<5>(quo, b) + (a[3] >> 31);
-    if constexpr(5 < ORDER) a[5] += u32_selector<6>(quo, b) + (a[4] >> 31);
     
     a[0] = a[0] & i31;
     if constexpr(1 < ORDER) a[1] = a[1] & i31;
     if constexpr(2 < ORDER) a[2] = a[2] & i31;
     if constexpr(3 < ORDER) a[3] = a[3] & i31;
-    if constexpr(4 < ORDER) a[4] = a[4] & i31;
-    if constexpr(5 < ORDER) a[5] = a[5] & i31;
   }
 
 };
