@@ -43,24 +43,27 @@ inline void interp_pp_real(cudaStream_t stream, cublasHandle_t handle, int32_t M
 
 int32_t device::interp_decomp_f64(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank,
   int32_t M, int32_t N, const double* A, int32_t lda, int32_t* jpiv, double* X, int32_t ldx) {
-  
-  MixPrecAHA::gemm_params param;
-  MixPrecAHA::rATA_params_query(&param, &epi, M, N, Precision::FP64);
+  int32_t algnM, algnN, orderA; Precision precC;
+  MixPrecAHA::mpgemm_params(&epi, M, N, &algnM, &algnN, &orderA, Precision::FP64, &precC);
+
+  int64_t elem_bytes = precC == Precision::FP32 ? sizeof(float) : (precC == Precision::FP64 ? sizeof(double) : sizeof(double2));
+  int64_t C_bytes = int64_t(N) * int64_t(orderA) * (int64_t(algnM) + int64_t(algnN) * sizeof(int32_t))
+    + int64_t(algnN) * (int64_t(N) * elem_bytes + sizeof(int32_t));
+  C_bytes = std::max(C_bytes, int64_t(algnN) * (int64_t(N) * (elem_bytes + std::min(elem_bytes, int64_t(sizeof(double)))) + int64_t(sizeof(int32_t))));
 
   void* work = nullptr;
-  int32_t* dpiv = nullptr, algnN = param.algnN;
-  cudaMalloc(&work, param.C_bytes);
+  int32_t* dpiv = nullptr;
+  cudaMalloc(&work, C_bytes);
   cudaMallocHost((void**)(&dpiv), 8192);
   std::vector<int32_t> hpiv(N);
 
-  MixPrecAHA::rATA(stream, handle, M, N, param.algnM, algnN, param.orderA, A, lda, Precision::FP64, work, param.precC);
-  Cholesky::rpotrfp(stream, handle, epi, &rank, N, work, algnN, param.precC, &hpiv[0], dpiv);
+  MixPrecAHA::rATA(stream, handle, M, N, algnM, algnN, orderA, A, lda, Precision::FP64, work, precC);
+  Cholesky::rpotrfp(stream, handle, epi, &rank, N, work, algnN, precC, &hpiv[0], dpiv);
   if (0 < rank) {
-    int64_t elem_bytes = param.precC == Precision::FP32 ? sizeof(float) : (param.precC == Precision::FP64 ? sizeof(double) : sizeof(double2));
     int32_t* ipiv = (int32_t*)&((int8_t*)work)[elem_bytes * int64_t(algnN) * int64_t(N)];
     int8_t* pp_work = (int8_t*)(&ipiv[algnN]);
     cudaMemcpyAsync(ipiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyHostToDevice, stream);
-    interp_pp_real<Precision::FP64>(stream, handle, rank, N, work, algnN, ipiv, param.precC, X, ldx, pp_work);
+    interp_pp_real<Precision::FP64>(stream, handle, rank, N, work, algnN, ipiv, precC, X, ldx, pp_work);
   }
 
   cudaStreamSynchronize(stream);
@@ -72,24 +75,27 @@ int32_t device::interp_decomp_f64(cudaStream_t stream, cublasHandle_t handle, do
 
 int32_t device::interp_decomp_f32(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank,
   int32_t M, int32_t N, const float* A, int32_t lda, int32_t* jpiv, float* X, int32_t ldx) {
+  int32_t algnM, algnN, orderA; Precision precC;
+  MixPrecAHA::mpgemm_params(&epi, M, N, &algnM, &algnN, &orderA, Precision::FP32, &precC);
 
-  MixPrecAHA::gemm_params param;
-  MixPrecAHA::rATA_params_query(&param, &epi, M, N, Precision::FP32);
+  int64_t elem_bytes = precC == Precision::FP32 ? sizeof(float) : sizeof(double);
+  int64_t C_bytes = int64_t(N) * int64_t(orderA) * (int64_t(algnM) + int64_t(algnN) * sizeof(int32_t))
+    + int64_t(algnN) * (int64_t(N) * elem_bytes + sizeof(int32_t));
+  C_bytes = std::max(C_bytes, int64_t(algnN) * (int64_t(N) * (elem_bytes + std::min(elem_bytes, int64_t(sizeof(float)))) + int64_t(sizeof(int32_t))));
 
   void* work = nullptr;
-  int32_t* dpiv = nullptr, algnN = param.algnN;
-  cudaMalloc(&work, param.C_bytes);
+  int32_t* dpiv = nullptr;
+  cudaMalloc(&work, C_bytes);
   cudaMallocHost((void**)(&dpiv), 8192);
   std::vector<int32_t> hpiv(N);
 
-  MixPrecAHA::rATA(stream, handle, M, N, param.algnM, algnN, param.orderA, A, lda, Precision::FP32, work, param.precC);
-  Cholesky::rpotrfp(stream, handle, epi, &rank, N, work, algnN, param.precC, &hpiv[0], dpiv);
+  MixPrecAHA::rATA(stream, handle, M, N, algnM, algnN, orderA, A, lda, Precision::FP32, work, precC);
+  Cholesky::rpotrfp(stream, handle, epi, &rank, N, work, algnN, precC, &hpiv[0], dpiv);
   if (0 < rank) {
-    int64_t elem_bytes = param.precC == Precision::FP32 ? sizeof(float) : (param.precC == Precision::FP64 ? sizeof(double) : sizeof(double2));
     int32_t* ipiv = (int32_t*)&((int8_t*)work)[elem_bytes * int64_t(algnN) * int64_t(N)];
     int8_t* pp_work = (int8_t*)(&ipiv[algnN]);
     cudaMemcpyAsync(ipiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyHostToDevice, stream);
-    interp_pp_real<Precision::FP32>(stream, handle, rank, N, work, algnN, ipiv, param.precC, X, ldx, pp_work);
+    interp_pp_real<Precision::FP32>(stream, handle, rank, N, work, algnN, ipiv, precC, X, ldx, pp_work);
   }
 
   cudaStreamSynchronize(stream);
@@ -140,24 +146,27 @@ inline void interp_pp_complex(cudaStream_t stream, cublasHandle_t handle, int32_
 
 int32_t device::interp_decomp_cf64(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank,
   int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int32_t* jpiv, std::complex<double>* X, int32_t ldx) {
+  int32_t algnM, algnN, orderA; Precision precC;
+  MixPrecAHA::mpgemm_params(&epi, M, N, &algnM, &algnN, &orderA, Precision::FP64, &precC);
 
-  MixPrecAHA::gemm_params param;
-  MixPrecAHA::cAHA_params_query(&param, &epi, M, N, Precision::FP64);
+  int64_t elem_bytes = precC == Precision::FP32 ? sizeof(float) : (precC == Precision::FP64 ? sizeof(double) : sizeof(double2));
+  int64_t C_bytes = int64_t(N) * int64_t(orderA) * (int64_t(2) * int64_t(algnM) + int64_t(algnN) * sizeof(int32_t))
+    + int64_t(algnN) * (int64_t(2) * int64_t(N) * elem_bytes + sizeof(int32_t));
+  C_bytes = std::max(C_bytes, int64_t(algnN) * (int64_t(2) * int64_t(N) * (elem_bytes + std::min(elem_bytes, int64_t(sizeof(double)))) + int64_t(sizeof(int32_t))));
 
   void* work = nullptr;
-  int32_t* dpiv = nullptr, algnN = param.algnN;
-  cudaMalloc(&work, param.C_bytes);
+  int32_t* dpiv = nullptr;
+  cudaMalloc(&work, C_bytes);
   cudaMallocHost((void**)(&dpiv), 8192);
   std::vector<int32_t> hpiv(N);
 
-  MixPrecAHA::cAHA(stream, handle, M, N, param.algnM, algnN, param.orderA, A, lda, Precision::FP64, work, param.precC);
-  Cholesky::cpotrfp(stream, handle, epi, &rank, N, work, algnN, param.precC, &hpiv[0], dpiv);
+  MixPrecAHA::cAHA(stream, handle, M, N, algnM, algnN, orderA, A, lda, Precision::FP64, work, precC);
+  Cholesky::cpotrfp(stream, handle, epi, &rank, N, work, algnN, precC, &hpiv[0], dpiv);
   if (0 < rank) {
-    int64_t elem_bytes = param.precC == Precision::FP32 ? sizeof(float) : (param.precC == Precision::FP64 ? sizeof(double) : sizeof(double2));
     int32_t* ipiv = (int32_t*)&((int8_t*)work)[int64_t(2) * elem_bytes * int64_t(algnN) * int64_t(N)];
     int8_t* pp_work = (int8_t*)(&ipiv[algnN]);
     cudaMemcpyAsync(ipiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyHostToDevice, stream);
-    interp_pp_complex<Precision::FP64>(stream, handle, rank, N, work, algnN, ipiv, param.precC, X, ldx, pp_work);
+    interp_pp_complex<Precision::FP64>(stream, handle, rank, N, work, algnN, ipiv, precC, X, ldx, pp_work);
   }
 
   cudaStreamSynchronize(stream);
@@ -169,24 +178,27 @@ int32_t device::interp_decomp_cf64(cudaStream_t stream, cublasHandle_t handle, d
 
 int32_t device::interp_decomp_cf32(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank,
   int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int32_t* jpiv, std::complex<float>* X, int32_t ldx) {
+  int32_t algnM, algnN, orderA; Precision precC;
+  MixPrecAHA::mpgemm_params(&epi, M, N, &algnM, &algnN, &orderA, Precision::FP32, &precC);
 
-  MixPrecAHA::gemm_params param;
-  MixPrecAHA::cAHA_params_query(&param, &epi, M, N, Precision::FP32);
+  int64_t elem_bytes = precC == Precision::FP32 ? sizeof(float) : sizeof(double);
+  int64_t C_bytes = int64_t(N) * int64_t(orderA) * (int64_t(2) * int64_t(algnM) + int64_t(algnN) * sizeof(int32_t))
+    + int64_t(algnN) * (int64_t(2) * int64_t(N) * elem_bytes + sizeof(int32_t));
+  C_bytes = std::max(C_bytes, int64_t(algnN) * (int64_t(2) * int64_t(N) * (elem_bytes + std::min(elem_bytes, int64_t(sizeof(float)))) + int64_t(sizeof(int32_t))));
 
   void* work = nullptr;
-  int32_t* dpiv = nullptr, algnN = param.algnN;
-  cudaMalloc(&work, param.C_bytes);
+  int32_t* dpiv = nullptr;
+  cudaMalloc(&work, C_bytes);
   cudaMallocHost((void**)(&dpiv), 8192);
   std::vector<int32_t> hpiv(N);
 
-  MixPrecAHA::cAHA(stream, handle, M, N, param.algnM, algnN, param.orderA, A, lda, Precision::FP32, work, param.precC);
-  Cholesky::cpotrfp(stream, handle, epi, &rank, N, work, algnN, param.precC, &hpiv[0], dpiv);
+  MixPrecAHA::cAHA(stream, handle, M, N, algnM, algnN, orderA, A, lda, Precision::FP32, work, precC);
+  Cholesky::cpotrfp(stream, handle, epi, &rank, N, work, algnN, precC, &hpiv[0], dpiv);
   if (0 < rank) {
-    int64_t elem_bytes = param.precC == Precision::FP32 ? sizeof(float) : (param.precC == Precision::FP64 ? sizeof(double) : sizeof(double2));
     int32_t* ipiv = (int32_t*)&((int8_t*)work)[int64_t(2) * elem_bytes * int64_t(algnN) * int64_t(N)];
     int8_t* pp_work = (int8_t*)(&ipiv[algnN]);
     cudaMemcpyAsync(ipiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyHostToDevice, stream);
-    interp_pp_complex<Precision::FP32>(stream, handle, rank, N, work, algnN, ipiv, param.precC, X, ldx, pp_work);
+    interp_pp_complex<Precision::FP32>(stream, handle, rank, N, work, algnN, ipiv, precC, X, ldx, pp_work);
   }
 
   cudaStreamSynchronize(stream);

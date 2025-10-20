@@ -97,27 +97,7 @@ namespace device {
     // Query :: params [out] is written with specified dimensions and accuracy
     //       :: epi [in/out] contain the accuracy used to compute at output
 
-    struct gemm_params {
-      Precision precA;
-      int32_t M;
-      int32_t N;
-      int32_t algnM;
-      int32_t orderA;
-
-      Precision precC;
-      int32_t algnN;
-      int64_t C_bytes;
-    };
-
-    void rATA_params_query(gemm_params* param, double* epi, int32_t M, int32_t N, Precision precA);
-
-    void cAHA_params_query(gemm_params* param, double* epi, int32_t M, int32_t N, Precision precA);
-
     void mpgemm_params(double* epi, int32_t M, int32_t N, int32_t* algnM, int32_t* algnN, int32_t* orderA, Precision precA, Precision* precC);
-
-    int64_t rATA_buffersize(int32_t N, int32_t algnM, int32_t algnN, int32_t orderA, Precision precC);
-
-    int64_t cAHA_buffersize(int32_t N, int32_t algnM, int32_t algnN, int32_t orderA, Precision precC);
 
     void rATA(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t algnM, int32_t algnN, int32_t orderA, const void* A, int32_t lda, Precision precA, void* C, Precision precC);
 

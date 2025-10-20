@@ -13,7 +13,6 @@ set(CPP_SOURCES
   src_cpp/check_id.cpp
   src_cpp/gemv_cublas.cpp
   src_cpp/geqp3_ronly.cpp
-  src_cpp/igemm_params.cpp
   src_cpp/igemm.cpp
   src_cpp/imax_host.cpp
   src_cpp/interp_decomp.cpp

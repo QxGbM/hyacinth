@@ -32,18 +32,6 @@ inline std::tuple<int64_t, int64_t, int64_t> i8gemm_work(int32_t N, int32_t algn
   return std::tie(acc_bytes, i8_bytes, scratch_bytes);
 }
 
-int64_t device::MixPrecAHA::rATA_buffersize(int32_t N, int32_t algnM, int32_t algnN, int32_t orderA, Precision precC) {
-  int64_t acc_bytes, i8_bytes, scratch_bytes;
-  std::tie(acc_bytes, i8_bytes, scratch_bytes) = i8gemm_work(N, algnN, algnM, orderA, precC);
-  return acc_bytes + i8_bytes + scratch_bytes + (int64_t(algnN) * sizeof(int32_t));
-}
-
-int64_t device::MixPrecAHA::cAHA_buffersize(int32_t N, int32_t algnM, int32_t algnN, int32_t orderA, Precision precC) {
-  int64_t acc_bytes, i8_bytes, scratch_bytes;
-  std::tie(acc_bytes, i8_bytes, scratch_bytes) = i8gemm_work(N, algnN, algnM, orderA, precC);
-  return (acc_bytes + i8_bytes) * int64_t(2) + scratch_bytes + (int64_t(algnN) * sizeof(int32_t));
-}
-
 template <device::Precision prec>
 inline void dequantize_dispatcher(cudaStream_t stream, int32_t depth_lo, int32_t depth_hi, int32_t N, void* A, const int32_t* B, int32_t ld) {
   if constexpr(prec == device::Precision::FP64)
