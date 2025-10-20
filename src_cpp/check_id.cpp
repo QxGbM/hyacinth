@@ -11,16 +11,13 @@ void device::check_interp_decomp_f64(cudaStream_t stream, cublasHandle_t handle,
   { *rel_err = std::numeric_limits<double>::quiet_NaN(); return; }
 
   double* dA = nullptr, *dC = nullptr;
-  int32_t* dpiv = nullptr;
   int64_t strideA = int64_t(M) * int64_t(N);
   cudaMalloc((void**)(&dA), strideA * sizeof(double));
   cudaMalloc((void**)(&dC), int64_t(M) * int64_t(rank) * sizeof(double));
-  cudaMalloc((void**)(&dpiv), int64_t(N) * sizeof(int32_t));
 
   double zero = 0., one = 1., minus_one = -1.;
   cublasDgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, &one, A, lda, &zero, dA, M, dA, M);
-  cudaMemcpy(dpiv, jpiv, N * sizeof(int32_t), cudaMemcpyDefault);
-  copy_permute(stream, 1, M, rank, dpiv, dA, M, dC, M, Precision::FP64);
+  copy_gather(stream, M, rank, jpiv, dA, M, dC, M, Precision::FP64);
 
   double nrm = 0., err = 0.;
   cublasDnrm2_64(handle, strideA, dA, int64_t(1), &nrm);
@@ -31,7 +28,6 @@ void device::check_interp_decomp_f64(cudaStream_t stream, cublasHandle_t handle,
   *rel_err = err / nrm;
   cudaFree(dA);
   cudaFree(dC);
-  cudaFree(dpiv);
 }
 
 void device::check_interp_decomp_f32(cudaStream_t stream, cublasHandle_t handle, int32_t rank,
@@ -41,16 +37,13 @@ void device::check_interp_decomp_f32(cudaStream_t stream, cublasHandle_t handle,
   { *rel_err = std::numeric_limits<double>::quiet_NaN(); return; }
 
   float* dA = nullptr, *dC = nullptr;
-  int32_t* dpiv = nullptr;
   int64_t strideA = int64_t(M) * int64_t(N);
   cudaMalloc((void**)(&dA), strideA * sizeof(float));
   cudaMalloc((void**)(&dC), int64_t(M) * int64_t(rank) * sizeof(float));
-  cudaMalloc((void**)(&dpiv), int64_t(N) * sizeof(int32_t));
 
   float zero = 0.f, one = 1.f, minus_one = -1.f;
   cublasSgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, &one, A, lda, &zero, dA, M, dA, M);
-  cudaMemcpy(dpiv, jpiv, N * sizeof(int32_t), cudaMemcpyDefault);
-  copy_permute(stream, 1, M, rank, dpiv, dA, M, dC, M, Precision::FP32);
+  copy_gather(stream, M, rank, jpiv, dA, M, dC, M, Precision::FP32);
 
   float nrm = 0.f, err = 0.f;
   cublasSnrm2_64(handle, strideA, dA, int64_t(1), &nrm);
@@ -61,7 +54,6 @@ void device::check_interp_decomp_f32(cudaStream_t stream, cublasHandle_t handle,
   *rel_err = double(err) / double(nrm);
   cudaFree(dA);
   cudaFree(dC);
-  cudaFree(dpiv);
 }
 
 void device::check_interp_decomp_cf64(cudaStream_t stream, cublasHandle_t handle, int32_t rank,
@@ -71,16 +63,13 @@ void device::check_interp_decomp_cf64(cudaStream_t stream, cublasHandle_t handle
   { *rel_err = std::numeric_limits<double>::quiet_NaN(); return; }
 
   cuDoubleComplex* dA = nullptr, *dC = nullptr;
-  int32_t* dpiv = nullptr;
   int64_t strideA = int64_t(M) * int64_t(N);
   cudaMalloc((void**)(&dA), strideA * sizeof(cuDoubleComplex));
   cudaMalloc((void**)(&dC), int64_t(M) * int64_t(rank) * sizeof(cuDoubleComplex));
-  cudaMalloc((void**)(&dpiv), int64_t(N) * sizeof(int32_t));
 
   std::complex<double> zero(0., 0.), one(1., 0.), minus_one(-1., 0.);
   cublasZgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, (cuDoubleComplex*)&one, (const cuDoubleComplex*)A, lda, (cuDoubleComplex*)&zero, dA, M, dA, M);
-  cudaMemcpy(dpiv, jpiv, N * sizeof(int32_t), cudaMemcpyDefault);
-  copy_permute(stream, 1, 2 * M, rank, dpiv, dA, 2 * M, dC, 2 * M, Precision::FP64);
+  copy_gather(stream, 2 * M, rank, jpiv, dA, 2 * M, dC, 2 * M, Precision::FP64);
 
   double nrm = 0., err = 0.;
   cublasDznrm2_64(handle, strideA, dA, int64_t(1), &nrm);
@@ -91,7 +80,6 @@ void device::check_interp_decomp_cf64(cudaStream_t stream, cublasHandle_t handle
   *rel_err = err / nrm;
   cudaFree(dA);
   cudaFree(dC);
-  cudaFree(dpiv);
 }
 
 void device::check_interp_decomp_cf32(cudaStream_t stream, cublasHandle_t handle, int32_t rank,
@@ -101,16 +89,13 @@ void device::check_interp_decomp_cf32(cudaStream_t stream, cublasHandle_t handle
   { *rel_err = std::numeric_limits<double>::quiet_NaN(); return; }
 
   cuComplex* dA = nullptr, *dC = nullptr;
-  int32_t* dpiv = nullptr;
   int64_t strideA = int64_t(M) * int64_t(N);
   cudaMalloc((void**)(&dA), strideA * sizeof(cuComplex));
   cudaMalloc((void**)(&dC), int64_t(M) * int64_t(rank) * sizeof(cuComplex));
-  cudaMalloc((void**)(&dpiv), int64_t(N) * sizeof(int32_t));
 
   std::complex<float> zero(0.f, 0.f), one(1.f, 0.f), minus_one(-1.f, 0.f);
   cublasCgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, (cuComplex*)&one, (const cuComplex*)A, lda, (cuComplex*)&zero, dA, M, dA, M);
-  cudaMemcpy(dpiv, jpiv, N * sizeof(int32_t), cudaMemcpyDefault);
-  copy_permute(stream, 1, 2 * M, rank, dpiv, dA, 2 * M, dC, 2 * M, Precision::FP32);
+  copy_gather(stream, 2 * M, rank, jpiv, dA, 2 * M, dC, 2 * M, Precision::FP32);
 
   float nrm = 0., err = 0.;
   cublasScnrm2_64(handle, strideA, dA, int64_t(1), &nrm);
@@ -121,5 +106,4 @@ void device::check_interp_decomp_cf32(cudaStream_t stream, cublasHandle_t handle
   *rel_err = double(err) / double(nrm);
   cudaFree(dA);
   cudaFree(dC);
-  cudaFree(dpiv);
 }

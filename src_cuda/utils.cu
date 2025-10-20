@@ -80,41 +80,57 @@ void device::convert_and_copy(cudaStream_t stream, int32_t M, int32_t N, const v
   }
 }
 
-template <int32_t sc0ga1, class real_t> struct permute_copy {
-  const real_t* __restrict__ A;
-  real_t* __restrict__ B;
-  const int32_t* jpiv;
+const int32_t clen = 16384;
+__constant__ int32_t cpiv[clen];
+
+template <int32_t sc0ga1, class elem_t> struct permute_copy {
+  const elem_t* __restrict__ A;
+  elem_t* __restrict__ B;
   int64_t M, lda, ldb;
-  permute_copy(int64_t M, const int32_t* jpiv, const real_t* A, int64_t lda, real_t* B, int64_t ldb) :
-    A(A), B(B), jpiv(jpiv), M(M), lda(lda), ldb(ldb) {}
+  permute_copy(int64_t M, const elem_t* A, int64_t lda, elem_t* B, int64_t ldb) :
+    A(A), B(B), M(M), lda(lda), ldb(ldb) {}
   
   __device__ __forceinline__ void operator()(int64_t i) {
     int64_t x = i / M, y = i - x * M;
-    int64_t px = int64_t(jpiv[x] - 1);
+    int64_t px = int64_t(cpiv[x] - 1);
     if constexpr(sc0ga1) B[y + x * ldb] = A[y + px * lda];
       else B[y + px * ldb] = A[y + x * lda];
   }
 };
 
-void device::copy_permute(cudaStream_t stream, int32_t sc0ga1, int32_t M, int32_t N, const int32_t* jpiv, const void* A, int32_t lda, void* B, int32_t ldb, Precision prec) {
-  int64_t iter_items = int64_t(N) * int64_t(M);
-  thrust::counting_iterator<int64_t> iter(0);
+void device::copy_gather(cudaStream_t stream, int32_t M, int32_t N, const int32_t* jpiv, const void* A, int32_t lda, void* B, int32_t ldb, Precision prec) {
+  for (int32_t i = 0; i < N; i += clen) {
+    int32_t iter_items = std::min(N - i, clen);
+    int64_t elements = int64_t(iter_items) * int64_t(M);
+    thrust::counting_iterator<int64_t> iter(0);
+    cudaMemcpyToSymbolAsync(cpiv, &jpiv[i], int64_t(iter_items) * sizeof(int32_t), 0, cudaMemcpyDefault, stream);
 
-  if (prec == Precision::FP64 && !sc0ga1) {
-    permute_copy<0, double> perm(M, jpiv, (const double*)A, lda, (double*)B, ldb);
-    thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, iter_items, perm);
+    if (prec == Precision::FP64) {
+      permute_copy<1, int64_t> perm(M, (const int64_t*)A, lda, &((int64_t*)B)[int64_t(i) * int64_t(ldb)], ldb);
+      thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, elements, perm);
+    }
+    else if (prec == Precision::FP32) {
+      permute_copy<1, int32_t> perm(M, (const int32_t*)A, lda, &((int32_t*)B)[int64_t(i) * int64_t(ldb)], ldb);
+      thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, elements, perm);
+    }
   }
-  else if (prec == Precision::FP64 && sc0ga1) {
-    permute_copy<1, double> perm(M, jpiv, (const double*)A, lda, (double*)B, ldb);
-    thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, iter_items, perm);
-  }
-  else if (prec == Precision::FP32 && !sc0ga1) {
-    permute_copy<0, float> perm(M, jpiv, (const float*)A, lda, (float*)B, ldb);
-    thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, iter_items, perm);
-  }
-  else if (prec == Precision::FP32 && sc0ga1) {
-    permute_copy<1, float> perm(M, jpiv, (const float*)A, lda, (float*)B, ldb);
-    thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, iter_items, perm);
+}
+
+void device::copy_scatter(cudaStream_t stream, int32_t M, int32_t N, const int32_t* jpiv, const void* A, int32_t lda, void* B, int32_t ldb, Precision prec) {
+  for (int32_t i = 0; i < N; i += clen) {
+    int32_t iter_items = std::min(N - i, clen);
+    int64_t elements = int64_t(iter_items) * int64_t(M);
+    thrust::counting_iterator<int64_t> iter(0);
+    cudaMemcpyToSymbolAsync(cpiv, &jpiv[i], int64_t(iter_items) * sizeof(int32_t), 0, cudaMemcpyDefault, stream);
+
+    if (prec == Precision::FP64) {
+      permute_copy<0, int64_t> perm(M, &((const int64_t*)A)[int64_t(i) * int64_t(lda)], lda, (int64_t*)B, ldb);
+      thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, elements, perm);
+    }
+    else if (prec == Precision::FP32) {
+      permute_copy<0, int32_t> perm(M, &((const int32_t*)A)[int64_t(i) * int64_t(lda)], lda, (int32_t*)B, ldb);
+      thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, elements, perm);
+    }
   }
 }
 

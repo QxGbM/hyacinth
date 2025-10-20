@@ -56,8 +56,7 @@ int32_t device::sgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double 
 }
 
 int32_t device::zgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t M, int32_t N, std::complex<double>* A, int32_t lda, int32_t* jpiv) {
-  int32_t algnM, algnN, orderA;
-  Precision precC;
+  int32_t algnM, algnN, orderA; Precision precC;
   MixPrecAHA::mpgemm_params(&epi, M, N, &algnM, &algnN, &orderA, Precision::FP64, &precC);
 
   int64_t elem_bytes = precC == Precision::FP32 ? sizeof(float) : (precC == Precision::FP64 ? sizeof(double) : sizeof(double2));
@@ -83,8 +82,7 @@ int32_t device::zgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double 
 }
 
 int32_t device::cgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t M, int32_t N, std::complex<float>* A, int32_t lda, int32_t* jpiv) {
-  int32_t algnM, algnN, orderA;
-  Precision precC;
+  int32_t algnM, algnN, orderA; Precision precC;
   MixPrecAHA::mpgemm_params(&epi, M, N, &algnM, &algnN, &orderA, Precision::FP32, &precC);
 
   int64_t elem_bytes = precC == Precision::FP32 ? sizeof(float) : sizeof(double);

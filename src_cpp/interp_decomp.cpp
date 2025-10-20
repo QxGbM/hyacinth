@@ -25,19 +25,19 @@ inline void interp_pp_real(cudaStream_t stream, cublasHandle_t handle, int32_t M
   if (precA == precX) {
     cublas_trsm_real<precX>(handle, M, N, A, lda);
     strided_identity(stream, M, M, M + 1, A, lda, precA);
-    copy_permute(stream, 0, M, N, ipiv, A, lda, X, ldx, precA);
+    copy_scatter(stream, M, N, ipiv, A, lda, X, ldx, precA);
   }
   else if (precA == device::Precision::FP32) {
     cublas_trsm_real<device::Precision::FP32>(handle, M, N, A, lda);
     strided_identity(stream, M, M, M + 1, A, lda, device::Precision::FP32);
-    copy_permute(stream, 0, M, N, ipiv, A, lda, work, lda, device::Precision::FP32);
+    copy_scatter(stream, M, N, ipiv, A, lda, work, lda, device::Precision::FP32);
     convert_and_copy(stream, M, N, work, lda, device::Precision::FP32, 0, X, ldx, precX);
   }
   else {
     convert_and_copy(stream, M, N, A, lda, precA, 0, work, lda, precX);
     cublas_trsm_real<precX>(handle, M, N, work, lda);
     strided_identity(stream, M, M, M + 1, work, lda, precX);
-    copy_permute(stream, 0, M, N, ipiv, work, lda, X, ldx, precX);
+    copy_scatter(stream, M, N, ipiv, work, lda, X, ldx, precX);
   }
 }
 
@@ -61,9 +61,8 @@ int32_t device::interp_decomp_f64(cudaStream_t stream, cublasHandle_t handle, do
   Cholesky::rpotrfp(stream, handle, epi, &rank, N, work, algnN, precC, &hpiv[0], dpiv);
   if (0 < rank) {
     int32_t* ipiv = (int32_t*)&((int8_t*)work)[elem_bytes * int64_t(algnN) * int64_t(N)];
-    int8_t* pp_work = (int8_t*)(&ipiv[algnN]);
     cudaMemcpyAsync(ipiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyHostToDevice, stream);
-    interp_pp_real<Precision::FP64>(stream, handle, rank, N, work, algnN, ipiv, precC, X, ldx, pp_work);
+    interp_pp_real<Precision::FP64>(stream, handle, rank, N, work, algnN, ipiv, precC, X, ldx, &ipiv[algnN]);
   }
 
   cudaStreamSynchronize(stream);
@@ -93,9 +92,8 @@ int32_t device::interp_decomp_f32(cudaStream_t stream, cublasHandle_t handle, do
   Cholesky::rpotrfp(stream, handle, epi, &rank, N, work, algnN, precC, &hpiv[0], dpiv);
   if (0 < rank) {
     int32_t* ipiv = (int32_t*)&((int8_t*)work)[elem_bytes * int64_t(algnN) * int64_t(N)];
-    int8_t* pp_work = (int8_t*)(&ipiv[algnN]);
     cudaMemcpyAsync(ipiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyHostToDevice, stream);
-    interp_pp_real<Precision::FP32>(stream, handle, rank, N, work, algnN, ipiv, precC, X, ldx, pp_work);
+    interp_pp_real<Precision::FP32>(stream, handle, rank, N, work, algnN, ipiv, precC, X, ldx, &ipiv[algnN]);
   }
 
   cudaStreamSynchronize(stream);
@@ -128,19 +126,19 @@ inline void interp_pp_complex(cudaStream_t stream, cublasHandle_t handle, int32_
   if (precA == precX) {
     cublas_trsm_complex<precX>(handle, M, N, A, lda);
     strided_identity(stream, 2 * M, M, 2 * M + 2, A, 2 * lda, precA);
-    copy_permute(stream, 0, 2 * M, N, ipiv, A, 2 * lda, X, 2 * ldx, precA);
+    copy_scatter(stream, 2 * M, N, ipiv, A, 2 * lda, X, 2 * ldx, precA);
   }
   else if (precA == device::Precision::FP32) {
     cublas_trsm_complex<device::Precision::FP32>(handle, M, N, A, lda);
     strided_identity(stream, 2 * M, M, 2 * M + 2, A, 2 * lda, device::Precision::FP32);
-    copy_permute(stream, 0, 2 * M, N, ipiv, A, 2 * lda, work, 2 * lda, device::Precision::FP32);
+    copy_scatter(stream, 2 * M, N, ipiv, A, 2 * lda, work, 2 * lda, device::Precision::FP32);
     convert_and_copy(stream, 2 * M, N, work, 2 * lda, device::Precision::FP32, 0, X, 2 * ldx, precX);
   }
   else {
     convert_and_copy(stream, 2 * M, N, A, 2 * lda, precA, 0, work, 2 * lda, precX);
     cublas_trsm_complex<precX>(handle, M, N, work, lda);
     strided_identity(stream, 2 * M, M, 2 * M + 2, work, 2 * lda, precX);
-    copy_permute(stream, 0, 2 * M, N, ipiv, work, 2 * lda, X, 2 * ldx, precX);
+    copy_scatter(stream, 2 * M, N, ipiv, work, 2 * lda, X, 2 * ldx, precX);
   }
 }
 
@@ -164,9 +162,8 @@ int32_t device::interp_decomp_cf64(cudaStream_t stream, cublasHandle_t handle, d
   Cholesky::cpotrfp(stream, handle, epi, &rank, N, work, algnN, precC, &hpiv[0], dpiv);
   if (0 < rank) {
     int32_t* ipiv = (int32_t*)&((int8_t*)work)[int64_t(2) * elem_bytes * int64_t(algnN) * int64_t(N)];
-    int8_t* pp_work = (int8_t*)(&ipiv[algnN]);
     cudaMemcpyAsync(ipiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyHostToDevice, stream);
-    interp_pp_complex<Precision::FP64>(stream, handle, rank, N, work, algnN, ipiv, precC, X, ldx, pp_work);
+    interp_pp_complex<Precision::FP64>(stream, handle, rank, N, work, algnN, ipiv, precC, X, ldx, &ipiv[algnN]);
   }
 
   cudaStreamSynchronize(stream);
@@ -196,9 +193,8 @@ int32_t device::interp_decomp_cf32(cudaStream_t stream, cublasHandle_t handle, d
   Cholesky::cpotrfp(stream, handle, epi, &rank, N, work, algnN, precC, &hpiv[0], dpiv);
   if (0 < rank) {
     int32_t* ipiv = (int32_t*)&((int8_t*)work)[int64_t(2) * elem_bytes * int64_t(algnN) * int64_t(N)];
-    int8_t* pp_work = (int8_t*)(&ipiv[algnN]);
     cudaMemcpyAsync(ipiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyHostToDevice, stream);
-    interp_pp_complex<Precision::FP32>(stream, handle, rank, N, work, algnN, ipiv, precC, X, ldx, pp_work);
+    interp_pp_complex<Precision::FP32>(stream, handle, rank, N, work, algnN, ipiv, precC, X, ldx, &ipiv[algnN]);
   }
 
   cudaStreamSynchronize(stream);
