@@ -4,10 +4,9 @@
 #include <cuComplex.h>
 #include <limits>
 
-void device::check_interp_decomp_f64(cublasHandle_t handle, int32_t rank, int32_t M, int32_t N, const double* A, int32_t lda, const int32_t* jpiv, const double* X, int32_t ldx, double* rel_err) {
-
+double device::check_interp_decomp_f64(cublasHandle_t handle, int32_t rank, int32_t M, int32_t N, const double* A, int32_t lda, const int32_t* jpiv, const double* X, int32_t ldx) {
   if (rank <= 0)
-  { *rel_err = std::numeric_limits<double>::quiet_NaN(); return; }
+    return std::numeric_limits<double>::quiet_NaN();
 
   cudaStream_t stream; cublasGetStream(handle, &stream);
   double* dA = nullptr, *dC = nullptr;
@@ -25,15 +24,14 @@ void device::check_interp_decomp_f64(cublasHandle_t handle, int32_t rank, int32_
   cublasDnrm2_64(handle, strideA, dA, int64_t(1), &err);
 
   cudaStreamSynchronize(stream);
-  *rel_err = err / nrm;
   cudaFree(dA);
   cudaFree(dC);
+  return err / nrm;
 }
 
-void device::check_interp_decomp_f32(cublasHandle_t handle, int32_t rank, int32_t M, int32_t N, const float* A, int32_t lda, const int32_t* jpiv, const float* X, int32_t ldx, double* rel_err) {
-
+double device::check_interp_decomp_f32(cublasHandle_t handle, int32_t rank, int32_t M, int32_t N, const float* A, int32_t lda, const int32_t* jpiv, const float* X, int32_t ldx) {
   if (rank <= 0)
-  { *rel_err = std::numeric_limits<double>::quiet_NaN(); return; }
+    return std::numeric_limits<double>::quiet_NaN();
 
   cudaStream_t stream; cublasGetStream(handle, &stream);
   float* dA = nullptr, *dC = nullptr;
@@ -51,15 +49,14 @@ void device::check_interp_decomp_f32(cublasHandle_t handle, int32_t rank, int32_
   cublasSnrm2_64(handle, strideA, dA, int64_t(1), &err);
 
   cudaStreamSynchronize(stream);
-  *rel_err = double(err) / double(nrm);
   cudaFree(dA);
   cudaFree(dC);
+  return err / nrm;
 }
 
-void device::check_interp_decomp_cf64(cublasHandle_t handle, int32_t rank, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, const int32_t* jpiv, const std::complex<double>* X, int32_t ldx, double* rel_err) {
-
+double device::check_interp_decomp_cf64(cublasHandle_t handle, int32_t rank, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, const int32_t* jpiv, const std::complex<double>* X, int32_t ldx) {
   if (rank <= 0)
-  { *rel_err = std::numeric_limits<double>::quiet_NaN(); return; }
+    return std::numeric_limits<double>::quiet_NaN();
 
   cudaStream_t stream; cublasGetStream(handle, &stream);
   cuDoubleComplex* dA = nullptr, *dC = nullptr;
@@ -77,15 +74,14 @@ void device::check_interp_decomp_cf64(cublasHandle_t handle, int32_t rank, int32
   cublasDznrm2_64(handle, strideA, dA, int64_t(1), &err);
 
   cudaStreamSynchronize(stream);
-  *rel_err = err / nrm;
   cudaFree(dA);
   cudaFree(dC);
+  return err / nrm;
 }
 
-void device::check_interp_decomp_cf32(cublasHandle_t handle, int32_t rank, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, const int32_t* jpiv, const std::complex<float>* X, int32_t ldx, double* rel_err) {
-  
+double device::check_interp_decomp_cf32(cublasHandle_t handle, int32_t rank, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, const int32_t* jpiv, const std::complex<float>* X, int32_t ldx) {
   if (rank <= 0)
-  { *rel_err = std::numeric_limits<double>::quiet_NaN(); return; }
+    return std::numeric_limits<double>::quiet_NaN();
 
   cudaStream_t stream; cublasGetStream(handle, &stream);
   cuComplex* dA = nullptr, *dC = nullptr;
@@ -103,7 +99,7 @@ void device::check_interp_decomp_cf32(cublasHandle_t handle, int32_t rank, int32
   cublasScnrm2_64(handle, strideA, dA, int64_t(1), &err);
 
   cudaStreamSynchronize(stream);
-  *rel_err = double(err) / double(nrm);
   cudaFree(dA);
   cudaFree(dC);
+  return err / nrm;
 }

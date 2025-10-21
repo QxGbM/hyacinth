@@ -61,8 +61,7 @@ int32_t main(int32_t argc, char* argv[]) {
   int32_t rank = device::interp_decomp_cf32(handle, epi, N, M, N, d_A, M, ipiv.data(), d_X, N);
   cudaEventRecord(stop, stream);
 
-  double rel_err = 0.;
-  device::check_interp_decomp_cf32(handle, rank, M, N, d_A, M, ipiv.data(), d_X, N, &rel_err);
+  double rel_err = device::check_interp_decomp_cf32(handle, rank, M, N, d_A, M, ipiv.data(), d_X, N);
   
   float milliseconds = 0.0f;
   cudaEventElapsedTime(&milliseconds, start, stop);
