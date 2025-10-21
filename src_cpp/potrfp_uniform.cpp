@@ -1,5 +1,5 @@
 
-#include <hyacinth.hpp>
+#include <hyacin.hpp>
 #include <internal.hpp>
 #include <double_double.hpp>
 #include <quad_float.hpp>

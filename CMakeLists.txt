@@ -16,6 +16,7 @@ set(CPP_SOURCES
   src_cpp/igemm.cpp
   src_cpp/imax_host.cpp
   src_cpp/interp_decomp.cpp
+  src_cpp/interp_pp.cpp
   src_cpp/potrfp_uniform.cpp
 )
 

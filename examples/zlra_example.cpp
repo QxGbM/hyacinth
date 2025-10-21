@@ -1,5 +1,5 @@
 
-#include <hyacinth.hpp>
+#include <hyacin.hpp>
 #include <iostream>
 #include <algorithm>
 #include <numeric>

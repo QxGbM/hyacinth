@@ -1,5 +1,5 @@
 
-#include <hyacinth.hpp>
+#include <hyacin.hpp>
 #include <internal.hpp>
 #include <int_fp_quantize.hpp>
 #include <double_double.hpp>
