@@ -3,8 +3,8 @@
 #include <internal.hpp>
 #include <vector>
 
-int32_t device::interp_decomp_f64(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank,
-  int32_t M, int32_t N, const double* A, int32_t lda, int32_t* jpiv, double* X, int32_t ldx) {
+int32_t device::interp_decomp_f64(cublasHandle_t handle, double epi, int32_t rank, int32_t M, int32_t N, const double* A, int32_t lda, int32_t* jpiv, double* X, int32_t ldx) {
+  cudaStream_t stream; cublasGetStream(handle, &stream);
   int32_t algnM, algnN, orderA; Precision precC;
   MixPrecAHA::mpgemm_params(&epi, M, N, &algnM, &algnN, &orderA, Precision::FP64, &precC);
 
@@ -40,8 +40,8 @@ int32_t device::interp_decomp_f64(cudaStream_t stream, cublasHandle_t handle, do
   return rank;
 }
 
-int32_t device::interp_decomp_f32(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank,
-  int32_t M, int32_t N, const float* A, int32_t lda, int32_t* jpiv, float* X, int32_t ldx) {
+int32_t device::interp_decomp_f32(cublasHandle_t handle, double epi, int32_t rank, int32_t M, int32_t N, const float* A, int32_t lda, int32_t* jpiv, float* X, int32_t ldx) {
+  cudaStream_t stream; cublasGetStream(handle, &stream);
   int32_t algnM, algnN, orderA; Precision precC;
   MixPrecAHA::mpgemm_params(&epi, M, N, &algnM, &algnN, &orderA, Precision::FP32, &precC);
 
@@ -77,8 +77,8 @@ int32_t device::interp_decomp_f32(cudaStream_t stream, cublasHandle_t handle, do
   return rank;
 }
 
-int32_t device::interp_decomp_cf64(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank,
-  int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int32_t* jpiv, std::complex<double>* X, int32_t ldx) {
+int32_t device::interp_decomp_cf64(cublasHandle_t handle, double epi, int32_t rank, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int32_t* jpiv, std::complex<double>* X, int32_t ldx) {
+  cudaStream_t stream; cublasGetStream(handle, &stream);
   int32_t algnM, algnN, orderA; Precision precC;
   MixPrecAHA::mpgemm_params(&epi, M, N, &algnM, &algnN, &orderA, Precision::FP64, &precC);
 
@@ -114,8 +114,8 @@ int32_t device::interp_decomp_cf64(cudaStream_t stream, cublasHandle_t handle, d
   return rank;
 }
 
-int32_t device::interp_decomp_cf32(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank,
-  int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int32_t* jpiv, std::complex<float>* X, int32_t ldx) {
+int32_t device::interp_decomp_cf32(cublasHandle_t handle, double epi, int32_t rank, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int32_t* jpiv, std::complex<float>* X, int32_t ldx) {
+  cudaStream_t stream; cublasGetStream(handle, &stream);
   int32_t algnM, algnN, orderA; Precision precC;
   MixPrecAHA::mpgemm_params(&epi, M, N, &algnM, &algnN, &orderA, Precision::FP32, &precC);
 

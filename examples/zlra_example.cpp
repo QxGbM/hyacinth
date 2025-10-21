@@ -53,16 +53,16 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaMalloc((void**)(&d_X), N * N * sizeof(std::complex<double>));
   cudaMemcpy(d_A, matA.data(), M * N * sizeof(std::complex<double>), cudaMemcpyHostToDevice);
 
-  device::interp_decomp_cf64(stream, handle, epi, N, M, N, d_A, M, ipiv.data(), d_X, N);
+  device::interp_decomp_cf64(handle, epi, N, M, N, d_A, M, ipiv.data(), d_X, N);
   std::fill(ipiv.begin(), ipiv.end(), 0);
   cudaMemcpy(d_A, matA.data(), M * N * sizeof(std::complex<double>), cudaMemcpyHostToDevice);
 
   cudaEventRecord(start, stream);
-  int32_t rank = device::interp_decomp_cf64(stream, handle, epi, N, M, N, d_A, M, ipiv.data(), d_X, N);
+  int32_t rank = device::interp_decomp_cf64(handle, epi, N, M, N, d_A, M, ipiv.data(), d_X, N);
   cudaEventRecord(stop, stream);
 
   double rel_err = 0.;
-  device::check_interp_decomp_cf64(stream, handle, rank, M, N, d_A, M, ipiv.data(), d_X, N, &rel_err);
+  device::check_interp_decomp_cf64(handle, rank, M, N, d_A, M, ipiv.data(), d_X, N, &rel_err);
 
   float milliseconds = 0.0f;
   cudaEventElapsedTime(&milliseconds, start, stop);

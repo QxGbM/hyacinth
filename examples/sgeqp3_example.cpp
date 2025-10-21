@@ -44,12 +44,12 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaMalloc((void**)(&d_A), M * N * sizeof(float));
   cudaMemcpy(d_A, matA.data(), M * N * sizeof(float), cudaMemcpyHostToDevice);
 
-  device::sgeqp3_ronly(stream, handle, epi, M, N, d_A, M, ipiv.data());
+  device::sgeqp3_ronly(handle, epi, M, N, d_A, M, ipiv.data());
   std::fill(ipiv.begin(), ipiv.end(), 0);
   cudaMemcpy(d_A, matA.data(), M * N * sizeof(float), cudaMemcpyHostToDevice);
 
   cudaEventRecord(start, stream);
-  int32_t ret = device::sgeqp3_ronly(stream, handle, epi, M, N, d_A, M, ipiv.data());
+  int32_t ret = device::sgeqp3_ronly(handle, epi, M, N, d_A, M, ipiv.data());
   cudaEventRecord(stop, stream);
 
   cudaDeviceSynchronize();

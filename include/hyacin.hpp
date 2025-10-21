@@ -33,13 +33,13 @@ namespace device {
   // A :: device, minimal length lda * N, M <= lda
   // jpiv :: host/device, minimal length N
 
-  int32_t dgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t M, int32_t N, double* A, int32_t lda, int32_t* jpiv);
+  int32_t dgeqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32_t N, double* A, int32_t lda, int32_t* jpiv);
 
-  int32_t sgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t M, int32_t N, float* A, int32_t lda, int32_t* jpiv);
+  int32_t sgeqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32_t N, float* A, int32_t lda, int32_t* jpiv);
 
-  int32_t zgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t M, int32_t N, std::complex<double>* A, int32_t lda, int32_t* jpiv);
+  int32_t zgeqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32_t N, std::complex<double>* A, int32_t lda, int32_t* jpiv);
 
-  int32_t cgeqp3_ronly(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t M, int32_t N, std::complex<float>* A, int32_t lda, int32_t* jpiv);
+  int32_t cgeqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32_t N, std::complex<float>* A, int32_t lda, int32_t* jpiv);
 
   // Mixed precision interpolative decomposition, synchronous call, includes memory alloc/dealloc
   // Outputs A ~= A[:jpiv(1, rank)] * X, rank of X as function return
@@ -47,29 +47,21 @@ namespace device {
   // jpiv :: host/device, minimal length N
   // X :: device, minimal length ldx * N, rank <= ldx
 
-  int32_t interp_decomp_f64(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank,
-    int32_t M, int32_t N, const double* A, int32_t lda, int32_t* jpiv, double* X, int32_t ldx);
+  int32_t interp_decomp_f64(cublasHandle_t handle, double epi, int32_t rank, int32_t M, int32_t N, const double* A, int32_t lda, int32_t* jpiv, double* X, int32_t ldx);
 
-  int32_t interp_decomp_f32(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank,
-    int32_t M, int32_t N, const float* A, int32_t lda, int32_t* jpiv, float* X, int32_t ldx);
+  int32_t interp_decomp_f32(cublasHandle_t handle, double epi, int32_t rank, int32_t M, int32_t N, const float* A, int32_t lda, int32_t* jpiv, float* X, int32_t ldx);
 
-  int32_t interp_decomp_cf64(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank,
-    int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int32_t* jpiv, std::complex<double>* X, int32_t ldx);
+  int32_t interp_decomp_cf64(cublasHandle_t handle, double epi, int32_t rank, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int32_t* jpiv, std::complex<double>* X, int32_t ldx);
 
-  int32_t interp_decomp_cf32(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank,
-    int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int32_t* jpiv, std::complex<float>* X, int32_t ldx);
+  int32_t interp_decomp_cf32(cublasHandle_t handle, double epi, int32_t rank, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int32_t* jpiv, std::complex<float>* X, int32_t ldx);
 
-  void check_interp_decomp_f64(cudaStream_t stream, cublasHandle_t handle, int32_t rank,
-    int32_t M, int32_t N, const double* A, int32_t lda, const int32_t* jpiv, const double* X, int32_t ldx, double* rel_err);
+  void check_interp_decomp_f64(cublasHandle_t handle, int32_t rank, int32_t M, int32_t N, const double* A, int32_t lda, const int32_t* jpiv, const double* X, int32_t ldx, double* rel_err);
 
-  void check_interp_decomp_f32(cudaStream_t stream, cublasHandle_t handle, int32_t rank,
-    int32_t M, int32_t N, const float* A, int32_t lda, const int32_t* jpiv, const float* X, int32_t ldx, double* rel_err);
+  void check_interp_decomp_f32(cublasHandle_t handle, int32_t rank, int32_t M, int32_t N, const float* A, int32_t lda, const int32_t* jpiv, const float* X, int32_t ldx, double* rel_err);
 
-  void check_interp_decomp_cf64(cudaStream_t stream, cublasHandle_t handle, int32_t rank,
-    int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, const int32_t* jpiv, const std::complex<double>* X, int32_t ldx, double* rel_err);
+  void check_interp_decomp_cf64(cublasHandle_t handle, int32_t rank, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, const int32_t* jpiv, const std::complex<double>* X, int32_t ldx, double* rel_err);
 
-  void check_interp_decomp_cf32(cudaStream_t stream, cublasHandle_t handle, int32_t rank,
-    int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, const int32_t* jpiv, const std::complex<float>* X, int32_t ldx, double* rel_err);
+  void check_interp_decomp_cf32(cublasHandle_t handle, int32_t rank, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, const int32_t* jpiv, const std::complex<float>* X, int32_t ldx, double* rel_err);
 
   namespace Cholesky {
     // jpiv :: host minimal length N
