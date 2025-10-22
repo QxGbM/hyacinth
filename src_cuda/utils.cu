@@ -8,57 +8,54 @@
 #include <thrust/iterator/counting_iterator.h>
 #include <thrust/execution_policy.h>
 
-struct convert_fp {
-  __device__ __forceinline__ void operator()(double a, double& b) { b = a; }
-  __device__ __forceinline__ void operator()(float a, double& b) { b = double(a); }
-  __device__ __forceinline__ void operator()(double2 a, double& b) { b = device::dd::dd2double(a); }
-  __device__ __forceinline__ void operator()(float4 a, double& b) { b = device::qf::qf2double(a); }
-
-  __device__ __forceinline__ void operator()(double a, float& b) { b = float(a); }
-  __device__ __forceinline__ void operator()(float a, float& b) { b = a; }
-  __device__ __forceinline__ void operator()(double2 a, float& b) { b = float(a.x) + float(a.y); }
-  __device__ __forceinline__ void operator()(float4 a, float& b) { b = a.x + a.y + a.z + a.w; }
-
-  __device__ __forceinline__ void operator()(double a, double2& b) { b = device::dd::double2dd(a); }
-  __device__ __forceinline__ void operator()(float a, double2& b) { b = make_double2(double(a), 0.); }
-  __device__ __forceinline__ void operator()(double2 a, double2& b) { b = a; }
-  __device__ __forceinline__ void operator()(float4 a, double2& b) { b = device::dd::qf2dd(a); }
-
-  __device__ __forceinline__ void operator()(double a, float4& b) { b = device::qf::double2qf(a); }
-  __device__ __forceinline__ void operator()(float a, float4& b) { b = make_float4(a, 0.f, 0.f, 0.f); }
-  __device__ __forceinline__ void operator()(double2 a, float4& b) { b = device::dd::dd2qf(a); }
-  __device__ __forceinline__ void operator()(float4 a, float4& b) { b = a; }
-};
-
-template <class typeA, class typeB> struct rect_conv_copy {
+template <class typeA, class typeB> struct convert_copy {
   const typeA* __restrict__ A;
   typeB* __restrict__ B;
   int64_t M, lda, ldb;
   char mode;
-  rect_conv_copy(char mode, int64_t M, const typeA* A, int64_t lda, typeB* B, int64_t ldb) :
+  convert_copy(char mode, int64_t M, const typeA* A, int64_t lda, typeB* B, int64_t ldb) :
     A(A), B(B), M(M), lda(lda), ldb(ldb), mode((mode == 'L' || mode == 'l') ? 'L' : ((mode == 'U' || mode == 'u') ? 'U' : 'A')) {}
+
+  __device__ __forceinline__ void conv(double a, double& b) { b = a; }
+  __device__ __forceinline__ void conv(float a, double& b) { b = double(a); }
+  __device__ __forceinline__ void conv(double2 a, double& b) { b = device::dd::dd2double(a); }
+  __device__ __forceinline__ void conv(float4 a, double& b) { b = device::qf::qf2double(a); }
+
+  __device__ __forceinline__ void conv(double a, float& b) { b = float(a); }
+  __device__ __forceinline__ void conv(float a, float& b) { b = a; }
+  __device__ __forceinline__ void conv(double2 a, float& b) { b = float(a.x) + float(a.y); }
+  __device__ __forceinline__ void conv(float4 a, float& b) { b = a.x + a.y + a.z + a.w; }
+
+  __device__ __forceinline__ void conv(double a, double2& b) { b = device::dd::double2dd(a); }
+  __device__ __forceinline__ void conv(float a, double2& b) { b = make_double2(double(a), 0.); }
+  __device__ __forceinline__ void conv(double2 a, double2& b) { b = a; }
+  __device__ __forceinline__ void conv(float4 a, double2& b) { b = device::dd::qf2dd(a); }
+
+  __device__ __forceinline__ void conv(double a, float4& b) { b = device::qf::double2qf(a); }
+  __device__ __forceinline__ void conv(float a, float4& b) { b = make_float4(a, 0.f, 0.f, 0.f); }
+  __device__ __forceinline__ void conv(double2 a, float4& b) { b = device::dd::dd2qf(a); }
+  __device__ __forceinline__ void conv(float4 a, float4& b) { b = a; }
 
   __device__ __forceinline__ void operator()(int64_t i) {
     int64_t x = i / M, y = i - x * M;
-    convert_fp conv;
     if ((mode != 'L' || x <= y) && (mode != 'U' || y <= x))
       conv(A[y + x * lda], B[y + x * ldb]);
   }
 };
 
-template <class typeA, class typeB>
-inline void conv_copy_dispatcher(cudaStream_t stream, char mode, int32_t M, int32_t N, const typeA* A, int32_t lda, typeB* B, int32_t ldb) {
-  thrust::counting_iterator<int64_t> iter(0);
-  thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, int64_t(M) * int64_t(N), rect_conv_copy<typeA, typeB>(mode, M, A, lda, B, ldb));
-}
-
 template <class typeA>
 inline void conv_copy_dispatcher(cudaStream_t stream, char mode, int32_t M, int32_t N, const typeA* A, int32_t lda, void* B, int32_t ldb, device::Precision precB) {
+  thrust::counting_iterator<int64_t> iter(0);
+  int64_t len = int64_t(M) * int64_t(N);
   switch (precB) {
-    case device::Precision::FP64: conv_copy_dispatcher<typeA, double>(stream, mode, M, N, A, lda, (double*)B, ldb); break;
-    case device::Precision::FP32: conv_copy_dispatcher<typeA, float>(stream, mode, M, N, A, lda, (float*)B, ldb); break;
-    case device::Precision::FP128_DD: conv_copy_dispatcher<typeA, double2>(stream, mode, M, N, A, lda, (double2*)B, ldb); break;
-    case device::Precision::FP128_QF: conv_copy_dispatcher<typeA, float4>(stream, mode, M, N, A, lda, (float4*)B, ldb); break;
+    case device::Precision::FP64:
+      thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, len, convert_copy<typeA, double>(mode, M, A, lda, (double*)B, ldb)); break;
+    case device::Precision::FP32:
+      thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, len, convert_copy<typeA, float>(mode, M, A, lda, (float*)B, ldb)); break;
+    case device::Precision::FP128_DD:
+      thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, len, convert_copy<typeA, double2>(mode, M, A, lda, (double2*)B, ldb)); break;
+    case device::Precision::FP128_QF:
+      thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, len, convert_copy<typeA, float4>(mode, M, A, lda, (float4*)B, ldb)); break;
     default: break;
   }
 }
