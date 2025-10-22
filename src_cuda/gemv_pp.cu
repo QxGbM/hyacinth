@@ -51,23 +51,22 @@ template <class real_ptr, class matrix_t, class matrix_ptr, class idx_t, class i
 __global__ void gemv_pp_kernel(int32_t j, int32_t M, int32_t N, matrix_t sq, matrix_ptr A, int64_t lda, real_ptr D, idx_ptr idx) {
   constexpr int32_t elements = GRID_BLOCKS * BLOCK_THREADS;
   constexpr int32_t elem_mask = elements - 1;
-  int32_t block_offset = int32_t(blockIdx.x) * BLOCK_THREADS;
+  int32_t offset = int32_t(blockIdx.x) * BLOCK_THREADS + int32_t(threadIdx.x) + 1;
   matrix_ptr A_col_j = &A[int64_t(j) * lda];
 
-  for (int32_t i = block_offset + int32_t(threadIdx.x); i < M; i += elements)
+  for (int32_t i = offset - 1; i < M; i += elements)
   { matrix_t a = A[i]; A[i] = A_col_j[i]; A_col_j[i] = a; }
   A = &A[M]; A_col_j = &A_col_j[M];
 
   __shared__ typename cub::BlockReduce<idx_t, BLOCK_THREADS>::TempStorage temp_reduce;
   cub::BlockReduce<idx_t, BLOCK_THREADS> block_reduce(temp_reduce);
   gemv_pp_fused pp_func; real_max cmp_max;
-  int32_t thread_offset = block_offset + int32_t(threadIdx.x) + 1;
   idx_t thread_x = idx_t();
 
-  if ((thread_offset & elem_mask) == (j & elem_mask))
+  if ((offset & elem_mask) == (j & elem_mask))
   { A_col_j[j] = A_col_j[0]; D[j] = D[0]; }
 
-  for (int32_t i = thread_offset; i < N; i += elements) {
+  for (int32_t i = offset; i < N; i += elements) {
     matrix_ptr A_col_i = &A[int64_t(i) * lda];
     idx_t thread_c = idx_t({ D[i], i });
     pp_func(A[i], A_col_j[i], A_col_i[j], A_col_i[0], thread_c.real);
