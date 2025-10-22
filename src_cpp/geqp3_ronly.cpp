@@ -21,7 +21,7 @@ int32_t device::dgeqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32
   int32_t iters = N; 
   MixPrecAHA::rATA(stream, handle, M, N, algnM, algnN, orderA, A, lda, Precision::FP64, work, precC);
   Cholesky::rpotrfp(stream, handle, epi, &iters, N, work, algnN, precC, &hpiv[0], dpiv);
-  convert_and_copy(stream, N, N, work, algnN, precC, 0, A, lda, Precision::FP64);
+  convert_and_copy(stream, 'A', N, N, work, algnN, precC, A, lda, Precision::FP64);
 
   cudaStreamSynchronize(stream);
   cudaMemcpy(jpiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyDefault);
@@ -48,7 +48,7 @@ int32_t device::sgeqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32
   int32_t iters = N; 
   MixPrecAHA::rATA(stream, handle, M, N, algnM, algnN, orderA, A, lda, Precision::FP32, work, precC);
   Cholesky::rpotrfp(stream, handle, epi, &iters, N, work, algnN, precC, &hpiv[0], dpiv);
-  convert_and_copy(stream, N, N, work, algnN, precC, 0, A, lda, Precision::FP32);
+  convert_and_copy(stream, 'A', N, N, work, algnN, precC, A, lda, Precision::FP32);
 
   cudaStreamSynchronize(stream);
   cudaMemcpy(jpiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyDefault);
@@ -75,7 +75,7 @@ int32_t device::zgeqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32
   int32_t iters = N; 
   MixPrecAHA::cAHA(stream, handle, M, N, algnM, algnN, orderA, A, lda, Precision::FP64, work, precC);
   Cholesky::cpotrfp(stream, handle, epi, &iters, N, work, algnN, precC, &hpiv[0], dpiv);
-  convert_and_copy(stream, 2 * N, N, work, 2 * algnN, precC, 0, A, 2 * lda, Precision::FP64);
+  convert_and_copy(stream, 'A', 2 * N, N, work, 2 * algnN, precC, A, 2 * lda, Precision::FP64);
 
   cudaStreamSynchronize(stream);
   cudaMemcpy(jpiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyDefault);
@@ -102,7 +102,7 @@ int32_t device::cgeqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32
   int32_t iters = N; 
   MixPrecAHA::cAHA(stream, handle, M, N, algnM, algnN, orderA, A, lda, Precision::FP32, work, precC);
   Cholesky::cpotrfp(stream, handle, epi, &iters, N, work, algnN, precC, &hpiv[0], dpiv);
-  convert_and_copy(stream, 2 * N, N, work, 2 * algnN, precC, 0, A, 2 * lda, Precision::FP32);
+  convert_and_copy(stream, 'A', 2 * N, N, work, 2 * algnN, precC, A, 2 * lda, Precision::FP32);
 
   cudaStreamSynchronize(stream);
   cudaMemcpy(jpiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyDefault);

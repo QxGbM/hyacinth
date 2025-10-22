@@ -30,52 +30,45 @@ struct convert_fp {
   __device__ __forceinline__ void operator()(float4 a, float4& b) { b = a; }
 };
 
-template <int32_t beta, class typeA, class typeB> struct rect_conv_copy {
+template <class typeA, class typeB> struct rect_conv_copy {
   const typeA* __restrict__ A;
   typeB* __restrict__ B;
   int64_t M, lda, ldb;
-  rect_conv_copy(int64_t M, const typeA* A, int64_t lda, typeB* B, int64_t ldb) :
-    A(A), B(B), M(M), lda(lda), ldb(ldb) {}
+  char mode;
+  rect_conv_copy(char mode, int64_t M, const typeA* A, int64_t lda, typeB* B, int64_t ldb) :
+    A(A), B(B), M(M), lda(lda), ldb(ldb), mode((mode == 'L' || mode == 'l') ? 'L' : ((mode == 'U' || mode == 'u') ? 'U' : 'A')) {}
 
-  __device__ __forceinline__ void add(double a, double& b) { b = a + b; }
-  __device__ __forceinline__ void add(float a, float& b) { b = a + b; }
-  __device__ __forceinline__ void add(double2 a, double2& b) { b = device::dd::add(a, b); }
-  __device__ __forceinline__ void add(float4 a, float4& b) { b = device::qf::add(a, b); }
-  
   __device__ __forceinline__ void operator()(int64_t i) {
     int64_t x = i / M, y = i - x * M;
     convert_fp conv;
-    if constexpr(beta) { typeB a; conv(A[y + x * lda], a); add(a, B[y + x * ldb]); }
-      else conv(A[y + x * lda], B[y + x * ldb]);
+    if ((mode != 'L' || x <= y) && (mode != 'U' || y <= x))
+      conv(A[y + x * lda], B[y + x * ldb]);
   }
 };
 
 template <class typeA, class typeB>
-inline void conv_copy_dispatcher(cudaStream_t stream, int32_t M, int32_t N, const typeA* A, int32_t lda, int32_t beta, typeB* B, int32_t ldb) {
+inline void conv_copy_dispatcher(cudaStream_t stream, char mode, int32_t M, int32_t N, const typeA* A, int32_t lda, typeB* B, int32_t ldb) {
   thrust::counting_iterator<int64_t> iter(0);
-  if (beta)
-    thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, int64_t(M) * int64_t(N), rect_conv_copy<1, typeA, typeB>(M, A, lda, B, ldb));
-  else
-    thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, int64_t(M) * int64_t(N), rect_conv_copy<0, typeA, typeB>(M, A, lda, B, ldb));
+  thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, int64_t(M) * int64_t(N), rect_conv_copy<typeA, typeB>(mode, M, A, lda, B, ldb));
 }
 
 template <class typeA>
-inline void conv_copy_dispatcher(cudaStream_t stream, int32_t M, int32_t N, const typeA* A, int32_t lda, int32_t beta, void* B, int32_t ldb, device::Precision precB) {
+inline void conv_copy_dispatcher(cudaStream_t stream, char mode, int32_t M, int32_t N, const typeA* A, int32_t lda, void* B, int32_t ldb, device::Precision precB) {
   switch (precB) {
-    case device::Precision::FP64: conv_copy_dispatcher<typeA, double>(stream, M, N, A, lda, beta, (double*)B, ldb); break;
-    case device::Precision::FP32: conv_copy_dispatcher<typeA, float>(stream, M, N, A, lda, beta, (float*)B, ldb); break;
-    case device::Precision::FP128_DD: conv_copy_dispatcher<typeA, double2>(stream, M, N, A, lda, beta, (double2*)B, ldb); break;
-    case device::Precision::FP128_QF: conv_copy_dispatcher<typeA, float4>(stream, M, N, A, lda, beta, (float4*)B, ldb); break;
+    case device::Precision::FP64: conv_copy_dispatcher<typeA, double>(stream, mode, M, N, A, lda, (double*)B, ldb); break;
+    case device::Precision::FP32: conv_copy_dispatcher<typeA, float>(stream, mode, M, N, A, lda, (float*)B, ldb); break;
+    case device::Precision::FP128_DD: conv_copy_dispatcher<typeA, double2>(stream, mode, M, N, A, lda, (double2*)B, ldb); break;
+    case device::Precision::FP128_QF: conv_copy_dispatcher<typeA, float4>(stream, mode, M, N, A, lda, (float4*)B, ldb); break;
     default: break;
   }
 }
 
-void device::convert_and_copy(cudaStream_t stream, int32_t M, int32_t N, const void* A, int32_t lda, Precision precA, int32_t beta, void* B, int32_t ldb, Precision precB) {
+void device::convert_and_copy(cudaStream_t stream, char mode, int32_t M, int32_t N, const void* A, int32_t lda, Precision precA, void* B, int32_t ldb, Precision precB) {
   switch (precA) {
-    case Precision::FP64: conv_copy_dispatcher<double>(stream, M, N, (const double*)A, lda, beta, B, ldb, precB); break;
-    case Precision::FP32: conv_copy_dispatcher<float>(stream, M, N, (const float*)A, lda, beta, B, ldb, precB); break;
-    case Precision::FP128_DD: conv_copy_dispatcher<double2>(stream, M, N, (const double2*)A, lda, beta, B, ldb, precB); break;
-    case Precision::FP128_QF: conv_copy_dispatcher<float4>(stream, M, N, (const float4*)A, lda, beta, B, ldb, precB); break;
+    case Precision::FP64: conv_copy_dispatcher<double>(stream, mode, M, N, (const double*)A, lda, B, ldb, precB); break;
+    case Precision::FP32: conv_copy_dispatcher<float>(stream, mode, M, N, (const float*)A, lda, B, ldb, precB); break;
+    case Precision::FP128_DD: conv_copy_dispatcher<double2>(stream, mode, M, N, (const double2*)A, lda, B, ldb, precB); break;
+    case Precision::FP128_QF: conv_copy_dispatcher<float4>(stream, mode, M, N, (const float4*)A, lda, B, ldb, precB); break;
     default: break;
   }
 }
