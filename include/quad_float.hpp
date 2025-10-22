@@ -148,7 +148,7 @@ namespace device::qf {
 #ifndef __CUDA_ARCH__
     using std::scalbnf;
 #endif
-    int32_t sign_i = int32_t(a[ORDER - 1] | ((a[ORDER - 1] << 1) & 0xa0000000));
+    int32_t sign_i = int32_t(a[ORDER - 1] | ((a[ORDER - 1] << 1) & 0x80000000));
     float res = float(sign_i);
     if constexpr(3 < ORDER) res = scalbnf(res, 31) + float(a[2]);
     if constexpr(2 < ORDER) res = scalbnf(res, 31) + float(a[1]);
@@ -166,7 +166,7 @@ namespace device::qf {
   __host__ __device__ __forceinline__ float4 conv_a31_qf(uint32_t const (&a)[ORDER], int32_t expon) {
     static_assert(1 <= ORDER && ORDER <= 6, "Integer 32 accumulation order must be in [1,4]");
 
-    int32_t sign_i = int32_t(a[ORDER - 1] | ((a[ORDER - 1] << 1) & 0xa0000000));
+    int32_t sign_i = int32_t(a[ORDER - 1] | ((a[ORDER - 1] << 1) & 0x80000000));
     float x = float(sign_i), y = float(sign_i + int32_t(-x));
     float4 res = make_float4(x, y, 0.f, 0.f);
     if constexpr(3 < ORDER) res = add_float2(fscalbn(res, 31), conv_i32_f32x2(a[2]));

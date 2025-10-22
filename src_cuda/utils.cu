@@ -40,6 +40,7 @@ template <class typeA, class typeB> struct convert_copy {
     int64_t x = i / M, y = i - x * M;
     if ((mode != 'L' || x <= y) && (mode != 'U' || y <= x))
       conv(A[y + x * lda], B[y + x * ldb]);
+    else B[y + x * ldb] = typeB();
   }
 };
 
@@ -124,17 +125,16 @@ void device::copy_scatter(cudaStream_t stream, int32_t M, int32_t N, const int32
   }
 }
 
-template <class real_t> struct identity {
-  real_t* __restrict__ A;
-  real_t zero, one;
+template <class elem_t, elem_t one> struct identity {
+  elem_t* __restrict__ A;
   int64_t M, lda, strideD;
-  identity(real_t zero, real_t one, int64_t M, real_t* A, int64_t lda, int64_t strideD) :
-    A(A), zero(zero), one(one), M(M), lda(lda), strideD(strideD) {}
+  identity(int64_t M, elem_t* A, int64_t lda, int64_t strideD) :
+    A(A), M(M), lda(lda), strideD(strideD) {}
   
   __device__ __forceinline__ void operator()(int64_t i) {
     int64_t x = i / M, y = i - x * M;
     int32_t diag = int32_t(i % strideD == int64_t(0));
-    A[y + x * lda] = diag ? one : zero;
+    A[y + x * lda] = diag ? one : elem_t();
   }
 };
 
@@ -143,11 +143,13 @@ void device::strided_identity(cudaStream_t stream, int32_t M, int32_t N, int32_t
   thrust::counting_iterator<int64_t> iter(0);
 
   if (prec == Precision::FP64) {
-    identity<double> id(0., 1., M, (double*)A, lda, strideD);
+    const int64_t f64_one = 0x3FF0000000000000LL;
+    identity<int64_t, f64_one> id(M, (int64_t*)A, lda, strideD);
     thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, iter_items, id);
   }
   else if (prec == Precision::FP32) {
-    identity<float> id(0.f, 1.f, M, (float*)A, lda, strideD);
+    const int32_t f32_one = 0x3F800000;
+    identity<int32_t, f32_one> id(M, (int32_t*)A, lda, strideD);
     thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, iter_items, id);
   }
 }

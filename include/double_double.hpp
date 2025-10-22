@@ -101,7 +101,7 @@ namespace device::dd {
 #ifndef __CUDA_ARCH__
     using std::scalbn;
 #endif
-    double res = double(int32_t(a[ORDER - 1] | ((a[ORDER - 1] << 1) & 0xa0000000)));
+    double res = double(int32_t(a[ORDER - 1] | ((a[ORDER - 1] << 1) & 0x80000000)));
     if constexpr(3 < ORDER) res = scalbn(res, 31) + double(a[2]);
     if constexpr(2 < ORDER) res = scalbn(res, 31) + double(a[1]);
     if constexpr(1 < ORDER) res = scalbn(res, 31) + double(a[0]);
@@ -112,7 +112,7 @@ namespace device::dd {
   __host__ __device__ __forceinline__ double2 conv_a31_dd(uint32_t const (&a)[ORDER], int32_t expon) {
     static_assert(1 <= ORDER && ORDER <= 4, "Integer 32 accumulation order must be in [1,4]");
 
-    double2 res = make_double2(int32_t(a[ORDER - 1] | ((a[ORDER - 1] << 1) & 0xa0000000)), 0.);
+    double2 res = make_double2(int32_t(a[ORDER - 1] | ((a[ORDER - 1] << 1) & 0x80000000)), 0.);
     if constexpr(3 < ORDER) res = add_double(fscalbn(res, 31), double(a[2]));
     if constexpr(2 < ORDER) res = add_double(fscalbn(res, 31), double(a[1]));
     if constexpr(1 < ORDER) res = add_double(fscalbn(res, 31), double(a[0]));

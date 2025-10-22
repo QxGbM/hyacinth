@@ -17,7 +17,8 @@ namespace device {
 
   enum class Precision { FP32, FP64, FP128_DD, FP128_QF };
 
-  // rectangle copy :: no limits
+  // rectangle copy :: mode='L/l'or'U/u' will copy only lower/upper triangular parts and write zero to the other
+  //                   mode=other will copy the entire matrix
   // conversion :: [all] to [all] is okay
 
   void convert_and_copy(cudaStream_t stream, char mode, int32_t M, int32_t N, const void* A, int32_t lda, Precision precA, void* B, int32_t ldb, Precision precB);
