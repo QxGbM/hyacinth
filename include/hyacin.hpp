@@ -27,6 +27,8 @@ namespace device {
 
   void copy_gather(cudaStream_t stream, int32_t M, int32_t N, const int32_t* jpiv, const void* A, int32_t lda, void* B, int32_t ldb, Precision prec);
 
+  void inplace_gather(cudaStream_t stream, int32_t M, int32_t N, const int32_t* jpiv, void* A, int32_t lda, void* workspace, Precision prec);
+
   void copy_scatter(cudaStream_t stream, int32_t M, int32_t N, const int32_t* jpiv, const void* A, int32_t lda, void* B, int32_t ldb, Precision prec);
 
   void strided_identity(cudaStream_t stream, int32_t M, int32_t N, int32_t strideD, void* A, int32_t lda, Precision prec);

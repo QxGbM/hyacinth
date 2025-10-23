@@ -12,6 +12,21 @@
 #include <lapacke.h>
 #endif
 
+void make_2D_oscillatory(double w, int32_t sep, int32_t M, int32_t N, double* A, int32_t lda) {
+  constexpr int32_t height = 128;
+  auto translate_2d = [](int64_t i) { int64_t x = i / height, y = i - height * x; return std::complex<double>(x, y); };
+  sep = height * sep + ((M + height - 1) & (~(height - 1)));
+
+  for (int32_t j = 0; j < N; ++j) {
+    auto vj = translate_2d(j + sep);
+    for (int32_t i = 0; i < M; ++i) {
+      auto vi = translate_2d(i);
+      double d = std::abs(vi - vj);
+      A[uint64_t(i) + uint64_t(j) * uint64_t(lda)] = std::cos(w * d) / d;
+    }
+  }
+}
+
 int32_t main(int32_t argc, char* argv[]) {
   auto cu_err = cudaSetDevice(0);
   cudaDeviceReset();
@@ -25,10 +40,7 @@ int32_t main(int32_t argc, char* argv[]) {
   double epi = 3 < argc ? std::atof(argv[3]) : 1.e-12;
   std::vector<double> matA(M * N);
   std::vector<int32_t> ipiv(N);
-
-  std::mt19937_64 gen(42);
-  std::normal_distribution<double> dist(0, 32);
-  std::generate(matA.begin(), matA.end(), [&](){ return dist(gen); });
+  make_2D_oscillatory(1., 0, M, N, matA.data(), M);
 
   cudaStream_t stream;
   cublasHandle_t cublasH;
@@ -71,11 +83,8 @@ int32_t main(int32_t argc, char* argv[]) {
     std::vector<double> tau(N);
     LAPACKE_dgeqp3(LAPACK_COL_MAJOR, M, N, matA.data(), M, jpiv.data(), tau.data());
 
-    for (int32_t i = 0; i < N; ++i) {
+    for (int32_t i = 0; i < N; ++i)
       err_int += int32_t(jpiv[i] != ipiv[i]);
-      if (matA[i * (M + 1)] < 0.)
-        cblas_dscal(N, -1., &(matA.data())[i], M);
-    }
   
     double nrm = 0.;
     for (int32_t j = 0; j < N; ++j)

@@ -113,11 +113,11 @@ template <int32_t sc0ga1, class elem_t> struct permute_copy {
 };
 
 void device::copy_gather(cudaStream_t stream, int32_t M, int32_t N, const int32_t* jpiv, const void* A, int32_t lda, void* B, int32_t ldb, Precision prec) {
+  thrust::counting_iterator<int64_t> iter(0);
   for (int32_t i = 0; i < N; i += clen) {
-    int32_t iter_items = std::min(N - i, clen);
-    int64_t elements = int64_t(iter_items) * int64_t(M);
-    thrust::counting_iterator<int64_t> iter(0);
-    cudaMemcpyToSymbolAsync(cpiv, &jpiv[i], int64_t(iter_items) * sizeof(int32_t), 0, cudaMemcpyDefault, stream);
+    int32_t cols = std::min(N - i, clen);
+    int64_t elements = int64_t(cols) * int64_t(M);
+    cudaMemcpyToSymbolAsync(cpiv, &jpiv[i], int64_t(cols) * sizeof(int32_t), 0, cudaMemcpyDefault, stream);
 
     if (prec == Precision::FP64) {
       permute_copy<1, int64_t> perm(M, (const int64_t*)A, lda, &((int64_t*)B)[int64_t(i) * int64_t(ldb)], ldb);
@@ -130,12 +130,37 @@ void device::copy_gather(cudaStream_t stream, int32_t M, int32_t N, const int32_
   }
 }
 
+void device::inplace_gather(cudaStream_t stream, int32_t M, int32_t N, const int32_t* jpiv, void* A, int32_t lda, void* workspace, Precision prec) {
+  const int32_t ws_rows = 8192;
+  int64_t elem_bytes = prec == Precision::FP32 ? sizeof(float) : sizeof(double);
+  thrust::counting_iterator<int64_t> iter(0);
+  if (N <= clen)
+    cudaMemcpyToSymbolAsync(cpiv, jpiv, int64_t(N) * sizeof(int32_t), 0, cudaMemcpyDefault, stream);
+
+  for (int32_t i = 0; i < M; i += ws_rows) {
+    int32_t rows = std::min(M - i, ws_rows);
+    uint8_t* A_i = &((uint8_t*)A)[elem_bytes * int64_t(i)];
+
+    if (N <= clen && prec == Precision::FP64) {
+      permute_copy<1, int64_t> perm(rows, (const int64_t*)A_i, lda, (int64_t*)workspace, rows);
+      thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, int64_t(N) * int64_t(rows), perm);
+    }
+    else if (N <= clen && prec == Precision::FP32) {
+      permute_copy<1, int32_t> perm(rows, (const int32_t*)A_i, lda, (int32_t*)workspace, rows);
+      thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, int64_t(N) * int64_t(rows), perm);
+    }
+    else
+      copy_gather(stream, rows, N, jpiv, A_i, lda, workspace, rows, prec);
+    cudaMemcpy2DAsync(A_i, elem_bytes * int64_t(lda), workspace, elem_bytes * int64_t(rows), elem_bytes * int64_t(rows), N, cudaMemcpyDeviceToDevice, stream);
+  }
+}
+
 void device::copy_scatter(cudaStream_t stream, int32_t M, int32_t N, const int32_t* jpiv, const void* A, int32_t lda, void* B, int32_t ldb, Precision prec) {
+  thrust::counting_iterator<int64_t> iter(0);
   for (int32_t i = 0; i < N; i += clen) {
-    int32_t iter_items = std::min(N - i, clen);
-    int64_t elements = int64_t(iter_items) * int64_t(M);
-    thrust::counting_iterator<int64_t> iter(0);
-    cudaMemcpyToSymbolAsync(cpiv, &jpiv[i], int64_t(iter_items) * sizeof(int32_t), 0, cudaMemcpyDefault, stream);
+    int32_t cols = std::min(N - i, clen);
+    int64_t elements = int64_t(cols) * int64_t(M);
+    cudaMemcpyToSymbolAsync(cpiv, &jpiv[i], int64_t(cols) * sizeof(int32_t), 0, cudaMemcpyDefault, stream);
 
     if (prec == Precision::FP64) {
       permute_copy<0, int64_t> perm(M, &((const int64_t*)A)[int64_t(i) * int64_t(lda)], lda, (int64_t*)B, ldb);
