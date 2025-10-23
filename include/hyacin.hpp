@@ -17,11 +17,13 @@ namespace device {
 
   enum class Precision { FP32, FP64, FP128_DD, FP128_QF };
 
-  // rectangle copy :: mode='L/l'or'U/u' will copy only lower/upper triangular parts and write zero to the other
+  // rectangle copy :: mode='U/u' will copy only upper triangular parts, 'U': two scalars=one elem (for complex)
   //                   mode=other will copy the entire matrix
   // conversion :: [all] to [all] is okay
 
-  void convert_and_copy(cudaStream_t stream, char mode, int32_t M, int32_t N, const void* A, int32_t lda, Precision precA, void* B, int32_t ldb, Precision precB);
+  void copy_signs(cudaStream_t stream, int32_t N, const void* X, int32_t incx, Precision precX, void* signs, int32_t sign_bytes);
+
+  void convert_and_copy(cudaStream_t stream, char mode, int32_t M, int32_t N, const void* A, int32_t lda, Precision precA, void* B, int32_t ldb, Precision precB, const int8_t* signs);
 
   void copy_gather(cudaStream_t stream, int32_t M, int32_t N, const int32_t* jpiv, const void* A, int32_t lda, void* B, int32_t ldb, Precision prec);
 
@@ -34,13 +36,13 @@ namespace device {
   // A :: device, minimal length lda * N, M <= lda
   // jpiv :: host/device, minimal length N
 
-  int32_t dgeqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32_t N, double* A, int32_t lda, int32_t* jpiv);
+  int32_t dgeqp3_ronly(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t N, double* A, int32_t lda, int32_t* jpiv, double* tau);
 
-  int32_t sgeqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32_t N, float* A, int32_t lda, int32_t* jpiv);
+  int32_t sgeqp3_ronly(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t N, float* A, int32_t lda, int32_t* jpiv, float* tau);
 
-  int32_t zgeqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32_t N, std::complex<double>* A, int32_t lda, int32_t* jpiv);
+  int32_t zgeqp3_ronly(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t N, std::complex<double>* A, int32_t lda, int32_t* jpiv, std::complex<double>* tau);
 
-  int32_t cgeqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32_t N, std::complex<float>* A, int32_t lda, int32_t* jpiv);
+  int32_t cgeqp3_ronly(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t N, std::complex<float>* A, int32_t lda, int32_t* jpiv, std::complex<float>* tau);
 
   // Mixed precision interpolative decomposition, synchronous call, includes memory alloc/dealloc
   // Outputs A ~= A[:jpiv(1, rank)] * X, rank of X as function return

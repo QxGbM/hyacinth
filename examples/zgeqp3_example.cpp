@@ -31,25 +31,33 @@ int32_t main(int32_t argc, char* argv[]) {
   std::generate(matA.begin(), matA.end(), [&](){ return std::complex<double>(dist(gen), dist(gen)); });
 
   cudaStream_t stream;
-  cublasHandle_t handle;
+  cublasHandle_t cublasH;
+  cusolverDnHandle_t cusolverH;
+  cusolverDnParams_t params;
+
   cudaStreamCreate(&stream);
-  cublasCreate(&handle);
-  cublasSetStream(handle, stream);
+  cublasCreate(&cublasH);
+  cublasSetStream(cublasH, stream);
+  cusolverDnCreate(&cusolverH);
+  cusolverDnSetStream(cusolverH, stream);
+  cusolverDnCreateParams(&params);
 
   cudaEvent_t start, stop;
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
 
-  std::complex<double>* d_A = nullptr;
+  std::complex<double>* d_A = nullptr, *d_tau = nullptr;
   cudaMalloc((void**)(&d_A), M * N * sizeof(std::complex<double>));
+  cudaMalloc((void**)(&d_tau), N * sizeof(std::complex<double>));
   cudaMemcpy(d_A, matA.data(), M * N * sizeof(std::complex<double>), cudaMemcpyHostToDevice);
 
-  device::zgeqp3_ronly(handle, epi, M, N, d_A, M, ipiv.data());
+  device::zgeqp3_ronly(cublasH, cusolverH, params, epi, M, N, d_A, M, ipiv.data(), d_tau);
   std::fill(ipiv.begin(), ipiv.end(), 0);
+  cudaMemset(d_tau, 0, N * sizeof(std::complex<double>));
   cudaMemcpy(d_A, matA.data(), M * N * sizeof(std::complex<double>), cudaMemcpyHostToDevice);
 
   cudaEventRecord(start, stream);
-  int32_t ret = device::zgeqp3_ronly(handle, epi, M, N, d_A, M, ipiv.data());
+  int32_t ret = device::zgeqp3_ronly(cublasH, cusolverH, params, epi, M, N, d_A, M, ipiv.data(), d_tau);
   cudaEventRecord(stop, stream);
 
   cudaDeviceSynchronize();
@@ -87,10 +95,13 @@ int32_t main(int32_t argc, char* argv[]) {
   std::cout << "ZGEQP3," << M << "," << N << "," << epi << "," << err_int << "," << err << "," << ret << "," << milliseconds << "," << gflops << std::endl;
 
   cudaFree(d_A);
+  cudaFree(d_tau);
   cudaEventDestroy(start);
   cudaEventDestroy(stop);
   cudaStreamDestroy(stream);
-  cublasDestroy(handle);
+  cublasDestroy(cublasH);
+  cusolverDnDestroy(cusolverH);
+  cusolverDnDestroyParams(params);
 
   cu_err = cudaGetLastError();
   if (cu_err != cudaSuccess)

@@ -58,13 +58,13 @@ __global__ void gemv_pp_kernel(int32_t j, int32_t M, int32_t N, matrix_t sq, mat
   { matrix_t a = A[i]; A[i] = A_col_j[i]; A_col_j[i] = a; }
   A = &A[M]; A_col_j = &A_col_j[M];
 
+  if (((j - offset) & elem_mask) == 0)
+  { A_col_j[j] = A_col_j[0]; D[j] = D[0]; }
+
   __shared__ typename cub::BlockReduce<idx_t, BLOCK_THREADS>::TempStorage temp_reduce;
   cub::BlockReduce<idx_t, BLOCK_THREADS> block_reduce(temp_reduce);
   gemv_pp_fused pp_func; real_max cmp_max;
   idx_t thread_x = idx_t();
-
-  if ((offset & elem_mask) == (j & elem_mask))
-  { A_col_j[j] = A_col_j[0]; D[j] = D[0]; }
 
   for (int32_t i = offset; i < N; i += elements) {
     matrix_ptr A_col_i = &A[int64_t(i) * lda];

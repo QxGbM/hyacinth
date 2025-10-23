@@ -3,8 +3,8 @@
 #include <internal.hpp>
 #include <vector>
 
-int32_t device::dgeqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32_t N, double* A, int32_t lda, int32_t* jpiv) {
-  cudaStream_t stream; cublasGetStream(handle, &stream);
+int32_t device::dgeqp3_ronly(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t N, double* A, int32_t lda, int32_t* jpiv, double* tau) {
+  cudaStream_t stream; cublasGetStream(cublasH, &stream);
   int32_t algnM, algnN, orderA; Precision precC;
   MixPrecAHA::mpgemm_params(&epi, M, N, &algnM, &algnN, &orderA, Precision::FP64, &precC);
 
@@ -19,9 +19,11 @@ int32_t device::dgeqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32
   std::vector<int32_t> hpiv(N);
 
   int32_t iters = N; 
-  MixPrecAHA::rATA(stream, handle, M, N, algnM, algnN, orderA, A, lda, Precision::FP64, work, precC);
-  Cholesky::rpotrfp(stream, handle, epi, &iters, N, work, algnN, precC, &hpiv[0], dpiv);
-  convert_and_copy(stream, 'A', N, N, work, algnN, precC, A, lda, Precision::FP64);
+  MixPrecAHA::rATA(stream, cublasH, M, N, algnM, algnN, orderA, A, lda, Precision::FP64, work, precC);
+  Cholesky::rpotrfp(stream, cublasH, epi, &iters, N, work, algnN, precC, &hpiv[0], dpiv);
+  int8_t* signs = &((int8_t*)work)[int64_t(algnN) * int64_t(N) * elem_bytes];
+  cudaMemsetAsync(signs, 0, iters, stream);
+  convert_and_copy(stream, 'u', iters, iters, work, algnN, precC, A, lda, Precision::FP64, signs);
 
   cudaStreamSynchronize(stream);
   cudaMemcpy(jpiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyDefault);
@@ -30,8 +32,8 @@ int32_t device::dgeqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32
   return iters == N ? 0 : (iters + 1);
 }
 
-int32_t device::sgeqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32_t N, float* A, int32_t lda, int32_t* jpiv) {
-  cudaStream_t stream; cublasGetStream(handle, &stream);
+int32_t device::sgeqp3_ronly(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t N, float* A, int32_t lda, int32_t* jpiv, float* tau) {
+  cudaStream_t stream; cublasGetStream(cublasH, &stream);
   int32_t algnM, algnN, orderA; Precision precC;
   MixPrecAHA::mpgemm_params(&epi, M, N, &algnM, &algnN, &orderA, Precision::FP32, &precC);
 
@@ -46,9 +48,11 @@ int32_t device::sgeqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32
   std::vector<int32_t> hpiv(N);
 
   int32_t iters = N; 
-  MixPrecAHA::rATA(stream, handle, M, N, algnM, algnN, orderA, A, lda, Precision::FP32, work, precC);
-  Cholesky::rpotrfp(stream, handle, epi, &iters, N, work, algnN, precC, &hpiv[0], dpiv);
-  convert_and_copy(stream, 'A', N, N, work, algnN, precC, A, lda, Precision::FP32);
+  MixPrecAHA::rATA(stream, cublasH, M, N, algnM, algnN, orderA, A, lda, Precision::FP32, work, precC);
+  Cholesky::rpotrfp(stream, cublasH, epi, &iters, N, work, algnN, precC, &hpiv[0], dpiv);
+  int8_t* signs = &((int8_t*)work)[int64_t(algnN) * int64_t(N) * elem_bytes];
+  cudaMemsetAsync(signs, 0, iters, stream);
+  convert_and_copy(stream, 'u', iters, iters, work, algnN, precC, A, lda, Precision::FP32, signs);
 
   cudaStreamSynchronize(stream);
   cudaMemcpy(jpiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyDefault);
@@ -57,8 +61,8 @@ int32_t device::sgeqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32
   return iters == N ? 0 : (iters + 1);
 }
 
-int32_t device::zgeqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32_t N, std::complex<double>* A, int32_t lda, int32_t* jpiv) {
-  cudaStream_t stream; cublasGetStream(handle, &stream);
+int32_t device::zgeqp3_ronly(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t N, std::complex<double>* A, int32_t lda, int32_t* jpiv, std::complex<double>* tau) {
+  cudaStream_t stream; cublasGetStream(cublasH, &stream);
   int32_t algnM, algnN, orderA; Precision precC;
   MixPrecAHA::mpgemm_params(&epi, M, N, &algnM, &algnN, &orderA, Precision::FP64, &precC);
 
@@ -73,9 +77,11 @@ int32_t device::zgeqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32
   std::vector<int32_t> hpiv(N);
 
   int32_t iters = N; 
-  MixPrecAHA::cAHA(stream, handle, M, N, algnM, algnN, orderA, A, lda, Precision::FP64, work, precC);
-  Cholesky::cpotrfp(stream, handle, epi, &iters, N, work, algnN, precC, &hpiv[0], dpiv);
-  convert_and_copy(stream, 'A', 2 * N, N, work, 2 * algnN, precC, A, 2 * lda, Precision::FP64);
+  MixPrecAHA::cAHA(stream, cublasH, M, N, algnM, algnN, orderA, A, lda, Precision::FP64, work, precC);
+  Cholesky::cpotrfp(stream, cublasH, epi, &iters, N, work, algnN, precC, &hpiv[0], dpiv);
+  int8_t* signs = &((int8_t*)work)[int64_t(2) * int64_t(algnN) * int64_t(N) * elem_bytes];
+  cudaMemsetAsync(signs, 0, 2 * iters, stream);
+  convert_and_copy(stream, 'U', 2 * iters, iters, work, 2 * algnN, precC, A, 2 * lda, Precision::FP64, signs);
 
   cudaStreamSynchronize(stream);
   cudaMemcpy(jpiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyDefault);
@@ -84,8 +90,8 @@ int32_t device::zgeqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32
   return iters == N ? 0 : (iters + 1);
 }
 
-int32_t device::cgeqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32_t N, std::complex<float>* A, int32_t lda, int32_t* jpiv) {
-  cudaStream_t stream; cublasGetStream(handle, &stream);
+int32_t device::cgeqp3_ronly(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t N, std::complex<float>* A, int32_t lda, int32_t* jpiv, std::complex<float>* tau) {
+  cudaStream_t stream; cublasGetStream(cublasH, &stream);
   int32_t algnM, algnN, orderA; Precision precC;
   MixPrecAHA::mpgemm_params(&epi, M, N, &algnM, &algnN, &orderA, Precision::FP32, &precC);
 
@@ -100,9 +106,11 @@ int32_t device::cgeqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32
   std::vector<int32_t> hpiv(N);
 
   int32_t iters = N; 
-  MixPrecAHA::cAHA(stream, handle, M, N, algnM, algnN, orderA, A, lda, Precision::FP32, work, precC);
-  Cholesky::cpotrfp(stream, handle, epi, &iters, N, work, algnN, precC, &hpiv[0], dpiv);
-  convert_and_copy(stream, 'A', 2 * N, N, work, 2 * algnN, precC, A, 2 * lda, Precision::FP32);
+  MixPrecAHA::cAHA(stream, cublasH, M, N, algnM, algnN, orderA, A, lda, Precision::FP32, work, precC);
+  Cholesky::cpotrfp(stream, cublasH, epi, &iters, N, work, algnN, precC, &hpiv[0], dpiv);
+  int8_t* signs = &((int8_t*)work)[int64_t(2) * int64_t(algnN) * int64_t(N) * elem_bytes];
+  cudaMemsetAsync(signs, 0, 2 * iters, stream);
+  convert_and_copy(stream, 'U', 2 * iters, iters, work, 2 * algnN, precC, A, 2 * lda, Precision::FP32, signs);
 
   cudaStreamSynchronize(stream);
   cudaMemcpy(jpiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyDefault);
