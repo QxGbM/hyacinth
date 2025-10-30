@@ -38,8 +38,7 @@ inline void interp_pp_loA_real(cudaStream_t stream, cublasHandle_t handle, int32
     device::strided_identity(stream, M, M, M + 1, A, lda, precA);
     cudaMemcpyAsync(work, ipiv, sizeof(int32_t) * N, cudaMemcpyHostToDevice, stream);
     device::copy_scatter(stream, M, N, work, A, lda, &work[lda], lda, precA);
-    cudaMemsetAsync(work, 0, M, stream);
-    device::convert_and_copy(stream, 'A', M, N, &work[lda], lda, precA, X, ldx, precX, (const int8_t*)work);
+    device::convert_and_copy(stream, M, N, &work[lda], lda, precA, X, ldx, precX);
   }
 }
 
@@ -47,8 +46,7 @@ template <device::Precision precA, device::Precision precX, class typeA, class t
 inline void interp_pp_loX_real(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, typeA* A, int32_t lda, const int32_t* ipiv, typeX* X, int32_t ldx) {
   if (0 < M) {
     int32_t* work = (int32_t*)&A[int64_t(lda) * int64_t(N)];
-    cudaMemsetAsync(work, 0, M, stream);
-    device::convert_and_copy(stream, 'A', M, N, A, lda, precA, &work[lda], lda, precX, (const int8_t*)work);
+    device::convert_and_copy(stream, M, N, A, lda, precA, &work[lda], lda, precX);
     cublas_trsm_real<precX>(handle, M, N, (typeX*)&work[lda], lda);
     device::strided_identity(stream, M, M, M + 1, &work[lda], lda, precX);
     cudaMemcpyAsync(work, ipiv, sizeof(int32_t) * N, cudaMemcpyHostToDevice, stream);
@@ -121,8 +119,7 @@ inline void interp_pp_loA_complex(cudaStream_t stream, cublasHandle_t handle, in
     device::strided_identity(stream, 2 * M, M, 2 * M + 2, A, 2 * lda, precA);
     cudaMemcpyAsync(work, ipiv, sizeof(int32_t) * N, cudaMemcpyHostToDevice, stream);
     device::copy_scatter(stream, 2 * M, N, work, A, 2 * lda, &work[lda], 2 * lda, precA);
-    cudaMemsetAsync(work, 0, 2 * M, stream);
-    device::convert_and_copy(stream, 'A', 2 * M, N, &work[lda], 2 * lda, precA, X, 2 * ldx, precX, (const int8_t*)work);
+    device::convert_and_copy(stream, 2 * M, N, &work[lda], 2 * lda, precA, X, 2 * ldx, precX);
   }
 }
 
@@ -130,8 +127,7 @@ template <device::Precision precA, device::Precision precX, class typeA, class t
 inline void interp_pp_loX_complex(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, typeA* A, int32_t lda, const int32_t* ipiv, typeX* X, int32_t ldx) {
   if (0 < M) {
     int32_t* work = (int32_t*)&A[int64_t(lda) * int64_t(N)];
-    cudaMemsetAsync(work, 0, 2 * M, stream);
-    device::convert_and_copy(stream, 'A', 2 * M, N, A, 2 * lda, precA, &work[lda], 2 * lda, precX, (const int8_t*)work);
+    device::convert_and_copy(stream, 2 * M, N, A, 2 * lda, precA, &work[lda], 2 * lda, precX);
     cublas_trsm_complex<precX>(handle, M, N, (typeX*)&work[lda], lda);
     device::strided_identity(stream, 2 * M, M, 2 * M + 2, &work[lda], 2 * lda, precX);
     cudaMemcpyAsync(work, ipiv, sizeof(int32_t) * N, cudaMemcpyHostToDevice, stream);

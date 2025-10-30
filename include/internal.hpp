@@ -4,6 +4,7 @@
 #include <complex>
 #include <cuda_runtime_api.h>
 #include <cublas_v2.h>
+#include <cusolverDn.h>
 
 struct complex_double2;
 struct complex_float4;
@@ -149,5 +150,17 @@ namespace internal::InterpolativeDecomposition {
   void interp_pp_cf128_dd_cf32(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, complex_double2* A, int32_t lda, const int32_t* ipiv, std::complex<float>* X, int32_t ldx);
 
   void interp_pp_cf128_qf_cf32(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, complex_float4* A, int32_t lda, const int32_t* ipiv, std::complex<float>* X, int32_t ldx);
+
+};
+
+namespace internal::Orthogonalize {
+
+  void qr_pp_f64(cudaStream_t stream, cusolverDnHandle_t cusolverH, int32_t M, int32_t N, int32_t K, double* A, int32_t lda, const int32_t* ipiv, double* tau, void** Workspace, int64_t* Lwork);
+
+  void qr_pp_f32(cudaStream_t stream, cusolverDnHandle_t cusolverH, int32_t M, int32_t N, int32_t K, float* A, int32_t lda, const int32_t* ipiv, float* tau, void** Workspace, int64_t* Lwork);
+
+  void qr_pp_cf64(cudaStream_t stream, cusolverDnHandle_t cusolverH, int32_t M, int32_t N, int32_t K, std::complex<double>* A, int32_t lda, const int32_t* ipiv, std::complex<double>* tau, void** Workspace, int64_t* Lwork);
+
+  void qr_pp_cf32(cudaStream_t stream, cusolverDnHandle_t cusolverH, int32_t M, int32_t N, int32_t K, std::complex<float>* A, int32_t lda, const int32_t* ipiv, std::complex<float>* tau, void** Workspace, int64_t* Lwork);
 
 };

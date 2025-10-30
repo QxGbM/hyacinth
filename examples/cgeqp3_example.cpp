@@ -33,14 +33,12 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaStream_t stream;
   cublasHandle_t cublasH;
   cusolverDnHandle_t cusolverH;
-  cusolverDnParams_t params;
 
   cudaStreamCreate(&stream);
   cublasCreate(&cublasH);
   cublasSetStream(cublasH, stream);
   cusolverDnCreate(&cusolverH);
   cusolverDnSetStream(cusolverH, stream);
-  cusolverDnCreateParams(&params);
 
   cudaEvent_t start, stop;
   cudaEventCreate(&start);
@@ -51,12 +49,12 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaMalloc((void**)(&d_tau), N * sizeof(std::complex<float>));
   cudaMemcpy(d_A, matA.data(), M * N * sizeof(std::complex<float>), cudaMemcpyHostToDevice);
 
-  device::cgeqp3_ronly(cublasH, cusolverH, params, epi, M, N, d_A, M, ipiv.data(), d_tau);
+  device::cgeqp3(cublasH, cusolverH, 'Q', epi, M, N, d_A, M, ipiv.data(), d_tau);
   std::fill(ipiv.begin(), ipiv.end(), 0);
   cudaMemcpy(d_A, matA.data(), M * N * sizeof(std::complex<float>), cudaMemcpyHostToDevice);
 
   cudaEventRecord(start, stream);
-  int32_t ret = device::cgeqp3_ronly(cublasH, cusolverH, params, epi, M, N, d_A, M, ipiv.data(), d_tau);
+  int32_t ret = device::cgeqp3(cublasH, cusolverH, 'Q', epi, M, N, d_A, M, ipiv.data(), d_tau);
   cudaEventRecord(stop, stream);
 
   cudaDeviceSynchronize();
@@ -99,7 +97,6 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaStreamDestroy(stream);
   cublasDestroy(cublasH);
   cusolverDnDestroy(cusolverH);
-  cusolverDnDestroyParams(params);
 
   cu_err = cudaGetLastError();
   if (cu_err != cudaSuccess)

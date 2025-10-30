@@ -8,88 +8,62 @@
 #include <thrust/iterator/counting_iterator.h>
 #include <thrust/execution_policy.h>
 
-template <class elem_t, class sign_t, sign_t one> struct vector_signs {
-  const elem_t* __restrict__ X;
-  sign_t* __restrict__ signs;
-  int32_t incx;
-  vector_signs(const elem_t* X, int32_t incx, sign_t* signs) : X(X), signs(signs), incx(incx) {}
-
-  __device__ __forceinline__ void operator()(int32_t i) {
-    signs[i] = signbit(X[i * incx]) ? one : sign_t();
-  }
-};
-
-void device::copy_signs(cudaStream_t stream, int32_t N, const void* X, int32_t incx, Precision precX, void* signs, int32_t sign_bytes) {
-  thrust::counting_iterator<int32_t> iter(0);
-  if (precX == Precision::FP64 && sign_bytes == 1)
-    thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, N, vector_signs<double, uint8_t, uint8_t(0xFF)>((const double*)X, incx, (uint8_t*)signs));
-  else if (precX == Precision::FP32 && sign_bytes == 1)
-    thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, N, vector_signs<float, uint8_t, uint8_t(0xFF)>((const float*)X, incx, (uint8_t*)signs));
-  else if (precX == Precision::FP64 && sign_bytes == 2)
-    thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, N, vector_signs<double, uint16_t, uint16_t(0xFFFF)>((const double*)X, incx, (uint16_t*)signs));
-  else if (precX == Precision::FP32 && sign_bytes == 2)
-    thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, N, vector_signs<float, uint16_t, uint16_t(0xFFFF)>((const float*)X, incx, (uint16_t*)signs));
-}
-
 template <class typeA, class typeB> struct convert_copy {
   const typeA* __restrict__ A;
-  const int8_t* __restrict__ signs;
   typeB* __restrict__ B;
   int64_t M, lda, ldb;
-  char mode;
-  convert_copy(char mode, int64_t M, const typeA* A, int64_t lda, typeB* B, int64_t ldb, const int8_t* signs) :
-    A(A), signs(signs), B(B), M(M), lda(lda), ldb(ldb), mode(mode) {}
+  convert_copy(int64_t M, const typeA* A, int64_t lda, typeB* B, int64_t ldb) :
+    A(A), B(B), M(M), lda(lda), ldb(ldb) {}
 
-  __device__ __forceinline__ void conv(double a, double& b, int8_t sign) { b = sign ? -a : a; }
-  __device__ __forceinline__ void conv(float a, double& b, int8_t sign) { b = double(sign ? -a : a); }
-  __device__ __forceinline__ void conv(double2 a, double& b, int8_t sign) { double c = device::dd::dd2double(a); b = sign ? -c : c; }
-  __device__ __forceinline__ void conv(float4 a, double& b, int8_t sign) { double c = device::qf::qf2double(a); b = sign ? -c : c; }
+  __device__ __forceinline__ void conv(double a, double& b) { b = a; }
+  __device__ __forceinline__ void conv(float a, double& b) { b = double(a); }
+  __device__ __forceinline__ void conv(double2 a, double& b) { b = device::dd::dd2double(a); }
+  __device__ __forceinline__ void conv(float4 a, double& b) { b = device::qf::qf2double(a); }
 
-  __device__ __forceinline__ void conv(double a, float& b, int8_t sign) { float c = float(a); b = sign ? -c : c; }
-  __device__ __forceinline__ void conv(float a, float& b, int8_t sign) { b = sign ? -a : a; }
-  __device__ __forceinline__ void conv(double2 a, float& b, int8_t sign) { float c = float(a.x) + float(a.y); b = sign ? -c : c; }
-  __device__ __forceinline__ void conv(float4 a, float& b, int8_t sign) { float c = a.x + a.y + a.z + a.w; b = sign ? -c : c; }
+  __device__ __forceinline__ void conv(double a, float& b) { b = float(a); }
+  __device__ __forceinline__ void conv(float a, float& b) { b = a; }
+  __device__ __forceinline__ void conv(double2 a, float& b) { b = float(a.x) + float(a.y); }
+  __device__ __forceinline__ void conv(float4 a, float& b) { b = a.x + a.y + a.z + a.w; }
 
-  __device__ __forceinline__ void conv(double a, double2& b, int8_t sign) { b = device::dd::double2dd(sign ? -a : a); }
-  __device__ __forceinline__ void conv(float a, double2& b, int8_t sign) { b = make_double2(double(sign ? -a : a), 0.); }
-  __device__ __forceinline__ void conv(double2 a, double2& b, int8_t sign) { b = sign ? device::dd::negate(a) : a; }
-  __device__ __forceinline__ void conv(float4 a, double2& b, int8_t sign) { b = device::dd::qf2dd(sign ? device::qf::negate(a) : a); }
+  __device__ __forceinline__ void conv(double a, double2& b) { b = device::dd::double2dd(a); }
+  __device__ __forceinline__ void conv(float a, double2& b) { b = make_double2(double(a), 0.); }
+  __device__ __forceinline__ void conv(double2 a, double2& b) { b = a; }
+  __device__ __forceinline__ void conv(float4 a, double2& b) { b = device::dd::qf2dd(a); }
 
-  __device__ __forceinline__ void conv(double a, float4& b, int8_t sign) { b = device::qf::double2qf(sign ? -a : a); }
-  __device__ __forceinline__ void conv(float a, float4& b, int8_t sign) { b = make_float4(sign ? -a : a, 0.f, 0.f, 0.f); }
-  __device__ __forceinline__ void conv(double2 a, float4& b, int8_t sign) { b = device::dd::dd2qf(sign ? device::dd::negate(a) : a); }
-  __device__ __forceinline__ void conv(float4 a, float4& b, int8_t sign) { b = sign ? device::qf::negate(a) : a; }
+  __device__ __forceinline__ void conv(double a, float4& b) { b = device::qf::double2qf(a); }
+  __device__ __forceinline__ void conv(float a, float4& b) { b = make_float4(a, 0.f, 0.f, 0.f); }
+  __device__ __forceinline__ void conv(double2 a, float4& b) { b = device::dd::dd2qf(a); }
+  __device__ __forceinline__ void conv(float4 a, float4& b) { b = a; }
 
   __device__ __forceinline__ void operator()(int64_t i) {
     int64_t x = i / M, y = i - x * M;
-    if ((mode != 'u' || y <= x) && (mode != 'U' || (y >> 1) <= x))
-      conv(A[y + x * lda], B[y + x * ldb], signs[y]);
+    conv(A[y + x * lda], B[y + x * ldb]);
   }
 };
 
 template <class typeA>
-inline void conv_copy_dispatcher(cudaStream_t stream, char mode, int32_t M, int32_t N, const typeA* A, int32_t lda, void* B, int32_t ldb, device::Precision precB, const int8_t* signs) {
+inline void conv_copy_dispatcher(cudaStream_t stream, int32_t M, int32_t N, const typeA* A, int32_t lda, void* B, int32_t ldb, device::Precision precB) {
   thrust::counting_iterator<int64_t> iter(0);
   int64_t len = int64_t(M) * int64_t(N);
   switch (precB) {
     case device::Precision::FP64:
-      thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, len, convert_copy<typeA, double>(mode, M, A, lda, (double*)B, ldb, signs)); break;
+      thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, len, convert_copy(M, A, lda, (double*)B, ldb)); break;
     case device::Precision::FP32:
-      thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, len, convert_copy<typeA, float>(mode, M, A, lda, (float*)B, ldb, signs)); break;
+      thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, len, convert_copy(M, A, lda, (float*)B, ldb)); break;
     case device::Precision::FP128_DD:
-      thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, len, convert_copy<typeA, double2>(mode, M, A, lda, (double2*)B, ldb, signs)); break;
+      thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, len, convert_copy(M, A, lda, (double2*)B, ldb)); break;
     case device::Precision::FP128_QF:
-      thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, len, convert_copy<typeA, float4>(mode, M, A, lda, (float4*)B, ldb, signs)); break;
+      thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, len, convert_copy(M, A, lda, (float4*)B, ldb)); break;
     default: break;
   }
 }
 
-void device::convert_and_copy(cudaStream_t stream, char mode, int32_t M, int32_t N, const void* A, int32_t lda, Precision precA, void* B, int32_t ldb, Precision precB, const int8_t* signs) {
+void device::convert_and_copy(cudaStream_t stream, int32_t M, int32_t N, const void* A, int32_t lda, Precision precA, void* B, int32_t ldb, Precision precB) {
   switch (precA) {
-    case Precision::FP64: conv_copy_dispatcher<double>(stream, mode, M, N, (const double*)A, lda, B, ldb, precB, signs); break;
-    case Precision::FP32: conv_copy_dispatcher<float>(stream, mode, M, N, (const float*)A, lda, B, ldb, precB, signs); break;
-    case Precision::FP128_DD: conv_copy_dispatcher<double2>(stream, mode, M, N, (const double2*)A, lda, B, ldb, precB, signs); break;
-    case Precision::FP128_QF: conv_copy_dispatcher<float4>(stream, mode, M, N, (const float4*)A, lda, B, ldb, precB, signs); break;
+    case Precision::FP64: conv_copy_dispatcher(stream, M, N, (const double*)A, lda, B, ldb, precB); break;
+    case Precision::FP32: conv_copy_dispatcher(stream, M, N, (const float*)A, lda, B, ldb, precB); break;
+    case Precision::FP128_DD: conv_copy_dispatcher(stream, M, N, (const double2*)A, lda, B, ldb, precB); break;
+    case Precision::FP128_QF: conv_copy_dispatcher(stream, M, N, (const float4*)A, lda, B, ldb, precB); break;
     default: break;
   }
 }
@@ -130,28 +104,32 @@ void device::copy_gather(cudaStream_t stream, int32_t M, int32_t N, const int32_
   }
 }
 
-void device::inplace_gather(cudaStream_t stream, int32_t M, int32_t N, const int32_t* jpiv, void* A, int32_t lda, void* workspace, Precision prec) {
-  const int32_t ws_rows = 8192;
+void device::inplace_gather(cudaStream_t stream, int32_t M, int32_t N, const int32_t* jpiv, void* A, int32_t lda, void* workspace, int64_t Lwork, Precision prec) {
   int64_t elem_bytes = prec == Precision::FP32 ? sizeof(float) : sizeof(double);
+  int32_t ws_rows = int32_t(Lwork / (int64_t(N) * elem_bytes)) & (~255);
   thrust::counting_iterator<int64_t> iter(0);
   if (N <= clen)
     cudaMemcpyToSymbolAsync(cpiv, jpiv, int64_t(N) * sizeof(int32_t), 0, cudaMemcpyDefault, stream);
 
   for (int32_t i = 0; i < M; i += ws_rows) {
     int32_t rows = std::min(M - i, ws_rows);
+    int64_t len = int64_t(N) * int64_t(rows);
     uint8_t* A_i = &((uint8_t*)A)[elem_bytes * int64_t(i)];
 
     if (N <= clen && prec == Precision::FP64) {
       permute_copy<1, int64_t> perm(rows, (const int64_t*)A_i, lda, (int64_t*)workspace, rows);
-      thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, int64_t(N) * int64_t(rows), perm);
+      thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, len, perm);
+      thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, len, convert_copy(rows, (double*)workspace, rows, (double*)A_i, lda));
     }
     else if (N <= clen && prec == Precision::FP32) {
       permute_copy<1, int32_t> perm(rows, (const int32_t*)A_i, lda, (int32_t*)workspace, rows);
-      thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, int64_t(N) * int64_t(rows), perm);
+      thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, len, perm);
+      thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, len, convert_copy(rows, (float*)workspace, rows, (float*)A_i, lda));
     }
-    else
+    else {
       copy_gather(stream, rows, N, jpiv, A_i, lda, workspace, rows, prec);
-    cudaMemcpy2DAsync(A_i, elem_bytes * int64_t(lda), workspace, elem_bytes * int64_t(rows), elem_bytes * int64_t(rows), N, cudaMemcpyDeviceToDevice, stream);
+      convert_and_copy(stream, rows, N, workspace, rows, prec, A_i, lda, prec);
+    }
   }
 }
 

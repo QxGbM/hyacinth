@@ -1,6 +1,5 @@
 
 #include <hyacin.hpp>
-#include <random>
 #include <iostream>
 #include <algorithm>
 #include <vector>
@@ -45,14 +44,12 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaStream_t stream;
   cublasHandle_t cublasH;
   cusolverDnHandle_t cusolverH;
-  cusolverDnParams_t params;
 
   cudaStreamCreate(&stream);
   cublasCreate(&cublasH);
   cublasSetStream(cublasH, stream);
   cusolverDnCreate(&cusolverH);
   cusolverDnSetStream(cusolverH, stream);
-  cusolverDnCreateParams(&params);
 
   cudaEvent_t start, stop;
   cudaEventCreate(&start);
@@ -63,44 +60,41 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaMalloc((void**)(&d_tau), N * sizeof(double));
   cudaMemcpy(d_A, matA.data(), M * N * sizeof(double), cudaMemcpyHostToDevice);
 
-  device::dgeqp3_ronly(cublasH, cusolverH, params, epi, M, N, d_A, M, ipiv.data(), d_tau);
+  device::dgeqp3(cublasH, cusolverH, 'Q', epi, M, N, d_A, M, ipiv.data(), d_tau);
   std::fill(ipiv.begin(), ipiv.end(), 0);
   cudaMemcpy(d_A, matA.data(), M * N * sizeof(double), cudaMemcpyHostToDevice);
 
   cudaEventRecord(start, stream);
-  int32_t ret = device::dgeqp3_ronly(cublasH, cusolverH, params, epi, M, N, d_A, M, ipiv.data(), d_tau);
+  int32_t ret = device::dgeqp3(cublasH, cusolverH, 'Q', epi, M, N, d_A, M, ipiv.data(), d_tau);
   cudaEventRecord(stop, stream);
 
   cudaDeviceSynchronize();
 
-  int32_t err_int = 0;
   double err = 0.;
-  if (M <= 2048 && N <= 2048) {
-    std::vector<double> matB(M * N);
-    cudaMemcpy(matB.data(), d_A, M * N * sizeof(double), cudaMemcpyDeviceToHost);
+  std::vector<double> matB(M * N), tau(N), matQ(M * N, 0.);
+  cudaMemcpy(matB.data(), d_A, M * N * sizeof(double), cudaMemcpyDeviceToHost);
+  cudaMemcpy(tau.data(), d_tau, N * sizeof(double), cudaMemcpyDeviceToHost);
 
-    std::vector<int32_t> jpiv(N, 0);
-    std::vector<double> tau(N);
-    LAPACKE_dgeqp3(LAPACK_COL_MAJOR, M, N, matA.data(), M, jpiv.data(), tau.data());
+  int32_t rank = ret == 0 ? N : (ret - 1);
+  std::copy_n(matB.begin(), M * rank, matQ.begin());
+  LAPACKE_dorgqr(LAPACK_COL_MAJOR, M, rank, rank, matQ.data(), M, tau.data());
+  cblas_dtrmm(CblasColMajor, CblasRight, CblasUpper, CblasNoTrans, CblasNonUnit, M, N, 1., matB.data(), M, matQ.data(), M);
 
-    for (int32_t i = 0; i < N; ++i)
-      err_int += int32_t(jpiv[i] != ipiv[i]);
-  
-    double nrm = 0.;
-    for (int32_t j = 0; j < N; ++j)
-      for (int32_t i = 0; i <= j; ++i) {
-        err += std::norm(matB[i + j * M] - matA[i + j * M]);
-        nrm += std::norm(matA[i + j * M]);
-    }
-    err = std::sqrt(err / nrm);
+  double nrm = 0.;
+  for (int32_t j = 0; j < N; ++j)
+    for (int32_t i = 0; i < M; ++i) {
+      int32_t j2 = ipiv[j] - 1;
+      err += std::norm(matQ[i + j * M] - matA[i + j2 * M]);
+      nrm += std::norm(matA[i + j * M]);
   }
+  err = std::sqrt(err / nrm);
 
   float milliseconds = 0.0f;
   cudaEventElapsedTime(&milliseconds, start, stop);
   int64_t flops = (int64_t(N) * int64_t(N) * int64_t(N) * -2 / 3) + (int64_t(M) * int64_t(N) * int64_t(N) * 2);
   double gflops = double(flops) * 1.e-6 / milliseconds;
 
-  std::cout << "DGEQP3," << M << "," << N << "," << epi << "," << err_int << "," << err << "," << ret << "," << milliseconds << "," << gflops << std::endl;
+  std::cout << "DGEQP3," << M << "," << N << "," << epi << "," << err << "," << ret << "," << milliseconds << "," << gflops << std::endl;
 
   cudaFree(d_A);
   cudaFree(d_tau);
@@ -109,7 +103,6 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaStreamDestroy(stream);
   cublasDestroy(cublasH);
   cusolverDnDestroy(cusolverH);
-  cusolverDnDestroyParams(params);
 
   cu_err = cudaGetLastError();
   if (cu_err != cudaSuccess)
