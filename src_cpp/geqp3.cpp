@@ -2,19 +2,7 @@
 #include <hyacin.hpp>
 #include <internal.hpp>
 #include <vector>
-
-inline void workspace_realloc(cudaStream_t stream, void** ptr, size_t bytes_old, size_t bytes_required, size_t bytes_migrate) {
-  if (bytes_old < bytes_required) {
-    void* workspace = nullptr;
-    cudaStreamSynchronize(stream);
-    cudaMalloc(&workspace, bytes_required);
-    if (bytes_migrate)
-      cudaMemcpy(workspace, *ptr, bytes_migrate, cudaMemcpyDeviceToDevice);
-    if (*ptr)
-      cudaFree(*ptr);
-    *ptr = workspace;
-  }
-}
+#include <numeric>
 
 int32_t device::dgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, char mode, double epi, int32_t M, int32_t N, double* A, int32_t lda, int32_t* jpiv, double* tau) {
   cudaStream_t stream; cublasGetStream(cublasH, &stream);
@@ -30,6 +18,7 @@ int32_t device::dgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cha
   cudaMalloc(&work, C_bytes);
   cudaMallocHost((void**)(&dpiv), 8192);
   std::vector<int32_t> hpiv(N);
+  std::iota(hpiv.begin(), hpiv.end(), 1);
 
   int32_t iters = N; 
   MixPrecAHA::rATA(stream, cublasH, M, N, algnM, algnN, orderA, A, lda, Precision::FP64, work, precC);
@@ -60,6 +49,7 @@ int32_t device::sgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cha
   cudaMalloc(&work, C_bytes);
   cudaMallocHost((void**)(&dpiv), 8192);
   std::vector<int32_t> hpiv(N);
+  std::iota(hpiv.begin(), hpiv.end(), 1);
 
   int32_t iters = N; 
   MixPrecAHA::rATA(stream, cublasH, M, N, algnM, algnN, orderA, A, lda, Precision::FP32, work, precC);
@@ -90,6 +80,7 @@ int32_t device::zgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cha
   cudaMalloc(&work, C_bytes);
   cudaMallocHost((void**)(&dpiv), 8192);
   std::vector<int32_t> hpiv(N);
+  std::iota(hpiv.begin(), hpiv.end(), 1);
 
   int32_t iters = N; 
   MixPrecAHA::cAHA(stream, cublasH, M, N, algnM, algnN, orderA, A, lda, Precision::FP64, work, precC);
@@ -120,6 +111,7 @@ int32_t device::cgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cha
   cudaMalloc(&work, C_bytes);
   cudaMallocHost((void**)(&dpiv), 8192);
   std::vector<int32_t> hpiv(N);
+  std::iota(hpiv.begin(), hpiv.end(), 1);
 
   int32_t iters = N; 
   MixPrecAHA::cAHA(stream, cublasH, M, N, algnM, algnN, orderA, A, lda, Precision::FP32, work, precC);

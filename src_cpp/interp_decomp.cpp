@@ -2,6 +2,7 @@
 #include <hyacin.hpp>
 #include <internal.hpp>
 #include <vector>
+#include <numeric>
 
 int32_t device::interp_decomp_f64(cublasHandle_t handle, double epi, int32_t rank, int32_t M, int32_t N, const double* A, int32_t lda, int32_t* jpiv, double* X, int32_t ldx) {
   cudaStream_t stream; cublasGetStream(handle, &stream);
@@ -18,6 +19,7 @@ int32_t device::interp_decomp_f64(cublasHandle_t handle, double epi, int32_t ran
   cudaMalloc(&work, C_bytes);
   cudaMallocHost((void**)(&dpiv), 8192);
   std::vector<int32_t> hpiv(N);
+  std::iota(hpiv.begin(), hpiv.end(), 1);
 
   MixPrecAHA::rATA(stream, handle, M, N, algnM, algnN, orderA, A, lda, Precision::FP64, work, precC);
   Cholesky::rpotrfp(stream, handle, epi, &rank, N, work, algnN, precC, &hpiv[0], dpiv);
@@ -55,6 +57,7 @@ int32_t device::interp_decomp_f32(cublasHandle_t handle, double epi, int32_t ran
   cudaMalloc(&work, C_bytes);
   cudaMallocHost((void**)(&dpiv), 8192);
   std::vector<int32_t> hpiv(N);
+  std::iota(hpiv.begin(), hpiv.end(), 1);
 
   MixPrecAHA::rATA(stream, handle, M, N, algnM, algnN, orderA, A, lda, Precision::FP32, work, precC);
   Cholesky::rpotrfp(stream, handle, epi, &rank, N, work, algnN, precC, &hpiv[0], dpiv);
@@ -92,6 +95,7 @@ int32_t device::interp_decomp_cf64(cublasHandle_t handle, double epi, int32_t ra
   cudaMalloc(&work, C_bytes);
   cudaMallocHost((void**)(&dpiv), 8192);
   std::vector<int32_t> hpiv(N);
+  std::iota(hpiv.begin(), hpiv.end(), 1);
 
   MixPrecAHA::cAHA(stream, handle, M, N, algnM, algnN, orderA, A, lda, Precision::FP64, work, precC);
   Cholesky::cpotrfp(stream, handle, epi, &rank, N, work, algnN, precC, &hpiv[0], dpiv);
@@ -129,6 +133,7 @@ int32_t device::interp_decomp_cf32(cublasHandle_t handle, double epi, int32_t ra
   cudaMalloc(&work, C_bytes);
   cudaMallocHost((void**)(&dpiv), 8192);
   std::vector<int32_t> hpiv(N);
+  std::iota(hpiv.begin(), hpiv.end(), 1);
 
   MixPrecAHA::cAHA(stream, handle, M, N, algnM, algnN, orderA, A, lda, Precision::FP32, work, precC);
   Cholesky::cpotrfp(stream, handle, epi, &rank, N, work, algnN, precC, &hpiv[0], dpiv);

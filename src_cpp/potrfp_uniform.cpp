@@ -4,43 +4,38 @@
 #include <double_double.hpp>
 #include <quad_float.hpp>
 
-#include <numeric>
-
 template <device::Precision prec, class real_t>
-inline void imax_dispatcher(cudaStream_t stream, int32_t N, const real_t* X, real_t* diag_piv) {
-  using namespace internal::Cholesky;
-
+inline void imax_dispatcher(cudaStream_t stream, int32_t N, const real_t* X, int32_t incx, real_t* D, real_t* diag_piv) {
   if constexpr(prec == device::Precision::FP64)
-    imax_f64(stream, N, X, diag_piv);
+    internal::Cholesky::imax_f64(stream, N, X, incx, D, diag_piv);
   else if constexpr(prec == device::Precision::FP32)
-    imax_f32(stream, N, X, diag_piv);
+    internal::Cholesky::imax_f32(stream, N, X, incx, D, diag_piv);
   else if constexpr(prec == device::Precision::FP128_DD)
-    imax_f128_dd(stream, N, X, diag_piv);
+    internal::Cholesky::imax_f128_dd(stream, N, X, incx, D, diag_piv);
   else if constexpr(prec == device::Precision::FP128_QF)
-    imax_f128_qf(stream, N, X, diag_piv);
+    internal::Cholesky::imax_f128_qf(stream, N, X, incx, D, diag_piv);
 }
 
 template <device::Precision prec, class real_t, class matrix_t>
 inline void gemv_dispatcher(cudaStream_t stream, cublasHandle_t handle, real_t* scale, int32_t j, int32_t M, int32_t N, matrix_t* A, int32_t lda, real_t* D) {
-  using namespace internal::Cholesky;
   constexpr int32_t COMPLEX = int32_t(sizeof(real_t) < sizeof(matrix_t));
 
   if constexpr(COMPLEX && prec == device::Precision::FP64)
-    gemv_cublas_cf64(stream, handle, scale, j, M, N, A, lda, D);
+    internal::Cholesky::gemv_cublas_cf64(stream, handle, scale, j, M, N, A, lda, D);
   else if constexpr(COMPLEX && prec == device::Precision::FP32)
-    gemv_cublas_cf32(stream, handle, scale, j, M, N, A, lda, D);
+    internal::Cholesky::gemv_cublas_cf32(stream, handle, scale, j, M, N, A, lda, D);
   else if constexpr(!COMPLEX && prec == device::Precision::FP64)
-    gemv_cublas_f64(stream, handle, scale, j, M, N, A, lda, D);
+    internal::Cholesky::gemv_cublas_f64(stream, handle, scale, j, M, N, A, lda, D);
   else if constexpr(!COMPLEX && prec == device::Precision::FP32)
-    gemv_cublas_f32(stream, handle, scale, j, M, N, A, lda, D);
+    internal::Cholesky::gemv_cublas_f32(stream, handle, scale, j, M, N, A, lda, D);
   else if constexpr(COMPLEX && prec == device::Precision::FP128_DD)
-    gemv_scal_cf128_dd(stream, scale, j, M, N, A, lda, D);
+    internal::Cholesky::gemv_scal_cf128_dd(stream, scale, j, M, N, A, lda, D);
   else if constexpr(COMPLEX && prec == device::Precision::FP128_QF)
-    gemv_scal_cf128_qf(stream, scale, j, M, N, A, lda, D);
+    internal::Cholesky::gemv_scal_cf128_qf(stream, scale, j, M, N, A, lda, D);
   else if constexpr(!COMPLEX && prec == device::Precision::FP128_DD)
-    gemv_scal_f128_dd(stream, scale, j, M, N, A, lda, D);
+    internal::Cholesky::gemv_scal_f128_dd(stream, scale, j, M, N, A, lda, D);
   else if constexpr(!COMPLEX && prec == device::Precision::FP128_QF)
-    gemv_scal_f128_qf(stream, scale, j, M, N, A, lda, D);
+    internal::Cholesky::gemv_scal_f128_qf(stream, scale, j, M, N, A, lda, D);
 }
 
 template <device::Precision prec, class real_t>
@@ -52,13 +47,10 @@ inline double conv_f64(real_t r) {
 }
 
 template <device::Precision prec, class real_t, class matrix_t>
-inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t iters, int32_t N, matrix_t* A, int32_t lda, int32_t* jpiv, void* pinned_work) {
-  real_t* scale = (real_t*)(pinned_work), *diag = (real_t*)(&A[int64_t(N) * int64_t(lda)]);
+inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t iters, int32_t N, matrix_t* A, int32_t lda, int32_t* jpiv, real_t* scale) {
+  real_t* diag = (real_t*)(&A[int64_t(N) * int64_t(lda)]);
+  imax_dispatcher<prec>(stream, N, (real_t*)A, sizeof(real_t) == sizeof(matrix_t) ? (lda + 1) : (2 * lda + 2), diag, scale);
   int32_t* pivot_i = (int32_t*)&scale[2];
-
-  std::iota(jpiv, &jpiv[N], 1);
-  cudaMemcpy2DAsync(diag, sizeof(real_t), A, sizeof(matrix_t) * int64_t(lda + 1), sizeof(real_t), N, cudaMemcpyDeviceToDevice, stream);
-  imax_dispatcher<prec>(stream, N, diag, scale);
 
   for (int32_t i = 0; i < iters; ++i) {
     int64_t A_col = int64_t(i) * int64_t(lda);
@@ -74,36 +66,36 @@ inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, double epi, in
 }
 
 void device::Cholesky::rpotrfp(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t* iters, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv, void* pinned_work) {
-  epi = std::min(1., std::max(0., epi));
+  epi = std::min(1., std::max(0., std::abs(epi)));
   int32_t rank = std::min(N, std::max(0, *iters));
   
   switch (precA) {
     case Precision::FP64:
-      *iters = potrfp<Precision::FP64, double, double>(stream, handle, epi, rank, N, (double*)A, lda, jpiv, pinned_work); break;
+      *iters = potrfp<Precision::FP64>(stream, handle, epi, rank, N, (double*)A, lda, jpiv, (double*)pinned_work); break;
     case Precision::FP32:
-      *iters = potrfp<Precision::FP32, float, float>(stream, handle, epi, rank, N, (float*)A, lda, jpiv, pinned_work); break;
+      *iters = potrfp<Precision::FP32>(stream, handle, epi, rank, N, (float*)A, lda, jpiv, (float*)pinned_work); break;
     case Precision::FP128_DD:
-      *iters = potrfp<Precision::FP128_DD, double2, double2>(stream, handle, epi, rank, N, (double2*)A, lda, jpiv, pinned_work); break;
+      *iters = potrfp<Precision::FP128_DD>(stream, handle, epi, rank, N, (double2*)A, lda, jpiv, (double2*)pinned_work); break;
     case Precision::FP128_QF:
-      *iters = potrfp<Precision::FP128_QF, float4, float4>(stream, handle, epi, rank, N, (float4*)A, lda, jpiv, pinned_work); break;
+      *iters = potrfp<Precision::FP128_QF>(stream, handle, epi, rank, N, (float4*)A, lda, jpiv, (float4*)pinned_work); break;
     default:
       *iters = 0; break;
   }
 }
 
 void device::Cholesky::cpotrfp(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t* iters, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv, void* pinned_work) {
-  epi = std::min(1., std::max(0., epi));
+  epi = std::min(1., std::max(0., std::abs(epi)));
   int32_t rank = std::min(N, std::max(0, *iters));
 
   switch (precA) {
     case Precision::FP64:
-      *iters = potrfp<Precision::FP64, double, std::complex<double>>(stream, handle, epi, rank, N, (std::complex<double>*)A, lda, jpiv, pinned_work); break;
+      *iters = potrfp<Precision::FP64>(stream, handle, epi, rank, N, (std::complex<double>*)A, lda, jpiv, (double*)pinned_work); break;
     case Precision::FP32:
-      *iters = potrfp<Precision::FP32, float, std::complex<float>>(stream, handle, epi, rank, N, (std::complex<float>*)A, lda, jpiv, pinned_work); break;
+      *iters = potrfp<Precision::FP32>(stream, handle, epi, rank, N, (std::complex<float>*)A, lda, jpiv, (float*)pinned_work); break;
     case Precision::FP128_DD:
-      *iters = potrfp<Precision::FP128_DD, double2, complex_double2>(stream, handle, epi, rank, N, (complex_double2*)A, lda, jpiv, pinned_work); break;
+      *iters = potrfp<Precision::FP128_DD>(stream, handle, epi, rank, N, (complex_double2*)A, lda, jpiv, (double2*)pinned_work); break;
     case Precision::FP128_QF:
-      *iters = potrfp<Precision::FP128_QF, float4, complex_float4>(stream, handle, epi, rank, N, (complex_float4*)A, lda, jpiv, pinned_work); break;
+      *iters = potrfp<Precision::FP128_QF>(stream, handle, epi, rank, N, (complex_float4*)A, lda, jpiv, (float4*)pinned_work); break;
     default:
       *iters = 0; break;
   }
