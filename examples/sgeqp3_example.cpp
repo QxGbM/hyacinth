@@ -1,6 +1,5 @@
 
 #include <hyacin.hpp>
-#include <random>
 #include <iostream>
 #include <algorithm>
 #include <vector>
@@ -11,6 +10,39 @@
 #include <cblas.h>
 #include <lapacke.h>
 #endif
+
+void make_2D_oscillatory(double w, int32_t sep, int32_t M, int32_t N, float* A, int32_t lda) {
+  constexpr int32_t height = 128;
+  auto translate_2d = [](int64_t i) { int64_t x = i / height, y = i - height * x; return std::complex<double>(x, y); };
+  sep = height * sep + ((M + height - 1) & (~(height - 1)));
+
+  for (int32_t j = 0; j < N; ++j) {
+    auto vj = translate_2d(j + sep);
+    for (int32_t i = 0; i < M; ++i) {
+      auto vi = translate_2d(i);
+      double d = std::abs(vi - vj);
+      A[uint64_t(i) + uint64_t(j) * uint64_t(lda)] = float(std::cos(w * d) / d);
+    }
+  }
+}
+
+double check_answer(int32_t M, int32_t N, int32_t rank, const float* A, int32_t lda, const int32_t* jpiv, const float* tau, const float* B, int32_t ldb) {
+  if (rank <= 0)
+    return std::numeric_limits<double>::quiet_NaN();
+  std::vector<float> matQ(M * N, 0.f);
+  LAPACKE_slacpy(LAPACK_COL_MAJOR, 'A', M, N, A, lda, &matQ[0], M);
+  LAPACKE_sorgqr(LAPACK_COL_MAJOR, M, rank, rank, &matQ[0], M, tau);
+  cblas_strmm(CblasColMajor, CblasRight, CblasUpper, CblasNoTrans, CblasNonUnit, M, N, 1., A, lda, &matQ[0], M);
+
+  double err = 0., nrm = 0.;
+  for (int32_t j = 0; j < N; ++j)
+    for (int32_t i = 0; i < M; ++i) {
+      int32_t j2 = jpiv[j] - 1;
+      err += std::norm(matQ[i + j * M] - B[i + j2 * ldb]);
+      nrm += std::norm(B[i + j2 * ldb]);
+  }
+  return std::sqrt(err / nrm);
+}
 
 int32_t main(int32_t argc, char* argv[]) {
   auto cu_err = cudaSetDevice(0);
@@ -25,10 +57,7 @@ int32_t main(int32_t argc, char* argv[]) {
   double epi = 3 < argc ? std::atof(argv[3]) : 1.e-6;
   std::vector<float> matA(M * N);
   std::vector<int32_t> ipiv(N);
-
-  std::mt19937_64 gen(42);
-  std::normal_distribution<float> dist(0, 32);
-  std::generate(matA.begin(), matA.end(), [&](){ return dist(gen); });
+  make_2D_oscillatory(1., 0, M, N, matA.data(), M);
 
   cudaStream_t stream;
   cublasHandle_t cublasH;
@@ -59,24 +88,10 @@ int32_t main(int32_t argc, char* argv[]) {
 
   cudaDeviceSynchronize();
 
-  double err = 0.;
-  std::vector<float> matB(M * N), tau(N), matQ(M * N, 0.);
+  std::vector<float> matB(M * N), tau(N);
   cudaMemcpy(matB.data(), d_A, M * N * sizeof(float), cudaMemcpyDeviceToHost);
   cudaMemcpy(tau.data(), d_tau, N * sizeof(float), cudaMemcpyDeviceToHost);
-
-  int32_t rank = ret == 0 ? N : (ret - 1);
-  std::copy_n(matB.begin(), M * rank, matQ.begin());
-  LAPACKE_sorgqr(LAPACK_COL_MAJOR, M, rank, rank, matQ.data(), M, tau.data());
-  cblas_strmm(CblasColMajor, CblasRight, CblasUpper, CblasNoTrans, CblasNonUnit, M, N, 1.f, matB.data(), M, matQ.data(), M);
-
-  double nrm = 0.;
-  for (int32_t j = 0; j < N; ++j)
-    for (int32_t i = 0; i < M; ++i) {
-      int32_t j2 = ipiv[j] - 1;
-      err += std::norm(matQ[i + j * M] - matA[i + j2 * M]);
-      nrm += std::norm(matA[i + j * M]);
-  }
-  err = std::sqrt(err / nrm);
+  double err = check_answer(M, N, ret == 0 ? N : (ret - 1), &matB[0], M, &ipiv[0], &tau[0], &matA[0], M);
 
   float milliseconds = 0.0f;
   cudaEventElapsedTime(&milliseconds, start, stop);

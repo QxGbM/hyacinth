@@ -62,7 +62,7 @@ void internal::Orthogonalize::qr_pp_cf64(cudaStream_t stream, cusolverDnHandle_t
   cuDoubleComplex* R = (cuDoubleComplex*)&A[int64_t(K) * int64_t(lda)];
   cusolverDnZgeqrf_bufferSize(cusolverH, M, K, (cuDoubleComplex*)A, lda, &l1);
   if (K < N)
-    cusolverDnZunmqr_bufferSize(cusolverH, CUBLAS_SIDE_LEFT, CUBLAS_OP_T, M, N - K, K, (cuDoubleComplex*)A, lda, (cuDoubleComplex*)tau, R, lda, &l2);
+    cusolverDnZunmqr_bufferSize(cusolverH, CUBLAS_SIDE_LEFT, CUBLAS_OP_C, M, N - K, K, (cuDoubleComplex*)A, lda, (cuDoubleComplex*)tau, R, lda, &l2);
   int64_t bytes_required = std::max(ws_rows * int64_t(N), int64_t(1 + std::max(l1, l2))) * int64_t(sizeof(cuDoubleComplex));
   workspace_realloc(stream, Workspace, Lwork, bytes_required);
 
@@ -72,7 +72,7 @@ void internal::Orthogonalize::qr_pp_cf64(cudaStream_t stream, cusolverDnHandle_t
   cusolverDnZgeqrf(cusolverH, M, K, (cuDoubleComplex*)A, lda, (cuDoubleComplex*)tau, work, l1, (int32_t*)&work[l1]);
 
   if (K < N) {
-    cusolverDnZunmqr(cusolverH, CUBLAS_SIDE_LEFT, CUBLAS_OP_T, M, N - K, K, (cuDoubleComplex*)A, lda, (cuDoubleComplex*)tau, R, lda, work, l2, (int32_t*)&work[l2]);
+    cusolverDnZunmqr(cusolverH, CUBLAS_SIDE_LEFT, CUBLAS_OP_C, M, N - K, K, (cuDoubleComplex*)A, lda, (cuDoubleComplex*)tau, R, lda, work, l2, (int32_t*)&work[l2]);
     cudaMemsetAsync(&tau[K], 0, int64_t(N - K) * sizeof(cuDoubleComplex), stream);
   }
 }
@@ -82,7 +82,7 @@ void internal::Orthogonalize::qr_pp_cf32(cudaStream_t stream, cusolverDnHandle_t
   cuComplex* R = (cuComplex*)&A[int64_t(K) * int64_t(lda)];
   cusolverDnCgeqrf_bufferSize(cusolverH, M, K, (cuComplex*)A, lda, &l1);
   if (K < N)
-    cusolverDnCunmqr_bufferSize(cusolverH, CUBLAS_SIDE_LEFT, CUBLAS_OP_T, M, N - K, K, (cuComplex*)A, lda, (cuComplex*)tau, R, lda, &l2);
+    cusolverDnCunmqr_bufferSize(cusolverH, CUBLAS_SIDE_LEFT, CUBLAS_OP_C, M, N - K, K, (cuComplex*)A, lda, (cuComplex*)tau, R, lda, &l2);
   int64_t bytes_required = std::max(ws_rows * int64_t(N), int64_t(1 + std::max(l1, l2))) * int64_t(sizeof(cuComplex));
   workspace_realloc(stream, Workspace, Lwork, bytes_required);
 
@@ -92,7 +92,7 @@ void internal::Orthogonalize::qr_pp_cf32(cudaStream_t stream, cusolverDnHandle_t
   cusolverDnCgeqrf(cusolverH, M, K, (cuComplex*)A, lda, (cuComplex*)tau, work, l1, (int32_t*)&work[l1]);
 
   if (K < N) {
-    cusolverDnCunmqr(cusolverH, CUBLAS_SIDE_LEFT, CUBLAS_OP_T, M, N - K, K, (cuComplex*)A, lda, (cuComplex*)tau, R, lda, work, l2, (int32_t*)&work[l2]);
+    cusolverDnCunmqr(cusolverH, CUBLAS_SIDE_LEFT, CUBLAS_OP_C, M, N - K, K, (cuComplex*)A, lda, (cuComplex*)tau, R, lda, work, l2, (int32_t*)&work[l2]);
     cudaMemsetAsync(&tau[K], 0, int64_t(N - K) * sizeof(cuComplex), stream);
   }
 }

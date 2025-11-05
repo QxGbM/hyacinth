@@ -3,6 +3,7 @@
 #include <iostream>
 #include <algorithm>
 #include <vector>
+#include <limits>
 
 #ifdef USE_MKL
 #include <mkl.h>
@@ -24,6 +25,24 @@ void make_2D_oscillatory(double w, int32_t sep, int32_t M, int32_t N, double* A,
       A[uint64_t(i) + uint64_t(j) * uint64_t(lda)] = std::cos(w * d) / d;
     }
   }
+}
+
+double check_answer(int32_t M, int32_t N, int32_t rank, const double* A, int32_t lda, const int32_t* jpiv, const double* tau, const double* B, int32_t ldb) {
+  if (rank <= 0)
+    return std::numeric_limits<double>::quiet_NaN();
+  std::vector<double> matQ(M * N, 0.);
+  LAPACKE_dlacpy(LAPACK_COL_MAJOR, 'A', M, N, A, lda, &matQ[0], M);
+  LAPACKE_dorgqr(LAPACK_COL_MAJOR, M, rank, rank, &matQ[0], M, tau);
+  cblas_dtrmm(CblasColMajor, CblasRight, CblasUpper, CblasNoTrans, CblasNonUnit, M, N, 1., A, lda, &matQ[0], M);
+
+  double err = 0., nrm = 0.;
+  for (int32_t j = 0; j < N; ++j)
+    for (int32_t i = 0; i < M; ++i) {
+      int32_t j2 = jpiv[j] - 1;
+      err += std::norm(matQ[i + j * M] - B[i + j2 * ldb]);
+      nrm += std::norm(B[i + j2 * ldb]);
+  }
+  return std::sqrt(err / nrm);
 }
 
 int32_t main(int32_t argc, char* argv[]) {
@@ -70,24 +89,10 @@ int32_t main(int32_t argc, char* argv[]) {
 
   cudaDeviceSynchronize();
 
-  double err = 0.;
-  std::vector<double> matB(M * N), tau(N), matQ(M * N, 0.);
+  std::vector<double> matB(M * N), tau(N);
   cudaMemcpy(matB.data(), d_A, M * N * sizeof(double), cudaMemcpyDeviceToHost);
   cudaMemcpy(tau.data(), d_tau, N * sizeof(double), cudaMemcpyDeviceToHost);
-
-  int32_t rank = ret == 0 ? N : (ret - 1);
-  std::copy_n(matB.begin(), M * rank, matQ.begin());
-  LAPACKE_dorgqr(LAPACK_COL_MAJOR, M, rank, rank, matQ.data(), M, tau.data());
-  cblas_dtrmm(CblasColMajor, CblasRight, CblasUpper, CblasNoTrans, CblasNonUnit, M, N, 1., matB.data(), M, matQ.data(), M);
-
-  double nrm = 0.;
-  for (int32_t j = 0; j < N; ++j)
-    for (int32_t i = 0; i < M; ++i) {
-      int32_t j2 = ipiv[j] - 1;
-      err += std::norm(matQ[i + j * M] - matA[i + j2 * M]);
-      nrm += std::norm(matA[i + j * M]);
-  }
-  err = std::sqrt(err / nrm);
+  double err = check_answer(M, N, ret == 0 ? N : (ret - 1), &matB[0], M, &ipiv[0], &tau[0], &matA[0], M);
 
   float milliseconds = 0.0f;
   cudaEventElapsedTime(&milliseconds, start, stop);
