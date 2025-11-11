@@ -1,7 +1,5 @@
 
 #include <internal.hpp>
-#include <double_double.hpp>
-#include <quad_float.hpp>
 #include <cuComplex.h>
 
 void internal::Cholesky::gemv_cublas_f64(cudaStream_t stream, cublasHandle_t handle, double* scale, int32_t j, int32_t M, int32_t N, double* A, int32_t lda, double* D) {
