@@ -58,14 +58,6 @@ namespace device {
 
   int32_t interp_decomp_cf32(cublasHandle_t handle, double epi, int32_t rank, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int32_t* jpiv, std::complex<float>* X, int32_t ldx);
 
-  double check_interp_decomp_f64(cublasHandle_t handle, int32_t rank, int32_t M, int32_t N, const double* A, int32_t lda, const int32_t* jpiv, const double* X, int32_t ldx);
-
-  double check_interp_decomp_f32(cublasHandle_t handle, int32_t rank, int32_t M, int32_t N, const float* A, int32_t lda, const int32_t* jpiv, const float* X, int32_t ldx);
-
-  double check_interp_decomp_cf64(cublasHandle_t handle, int32_t rank, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, const int32_t* jpiv, const std::complex<double>* X, int32_t ldx);
-
-  double check_interp_decomp_cf32(cublasHandle_t handle, int32_t rank, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, const int32_t* jpiv, const std::complex<float>* X, int32_t ldx);
-
   namespace Cholesky {
     // jpiv :: host minimal length N
     // A :: device, minimal length lda * (N + 1), 16 byte aligned

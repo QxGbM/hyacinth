@@ -56,9 +56,12 @@ int32_t main(int32_t argc, char* argv[]) {
   N = std::min(M, N);
 
   double epi = 3 < argc ? std::atof(argv[3]) : 1.e-12;
+  double omega = 4 < argc ? std::atof(argv[4]) : 1.;
+  int32_t sep = 5 < argc ? std::atoi(argv[5]) : 0;
+
   std::vector<std::complex<double>> matA(M * N);
   std::vector<int32_t> ipiv(N);
-  make_2D_oscillatory(1., 0, M, N, &matA[0], M);
+  make_2D_oscillatory(omega, sep, M, N, &matA[0], M);
 
   cudaStream_t stream;
   cublasHandle_t cublasH;

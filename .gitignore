@@ -52,3 +52,4 @@ _deps
 *.cubin
 *.fatbin
 *.nsys-rep
+.vscode

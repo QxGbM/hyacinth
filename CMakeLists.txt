@@ -10,7 +10,6 @@ set(SM_TARGETS "80;86;89;90;100;120")
 find_package(CUDAToolkit REQUIRED)
 
 set(CPP_SOURCES
-  src_cpp/check_id.cpp
   src_cpp/gemv_cublas.cpp
   src_cpp/geqp3.cpp
   src_cpp/igemm.cpp
