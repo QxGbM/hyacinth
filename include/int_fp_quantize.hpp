@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cmath>
+#include <cfloat>
 #include <cuda_runtime.h>
 
 namespace device::int8 {
@@ -92,43 +93,56 @@ namespace device::int8 {
     }
   }
 
-  template <uint32_t div>
-  __host__ __device__ __forceinline__ void fast_division_i32(int32_t x, int32_t& quo, int32_t& rem) {
-    constexpr uint32_t m_num = uint32_t((uint64_t(1) << 32) / uint64_t(div));
-    int32_t sign_m_num = m_num + (uint32_t(~x) >> 31); // x-:floor(2^32 / div) x+: ceil(2^32 / div)
-#ifdef __CUDA_ARCH__
-    quo = __mulhi(x, sign_m_num);
-#else
-    quo = int32_t(uint64_t(int64_t(x) * int64_t(sign_m_num)) >> 32);
-#endif
-    rem = x - quo * div;
-  }
-
   template<int32_t i>
-  __host__ __device__ __forceinline__ uint32_t u32_selector(int32_t x, uint4 b) {
-    constexpr int32_t i1 = i - 1, i2 = i - 2, i3 = i - 3;
-    uint4 sel = make_uint4(-(uint32_t)(i <= x), -(uint32_t)(i1 == x), -(uint32_t)(i2 == x), -(uint32_t)(x <= i3));
-    return ((b.x & sel.x) | (b.y & sel.y)) | ((b.z & sel.z) | (b.w & sel.w));
+  __host__ __device__ __forceinline__ uint64_t u64_selector(int32_t x, const uint64_t (&b)[3]) {
+    constexpr int32_t i1 = i - 1, i2 = i - 2;
+    uint64_t sel0 = b[0] & -(uint64_t)(i == x);
+    uint64_t sel1 = b[1] & -(uint64_t)(i1 == x);
+    uint64_t sel2 = b[2] & -(uint64_t)(x <= i2);
+    return sel0 | sel1 | sel2;
   }
 
   template <uint32_t ORDER>
-  __host__ __device__ __forceinline__ void add_shifted(uint32_t (&a)[ORDER], int32_t i, int32_t expon) {
-    static_assert(1 <= ORDER && ORDER <= 4, "Integer accumulation order must be in [1,4]");
+  __host__ __device__ __forceinline__ void add_shifted(uint64_t (&a)[ORDER], int64_t i, uint32_t expon) {
+    static_assert(1 <= ORDER && ORDER <= 3, "64-bit integer accumulation order must be in [1,3]");
 
-    constexpr uint32_t i31 = ~(uint32_t(1) << 31);
-    int32_t quo, rem;
-    fast_division_i32<31>(expon, quo, rem);
-
-    uint4 b = make_uint4(0, (uint32_t(i) << rem) & i31, uint32_t(i >> (31 - rem)) & i31, -(uint32_t(i) >> 31) & i31);
-    a[0] += u32_selector<1>(quo, b);
-    if constexpr(1 < ORDER) a[1] += u32_selector<2>(quo, b) + (a[0] >> 31);
-    if constexpr(2 < ORDER) a[2] += u32_selector<3>(quo, b) + (a[1] >> 31);
-    if constexpr(3 < ORDER) a[3] += u32_selector<4>(quo, b) + (a[2] >> 31);
+    constexpr uint64_t i63 = ~(uint64_t(1) << 63);
+    constexpr uint32_t m_num = uint32_t((uint64_t(1) << 32) / uint64_t(63));
+#ifdef __CUDA_ARCH__
+    uint32_t quo = __umulhi(expon, m_num);
+#else
+    uint32_t quo = (uint64_t(expon) * uint64_t(m_num)) >> 32;
+#endif
+    uint32_t rem = expon - quo * uint32_t(63);
+    uint64_t b[3]{ (uint64_t(i) << rem) & i63, uint64_t(i >> (63 - rem)) & i63, -(uint64_t(i) >> 63) & i63 };
+    a[0] += u64_selector<0>(quo, b);
+    if constexpr(1 < ORDER) a[1] += u64_selector<1>(quo, b) + (a[0] >> 63);
+    if constexpr(2 < ORDER) a[2] += u64_selector<2>(quo, b) + (a[1] >> 63);
     
-    a[0] = a[0] & i31;
-    if constexpr(1 < ORDER) a[1] = a[1] & i31;
-    if constexpr(2 < ORDER) a[2] = a[2] & i31;
-    if constexpr(3 < ORDER) a[3] = a[3] & i31;
+    a[0] = a[0] & i63;
+    if constexpr(1 < ORDER) a[1] = a[1] & i63;
+    if constexpr(2 < ORDER) a[2] = a[2] & i63;
+  }
+
+  __host__ __device__ __forceinline__ void quant_bounds(double xmin, double xmax, uint64_t umax, uint32_t& scale, int64_t& z) {
+#ifndef __CUDA_ARCH__
+    using std::fabs, std::fmax, std::nextafter, std::fma, std::scalbn, std::frexp;
+#endif
+    uint32_t sgn = fabs(xmax) < fabs(xmin);
+    if (sgn) // swap and negate
+    { double t = -xmin; xmin = -xmax; xmax = t; }
+
+    double umax_d = double(umax);
+    if (0. <= xmin) { // ulp checks, clamp to avoid subnormal ulp
+      double ulp = fmax(nextafter(xmin, xmax) - xmin, DBL_MIN);
+      xmax = fmax(xmax, fma(umax_d, ulp, xmin));
+    }
+
+    // accepting clamps for upto epi * umax
+    double diff = scalbn(xmax - xmin, 1);
+    int32_t exp; frexp(umax_d / diff, &exp);
+    scale = (sgn << 31) | (exp & 0x7fffffff);
+    z = int64_t(scalbn(xmin, exp));
   }
 
 };

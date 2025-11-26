@@ -142,36 +142,25 @@ namespace device::qf {
     return fscalbn(x, p);
   }
 
-  template <uint32_t ORDER>
-  __host__ __device__ __forceinline__ float conv_a31_f32(uint32_t const (&a)[ORDER], int32_t expon) {
-    static_assert(1 <= ORDER && ORDER <= 6, "Integer 32 accumulation order must be in [1,4]");
-#ifndef __CUDA_ARCH__
-    using std::scalbnf;
-#endif
-    int32_t sign_i = int32_t(a[ORDER - 1] | ((a[ORDER - 1] << 1) & 0x80000000));
-    float res = float(sign_i);
-    if constexpr(3 < ORDER) res = scalbnf(res, 31) + float(a[2]);
-    if constexpr(2 < ORDER) res = scalbnf(res, 31) + float(a[1]);
-    if constexpr(1 < ORDER) res = scalbnf(res, 31) + float(a[0]);
-    return scalbnf(res, expon);
-  }
-
-  __host__ __device__ __forceinline__ float2 conv_i32_f32x2(int32_t i) {
-    float x = float(i);
-    float y = float(int32_t(i) + int32_t(-x));
-    return make_float2(x, y);
+  __host__ __device__ __forceinline__ float4 conv_i64_qf(int64_t i) {
+    float x = float(i); i = i + int64_t(-x);
+    float y = float(i);
+    return make_float4(x, y, float(i + int64_t(-y)), 0.f);
   }
 
   template <uint32_t ORDER>
-  __host__ __device__ __forceinline__ float4 conv_a31_qf(uint32_t const (&a)[ORDER], int32_t expon) {
-    static_assert(1 <= ORDER && ORDER <= 6, "Integer 32 accumulation order must be in [1,4]");
+  __host__ __device__ __forceinline__ float4 conv_a63_qf(uint64_t const (&a)[ORDER], int32_t expon) {
+    static_assert(1 <= ORDER && ORDER <= 3, "Integer 64 accumulation order must be in [1,3]");
 
-    int32_t sign_i = int32_t(a[ORDER - 1] | ((a[ORDER - 1] << 1) & 0x80000000));
-    float x = float(sign_i), y = float(sign_i + int32_t(-x));
-    float4 res = make_float4(x, y, 0.f, 0.f);
-    if constexpr(3 < ORDER) res = add_float2(fscalbn(res, 31), conv_i32_f32x2(a[2]));
-    if constexpr(2 < ORDER) res = add_float2(fscalbn(res, 31), conv_i32_f32x2(a[1]));
-    if constexpr(1 < ORDER) res = add_float2(fscalbn(res, 31), conv_i32_f32x2(a[0]));
+    constexpr uint64_t u63 = uint64_t(1) << 63;
+    int64_t sign_i = a[ORDER - 1] | ((a[ORDER - 1] << 1) & u63);
+    float x = float(sign_i);
+    sign_i = sign_i + int64_t(-x);
+    float y = float(sign_i);
+
+    float4 res = make_float4(x, y, float(sign_i + int64_t(-y)), 0.f);
+    if constexpr(2 < ORDER) res = add(fscalbn(res, 63), conv_i64_qf(a[1]));
+    if constexpr(1 < ORDER) res = add(fscalbn(res, 63), conv_i64_qf(a[0]));
     return fscalbn(res, expon);
   }
 
