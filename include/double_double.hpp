@@ -96,55 +96,35 @@ namespace device::dd {
   }
 
   template <uint32_t ORDER>
-  __host__ __device__ __forceinline__ double conv_a31_f64(uint32_t const (&a)[ORDER], int32_t expon) {
-    static_assert(1 <= ORDER && ORDER <= 4, "Integer 32 accumulation order must be in [1,4]");
-#ifndef __CUDA_ARCH__
-    using std::scalbn;
-#endif
-    double res = double(int32_t(a[ORDER - 1] | ((a[ORDER - 1] << 1) & 0x80000000)));
-    if constexpr(3 < ORDER) res = scalbn(res, 31) + double(a[2]);
-    if constexpr(2 < ORDER) res = scalbn(res, 31) + double(a[1]);
-    if constexpr(1 < ORDER) res = scalbn(res, 31) + double(a[0]);
-    return scalbn(res, expon);
-  }
-
-  template <uint32_t ORDER>
-  __host__ __device__ __forceinline__ double2 conv_a31_dd(uint32_t const (&a)[ORDER], int32_t expon) {
-    static_assert(1 <= ORDER && ORDER <= 4, "Integer 32 accumulation order must be in [1,4]");
-
-    double2 res = make_double2(int32_t(a[ORDER - 1] | ((a[ORDER - 1] << 1) & 0x80000000)), 0.);
-    if constexpr(3 < ORDER) res = add_double(fscalbn(res, 31), double(a[2]));
-    if constexpr(2 < ORDER) res = add_double(fscalbn(res, 31), double(a[1]));
-    if constexpr(1 < ORDER) res = add_double(fscalbn(res, 31), double(a[0]));
-    return fscalbn(res, expon);
-  }
-
-  template <uint32_t ORDER>
   __host__ __device__ __forceinline__ double conv_a63_f64(uint64_t const (&a)[ORDER], int32_t expon) {
-    static_assert(1 <= ORDER && ORDER <= 3, "Integer 64 accumulation order must be in [1,3]");
+    static_assert(1 <= ORDER && ORDER <= 4, "Integer 64 accumulation order must be in [1,4]");
 #ifndef __CUDA_ARCH__
     using std::scalbn;
 #endif
     constexpr uint64_t u63 = uint64_t(1) << 63;
     double res = double(int64_t(a[ORDER - 1] | ((a[ORDER - 1] << 1) & u63)));
+    if constexpr(3 < ORDER) res = scalbn(res, 63) + double(a[2]);
     if constexpr(2 < ORDER) res = scalbn(res, 63) + double(a[1]);
     if constexpr(1 < ORDER) res = scalbn(res, 63) + double(a[0]);
     return scalbn(res, expon);
   }
 
   __host__ __device__ __forceinline__ double2 conv_i64_dd(int64_t i) {
-    double x = double(i);
-    return make_double2(x, double(i + int64_t(-x)));
+#ifndef __CUDA_ARCH__
+    using std::scalbn;
+#endif
+    constexpr uint64_t i53 = (uint64_t(1) << 53) - uint64_t(1);
+    double x = double(i >> 53), y = double(uint64_t(i) & i53);
+    return normalize(make_double2(scalbn(x, 53), y));
   }
 
   template <uint32_t ORDER>
   __host__ __device__ __forceinline__ double2 conv_a63_dd(uint64_t const (&a)[ORDER], int32_t expon) {
-    static_assert(1 <= ORDER && ORDER <= 3, "Integer 64 accumulation order must be in [1,3]");
+    static_assert(1 <= ORDER && ORDER <= 4, "Integer 64 accumulation order must be in [1,4]");
 
     constexpr uint64_t u63 = uint64_t(1) << 63;
-    int64_t sign_i = a[ORDER - 1] | ((a[ORDER - 1] << 1) & u63);
-    double x = double(sign_i);
-    double2 res = make_double2(x, double(sign_i + int64_t(-x)));
+    double2 res = conv_i64_dd(a[ORDER - 1] | ((a[ORDER - 1] << 1) & u63));
+    if constexpr(3 < ORDER) res = add(fscalbn(res, 63), conv_i64_dd(a[2]));
     if constexpr(2 < ORDER) res = add(fscalbn(res, 63), conv_i64_dd(a[1]));
     if constexpr(1 < ORDER) res = add(fscalbn(res, 63), conv_i64_dd(a[0]));
     return fscalbn(res, expon);

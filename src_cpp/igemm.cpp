@@ -24,11 +24,12 @@ void device::MixPrecAHA::mpgemm_params(double* epi, int32_t M, int32_t N, int32_
   *precC = acc_bits <= 24 ? Precision::FP32 : (acc_bits <= 53 ? Precision::FP64 : f128.first);
 }
 
-inline std::tuple<int64_t, int64_t, int64_t> i8gemm_work(int32_t N, int32_t algnN, int32_t algnK, int32_t orderA, device::Precision prec) {
+inline std::tuple<int64_t, int64_t, int64_t> i8gemm_work(int32_t N, int32_t algnN, int32_t algnK, int32_t orderA, int32_t complex, device::Precision prec) {
   int64_t elem_bytes = prec == device::Precision::FP32 ? sizeof(float) : (prec == device::Precision::FP64 ? sizeof(double) : sizeof(double2));
   int64_t acc_bytes = int64_t(algnN) * int64_t(N) * elem_bytes;
   int64_t i8_bytes = int64_t(algnK) * int64_t(N) * int64_t(orderA);
   int64_t scratch_bytes = int64_t(algnN) * int64_t(N) * int64_t(orderA) * sizeof(int32_t);
+  scratch_bytes = std::max(scratch_bytes, (acc_bytes - i8_bytes) << complex);
   return std::tie(acc_bytes, i8_bytes, scratch_bytes);
 }
 
@@ -107,7 +108,7 @@ inline void quantize_dispatcher_real(cudaStream_t stream, int32_t order, int32_t
 
 void device::MixPrecAHA::rATA(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t algnM, int32_t algnN, int32_t orderA, const void* A, int32_t lda, Precision precA, void* C, Precision precC) {
   int64_t acc_bytes, i8_bytes, scratch_bytes;
-  std::tie(acc_bytes, i8_bytes, scratch_bytes) = i8gemm_work(N, algnN, algnM, orderA, precC);
+  std::tie(acc_bytes, i8_bytes, scratch_bytes) = i8gemm_work(N, algnN, algnM, orderA, 0, precC);
 
   int8_t* acc = (int8_t*)(C), *iA = &acc[acc_bytes];
   int8_t* workspace = &iA[i8_bytes], *v_exp = &workspace[scratch_bytes];
@@ -145,7 +146,7 @@ inline void quantize_dispatcher_complex(cudaStream_t stream, int32_t order, int3
 
 void device::MixPrecAHA::cAHA(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t algnM, int32_t algnN, int32_t orderA, const void* A, int32_t lda, Precision precA, void* C, Precision precC) {
   int64_t acc_bytes, i8_bytes, scratch_bytes;
-  std::tie(acc_bytes, i8_bytes, scratch_bytes) = i8gemm_work(N, algnN, algnM, orderA, precC);
+  std::tie(acc_bytes, i8_bytes, scratch_bytes) = i8gemm_work(N, algnN, algnM, orderA, 1, precC);
 
   int8_t* iA = (int8_t*)(C), *workspace = &iA[i8_bytes + i8_bytes];
   int8_t* acc = &workspace[scratch_bytes], *v_exp = &acc[acc_bytes + acc_bytes];

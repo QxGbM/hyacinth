@@ -143,22 +143,21 @@ namespace device::qf {
   }
 
   __host__ __device__ __forceinline__ float4 conv_i64_qf(int64_t i) {
-    float x = float(i); i = i + int64_t(-x);
-    float y = float(i);
-    return make_float4(x, y, float(i + int64_t(-y)), 0.f);
+#ifndef __CUDA_ARCH__
+    using std::scalbnf;
+#endif
+    constexpr uint32_t i24 = (uint32_t(1) << 24) - uint32_t(1);
+    float x = float(int16_t(i >> 48)), y = float(uint32_t(i >> 24) & i24), z = float(uint32_t(i) & i24);
+    return normalize(make_float4(scalbnf(x, 48), scalbnf(y, 24), z, 0.f));
   }
 
   template <uint32_t ORDER>
   __host__ __device__ __forceinline__ float4 conv_a63_qf(uint64_t const (&a)[ORDER], int32_t expon) {
-    static_assert(1 <= ORDER && ORDER <= 3, "Integer 64 accumulation order must be in [1,3]");
+    static_assert(1 <= ORDER && ORDER <= 4, "Integer 64 accumulation order must be in [1,4]");
 
     constexpr uint64_t u63 = uint64_t(1) << 63;
-    int64_t sign_i = a[ORDER - 1] | ((a[ORDER - 1] << 1) & u63);
-    float x = float(sign_i);
-    sign_i = sign_i + int64_t(-x);
-    float y = float(sign_i);
-
-    float4 res = make_float4(x, y, float(sign_i + int64_t(-y)), 0.f);
+    float4 res = conv_i64_qf(a[ORDER - 1] | ((a[ORDER - 1] << 1) & u63));
+    if constexpr(3 < ORDER) res = add(fscalbn(res, 63), conv_i64_qf(a[2]));
     if constexpr(2 < ORDER) res = add(fscalbn(res, 63), conv_i64_qf(a[1]));
     if constexpr(1 < ORDER) res = add(fscalbn(res, 63), conv_i64_qf(a[0]));
     return fscalbn(res, expon);

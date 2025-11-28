@@ -42,7 +42,7 @@ namespace device::int8 {
     using std::signbit, std::fabs, std::scalbn, std::floor;
 #endif
     uint32_t sign = signbit(value);
-    value = scalbn(fabs(value), -expon);
+    value = scalbn(fabs(value), expon);
 
     if constexpr(1 <= ORDER && ORDER <= 2) {
       uint64_t ir_hi = uint64_t(value);
@@ -64,35 +64,6 @@ namespace device::int8 {
     }
   }
 
-  template <uint32_t BASE, uint32_t ORDER>
-  __host__ __device__ __forceinline__ void quantize_float_align(float value, int32_t expon, uint32_t (&code)[ORDER]) {
-    static_assert(4 <= BASE && BASE <= 7, "Integer quantization base need to be in [2^4,2^7].");
-    static_assert(1 <= ORDER && ORDER <= 2, "Integer quantization order need to be in [1,2] for FP32.");
-    constexpr int32_t BASE4x = 4 * BASE;
-
-#ifdef __CUDA_ARCH__
-    uint32_t sign = uint32_t(signbit(value));
-    value = scalbnf(fabsf(value), -expon);
-#else
-    uint32_t sign = uint32_t(std::signbit(value));
-    value = std::scalbnf(std::fabs(value), -expon);
-#endif
-
-    if constexpr(ORDER == 1)
-      code[0] = pack_4x_int<BASE>(uint32_t(value), sign);
-    else {
-#ifdef __CUDA_ARCH__
-      float fr_hi = floorf(scalbnf(value, -BASE4x));
-      float fr_lo = value - scalbnf(fr_hi, BASE4x);
-#else
-      float fr_hi = std::floor(std::scalbnf(value, -BASE4x));
-      float fr_lo = value - std::scalbnf(fr_hi, BASE4x);
-#endif
-      code[0] = pack_4x_int<BASE>(uint32_t(fr_lo), sign);
-      code[1] = pack_4x_int<BASE>(uint32_t(fr_hi), sign);
-    }
-  }
-
   template<int32_t i>
   __host__ __device__ __forceinline__ uint64_t u64_selector(int32_t x, const uint64_t (&b)[3]) {
     constexpr int32_t i1 = i - 1, i2 = i - 2;
@@ -104,7 +75,7 @@ namespace device::int8 {
 
   template <uint32_t ORDER>
   __host__ __device__ __forceinline__ void add_shifted(uint64_t (&a)[ORDER], int64_t i, uint32_t expon) {
-    static_assert(1 <= ORDER && ORDER <= 3, "64-bit integer accumulation order must be in [1,3]");
+    static_assert(1 <= ORDER && ORDER <= 4, "Integer 64 accumulation order must be in [1,4]");
 
     constexpr uint64_t i63 = ~(uint64_t(1) << 63);
     constexpr uint32_t m_num = uint32_t((uint64_t(1) << 32) / uint64_t(63));
@@ -118,31 +89,56 @@ namespace device::int8 {
     a[0] += u64_selector<0>(quo, b);
     if constexpr(1 < ORDER) a[1] += u64_selector<1>(quo, b) + (a[0] >> 63);
     if constexpr(2 < ORDER) a[2] += u64_selector<2>(quo, b) + (a[1] >> 63);
+    if constexpr(3 < ORDER) a[3] += u64_selector<3>(quo, b) + (a[2] >> 63);
     
     a[0] = a[0] & i63;
     if constexpr(1 < ORDER) a[1] = a[1] & i63;
     if constexpr(2 < ORDER) a[2] = a[2] & i63;
+    if constexpr(3 < ORDER) a[3] = a[3] & i63;
   }
 
-  __host__ __device__ __forceinline__ void quant_bounds(double xmin, double xmax, uint64_t umax, uint32_t& scale, int64_t& z) {
+  __host__ __device__ __forceinline__ void quant_bounds(double xmin, double xmax, uint32_t umax, uint32_t& scale, double& z) {
 #ifndef __CUDA_ARCH__
-    using std::fabs, std::fmax, std::nextafter, std::fma, std::scalbn, std::frexp;
+    using std::fma, std::fabs, std::fmin, std::fmax, std::nextafter, std::scalbn, std::frexp, std::nearbyint;
 #endif
     uint32_t sgn = fabs(xmax) < fabs(xmin);
     if (sgn) // swap and negate
     { double t = -xmin; xmin = -xmax; xmax = t; }
 
-    double umax_d = double(umax);
+    double umax_d = scalbn(1., umax);
+    umax_d = fmin(nextafter(umax_d, 0.), umax_d - 1.);
     if (0. <= xmin) { // ulp checks, clamp to avoid subnormal ulp
       double ulp = fmax(nextafter(xmin, xmax) - xmin, DBL_MIN);
       xmax = fmax(xmax, fma(umax_d, ulp, xmin));
     }
 
     // accepting clamps for upto epi * umax
-    double diff = scalbn(xmax - xmin, 1);
+    double diff = xmax - xmin;
     int32_t exp; frexp(umax_d / diff, &exp);
-    scale = (sgn << 31) | (exp & 0x7fffffff);
-    z = int64_t(scalbn(xmin, exp));
+    scale = (sgn << 31) | ((--exp) & 0x7fffffff);
+    z = nearbyint(scalbn(xmin, exp));
+  }
+
+  __host__ __device__ __forceinline__ void round_f64_i64s(double x, int64_t& i, uint32_t& shift) {
+#ifndef __CUDA_ARCH__
+    using std::scalbn, std::frexp, std::min;
+#endif
+    int32_t exp; x = frexp(x, &exp);
+    int32_t e = min(exp, 53);
+    i = int64_t(scalbn(x, e));
+    shift = uint32_t(exp - e);
+  }
+
+  __host__ __device__ __forceinline__ void quantize_f64(double x, uint32_t scale, double z, uint64_t (&q)[2]) {
+#ifndef __CUDA_ARCH__
+    using std::scalbn;
+#endif
+    constexpr uint32_t u31 = uint32_t(1) << 31, i31 = u31 - 1;
+    uint32_t s; int64_t i; q[0] = q[1] = uint64_t(0);
+    x = scalbn((scale & u31) ? -x : x, int32_t(((scale << 1) & u31) | (scale & i31)));
+
+    round_f64_i64s(x, i, s); add_shifted(q, i, s);
+    round_f64_i64s(z, i, s); add_shifted(q, i, s);
   }
 
 };
