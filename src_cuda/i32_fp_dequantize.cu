@@ -12,8 +12,8 @@
 template <uint32_t depth, class real_t> struct dequantize_func {
   real_t* __restrict__ A;
   const int32_t* __restrict__ B;
-  int32_t expon; int64_t M;
-  dequantize_func(int64_t M, int32_t expon, real_t* A, const int32_t* B) : A(A), B(B), expon(expon), M(M) {}
+  uint32_t expon; int64_t M;
+  dequantize_func(int64_t M, int32_t expon, real_t* A, const int32_t* B) : A(A), B(B), expon(expon & 0x7fffffff), M(M) {}
 
   template <uint32_t ORDER>
   __device__ __forceinline__ void acc_i64(double& f, uint64_t const (&a)[ORDER], int32_t expon) {

@@ -67,8 +67,8 @@ namespace device::int8 {
   template<int32_t i>
   __host__ __device__ __forceinline__ uint64_t u64_selector(int32_t x, const uint64_t (&b)[3]) {
     constexpr int32_t i1 = i - 1, i2 = i - 2;
-    uint64_t sel0 = b[0] & -(uint64_t)(i == x);
-    uint64_t sel1 = b[1] & -(uint64_t)(i1 == x);
+    uint64_t sel0 = b[0] & -(uint64_t)(x == i);
+    uint64_t sel1 = b[1] & -(uint64_t)(x == i1);
     uint64_t sel2 = b[2] & -(uint64_t)(x <= i2);
     return sel0 | sel1 | sel2;
   }
@@ -106,7 +106,6 @@ namespace device::int8 {
     { double t = -xmin; xmin = -xmax; xmax = t; }
 
     double umax_d = scalbn(1., umax);
-    umax_d = fmin(nextafter(umax_d, 0.), umax_d - 1.);
     if (0. <= xmin) { // ulp checks, clamp to avoid subnormal ulp
       double ulp = fmax(nextafter(xmin, xmax) - xmin, DBL_MIN);
       xmax = fmax(xmax, fma(umax_d, ulp, xmin));
@@ -114,31 +113,40 @@ namespace device::int8 {
 
     // accepting clamps for upto epi * umax
     double diff = xmax - xmin;
-    int32_t exp; frexp(umax_d / diff, &exp);
-    scale = (sgn << 31) | ((--exp) & 0x7fffffff);
-    z = nearbyint(scalbn(xmin, exp));
+    int32_t expon; frexp(umax_d / diff, &expon);
+    scale = (sgn << 31) | ((1 - expon) & 0x7fffffff);
+    z = nearbyint(scalbn(xmin, expon - 1));
   }
 
   __host__ __device__ __forceinline__ void round_f64_i64s(double x, int64_t& i, uint32_t& shift) {
 #ifndef __CUDA_ARCH__
     using std::scalbn, std::frexp, std::min;
 #endif
-    int32_t exp; x = frexp(x, &exp);
-    int32_t e = min(exp, 53);
+    int32_t expon; x = frexp(x, &expon);
+    int32_t e = min(expon, 53);
     i = int64_t(scalbn(x, e));
-    shift = uint32_t(exp - e);
+    shift = uint32_t(expon - e);
   }
 
-  __host__ __device__ __forceinline__ void quantize_f64(double x, uint32_t scale, double z, uint64_t (&q)[2]) {
+  __host__ __device__ __forceinline__ void quantize_f64(double x, uint32_t scale, double z, uint32_t umax, uint64_t (&q)[2]) {
 #ifndef __CUDA_ARCH__
-    using std::scalbn;
+    using std::scalbn, std::min;
 #endif
     constexpr uint32_t u31 = uint32_t(1) << 31, i31 = u31 - 1;
+    constexpr uint64_t lo = (uint64_t(1) << 63) - uint64_t(1);
     uint32_t s; int64_t i; q[0] = q[1] = uint64_t(0);
-    x = scalbn((scale & u31) ? -x : x, int32_t(((scale << 1) & u31) | (scale & i31)));
+    x = scalbn((scale & u31) ? -x : x, -int32_t(((scale << 1) & u31) | (scale & i31)));
 
     round_f64_i64s(x, i, s); add_shifted(q, i, s);
-    round_f64_i64s(z, i, s); add_shifted(q, i, s);
+    round_f64_i64s(-z, i, s); add_shifted(q, i, s);
+    int32_t pred = int32_t(63u < umax); umax = umax - pred * 63;
+    int32_t clamp = int32_t((pred ? q[1] : q[0]) >> umax);
+
+    if (clamp) {
+      uint64_t hi = (uint64_t(1) << umax) - uint64_t(1);
+      q[0] = pred ? lo : hi;
+      q[1] = pred ? hi : uint64_t(0);
+    }
   }
 
 };
