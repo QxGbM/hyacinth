@@ -97,25 +97,20 @@ namespace device::int8 {
     if constexpr(3 < ORDER) a[3] = a[3] & i63;
   }
 
-  __host__ __device__ __forceinline__ void quant_bounds(double xmin, double xmax, uint32_t umax, uint32_t& scale, double& z) {
-#ifndef __CUDA_ARCH__
-    using std::fma, std::fabs, std::fmin, std::fmax, std::nextafter, std::scalbn, std::frexp, std::nearbyint;
-#endif
-    uint32_t sgn = fabs(xmax) < fabs(xmin);
-    if (sgn) // swap and negate
-    { double t = -xmin; xmin = -xmax; xmax = t; }
+  template <uint32_t ORDER>
+  __host__ __device__ __forceinline__ void negate_shifted(uint64_t (&a)[ORDER]) {
+    static_assert(1 <= ORDER && ORDER <= 4, "Integer 64 accumulation order must be in [1,4]");
 
-    double umax_d = scalbn(1., umax);
-    if (0. <= xmin) { // ulp checks, clamp to avoid subnormal ulp
-      double ulp = fmax(nextafter(xmin, xmax) - xmin, DBL_MIN);
-      xmax = fmax(xmax, fma(umax_d, ulp, xmin));
-    }
-
-    // accepting clamps for upto epi * umax
-    double diff = xmax - xmin;
-    int32_t expon; frexp(umax_d / diff, &expon);
-    scale = (sgn << 31) | ((1 - expon) & 0x7fffffff);
-    z = nearbyint(scalbn(xmin, expon - 1));
+    constexpr uint64_t i63 = ~(uint64_t(1) << 63);
+    a[0] += i63;
+    if constexpr(1 < ORDER) a[1] += i63 + (a[0] >> 63);
+    if constexpr(2 < ORDER) a[2] += i63 + (a[1] >> 63);
+    if constexpr(3 < ORDER) a[3] += i63 + (a[2] >> 63);
+    
+    a[0] = (~a[0]) & i63;
+    if constexpr(1 < ORDER) a[1] = (~a[1]) & i63;
+    if constexpr(2 < ORDER) a[2] = (~a[2]) & i63;
+    if constexpr(3 < ORDER) a[3] = (~a[3]) & i63;
   }
 
   __host__ __device__ __forceinline__ void round_f64_i64s(double x, int64_t& i, uint32_t& shift) {
@@ -128,25 +123,72 @@ namespace device::int8 {
     shift = uint32_t(expon - e);
   }
 
-  __host__ __device__ __forceinline__ void quantize_f64(double x, uint32_t scale, double z, uint32_t umax, uint64_t (&q)[2]) {
+  __host__ __device__ __forceinline__ void quant_bounds(double xmin, double xmax, uint32_t umax, uint32_t& scale, uint64_t (&z)[2]) {
+#ifndef __CUDA_ARCH__
+    using std::fma, std::fabs, std::fmin, std::fmax, std::nextafter, std::scalbn, std::frexp;
+#endif
+    uint32_t s = fabs(xmax) < fabs(xmin);
+    if (s) // swap and negate
+    { double t = -xmin; xmin = -xmax; xmax = t; }
+
+    double umax_d = scalbn(1., umax);
+    if (0. <= xmin) { // ulp checks, clamp to avoid subnormal ulp
+      double ulp = fmax(nextafter(xmin, xmax) - xmin, DBL_MIN);
+      xmax = fmax(xmax, fma(umax_d, ulp, xmin));
+    }
+
+    // accepting clamps for upto epi * umax
+    double diff = xmax - xmin;
+    int32_t expon; frexp(umax_d / diff, &expon);
+    scale = (s << 31) | ((1 - expon) & 0x7fffffff);
+    int64_t i; round_f64_i64s(scalbn(xmin, expon - 1), i, s);
+    z[0] = z[1] = uint64_t(0); add_shifted(z, i, s);
+  }
+
+  __host__ __device__ __forceinline__ void quantize_f64(double x, uint32_t umax, uint32_t scale, uint64_t (&qz)[2]) {
 #ifndef __CUDA_ARCH__
     using std::scalbn, std::min;
 #endif
     constexpr uint32_t u31 = uint32_t(1) << 31, i31 = u31 - 1;
     constexpr uint64_t lo = (uint64_t(1) << 63) - uint64_t(1);
-    uint32_t s; int64_t i; q[0] = q[1] = uint64_t(0);
     x = scalbn((scale & u31) ? -x : x, -int32_t(((scale << 1) & u31) | (scale & i31)));
 
-    round_f64_i64s(x, i, s); add_shifted(q, i, s);
-    round_f64_i64s(-z, i, s); add_shifted(q, i, s);
-    int32_t pred = int32_t(63u < umax); umax = umax - pred * 63;
-    int32_t clamp = int32_t((pred ? q[1] : q[0]) >> umax);
+    uint32_t s; int64_t i; round_f64_i64s(x, i, s);
+    negate_shifted(qz); add_shifted(qz, i, s);
+    uint32_t pred = uint32_t(63u < umax); umax = umax - pred * uint32_t(63);
+    int32_t clamp = int32_t((pred ? qz[1] : qz[0]) >> umax);
 
     if (clamp) {
       uint64_t hi = (uint64_t(1) << umax) - uint64_t(1);
-      q[0] = pred ? lo : hi;
-      q[1] = pred ? hi : uint64_t(0);
+      qz[0] = pred ? lo : hi;
+      qz[1] = pred ? hi : uint64_t(0);
     }
+  }
+
+  __host__ __device__ __forceinline__ void conv_u63_i8(uint32_t umax, uint64_t (&q)[2], uint64_t (&z)[2]) {
+    q[0] = q[0] | ((q[1] & uint64_t(1)) << 63);
+    q[1] = q[1] >> 1;
+    umax = (umax + uint32_t(7)) & ~uint32_t(7);
+
+#ifndef __CUDA_ARCH__
+    uint8_t* u = (uint8_t*)q;
+    constexpr uint8_t cb = 0x80;
+    for (int32_t i = 0; i < 16; ++i)
+      u[i] = u[i] + cb;
+    uint32_t lo = std::min(umax, uint32_t(56));
+#else
+    uint32_t* u = (uint32_t*)q;
+    constexpr uint32_t cb = 0x80808080;
+    u[0] = __vadd4(u[0], cb);
+    u[1] = __vadd4(u[1], cb);
+    u[2] = __vadd4(u[2], cb);
+    u[3] = __vadd4(u[3], cb);
+    uint32_t lo = min(umax, uint32_t(56));
+#endif
+
+    constexpr uint64_t c7 = 0x1010101010101ull;
+    add_shifted(z, c7 & ((uint64_t(1) << lo) - uint64_t(1)), uint32_t(7));
+    z[1] += c7 & ((uint64_t(1) << (umax - lo)) - uint64_t(1));
   }
 
 };
