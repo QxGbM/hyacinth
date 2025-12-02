@@ -86,11 +86,11 @@ namespace device {
     // Query :: params [out] is written with specified dimensions and accuracy
     //       :: epi [in/out] contain the accuracy used to compute at output
 
-    void mpgemm_params(double* epi, int32_t M, int32_t N, int32_t* algnM, int32_t* algnN, int32_t* orderA, Precision precA, Precision* precC);
+    void mpgemm_params(double* epi, int32_t M, int32_t N, int32_t* algnN, int32_t* umax, int32_t Complex, Precision precA, Precision* precC, int64_t* workspace);
 
-    void rATA(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t algnM, int32_t algnN, int32_t orderA, const void* A, int32_t lda, Precision precA, void* C, Precision precC);
+    void rATA(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t algnN, int32_t umax, const void* A, int32_t lda, Precision precA, void* C, Precision precC);
 
-    void cAHA(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t algnM, int32_t algnN, int32_t orderA, const void* A, int32_t lda, Precision precA, void* C, Precision precC);
+    void cAHA(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t algnN, int32_t umax, const void* A, int32_t lda, Precision precA, void* C, Precision precC);
 
   };
 };
