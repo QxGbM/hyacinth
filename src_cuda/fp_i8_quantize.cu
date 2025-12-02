@@ -16,16 +16,14 @@ template <int32_t order, class real_t, class matrix_t> struct quantize_func {
     A(A), vec_expon(vec_expon), B(B), M(M), lda(lda), ldb(ldb), strideB(int64_t(N) * int64_t(ldb)) {}
 
   __device__ __forceinline__ void operator()(int64_t i) {
-    constexpr int32_t code_words = (order + 3) / 4;
-    constexpr int32_t gemm_expon = order * device::Config::exp_base;
-    union { uint32_t code[code_words]; int8_t bytes[order]; } c;
+    union { uint32_t code[4]; int8_t bytes[order]; } c;
     int64_t x = i / M, y = i - M * x;
-    int32_t expon = gemm_expon - vec_expon[x];
+    int32_t expon = -vec_expon[x];
     int8_t* B_rl = &B[y + x * ldb];
     matrix_t A_i = A[y + x * lda];
 
     if constexpr(sizeof(real_t) < sizeof(matrix_t)) {
-      union { uint32_t code[code_words]; int8_t bytes[order]; } c_im;
+      union { uint32_t code[4]; int8_t bytes[order]; } c_im;
       int8_t* B_im = &B_rl[strideB * int64_t(order)];
       device::int8::quantize_double_align<device::Config::exp_base>(double(A_i.x), expon, c.code);
       device::int8::quantize_double_align<device::Config::exp_base>(double(A_i.y), expon, c_im.code);

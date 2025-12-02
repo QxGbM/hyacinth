@@ -56,7 +56,7 @@ inline void i8gemm_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_
       int64_t AT_i = int64_t(i) * strideA;
       cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * orderA, algnK, &one, 
         &AT[AT_i], CUDA_R_8I, algnK, A, CUDA_R_8I, algnK, &zero, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
-      dequantize_dispatcher<prec>(stream, i - orderA, i, N, C, workspace, algnN);
+      dequantize_dispatcher<prec>(stream, i, i + orderA, N, C, workspace, algnN);
     }
   else {
     int32_t rem = algnK & (iter_k - 1);
@@ -71,7 +71,7 @@ inline void i8gemm_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_
 
         cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * orderA, iter_k, &one, 
           AT_k, CUDA_R_8I, algnK, AN_k, CUDA_R_8I, algnK, &zero, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
-        dequantize_dispatcher<prec>(stream, i - orderA, i, N, C, workspace, algnN);
+        dequantize_dispatcher<prec>(stream, i, i + orderA, N, C, workspace, algnN);
       }
 
       const int8_t* AT_k = &AT[int64_t(range_k) + AT_i];
@@ -85,23 +85,23 @@ inline void i8gemm_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_
 
         cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * orderA, iter_h, &one, 
           AT_k, CUDA_R_8I, algnK, AN_k, CUDA_R_8I, algnK, &zero, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
-        dequantize_dispatcher<prec>(stream, i - orderA, i, N, C, workspace, algnN);
+        dequantize_dispatcher<prec>(stream, i, i + orderA, N, C, workspace, algnN);
 
         cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * orderA, rem - iter_h, &one, 
           AT_k2, CUDA_R_8I, algnK, AN_k2, CUDA_R_8I, algnK, &one, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
       }
-      dequantize_dispatcher<prec>(stream, i - orderA, i, N, C, workspace, algnN);
+      dequantize_dispatcher<prec>(stream, i, i + orderA, N, C, workspace, algnN);
     }
   }
 }
 
 inline void quantize_dispatcher_real(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const void* C, int32_t ldc, device::Precision prec, int32_t* vec_expon, int8_t* A, int32_t lda) {
   if (prec == device::Precision::FP64) {
-    internal::int8::vexp_f64(stream, M, N, (const double*)C, ldc, vec_expon);
+    internal::int8::vexp_f64(stream, M, N, (const double*)C, ldc, order * device::Config::exp_base, vec_expon);
     internal::int8::quantize_f64(stream, order, M, N, (const double*)C, ldc, vec_expon, A, lda);
   }
   else if (prec == device::Precision::FP32) {
-    internal::int8::vexp_f32(stream, M, N, (const float*)C, ldc, vec_expon);
+    internal::int8::vexp_f32(stream, M, N, (const float*)C, ldc, order * device::Config::exp_base, vec_expon);
     internal::int8::quantize_f32(stream, order, M, N, (const float*)C, ldc, vec_expon, A, lda);
   }
 }
@@ -117,29 +117,29 @@ void device::MixPrecAHA::rATA(cudaStream_t stream, cublasHandle_t handle, int32_
 
   if (precC == Precision::FP64) {
     i8gemm_dispatcher<Precision::FP64>(stream, handle, N, algnN, algnM, iA, iA, orderA, acc, (int32_t*)workspace);
-    internal::int8::scal_exponent_f64(stream, N, (double*)acc, algnN, -orderA * Config::exp_base, (int32_t*)v_exp);
+    internal::int8::scal_exponent_f64(stream, N, (double*)acc, algnN, (int32_t*)v_exp);
   }
   else if (precC == Precision::FP32) {
     i8gemm_dispatcher<Precision::FP32>(stream, handle, N, algnN, algnM, iA, iA, orderA, acc, (int32_t*)workspace);
-    internal::int8::scal_exponent_f32(stream, N, (float*)acc, algnN, -orderA * Config::exp_base, (int32_t*)v_exp);
+    internal::int8::scal_exponent_f32(stream, N, (float*)acc, algnN, (int32_t*)v_exp);
   }
   else if (precC == Precision::FP128_DD) {
     i8gemm_dispatcher<Precision::FP128_DD>(stream, handle, N, algnN, algnM, iA, iA, orderA, acc, (int32_t*)workspace);
-    internal::int8::scal_exponent_f128_dd(stream, N, (double2*)acc, algnN, -orderA * Config::exp_base, (int32_t*)v_exp);
+    internal::int8::scal_exponent_f128_dd(stream, N, (double2*)acc, algnN, (int32_t*)v_exp);
   }
   else if (precC == Precision::FP128_QF) {
     i8gemm_dispatcher<Precision::FP128_QF>(stream, handle, N, algnN, algnM, iA, iA, orderA, acc, (int32_t*)workspace);
-    internal::int8::scal_exponent_f128_qf(stream, N, (float4*)acc, algnN, -orderA * Config::exp_base, (int32_t*)v_exp);
+    internal::int8::scal_exponent_f128_qf(stream, N, (float4*)acc, algnN, (int32_t*)v_exp);
   }
 }
 
 inline void quantize_dispatcher_complex(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const void* C, int32_t ldc, device::Precision prec, int32_t* vec_expon, int8_t* A, int32_t lda) {
   if (prec == device::Precision::FP64) {
-    internal::int8::vexp_f64(stream, 2 * M, N, (const double*)C, 2 * ldc, vec_expon);
+    internal::int8::vexp_f64(stream, 2 * M, N, (const double*)C, 2 * ldc, order * device::Config::exp_base, vec_expon);
     internal::int8::quantize_cf64(stream, order, M, N, (const std::complex<double>*)C, ldc, vec_expon, A, lda);
   }
   else if (prec == device::Precision::FP32) {
-    internal::int8::vexp_f32(stream, 2 * M, N, (const float*)C, 2 * ldc, vec_expon);
+    internal::int8::vexp_f32(stream, 2 * M, N, (const float*)C, 2 * ldc, order * device::Config::exp_base, vec_expon);
     internal::int8::quantize_cf32(stream, order, M, N, (const std::complex<float>*)C, ldc, vec_expon, A, lda);
   }
 }
@@ -159,24 +159,24 @@ void device::MixPrecAHA::cAHA(cudaStream_t stream, cublasHandle_t handle, int32_
     i8gemm_dispatcher<Precision::FP64>(stream, handle, N, algnN, algnM, iA, iA, orderA, acc, (int32_t*)workspace);
     i8gemm_dispatcher<Precision::FP64>(stream, handle, N, algnN, algnM, iA_imag, iA_imag, orderA, acc, (int32_t*)workspace);
     i8gemm_dispatcher<Precision::FP64>(stream, handle, N, algnN, algnM, iA, iA_imag, orderA, acc_imag, (int32_t*)workspace);
-    internal::int8::planar_to_interleave_f64(stream, N, (double*)acc, algnN, -orderA * Config::exp_base, (int32_t*)v_exp, (std::complex<double>*)iA, algnN);
+    internal::int8::planar_to_interleave_f64(stream, N, (double*)acc, algnN, (int32_t*)v_exp, (std::complex<double>*)iA, algnN);
   }
   else if (precC == Precision::FP32) {
     i8gemm_dispatcher<Precision::FP32>(stream, handle, N, algnN, algnM, iA, iA, orderA, acc, (int32_t*)workspace);
     i8gemm_dispatcher<Precision::FP32>(stream, handle, N, algnN, algnM, iA_imag, iA_imag, orderA, acc, (int32_t*)workspace);
     i8gemm_dispatcher<Precision::FP32>(stream, handle, N, algnN, algnM, iA, iA_imag, orderA, acc_imag, (int32_t*)workspace);
-    internal::int8::planar_to_interleave_f32(stream, N, (float*)acc, algnN, -orderA * Config::exp_base, (int32_t*)v_exp, (std::complex<float>*)iA, algnN);
+    internal::int8::planar_to_interleave_f32(stream, N, (float*)acc, algnN, (int32_t*)v_exp, (std::complex<float>*)iA, algnN);
   }
   else if (precC == Precision::FP128_DD) {
     i8gemm_dispatcher<Precision::FP128_DD>(stream, handle, N, algnN, algnM, iA, iA, orderA, acc, (int32_t*)workspace);
     i8gemm_dispatcher<Precision::FP128_DD>(stream, handle, N, algnN, algnM, iA_imag, iA_imag, orderA, acc, (int32_t*)workspace);
     i8gemm_dispatcher<Precision::FP128_DD>(stream, handle, N, algnN, algnM, iA, iA_imag, orderA, acc_imag, (int32_t*)workspace);
-    internal::int8::planar_to_interleave_f128_dd(stream, N, (double2*)acc, algnN, -orderA * Config::exp_base, (int32_t*)v_exp, (complex_double2*)iA, algnN);
+    internal::int8::planar_to_interleave_f128_dd(stream, N, (double2*)acc, algnN, (int32_t*)v_exp, (complex_double2*)iA, algnN);
   }
   else if (precC == Precision::FP128_QF) {
     i8gemm_dispatcher<Precision::FP128_QF>(stream, handle, N, algnN, algnM, iA, iA, orderA, acc, (int32_t*)workspace);
     i8gemm_dispatcher<Precision::FP128_QF>(stream, handle, N, algnN, algnM, iA_imag, iA_imag, orderA, acc, (int32_t*)workspace);
     i8gemm_dispatcher<Precision::FP128_QF>(stream, handle, N, algnN, algnM, iA, iA_imag, orderA, acc_imag, (int32_t*)workspace);
-    internal::int8::planar_to_interleave_f128_qf(stream, N, (float4*)acc, algnN, -orderA * Config::exp_base, (int32_t*)v_exp, (complex_float4*)iA, algnN);
+    internal::int8::planar_to_interleave_f128_qf(stream, N, (float4*)acc, algnN, (int32_t*)v_exp, (complex_float4*)iA, algnN);
   }
 }

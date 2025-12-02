@@ -103,20 +103,20 @@ namespace device::dd {
 #endif
     constexpr uint32_t u31 = uint32_t(1) << 31, i31 = u31 - 1;
     constexpr uint64_t u63 = uint64_t(1) << 63;
-    double res = double(int64_t(a[ORDER - 1] | ((a[ORDER - 1] << 1) & u63)));
-    if constexpr(3 < ORDER) res = scalbn(res, 63) + double(a[2]);
-    if constexpr(2 < ORDER) res = scalbn(res, 63) + double(a[1]);
-    if constexpr(1 < ORDER) res = scalbn(res, 63) + double(a[0]);
-    return scalbn((e & u31) ? -res : res, int32_t(((e << 1) & u31) | (e & i31)));
+    double res = scalbn(double(int64_t(a[ORDER - 1] | ((a[ORDER - 1] << 1) & u63))), -1022);
+    if constexpr(3 < ORDER) res = scalbn(res, 63) + scalbn(double(a[2]), -1022);
+    if constexpr(2 < ORDER) res = scalbn(res, 63) + scalbn(double(a[1]), -1022);
+    if constexpr(1 < ORDER) res = scalbn(res, 63) + scalbn(double(a[0]), -1022);
+    return scalbn((e & u31) ? -res : res, 1022 + int32_t(((e << 1) & u31) | (e & i31)));
   }
 
-  __host__ __device__ __forceinline__ double2 conv_i64_dd(int64_t i) {
+  __host__ __device__ __forceinline__ double2 conv_i64_dd_m1022(int64_t i) {
 #ifndef __CUDA_ARCH__
     using std::scalbn;
 #endif
     constexpr uint64_t i53 = (uint64_t(1) << 53) - uint64_t(1);
     double x = double(i >> 53), y = double(uint64_t(i) & i53);
-    return normalize(make_double2(scalbn(x, 53), y));
+    return normalize(make_double2(scalbn(x, -969), scalbn(y, -1022)));
   }
 
   template <uint32_t ORDER>
@@ -125,11 +125,11 @@ namespace device::dd {
 
     constexpr uint32_t u31 = uint32_t(1) << 31, i31 = u31 - 1;
     constexpr uint64_t u63 = uint64_t(1) << 63;
-    double2 res = conv_i64_dd(a[ORDER - 1] | ((a[ORDER - 1] << 1) & u63));
-    if constexpr(3 < ORDER) res = add(fscalbn(res, 63), conv_i64_dd(a[2]));
-    if constexpr(2 < ORDER) res = add(fscalbn(res, 63), conv_i64_dd(a[1]));
-    if constexpr(1 < ORDER) res = add(fscalbn(res, 63), conv_i64_dd(a[0]));
-    return fscalbn((e & u31) ? negate(res) : res, int32_t(((e << 1) & u31) | (e & i31)));
+    double2 res = conv_i64_dd_m1022(a[ORDER - 1] | ((a[ORDER - 1] << 1) & u63));
+    if constexpr(3 < ORDER) res = add(fscalbn(res, 63), conv_i64_dd_m1022(a[2]));
+    if constexpr(2 < ORDER) res = add(fscalbn(res, 63), conv_i64_dd_m1022(a[1]));
+    if constexpr(1 < ORDER) res = add(fscalbn(res, 63), conv_i64_dd_m1022(a[0]));
+    return fscalbn((e & u31) ? negate(res) : res, 1022 + int32_t(((e << 1) & u31) | (e & i31)));
   }
 
   __host__ __device__ __forceinline__ double dd2double(double2 a) {

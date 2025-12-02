@@ -142,13 +142,13 @@ namespace device::qf {
     return fscalbn(x, p);
   }
 
-  __host__ __device__ __forceinline__ float4 conv_i64_qf(int64_t i) {
+  __host__ __device__ __forceinline__ float4 conv_i64_qf_m126(int64_t i) {
 #ifndef __CUDA_ARCH__
     using std::scalbnf;
 #endif
     constexpr uint32_t i24 = (uint32_t(1) << 24) - uint32_t(1);
-    float x = float(int16_t(i >> 48)), y = float(uint32_t(i >> 24) & i24), z = float(uint32_t(i) & i24);
-    return normalize(make_float4(scalbnf(x, 48), scalbnf(y, 24), z, 0.f));
+    float x = float(int16_t(uint64_t(i) >> 48)), y = float(uint32_t(i >> 24) & i24), z = float(uint32_t(i) & i24);
+    return normalize(make_float4(scalbnf(x, -78), scalbnf(y, -102), scalbnf(z, -126), 0.f));
   }
 
   template <uint32_t ORDER>
@@ -157,11 +157,11 @@ namespace device::qf {
 
     constexpr uint32_t u31 = uint32_t(1) << 31, i31 = u31 - 1;
     constexpr uint64_t u63 = uint64_t(1) << 63;
-    float4 res = conv_i64_qf(a[ORDER - 1] | ((a[ORDER - 1] << 1) & u63));
-    if constexpr(3 < ORDER) res = add(fscalbn(res, 63), conv_i64_qf(a[2]));
-    if constexpr(2 < ORDER) res = add(fscalbn(res, 63), conv_i64_qf(a[1]));
-    if constexpr(1 < ORDER) res = add(fscalbn(res, 63), conv_i64_qf(a[0]));
-    return fscalbn((e & u31) ? negate(res) : res, int32_t(((e << 1) & u31) | (e & i31)));
+    float4 res = conv_i64_qf_m126(a[ORDER - 1] | ((a[ORDER - 1] << 1) & u63));
+    if constexpr(3 < ORDER) res = add(fscalbn(res, 63), conv_i64_qf_m126(a[2]));
+    if constexpr(2 < ORDER) res = add(fscalbn(res, 63), conv_i64_qf_m126(a[1]));
+    if constexpr(1 < ORDER) res = add(fscalbn(res, 63), conv_i64_qf_m126(a[0]));
+    return fscalbn((e & u31) ? negate(res) : res, 126 + int32_t(((e << 1) & u31) | (e & i31)));
   }
 
   __host__ __device__ __forceinline__ double qf2double(float4 a) {
