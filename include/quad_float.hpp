@@ -156,8 +156,7 @@ namespace device::qf {
     static_assert(1 <= ORDER && ORDER <= 4, "Integer 64 accumulation order must be in [1,4]");
 
     constexpr uint32_t u31 = uint32_t(1) << 31, i31 = u31 - 1;
-    constexpr uint64_t u63 = uint64_t(1) << 63;
-    float4 res = conv_i64_qf_m126(a[ORDER - 1] | ((a[ORDER - 1] << 1) & u63));
+    float4 res = conv_i64_qf_m126(a[ORDER - 1]);
     if constexpr(3 < ORDER) res = add(fscalbn(res, 63), conv_i64_qf_m126(a[2]));
     if constexpr(2 < ORDER) res = add(fscalbn(res, 63), conv_i64_qf_m126(a[1]));
     if constexpr(1 < ORDER) res = add(fscalbn(res, 63), conv_i64_qf_m126(a[0]));

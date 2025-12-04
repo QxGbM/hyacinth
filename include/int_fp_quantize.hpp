@@ -73,11 +73,16 @@ namespace device::int8 {
     return sel0 | sel1 | sel2;
   }
 
+  __host__ __device__ __forceinline__ uint64_t copy_bit_i63(uint64_t i) {
+    constexpr uint64_t u63 = (uint64_t(1) << 63), i63 = u63 - uint64_t(1);
+    return ((i << 1) & u63) | (i & i63);
+  }
+
   template <uint32_t ORDER>
   __host__ __device__ __forceinline__ void add_shifted(uint64_t (&a)[ORDER], int64_t i, uint32_t expon) {
     static_assert(1 <= ORDER && ORDER <= 4, "Integer 64 accumulation order must be in [1,4]");
 
-    constexpr uint64_t i63 = ~(uint64_t(1) << 63);
+    constexpr uint64_t i63 = (uint64_t(1) << 63) - uint64_t(1);
     constexpr uint32_t m_num = uint32_t((uint64_t(1) << 32) / uint64_t(63));
 #ifdef __CUDA_ARCH__
     uint32_t quo = __umulhi(expon, m_num);
@@ -90,27 +95,49 @@ namespace device::int8 {
     if constexpr(1 < ORDER) a[1] += u64_selector<1>(quo, b) + (a[0] >> 63);
     if constexpr(2 < ORDER) a[2] += u64_selector<2>(quo, b) + (a[1] >> 63);
     if constexpr(3 < ORDER) a[3] += u64_selector<3>(quo, b) + (a[2] >> 63);
-    
-    a[0] = a[0] & i63;
-    if constexpr(1 < ORDER) a[1] = a[1] & i63;
-    if constexpr(2 < ORDER) a[2] = a[2] & i63;
-    if constexpr(3 < ORDER) a[3] = a[3] & i63;
+
+    if constexpr(1 < ORDER) a[0] = a[0] & i63;
+    if constexpr(2 < ORDER) a[1] = a[1] & i63;
+    if constexpr(3 < ORDER) a[2] = a[2] & i63;
+    a[ORDER - 1] = copy_bit_i63(a[ORDER - 1]);
   }
 
   template <uint32_t ORDER>
   __host__ __device__ __forceinline__ void negate_shifted(uint64_t (&a)[ORDER]) {
     static_assert(1 <= ORDER && ORDER <= 4, "Integer 64 accumulation order must be in [1,4]");
 
-    constexpr uint64_t i63 = ~(uint64_t(1) << 63);
+    constexpr uint64_t i63 = (uint64_t(1) << 63) - uint64_t(1);
     a[0] += i63;
     if constexpr(1 < ORDER) a[1] += i63 + (a[0] >> 63);
     if constexpr(2 < ORDER) a[2] += i63 + (a[1] >> 63);
     if constexpr(3 < ORDER) a[3] += i63 + (a[2] >> 63);
     
-    a[0] = (~a[0]) & i63;
-    if constexpr(1 < ORDER) a[1] = (~a[1]) & i63;
-    if constexpr(2 < ORDER) a[2] = (~a[2]) & i63;
-    if constexpr(3 < ORDER) a[3] = (~a[3]) & i63;
+    if constexpr(1 < ORDER) a[0] = (~a[0]) & i63;
+    if constexpr(2 < ORDER) a[1] = (~a[1]) & i63;
+    if constexpr(3 < ORDER) a[2] = (~a[2]) & i63;
+    a[ORDER - 1] = ~copy_bit_i63(a[ORDER - 1]);
+  }
+
+  template <uint32_t ORDER>
+  __host__ __device__ __forceinline__ void ima_shifted(uint64_t (&a)[ORDER], int64_t x, int64_t y, uint32_t expon) {
+    static_assert(1 <= ORDER && ORDER <= 4, "Integer 64 accumulation order must be in [1,4]");
+
+#ifdef __CUDA_ARCH__
+    constexpr uint64_t u63 = uint64_t(1) << 63, i63 = u63 - uint64_t(1);
+    int64_t prod = x * y;
+    add_shifted(a, prod & i63, expon);
+    add_shifted(a, ((prod & u63) >> 63) | (__mul64hi(x, y) << 1), expon + uint32_t(63));
+    add_shifted(a, int64_t((uint64_t(x) == u63) && (uint64_t(y) == u63)), expon + uint32_t(126));
+#else
+    constexpr uint32_t i24 = (uint32_t(1) << 24) - uint32_t(1);
+    int32_t x_limbs[3]{ int32_t(x) & i24, int32_t(uint64_t(x) >> 24) & i24, int32_t(x >> 48) };
+    int32_t y_hi = int32_t(y >> 32); uint32_t y_lo = uint32_t(y);
+
+    for (int32_t i = 0; i < 3; ++i) {
+      add_shifted(a, int64_t(x_limbs[i]) * int64_t(y_hi), expon + uint32_t(24 * i) + uint32_t(32));
+      add_shifted(a, int64_t(x_limbs[i]) * int64_t(y_lo), expon + uint32_t(24 * i));
+    }
+#endif
   }
 
   __host__ __device__ __forceinline__ void round_f64_i64s(double x, int64_t& i, uint32_t& shift) {
@@ -123,46 +150,29 @@ namespace device::int8 {
     shift = uint32_t(expon - e);
   }
 
-  __host__ __device__ __forceinline__ void quant_bounds(double xmin, double xmax, uint32_t umax, uint32_t& scale, uint64_t (&z)[2]) {
+  __host__ __device__ __forceinline__ void quant_bounds(double xmin, double xmax, uint32_t umax, uint32_t& scale, double& z) {
 #ifndef __CUDA_ARCH__
-    using std::fma, std::fabs, std::fmin, std::fmax, std::nextafter, std::scalbn, std::frexp;
+    using std::fabs, std::fmax, std::nextafter, std::scalbn, std::frexp, std::nearbyint;
 #endif
+    constexpr double inf = INFINITY;
     uint32_t s = fabs(xmax) < fabs(xmin);
-    if (s) // swap and negate
+    if (s)
     { double t = -xmin; xmin = -xmax; xmax = t; }
 
-    double umax_d = scalbn(1., umax);
-    if (0. <= xmin) { // ulp checks, clamp to avoid subnormal ulp
-      double ulp = fmax(nextafter(xmin, xmax) - xmin, DBL_MIN);
-      xmax = fmax(xmax, fma(umax_d, ulp, xmin));
-    }
-
-    // accepting clamps for upto epi * umax
     double diff = xmax - xmin;
-    int32_t expon; frexp(umax_d / diff, &expon);
-    scale = (s << 31) | ((1 - expon) & 0x7fffffff);
-    int64_t i; round_f64_i64s(scalbn(xmin, expon - 1), i, s);
-    z[0] = z[1] = uint64_t(0); add_shifted(z, i, s);
+    double diff_pos = fmax(scalbn(fmax(nextafter(xmin, inf) - xmin, DBL_MIN), umax), diff);
+    double diff_neg = (diff == xmax) ? nextafter(diff, inf) : diff;
+    diff = (0. <= xmin) ? diff_pos : diff_neg;
+
+    int32_t expon, c = int32_t(frexp(diff, &expon) == 0.5);
+    expon = umax - expon + c;
+    scale = (s << 31) | (expon & 0x7fffffff);
+    z = nearbyint(scalbn(xmin, expon));
   }
 
-  __host__ __device__ __forceinline__ void quantize_f64(double x, uint32_t umax, uint32_t scale, uint64_t (&qz)[2]) {
-#ifndef __CUDA_ARCH__
-    using std::scalbn, std::min;
-#endif
+  __host__ __device__ __forceinline__ void extract_scale(uint32_t scale, int32_t& sgn, int32_t& expon) {
     constexpr uint32_t u31 = uint32_t(1) << 31, i31 = u31 - 1;
-    constexpr uint64_t lo = (uint64_t(1) << 63) - uint64_t(1);
-    x = scalbn((scale & u31) ? -x : x, -int32_t(((scale << 1) & u31) | (scale & i31)));
-
-    uint32_t s; int64_t i; round_f64_i64s(x, i, s);
-    negate_shifted(qz); add_shifted(qz, i, s);
-    uint32_t pred = uint32_t(63u < umax); umax = umax - pred * uint32_t(63);
-    int32_t clamp = int32_t((pred ? qz[1] : qz[0]) >> umax);
-
-    if (clamp) {
-      uint64_t hi = (uint64_t(1) << umax) - uint64_t(1);
-      qz[0] = pred ? lo : hi;
-      qz[1] = pred ? hi : uint64_t(0);
-    }
+    sgn = int32_t(scale >> 31); expon = int32_t(((scale << 1) & u31) | (scale & i31));
   }
 
   __host__ __device__ __forceinline__ void conv_u63_i8(uint32_t umax, uint64_t (&q)[2], uint64_t (&z)[2]) {
@@ -188,7 +198,7 @@ namespace device::int8 {
 
     constexpr uint64_t c7 = 0x1010101010101ull;
     add_shifted(z, c7 & ((uint64_t(1) << lo) - uint64_t(1)), uint32_t(7));
-    z[1] += c7 & ((uint64_t(1) << (umax - lo)) - uint64_t(1));
+    z[1] = copy_bit_i63(z[1] + (c7 & ((uint64_t(1) << (umax - lo)) - uint64_t(1))));
   }
 
 };

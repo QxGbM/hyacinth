@@ -4,10 +4,13 @@
 #include <vector>
 #include <numeric>
 
+const int32_t umax_exp_extra = 7; // extra bits for exponent difference;
+
 int32_t device::dgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, char mode, double epi, int32_t M, int32_t N, double* A, int32_t lda, int32_t* jpiv, double* tau) {
   cudaStream_t stream; cublasGetStream(cublasH, &stream);
-  int32_t algnN, umax; Precision precC; int64_t work_bytes;
-  MixPrecAHA::mpgemm_params(&epi, M, N, &algnN, &umax, 0, Precision::FP64, &precC, &work_bytes);
+  int32_t algnN, umax = umax_exp_extra; Precision precC; int64_t work_bytes;
+  MixPrecAHA::igemm_params(&epi, N, &algnN, &umax, Precision::FP64, &precC);
+  MixPrecAHA::igemm_limbed_workspace(M, N, algnN, umax, 0, precC, &work_bytes);
 
   void* work = nullptr;
   int32_t* dpiv = nullptr;
@@ -33,8 +36,9 @@ int32_t device::dgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cha
 
 int32_t device::sgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, char mode, double epi, int32_t M, int32_t N, float* A, int32_t lda, int32_t* jpiv, float* tau) {
   cudaStream_t stream; cublasGetStream(cublasH, &stream);
-  int32_t algnN, umax; Precision precC; int64_t work_bytes;
-  MixPrecAHA::mpgemm_params(&epi, M, N, &algnN, &umax, 0, Precision::FP32, &precC, &work_bytes);
+  int32_t algnN, umax = umax_exp_extra; Precision precC; int64_t work_bytes;
+  MixPrecAHA::igemm_params(&epi, N, &algnN, &umax, Precision::FP32, &precC);
+  MixPrecAHA::igemm_limbed_workspace(M, N, algnN, umax, 0, precC, &work_bytes);
 
   void* work = nullptr;
   int32_t* dpiv = nullptr;
@@ -60,8 +64,9 @@ int32_t device::sgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cha
 
 int32_t device::zgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, char mode, double epi, int32_t M, int32_t N, std::complex<double>* A, int32_t lda, int32_t* jpiv, std::complex<double>* tau) {
   cudaStream_t stream; cublasGetStream(cublasH, &stream);
-  int32_t algnN, umax; Precision precC; int64_t work_bytes;
-  MixPrecAHA::mpgemm_params(&epi, M, N, &algnN, &umax, 1, Precision::FP64, &precC, &work_bytes);
+  int32_t algnN, umax = umax_exp_extra; Precision precC; int64_t work_bytes;
+  MixPrecAHA::igemm_params(&epi, N, &algnN, &umax, Precision::FP64, &precC);
+  MixPrecAHA::igemm_limbed_workspace(M, N, algnN, umax, 1, precC, &work_bytes);
 
   void* work = nullptr;
   int32_t* dpiv = nullptr;
@@ -87,8 +92,9 @@ int32_t device::zgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cha
 
 int32_t device::cgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, char mode, double epi, int32_t M, int32_t N, std::complex<float>* A, int32_t lda, int32_t* jpiv, std::complex<float>* tau) {
   cudaStream_t stream; cublasGetStream(cublasH, &stream);
-  int32_t algnN, umax; Precision precC; int64_t work_bytes;
-  MixPrecAHA::mpgemm_params(&epi, M, N, &algnN, &umax, 1, Precision::FP32, &precC, &work_bytes);
+  int32_t algnN, umax = umax_exp_extra; Precision precC; int64_t work_bytes;
+  MixPrecAHA::igemm_params(&epi, N, &algnN, &umax, Precision::FP32, &precC);
+  MixPrecAHA::igemm_limbed_workspace(M, N, algnN, umax, 1, precC, &work_bytes);
 
   void* work = nullptr;
   int32_t* dpiv = nullptr;

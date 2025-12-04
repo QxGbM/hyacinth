@@ -3,18 +3,7 @@
 #include <internal.hpp>
 #include <limits>
 
-inline std::tuple<int32_t, int32_t, int64_t, int64_t, int64_t> i8gemm_work(int32_t M, int32_t N, int32_t algnN, int32_t umax, int32_t Complex, device::Precision prec) {
-  int32_t algnM = (M + 255) & (~255);
-  int32_t orderA = (umax + device::Config::exp_base - 1) / device::Config::exp_base;
-  int64_t elem_bytes = prec == device::Precision::FP32 ? sizeof(float) : (prec == device::Precision::FP64 ? sizeof(double) : sizeof(double2));
-  int64_t acc_bytes = int64_t(algnN) * int64_t(N) * elem_bytes;
-  int64_t i8_bytes = int64_t(algnM) * int64_t(N) * int64_t(orderA);
-  int64_t scratch_bytes = int64_t(algnN) * int64_t(N) * int64_t(orderA) * sizeof(int32_t);
-  scratch_bytes = std::max(scratch_bytes, (acc_bytes - i8_bytes) << Complex);
-  return std::tie(algnM, orderA, acc_bytes, i8_bytes, scratch_bytes);
-}
-
-void device::MixPrecAHA::mpgemm_params(double* epi, int32_t M, int32_t N, int32_t* algnN, int32_t* umax, int32_t Complex, Precision precA, Precision* precC, int64_t* workspace) {
+void device::MixPrecAHA::igemm_params(double* epi, int32_t N, int32_t* algnN, int32_t* umax, Precision precA, Precision* precC) {
   int32_t device, major, minor;
   cudaGetDevice(&device);
   cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, device);
@@ -27,22 +16,29 @@ void device::MixPrecAHA::mpgemm_params(double* epi, int32_t M, int32_t N, int32_
     std::make_pair(device::Precision::FP128_DD, std::numeric_limits<double>::epsilon()) : 
     std::make_pair(device::Precision::FP128_QF, std::pow(double(std::numeric_limits<float>::epsilon()), 2));
 
-  *algnN = (N + 63) & (~63);
   double machine_epi = precA == Precision::FP32 ? double(std::numeric_limits<float>::epsilon()) : f128.second;
+  *algnN = (N + 63) & (~63);
   *epi = std::min(1., std::max(std::abs(*epi), machine_epi));
   *precC = epi_f32 <= *epi ? Precision::FP32 : (epi_f64 <= *epi ? Precision::FP64 : f128.first);
+  *umax += int32_t(std::ceil(-std::log2(*epi)));
+}
 
-  *umax = 7 + int32_t(std::ceil(-std::log2(*epi))); // extra bits in quant to account for exponent difference
-  int32_t orderA = (*umax + Config::exp_base - 1) / Config::exp_base;
-
+inline std::tuple<int32_t, int32_t, int64_t, int64_t, int64_t> i8gemm_work(int32_t M, int32_t N, int32_t algnN, int32_t umax, int32_t Complex, device::Precision prec) {
   int32_t algnM = (M + 255) & (~255);
-  int32_t elemC = int32_t(*precC == device::Precision::FP32 ? sizeof(float) : (*precC == device::Precision::FP64 ? sizeof(double) : sizeof(double2))) << Complex;
-  int64_t C_bytes = int64_t(*algnN) * int64_t(N) * int64_t(elemC);
-  int64_t acc_bytes = int64_t(*algnN) * int64_t(N) * int64_t(elemC);
-  int64_t i8_bytes = (int64_t(algnM) * int64_t(N) * int64_t(orderA)) << Complex;
-  int64_t vec_bytes = int64_t(*algnN) * sizeof(int32_t);
-  int64_t scratch_bytes = int64_t(N) * int64_t(orderA) * vec_bytes;
-  *workspace = std::max(C_bytes, i8_bytes + scratch_bytes) + acc_bytes + vec_bytes;
+  int32_t orderA = (umax + device::Config::exp_base - 1) / device::Config::exp_base;
+  int64_t elem_bytes = prec == device::Precision::FP32 ? sizeof(float) : (prec == device::Precision::FP64 ? sizeof(double) : sizeof(double2));
+  int64_t acc_bytes = int64_t(algnN) * int64_t(N) * elem_bytes;
+  int64_t i8_bytes = int64_t(algnM) * int64_t(N) * int64_t(orderA);
+  int64_t scratch_bytes = int64_t(algnN) * int64_t(N) * int64_t(orderA) * sizeof(int32_t);
+  scratch_bytes = std::max(scratch_bytes, (acc_bytes - i8_bytes) << Complex);
+  return std::tie(algnM, orderA, acc_bytes, i8_bytes, scratch_bytes);
+}
+
+void device::MixPrecAHA::igemm_limbed_workspace(int32_t M, int32_t N, int32_t algnN, int32_t umax, int32_t Complex, Precision precC, int64_t* workspace) {
+  int32_t algnM, orderA; int64_t acc_bytes, i8_bytes, scratch_bytes;
+  std::tie(algnM, orderA, acc_bytes, i8_bytes, scratch_bytes) = i8gemm_work(M, N, algnN, umax, Complex, precC);
+  int64_t vec_bytes = int64_t(algnN) * sizeof(int32_t);
+  *workspace = ((i8_bytes + acc_bytes) << Complex) + scratch_bytes + vec_bytes;
 }
 
 template <device::Precision prec>
