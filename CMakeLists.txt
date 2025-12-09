@@ -21,6 +21,7 @@ set(CPP_SOURCES
 )
 
 set(CU_SOURCES
+  src_cuda/acc_dequantize.cu
   src_cuda/fp_asq.cu
   src_cuda/fp_exponent.cu
   src_cuda/fp_i8_quantize.cu
@@ -28,8 +29,7 @@ set(CU_SOURCES
   src_cuda/gemv_pp_nopiv.cu
   src_cuda/gemv_pp.cu
   src_cuda/gemv_scal_f128.cu
-  src_cuda/i32_fp_dequantize.cu
-  src_cuda/igemm_pp.cu
+  src_cuda/i32_accum.cu
   src_cuda/imax_diag.cu
   src_cuda/utils.cu
 )

@@ -103,29 +103,23 @@ namespace internal::int8 {
 
   void quantize_cf32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<float>* C, int32_t ldc, const int32_t* vec_expon, int8_t* A, int32_t lda);
 
-  void scal_exponent_f64(cudaStream_t stream, int32_t N, const double* A, int32_t lda, const int32_t* vec_expon, double* B, int32_t ldb);
+  void accumulate_i32tensor(cudaStream_t stream, int32_t depth_lo, int32_t depth_hi, int32_t orderA, int64_t N, uint64_t* A, const int32_t* X);
 
-  void scal_exponent_f32(cudaStream_t stream, int32_t N, const float* A, int32_t lda, const int32_t* vec_expon, float* B, int32_t ldb);
+  void dequantize_f64(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t lda, const int32_t* vec_expon, double* B, int32_t ldb);
 
-  void scal_exponent_f128_dd(cudaStream_t stream, int32_t N, const double2* A, int32_t lda, const int32_t* vec_expon, double2* B, int32_t ldb);
+  void dequantize_f32(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t lda, const int32_t* vec_expon, float* B, int32_t ldb);
 
-  void scal_exponent_f128_qf(cudaStream_t stream, int32_t N, const float4* A, int32_t lda, const int32_t* vec_expon, float4* B, int32_t ldb);
+  void dequantize_f128_dd(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t lda, const int32_t* vec_expon, double2* B, int32_t ldb);
 
-  void planar_to_interleave_f64(cudaStream_t stream, int32_t N, const double* A, int32_t lda, const int32_t* vec_expon, std::complex<double>* B, int32_t ldb);
+  void dequantize_f128_qf(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t lda, const int32_t* vec_expon, float4* B, int32_t ldb);
 
-  void planar_to_interleave_f32(cudaStream_t stream, int32_t N, const float* A, int32_t lda, const int32_t* vec_expon, std::complex<float>* B, int32_t ldb);
+  void dequantize_cf64(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t lda, const int32_t* vec_expon, std::complex<double>* B, int32_t ldb);
 
-  void planar_to_interleave_f128_dd(cudaStream_t stream, int32_t N, const double2* A, int32_t lda, const int32_t* vec_expon, complex_double2* B, int32_t ldb);
+  void dequantize_cf32(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t lda, const int32_t* vec_expon, std::complex<float>* B, int32_t ldb);
 
-  void planar_to_interleave_f128_qf(cudaStream_t stream, int32_t N, const float4* A, int32_t lda, const int32_t* vec_expon, complex_float4* B, int32_t ldb);
+  void dequantize_cf128_dd(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t lda, const int32_t* vec_expon, complex_double2* B, int32_t ldb);
 
-  void dequantize_f64_i32tensor(cudaStream_t stream, int32_t depth_lo, int32_t depth_hi, int32_t N, double* A, const int32_t* B, int32_t ld);
-
-  void dequantize_f32_i32tensor(cudaStream_t stream, int32_t depth_lo, int32_t depth_hi, int32_t N, float* A, const int32_t* B, int32_t ld);
-
-  void dequantize_f128_dd_i32tensor(cudaStream_t stream, int32_t depth_lo, int32_t depth_hi, int32_t N, double2* A, const int32_t* B, int32_t ld);
-
-  void dequantize_f128_qf_i32tensor(cudaStream_t stream, int32_t depth_lo, int32_t depth_hi, int32_t N, float4* A, const int32_t* B, int32_t ld);
+  void dequantize_cf128_qf(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t lda, const int32_t* vec_expon, complex_float4* B, int32_t ldb);
 
 };
 
