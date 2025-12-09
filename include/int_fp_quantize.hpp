@@ -129,7 +129,7 @@ namespace device::int8 {
     add_shifted(a, ((prod & u63) >> 63) | (__mul64hi(x, y) << 1), expon + uint32_t(63));
     add_shifted(a, int64_t((uint64_t(x) == u63) && (uint64_t(y) == u63)), expon + uint32_t(126));
 #else
-    constexpr uint32_t i24 = (uint32_t(1) << 24) - uint32_t(1);
+    constexpr int32_t i24 = (int32_t(1) << 24) - 1;
     int32_t x_limbs[3]{ int32_t(x) & i24, int32_t(uint64_t(x) >> 24) & i24, int32_t(x >> 48) };
     int32_t y_hi = int32_t(y >> 32); uint32_t y_lo = uint32_t(y);
 
@@ -152,53 +152,34 @@ namespace device::int8 {
 
   __host__ __device__ __forceinline__ void quant_bounds(double xmin, double xmax, uint32_t umax, uint32_t& scale, double& z) {
 #ifndef __CUDA_ARCH__
-    using std::fabs, std::fmax, std::nextafter, std::scalbn, std::frexp, std::nearbyint;
+    using std::fabs, std::fmin, std::fmax, std::nextafter, std::scalbn, std::frexp, std::nearbyint;
 #endif
     constexpr double inf = INFINITY;
-    uint32_t s = fabs(xmax) < fabs(xmin);
-    if (s)
+    uint32_t sgn = (fabs(xmax) < fabs(xmin)) || (xmin == xmax && xmin < 0.);
+    if (sgn)
     { double t = -xmin; xmin = -xmax; xmax = t; }
 
+    double ulp = fmax(nextafter(xmin, inf) - xmin, DBL_MIN);
     double diff = xmax - xmin;
-    double diff_pos = fmax(scalbn(fmax(nextafter(xmin, inf) - xmin, DBL_MIN), umax), diff);
+    double diff_pos = fmax(scalbn(ulp, umax), diff);
     double diff_neg = (diff == xmax) ? nextafter(diff, inf) : diff;
-    diff = (0. <= xmin) ? diff_pos : diff_neg;
+    diff = fmin((0. <= xmin) ? diff_pos : diff_neg, DBL_MAX);
 
     int32_t expon, c = int32_t(frexp(diff, &expon) == 0.5);
     expon = umax - expon + c;
-    scale = (s << 31) | (expon & 0x7fffffff);
+    scale = (sgn << 31) | (expon & 0x7fffffff);
     z = nearbyint(scalbn(xmin, expon));
   }
 
   __host__ __device__ __forceinline__ void extract_scale(uint32_t scale, int32_t& sgn, int32_t& expon) {
     constexpr uint32_t u31 = uint32_t(1) << 31, i31 = u31 - 1;
-    sgn = int32_t(scale >> 31); expon = int32_t(((scale << 1) & u31) | (scale & i31));
+    sgn = sgn ^ int32_t(scale >> 31); expon = expon + int32_t(((scale << 1) & u31) | (scale & i31));
   }
 
-  __host__ __device__ __forceinline__ void conv_u63_i8(uint32_t umax, uint64_t (&q)[2], uint64_t (&z)[2]) {
-    q[0] = q[0] | ((q[1] & uint64_t(1)) << 63);
-    q[1] = q[1] >> 1;
-    umax = (umax + uint32_t(7)) & ~uint32_t(7);
-
-#ifndef __CUDA_ARCH__
-    uint8_t* u = (uint8_t*)q;
-    constexpr uint8_t cb = 0x80;
-    for (int32_t i = 0; i < 16; ++i)
-      u[i] = u[i] + cb;
-    uint32_t lo = std::min(umax, uint32_t(56));
-#else
-    uint32_t* u = (uint32_t*)q;
-    constexpr uint32_t cb = 0x80808080;
-    u[0] = __vadd4(u[0], cb);
-    u[1] = __vadd4(u[1], cb);
-    u[2] = __vadd4(u[2], cb);
-    u[3] = __vadd4(u[3], cb);
-    uint32_t lo = min(umax, uint32_t(56));
-#endif
-
-    constexpr uint64_t c7 = 0x1010101010101ull;
-    add_shifted(z, c7 & ((uint64_t(1) << lo) - uint64_t(1)), uint32_t(7));
-    z[1] = copy_bit_i63(z[1] + (c7 & ((uint64_t(1) << (umax - lo)) - uint64_t(1))));
+  __host__ __device__ __forceinline__ void combine_zc(double z, int64_t& c_lo, int64_t& c_hi) {
+    uint64_t c[2]{ uint64_t(c_lo), uint64_t(c_hi) };
+    int64_t q; uint32_t sft; round_f64_i64s(z, q, sft);
+    add_shifted(c, q, sft); c_lo = int64_t(c[0]); c_hi = int64_t(c[1]);
   }
 
 };

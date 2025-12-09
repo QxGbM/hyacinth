@@ -9,11 +9,12 @@
 #include <thrust/execution_policy.h>
 
 template <class real_t> struct scalbn_func {
-  real_t* __restrict__ A;
+  const real_t* __restrict__ A;
   const int32_t* __restrict__ vec_expon;
-  int64_t N, lda;
-  scalbn_func(int64_t N, real_t* A, int64_t lda, const int32_t* vec_expon) :
-    A(A), vec_expon(vec_expon), N(N), lda(lda) {}
+  real_t* __restrict__ B;
+  int64_t N, lda, ldb;
+  scalbn_func(int64_t N, const real_t* A, int64_t lda, const int32_t* vec_expon, real_t* B, int64_t ldb) :
+    A(A), vec_expon(vec_expon), B(B), N(N), lda(lda), ldb(ldb) {}
 
   __device__ __forceinline__ double scal(int32_t expon, double f) {
     return scalbn(f, expon);
@@ -30,33 +31,32 @@ template <class real_t> struct scalbn_func {
 
   __device__ __forceinline__ void operator()(int64_t i) {
     int64_t x = i / N, y = i - N * x;
-    real_t f = A[y + x * lda];
     int32_t expon = vec_expon[x] + vec_expon[y];
-    A[y + x * lda] = scal(expon, f);
+    B[y + x * ldb] = scal(expon, A[y + x * lda]);
   }
 };
 
-void internal::int8::scal_exponent_f64(cudaStream_t stream, int32_t N, double* A, int32_t lda, const int32_t* vec_expon) {
+void internal::int8::scal_exponent_f64(cudaStream_t stream, int32_t N, const double* A, int32_t lda, const int32_t* vec_expon, double* B, int32_t ldb) {
   thrust::counting_iterator<int64_t> iter(0);
-  scalbn_func<double> scal(N, A, lda, vec_expon);
+  scalbn_func<double> scal(N, A, lda, vec_expon, B, ldb);
   thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, int64_t(N) * int64_t(N), scal);
 }
 
-void internal::int8::scal_exponent_f32(cudaStream_t stream, int32_t N, float* A, int32_t lda, const int32_t* vec_expon) {
+void internal::int8::scal_exponent_f32(cudaStream_t stream, int32_t N, const float* A, int32_t lda, const int32_t* vec_expon, float* B, int32_t ldb) {
   thrust::counting_iterator<int64_t> iter(0);
-  scalbn_func<float> scal(N, A, lda, vec_expon);
+  scalbn_func<float> scal(N, A, lda, vec_expon, B, ldb);
   thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, int64_t(N) * int64_t(N), scal);
 }
 
-void internal::int8::scal_exponent_f128_dd(cudaStream_t stream, int32_t N, double2* A, int32_t lda, const int32_t* vec_expon) {
+void internal::int8::scal_exponent_f128_dd(cudaStream_t stream, int32_t N, const double2* A, int32_t lda, const int32_t* vec_expon, double2* B, int32_t ldb) {
   thrust::counting_iterator<int64_t> iter(0);
-  scalbn_func<double2> scal(N, A, lda, vec_expon);
+  scalbn_func<double2> scal(N, A, lda, vec_expon, B, ldb);
   thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, int64_t(N) * int64_t(N), scal);
 }
 
-void internal::int8::scal_exponent_f128_qf(cudaStream_t stream, int32_t N, float4* A, int32_t lda, const int32_t* vec_expon) {
+void internal::int8::scal_exponent_f128_qf(cudaStream_t stream, int32_t N, const float4* A, int32_t lda, const int32_t* vec_expon, float4* B, int32_t ldb) {
   thrust::counting_iterator<int64_t> iter(0);
-  scalbn_func<float4> scal(N, A, lda, vec_expon);
+  scalbn_func<float4> scal(N, A, lda, vec_expon, B, ldb);
   thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, int64_t(N) * int64_t(N), scal);
 }
 

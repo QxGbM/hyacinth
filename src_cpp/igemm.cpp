@@ -27,10 +27,15 @@ inline std::tuple<int32_t, int32_t, int64_t, int64_t, int64_t> i8gemm_work(int32
   int32_t algnM = (M + 255) & (~255);
   int32_t orderA = (umax + device::Config::exp_base - 1) / device::Config::exp_base;
   int64_t elem_bytes = prec == device::Precision::FP32 ? sizeof(float) : (prec == device::Precision::FP64 ? sizeof(double) : sizeof(double2));
-  int64_t acc_bytes = int64_t(algnN) * int64_t(N) * elem_bytes;
+  int64_t C_bytes = int64_t(algnN) * int64_t(N) * elem_bytes;
   int64_t i8_bytes = int64_t(algnM) * int64_t(N) * int64_t(orderA);
   int64_t scratch_bytes = int64_t(algnN) * int64_t(N) * int64_t(orderA) * sizeof(int32_t);
-  scratch_bytes = std::max(scratch_bytes, (acc_bytes - i8_bytes) << Complex);
+  scratch_bytes = std::max(scratch_bytes, (C_bytes - i8_bytes) << Complex);
+
+  int32_t bits = int32_t(std::ceil(std::log2(double(std::max(M, 1))))) + (umax << 1) + Complex;
+  int32_t acc_order = (bits + 62) / 63;
+  int64_t acc_bytes = int64_t(algnN) * int64_t(N) * int64_t(acc_order) * sizeof(uint64_t);
+  acc_bytes = std::max(acc_bytes, C_bytes); // TODO remove
   return std::tie(algnM, orderA, acc_bytes, i8_bytes, scratch_bytes);
 }
 
@@ -107,9 +112,10 @@ void device::MixPrecAHA::rATA(cudaStream_t stream, cublasHandle_t handle, int32_
   int32_t algnM, orderA; int64_t acc_bytes, i8_bytes, scratch_bytes;
   std::tie(algnM, orderA, acc_bytes, i8_bytes, scratch_bytes) = i8gemm_work(M, N, algnN, umax, 0, precC);
 
-  int8_t* acc = (int8_t*)(C), *iA = &acc[acc_bytes];
-  int8_t* workspace = &iA[i8_bytes], *v_exp = &workspace[scratch_bytes];
-  cudaMemsetAsync(acc, 0, acc_bytes + i8_bytes, stream);
+  int8_t* iA = (int8_t*)(C), *workspace = &iA[i8_bytes];
+  int8_t* acc = &workspace[scratch_bytes], *v_exp = &acc[acc_bytes];
+  cudaMemsetAsync(iA, 0, i8_bytes, stream);
+  cudaMemsetAsync(acc, 0, acc_bytes, stream);
 
   if (precA == Precision::FP64) {
     internal::int8::vexp_f64(stream, M, N, (const double*)A, lda, umax, (int32_t*)v_exp);
@@ -122,19 +128,19 @@ void device::MixPrecAHA::rATA(cudaStream_t stream, cublasHandle_t handle, int32_
 
   if (precC == Precision::FP64) {
     i8gemm_dispatcher<Precision::FP64>(stream, handle, N, algnN, algnM, iA, iA, orderA, acc, (int32_t*)workspace);
-    internal::int8::scal_exponent_f64(stream, N, (double*)acc, algnN, (int32_t*)v_exp);
+    internal::int8::scal_exponent_f64(stream, N, (double*)acc, algnN, (int32_t*)v_exp, (double*)iA, algnN);
   }
   else if (precC == Precision::FP32) {
     i8gemm_dispatcher<Precision::FP32>(stream, handle, N, algnN, algnM, iA, iA, orderA, acc, (int32_t*)workspace);
-    internal::int8::scal_exponent_f32(stream, N, (float*)acc, algnN, (int32_t*)v_exp);
+    internal::int8::scal_exponent_f32(stream, N, (float*)acc, algnN, (int32_t*)v_exp, (float*)iA, algnN);
   }
   else if (precC == Precision::FP128_DD) {
     i8gemm_dispatcher<Precision::FP128_DD>(stream, handle, N, algnN, algnM, iA, iA, orderA, acc, (int32_t*)workspace);
-    internal::int8::scal_exponent_f128_dd(stream, N, (double2*)acc, algnN, (int32_t*)v_exp);
+    internal::int8::scal_exponent_f128_dd(stream, N, (double2*)acc, algnN, (int32_t*)v_exp, (double2*)iA, algnN);
   }
   else if (precC == Precision::FP128_QF) {
     i8gemm_dispatcher<Precision::FP128_QF>(stream, handle, N, algnN, algnM, iA, iA, orderA, acc, (int32_t*)workspace);
-    internal::int8::scal_exponent_f128_qf(stream, N, (float4*)acc, algnN, (int32_t*)v_exp);
+    internal::int8::scal_exponent_f128_qf(stream, N, (float4*)acc, algnN, (int32_t*)v_exp, (float4*)iA, algnN);
   }
 }
 

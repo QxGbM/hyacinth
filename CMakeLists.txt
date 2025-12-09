@@ -24,7 +24,7 @@ set(CU_SOURCES
   src_cuda/fp_asq.cu
   src_cuda/fp_exponent.cu
   src_cuda/fp_i8_quantize.cu
-  src_cuda/fp_unshift_sum.cu
+  src_cuda/fp_pervec_sum.cu
   src_cuda/gemv_pp_nopiv.cu
   src_cuda/gemv_pp.cu
   src_cuda/gemv_scal_f128.cu
