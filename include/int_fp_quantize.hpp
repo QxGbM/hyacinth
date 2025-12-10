@@ -142,12 +142,10 @@ namespace device::int8 {
 
   __host__ __device__ __forceinline__ void round_f64_i64s(double x, int64_t& i, uint32_t& shift) {
 #ifndef __CUDA_ARCH__
-    using std::scalbn, std::frexp, std::min;
+    using std::ilogb, std::scalbn;
 #endif
-    int32_t expon; x = frexp(x, &expon);
-    int32_t e = min(expon, 53);
-    i = int64_t(scalbn(x, e));
-    shift = uint32_t(expon - e);
+    int32_t E = int32_t(shift) + ilogb(x), e = E < 52 ? E : 52;
+    shift = uint32_t(E - e); i = int64_t(scalbn(x, e - E));
   }
 
   __host__ __device__ __forceinline__ void quant_bounds(double xmin, double xmax, uint32_t umax, uint32_t& scale, double& z) {
@@ -178,7 +176,7 @@ namespace device::int8 {
 
   __host__ __device__ __forceinline__ void combine_zc(double z, int64_t& c_lo, int64_t& c_hi) {
     uint64_t c[2]{ uint64_t(c_lo), uint64_t(c_hi) };
-    int64_t q; uint32_t sft; round_f64_i64s(z, q, sft);
+    int64_t q; uint32_t sft = uint32_t(0); round_f64_i64s(z, q, sft);
     add_shifted(c, q, sft); c_lo = int64_t(c[0]); c_hi = int64_t(c[1]);
   }
 

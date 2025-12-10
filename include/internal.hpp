@@ -79,21 +79,21 @@ namespace internal::Cholesky {
 
 namespace internal::int8 {
 
-  void asq_f64(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, uint32_t umax, uint32_t* scale, double* z);
+  void asq_f64(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, uint32_t umax, uint64_t* vec_expon, int32_t incv);
 
-  void asq_f32(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, uint32_t umax, uint32_t* scale, double* z);
+  void asq_f32(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, uint32_t umax, uint64_t* vec_expon, int32_t incv);
 
   void vexp_f64(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int32_t umax, int32_t* vec_expon);
 
   void vexp_f32(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, int32_t umax, int32_t* vec_expon);
 
-  void vsum_f64(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int64_t c_lo, int64_t c_hi, const uint32_t* scale, const double* z, uint64_t* vec_sum, int32_t incv);
+  void vsum_f64(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int64_t c_lo, int64_t c_hi, uint64_t* vec_expon, int32_t incv);
 
-  void vsum_f32(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, int64_t c_lo, int64_t c_hi, const uint32_t* scale, const double* z, uint64_t* vec_sum, int32_t incv);
+  void vsum_f32(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, int64_t c_lo, int64_t c_hi, uint64_t* vec_expon, int32_t incv);
 
-  void vsum_cf64(cudaStream_t stream, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int64_t c_lo, int64_t c_hi, const uint32_t* scale, const double* z, uint64_t* vec_sum, int32_t incv);
+  void vsum_cf64(cudaStream_t stream, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int64_t c_lo, int64_t c_hi, uint64_t* vec_expon, int32_t incv);
 
-  void vsum_cf32(cudaStream_t stream, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int64_t c_lo, int64_t c_hi, const uint32_t* scale, const double* z, uint64_t* vec_sum, int32_t incv);
+  void vsum_cf32(cudaStream_t stream, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int64_t c_lo, int64_t c_hi, uint64_t* vec_expon, int32_t incv);
 
   void quantize_f64(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const double* C, int32_t ldc, const int32_t* vec_expon, int8_t* A, int32_t lda);
 
@@ -103,23 +103,23 @@ namespace internal::int8 {
 
   void quantize_cf32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<float>* C, int32_t ldc, const int32_t* vec_expon, int8_t* A, int32_t lda);
 
-  void accumulate_i32tensor(cudaStream_t stream, int32_t depth_lo, int32_t depth_hi, int32_t orderA, int64_t N, uint64_t* A, const int32_t* X);
+  void accumulate_i32tensor(cudaStream_t stream, int64_t N, int32_t depth_lo, int32_t depth_hi, int32_t sft, const int32_t* X, int32_t orderA, uint64_t* A);
 
-  void dequantize_f64(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t lda, const int32_t* vec_expon, double* B, int32_t ldb);
+  void dequantize_f64(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t lda, const uint64_t* vec_expon, int32_t incv, double* B, int32_t ldb);
 
-  void dequantize_f32(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t lda, const int32_t* vec_expon, float* B, int32_t ldb);
+  void dequantize_f32(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t lda, const uint64_t* vec_expon, int32_t incv, float* B, int32_t ldb);
 
-  void dequantize_f128_dd(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t lda, const int32_t* vec_expon, double2* B, int32_t ldb);
+  void dequantize_f128_dd(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t lda, const uint64_t* vec_expon, int32_t incv, double2* B, int32_t ldb);
 
-  void dequantize_f128_qf(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t lda, const int32_t* vec_expon, float4* B, int32_t ldb);
+  void dequantize_f128_qf(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t lda, const uint64_t* vec_expon, int32_t incv, float4* B, int32_t ldb);
 
-  void dequantize_cf64(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t lda, const int32_t* vec_expon, std::complex<double>* B, int32_t ldb);
+  void dequantize_cf64(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t lda, const uint64_t* vec_expon, int32_t incv, std::complex<double>* B, int32_t ldb);
 
-  void dequantize_cf32(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t lda, const int32_t* vec_expon, std::complex<float>* B, int32_t ldb);
+  void dequantize_cf32(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t lda, const uint64_t* vec_expon, int32_t incv, std::complex<float>* B, int32_t ldb);
 
-  void dequantize_cf128_dd(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t lda, const int32_t* vec_expon, complex_double2* B, int32_t ldb);
+  void dequantize_cf128_dd(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t lda, const uint64_t* vec_expon, int32_t incv, complex_double2* B, int32_t ldb);
 
-  void dequantize_cf128_qf(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t lda, const int32_t* vec_expon, complex_float4* B, int32_t ldb);
+  void dequantize_cf128_qf(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t lda, const uint64_t* vec_expon, int32_t incv, complex_float4* B, int32_t ldb);
 
 };
 

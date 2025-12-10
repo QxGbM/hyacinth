@@ -15,9 +15,8 @@ __global__ void asq_kernel(int32_t M, real_const_ptr A, int64_t lda, uint32_t um
   cub::BlockReduce<double2, BLOCK_THREADS> block_reduce(temp_reduce);
   minmax mm_func;
 
-  constexpr double inf = INFINITY;
   real_const_ptr A_i = &A[int64_t(blockIdx.x) * lda];
-  double2 threadA = make_double2(inf, -inf);
+  double2 threadA = make_double2(DBL_MAX, -DBL_MAX);
 
   for (int32_t i = threadIdx.x; i < M; i += BLOCK_THREADS) {
     double a = double(A_i[i]);
@@ -33,12 +32,12 @@ __global__ void asq_kernel(int32_t M, real_const_ptr A, int64_t lda, uint32_t um
 
 constexpr int32_t block_threads = 512;
 
-void internal::int8::asq_f64(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, uint32_t umax, uint32_t* scale, double* z) {
+void internal::int8::asq_f64(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, uint32_t umax, uint64_t* vec_expon, int32_t incv) {
   asq_kernel <const double* __restrict__, block_threads>
-    <<< N, block_threads, 0, stream >>> (M, A, lda, umax, scale, z);
+    <<< N, block_threads, 0, stream >>> (M, A, lda, umax, (uint32_t*)vec_expon, (double*)&vec_expon[incv]);
 }
 
-void internal::int8::asq_f32(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, uint32_t umax, uint32_t* scale, double* z) {
+void internal::int8::asq_f32(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, uint32_t umax, uint64_t* vec_expon, int32_t incv) {
   asq_kernel <const float* __restrict__, block_threads>
-    <<< N, block_threads, 0, stream >>> (M, A, lda, umax, scale, z);
+    <<< N, block_threads, 0, stream >>> (M, A, lda, umax, (uint32_t*)vec_expon, (double*)&vec_expon[incv]);
 }
