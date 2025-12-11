@@ -7,6 +7,11 @@
 
 namespace device::int8 {
 
+  constexpr uint64_t i63 = 0x7fffffffffffffffllu;
+  constexpr uint64_t u63 = 0x8000000000000000llu;
+  constexpr uint32_t i31 = 0x7fffffffu;
+  constexpr uint32_t u31 = 0x80000000u;
+
   template <uint32_t BASE>
   __host__ __device__ __forceinline__ uint32_t pack_4x_int(uint32_t a, uint32_t sign) {
     constexpr uint32_t iBASE = (uint32_t(1) << BASE) - 1;
@@ -74,7 +79,6 @@ namespace device::int8 {
   }
 
   __host__ __device__ __forceinline__ uint64_t copy_bit_i63(uint64_t i) {
-    constexpr uint64_t u63 = (uint64_t(1) << 63), i63 = u63 - uint64_t(1);
     return ((i << 1) & u63) | (i & i63);
   }
 
@@ -82,7 +86,6 @@ namespace device::int8 {
   __host__ __device__ __forceinline__ void add_shifted(uint64_t (&a)[ORDER], int64_t i, uint32_t expon) {
     static_assert(1 <= ORDER && ORDER <= 4, "Integer 64 accumulation order must be in [1,4]");
 
-    constexpr uint64_t i63 = (uint64_t(1) << 63) - uint64_t(1);
     constexpr uint32_t m_num = uint32_t((uint64_t(1) << 32) / uint64_t(63));
 #ifdef __CUDA_ARCH__
     uint32_t quo = __umulhi(expon, m_num);
@@ -106,7 +109,6 @@ namespace device::int8 {
   __host__ __device__ __forceinline__ void negate_shifted(uint64_t (&a)[ORDER]) {
     static_assert(1 <= ORDER && ORDER <= 4, "Integer 64 accumulation order must be in [1,4]");
 
-    constexpr uint64_t i63 = (uint64_t(1) << 63) - uint64_t(1);
     a[0] += i63;
     if constexpr(1 < ORDER) a[1] += i63 + (a[0] >> 63);
     if constexpr(2 < ORDER) a[2] += i63 + (a[1] >> 63);
@@ -123,7 +125,6 @@ namespace device::int8 {
     static_assert(1 <= ORDER && ORDER <= 4, "Integer 64 accumulation order must be in [1,4]");
 
 #ifdef __CUDA_ARCH__
-    constexpr uint64_t u63 = uint64_t(1) << 63, i63 = u63 - uint64_t(1);
     int64_t prod = x * y;
     add_shifted(a, prod & i63, expon);
     add_shifted(a, ((prod & u63) >> 63) | (__mul64hi(x, y) << 1), expon + uint32_t(63));
@@ -140,15 +141,18 @@ namespace device::int8 {
 #endif
   }
 
-  __host__ __device__ __forceinline__ void round_f64_i64s(double x, int64_t& i, uint32_t& shift) {
+  __host__ __device__ __forceinline__ void quantize_f64(double x, int32_t expon, int32_t& hi, uint64_t& lo) {
 #ifndef __CUDA_ARCH__
-    using std::ilogb, std::scalbn;
+    using std::ilogb, std::max, std::scalbn, std::llrint;
 #endif
-    int32_t E = int32_t(shift) + ilogb(x), e = E < 52 ? E : 52;
-    shift = uint32_t(E - e); i = int64_t(scalbn(x, e - E));
+    int32_t e = max(ilogb(x) + expon - 62, 0);
+    int64_t q = llrint(scalbn(x, expon - e));
+    lo += (uint64_t(q) << e) & i63;
+    hi += int32_t(q >> (63 - e)) + int32_t(lo >> 63);
+    lo &= i63;
   }
 
-  __host__ __device__ __forceinline__ void quant_bounds(double xmin, double xmax, uint32_t umax, uint32_t& scale, double& z) {
+  __host__ __device__ __forceinline__ void quant_bounds(double xmin, double xmax, uint32_t umax, uint32_t c, uint64_t& s_lo, uint64_t& s_hi) {
 #ifndef __CUDA_ARCH__
     using std::fabs, std::fmin, std::fmax, std::nextafter, std::scalbn, std::frexp, std::nearbyint;
 #endif
@@ -159,25 +163,26 @@ namespace device::int8 {
 
     double ulp = fmax(nextafter(xmin, inf) - xmin, DBL_MIN);
     double diff = xmax - xmin;
-    double diff_pos = fmax(scalbn(ulp, umax), diff);
+    double diff_pos = fmax(scalbn(ulp, int32_t(umax)), diff);
     double diff_neg = (diff == xmax) ? nextafter(diff, inf) : diff;
     diff = fmin((0. <= xmin) ? diff_pos : diff_neg, DBL_MAX);
 
-    int32_t expon, c = int32_t(frexp(diff, &expon) == 0.5);
-    expon = umax - expon + c;
-    scale = (sgn << 31) | (expon & 0x7fffffff);
-    z = nearbyint(scalbn(xmin, expon));
+    int32_t expon, cel = int32_t(frexp(diff, &expon) == 0.5);
+    expon = int32_t(umax) - expon + cel;
+
+    uint32_t c_lo = uint32_t(63) < c ? uint32_t(63) : c; c -= c_lo;
+    uint64_t z_lo = 0x0080808080808080llu & ((uint64_t(1) << c_lo) - uint64_t(1));
+    int32_t z_hi = 0x01010101 & ((1 << c) - 1);
+    quantize_f64(xmin, expon, z_hi, z_lo);
+
+    int32_t neg_z_hi = -(z_hi + int32_t(z_lo != 0));
+    uint64_t neg_z_lo = -z_lo & i63;
+    s_hi = sgn ? neg_z_lo : z_lo;
+    s_lo = (uint64_t(sgn ? neg_z_hi : z_hi) << 32) | uint64_t(sgn << 31) | uint64_t(expon & i31);
   }
 
   __host__ __device__ __forceinline__ void extract_scale(uint32_t scale, int32_t& sgn, int32_t& expon) {
-    constexpr uint32_t u31 = uint32_t(1) << 31, i31 = u31 - 1;
     sgn = sgn ^ int32_t(scale >> 31); expon = expon + int32_t(((scale << 1) & u31) | (scale & i31));
-  }
-
-  __host__ __device__ __forceinline__ void combine_zc(double z, int64_t& c_lo, int64_t& c_hi) {
-    uint64_t c[2]{ uint64_t(c_lo), uint64_t(c_hi) };
-    int64_t q; uint32_t sft = uint32_t(0); round_f64_i64s(z, q, sft);
-    add_shifted(c, q, sft); c_lo = int64_t(c[0]); c_hi = int64_t(c[1]);
   }
 
 };

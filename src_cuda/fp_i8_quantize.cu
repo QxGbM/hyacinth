@@ -9,17 +9,17 @@
 
 template <int32_t order, class real_t, class matrix_t> struct quantize_func {
   const matrix_t* __restrict__ A;
-  const uint32_t* __restrict__ vec_expon;
+  const uint64_t* __restrict__ vec_expon;
   int8_t* __restrict__ B;
   int64_t M, lda, ldb, strideB;
-  quantize_func(int64_t M, int64_t N, const matrix_t* A, int64_t lda, const uint32_t* vec_expon, int8_t* B, int64_t ldb) :
+  quantize_func(int64_t M, int64_t N, const matrix_t* A, int64_t lda, const uint64_t* vec_expon, int8_t* B, int64_t ldb) :
     A(A), vec_expon(vec_expon), B(B), M(M), lda(lda), ldb(ldb), strideB(int64_t(N) * int64_t(ldb)) {}
 
   __device__ __forceinline__ void operator()(int64_t i) {
     union { uint32_t code[4]; int8_t bytes[order]; } c;
     int64_t x = i / M, y = i - M * x;
     int32_t sgn = 0, expon = 0;
-    device::int8::extract_scale(vec_expon[x], sgn, expon); expon = -expon;
+    device::int8::extract_scale(uint32_t(vec_expon[x]), sgn, expon); expon = -expon;
     int8_t* B_rl = &B[y + x * ldb];
     matrix_t A_i = A[y + x * lda];
 
@@ -46,7 +46,7 @@ template <int32_t order, class real_t, class matrix_t> struct quantize_func {
 };
 
 template <class matrix_t>
-inline void quantize_dispatcher_f64(cudaStream_t stream, int32_t order, int64_t M, int64_t N, const matrix_t* C, int64_t ldc, const uint32_t* vec_expon, int8_t* A, int64_t lda) {
+inline void quantize_dispatcher_f64(cudaStream_t stream, int32_t order, int64_t M, int64_t N, const matrix_t* C, int64_t ldc, const uint64_t* vec_expon, int8_t* A, int64_t lda) {
   thrust::counting_iterator<int64_t> iter(0);
   int64_t stride = M * N;
 
@@ -81,16 +81,16 @@ inline void quantize_dispatcher_f64(cudaStream_t stream, int32_t order, int64_t 
     }
 }
 
-void internal::int8::quantize_f64(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const double* C, int32_t ldc, const int32_t* vec_expon, int8_t* A, int32_t lda) {
-  quantize_dispatcher_f64(stream, order, M, N, C, ldc, (const uint32_t*)vec_expon, A, lda);
+void internal::int8::quantize_f64(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const double* C, int32_t ldc, const uint64_t* vec_expon, int8_t* A, int32_t lda) {
+  quantize_dispatcher_f64(stream, order, M, N, C, ldc, vec_expon, A, lda);
 }
 
-void internal::int8::quantize_cf64(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<double>* C, int32_t ldc, const int32_t* vec_expon, int8_t* A, int32_t lda) {
-  quantize_dispatcher_f64(stream, order, M, N, (double2*)C, ldc, (const uint32_t*)vec_expon, A, lda);
+void internal::int8::quantize_cf64(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<double>* C, int32_t ldc, const uint64_t* vec_expon, int8_t* A, int32_t lda) {
+  quantize_dispatcher_f64(stream, order, M, N, (double2*)C, ldc, vec_expon, A, lda);
 }
 
 template <class matrix_t>
-inline void quantize_dispatcher_f32(cudaStream_t stream, int32_t order, int64_t M, int64_t N, const matrix_t* C, int64_t ldc, const uint32_t* vec_expon, int8_t* A, int64_t lda) {
+inline void quantize_dispatcher_f32(cudaStream_t stream, int32_t order, int64_t M, int64_t N, const matrix_t* C, int64_t ldc, const uint64_t* vec_expon, int8_t* A, int64_t lda) {
   thrust::counting_iterator<int64_t> iter(0);
   int64_t stride = M * N;
 
@@ -107,10 +107,10 @@ inline void quantize_dispatcher_f32(cudaStream_t stream, int32_t order, int64_t 
   }
 }
 
-void internal::int8::quantize_f32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const float* C, int32_t ldc, const int32_t* vec_expon, int8_t* A, int32_t lda) {
-  quantize_dispatcher_f32(stream, order, M, N, C, ldc, (const uint32_t*)vec_expon, A, lda);
+void internal::int8::quantize_f32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const float* C, int32_t ldc, const uint64_t* vec_expon, int8_t* A, int32_t lda) {
+  quantize_dispatcher_f32(stream, order, M, N, C, ldc, vec_expon, A, lda);
 }
 
-void internal::int8::quantize_cf32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<float>* C, int32_t ldc, const int32_t* vec_expon, int8_t* A, int32_t lda) {
-  quantize_dispatcher_f32(stream, order, M, N, (float2*)C, ldc, (const uint32_t*)vec_expon, A, lda);
+void internal::int8::quantize_cf32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<float>* C, int32_t ldc, const uint64_t* vec_expon, int8_t* A, int32_t lda) {
+  quantize_dispatcher_f32(stream, order, M, N, (float2*)C, ldc, vec_expon, A, lda);
 }
