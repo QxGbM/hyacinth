@@ -16,7 +16,7 @@ template <int32_t order, class real_t, class matrix_t> struct quantize_func {
     A(A), vec_expon(vec_expon), B(B), M(M), lda(lda), ldb(ldb), strideB(int64_t(N) * int64_t(ldb)) {}
 
   __device__ __forceinline__ void operator()(int64_t i) {
-    union { uint32_t code[4]; int8_t bytes[order]; } c;
+    union { uint32_t code[3]; int8_t bytes[order]; } c;
     int64_t x = i / M, y = i - M * x;
     int32_t sgn = 0, expon = 0;
     device::int8::extract_scale(uint32_t(vec_expon[x]), sgn, expon); expon = -expon;
@@ -24,10 +24,10 @@ template <int32_t order, class real_t, class matrix_t> struct quantize_func {
     matrix_t A_i = A[y + x * lda];
 
     if constexpr(sizeof(real_t) < sizeof(matrix_t)) {
-      union { uint32_t code[4]; int8_t bytes[order]; } c_im;
+      union { uint32_t code[3]; int8_t bytes[order]; } c_im;
       int8_t* B_im = &B_rl[strideB * int64_t(order)];
-      device::int8::quantize_double_align<device::Config::exp_base>(double(A_i.x), expon, c.code);
-      device::int8::quantize_double_align<device::Config::exp_base>(double(A_i.y), expon, c_im.code);
+      device::int8::quantize_double_align(double(A_i.x), expon, c.code);
+      device::int8::quantize_double_align(double(A_i.y), expon, c_im.code);
 
       #pragma unroll
       for (int32_t k = 0; k < order; ++k) {
@@ -36,7 +36,7 @@ template <int32_t order, class real_t, class matrix_t> struct quantize_func {
       }
     }
     else {
-      device::int8::quantize_double_align<device::Config::exp_base>(double(A_i), expon, c.code);
+      device::int8::quantize_double_align(double(A_i), expon, c.code);
 
       #pragma unroll
       for (int32_t k = 0; k < order; ++k)
@@ -45,72 +45,39 @@ template <int32_t order, class real_t, class matrix_t> struct quantize_func {
   }
 };
 
-template <class matrix_t>
-inline void quantize_dispatcher_f64(cudaStream_t stream, int32_t order, int64_t M, int64_t N, const matrix_t* C, int64_t ldc, const uint64_t* vec_expon, int8_t* A, int64_t lda) {
+template <class real_t, class matrix_t>
+inline void quantize_dispatcher(cudaStream_t stream, int32_t order, int64_t M, int64_t N, const matrix_t* C, int64_t ldc, const uint64_t* vec_expon, int8_t* A, int64_t lda) {
   thrust::counting_iterator<int64_t> iter(0);
   int64_t stride = M * N;
 
   switch (order) {
-    case 1: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<1, double, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
-    case 2: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<2, double, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
-    case 3: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<3, double, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
-    case 4: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<4, double, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
-    case 5: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<5, double, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
-    case 6: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<6, double, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
-    case 7: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<7, double, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
-    case 8: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<8, double, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
-    case 9: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<9, double, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
-    case 10: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<10, double, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
+    case 1: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<1, real_t, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
+    case 2: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<2, real_t, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
+    case 3: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<3, real_t, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
+    case 4: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<4, real_t, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
+    case 5: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<5, real_t, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
+    case 6: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<6, real_t, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
+    case 7: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<7, real_t, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
+    case 8: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<8, real_t, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
+    case 9: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<9, real_t, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
+    case 10: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<10, real_t, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
+    case 11: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<11, real_t, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
     default: break;
   }
-
-  if constexpr (device::Config::exp_base < 7)
-    switch (order) {
-      case 11: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<11, double, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
-      case 12: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<12, double, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
-      case 13: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<13, double, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
-      default: break;
-    }
-
-  if constexpr (device::Config::exp_base < 5)
-    switch (order) {
-      case 14: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<14, double, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
-      case 15: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<15, double, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
-      case 16: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<16, double, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
-      default: break;
-    }
 }
 
 void internal::int8::quantize_f64(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const double* C, int32_t ldc, const uint64_t* vec_expon, int8_t* A, int32_t lda) {
-  quantize_dispatcher_f64(stream, order, M, N, C, ldc, vec_expon, A, lda);
+  quantize_dispatcher<double>(stream, order, M, N, C, ldc, vec_expon, A, lda);
 }
 
 void internal::int8::quantize_cf64(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<double>* C, int32_t ldc, const uint64_t* vec_expon, int8_t* A, int32_t lda) {
-  quantize_dispatcher_f64(stream, order, M, N, (double2*)C, ldc, vec_expon, A, lda);
-}
-
-template <class matrix_t>
-inline void quantize_dispatcher_f32(cudaStream_t stream, int32_t order, int64_t M, int64_t N, const matrix_t* C, int64_t ldc, const uint64_t* vec_expon, int8_t* A, int64_t lda) {
-  thrust::counting_iterator<int64_t> iter(0);
-  int64_t stride = M * N;
-
-  switch (order) {
-    case 1: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<1, float, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
-    case 2: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<2, float, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
-    case 3: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<3, float, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
-    case 4: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<4, float, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
-    case 5: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<5, float, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
-    case 6: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<6, float, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
-    case 7: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<7, float, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
-    case 8: thrust::for_each_n(thrust::cuda::par_nosync.on(stream), iter, stride, quantize_func<8, float, matrix_t>(M, N, C, ldc, vec_expon, A, lda)); break;
-    default: break;
-  }
+  quantize_dispatcher<double>(stream, order, M, N, (double2*)C, ldc, vec_expon, A, lda);
 }
 
 void internal::int8::quantize_f32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const float* C, int32_t ldc, const uint64_t* vec_expon, int8_t* A, int32_t lda) {
-  quantize_dispatcher_f32(stream, order, M, N, C, ldc, vec_expon, A, lda);
+  quantize_dispatcher<float>(stream, order, M, N, C, ldc, vec_expon, A, lda);
 }
 
 void internal::int8::quantize_cf32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<float>* C, int32_t ldc, const uint64_t* vec_expon, int8_t* A, int32_t lda) {
-  quantize_dispatcher_f32(stream, order, M, N, (float2*)C, ldc, vec_expon, A, lda);
+  quantize_dispatcher<float>(stream, order, M, N, (float2*)C, ldc, vec_expon, A, lda);
 }

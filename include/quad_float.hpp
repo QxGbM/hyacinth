@@ -152,15 +152,14 @@ namespace device::qf {
   }
 
   template <uint32_t ORDER>
-  __host__ __device__ __forceinline__ float4 conv_a63_qf(uint64_t const (&a)[ORDER], uint32_t e) {
+  __host__ __device__ __forceinline__ float4 conv_a63_qf(uint64_t const (&a)[ORDER], int32_t e) {
     static_assert(1 <= ORDER && ORDER <= 4, "Integer 64 accumulation order must be in [1,4]");
 
-    constexpr uint32_t u31 = uint32_t(1) << 31, i31 = u31 - 1;
     float4 res = conv_i64_qf_m126(a[ORDER - 1]);
     if constexpr(3 < ORDER) res = add(fscalbn(res, 63), conv_i64_qf_m126(a[2]));
     if constexpr(2 < ORDER) res = add(fscalbn(res, 63), conv_i64_qf_m126(a[1]));
     if constexpr(1 < ORDER) res = add(fscalbn(res, 63), conv_i64_qf_m126(a[0]));
-    return fscalbn((e & u31) ? negate(res) : res, 126 + int32_t(((e << 1) & u31) | (e & i31)));
+    return fscalbn(res, 126 + e);
   }
 
   __host__ __device__ __forceinline__ double qf2double(float4 a) {

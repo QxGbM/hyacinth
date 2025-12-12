@@ -12,63 +12,6 @@ namespace device::int8 {
   constexpr uint32_t i31 = 0x7fffffffu;
   constexpr uint32_t u31 = 0x80000000u;
 
-  template <uint32_t BASE>
-  __host__ __device__ __forceinline__ uint32_t pack_4x_int(uint32_t a, uint32_t sign) {
-    constexpr uint32_t iBASE = (uint32_t(1) << BASE) - 1;
-    constexpr uint32_t lsft_1x = 8 - BASE;
-    constexpr uint32_t lsft_2x = 16 - 2 * BASE;
-    constexpr uint32_t lsft_3x = 24 - 3 * BASE;
-    
-    uint32_t a0 = a & iBASE;
-    uint32_t a1 = (a << lsft_1x) & (iBASE << 8);
-    uint32_t a2 = (a << lsft_2x) & (iBASE << 16);
-    uint32_t a3 = (a << lsft_3x) & (iBASE << 24);
-    a = (a0 | a1) | (a2 | a3);
-
-#ifdef __CUDA_ARCH__
-    return sign ? __vneg4(a) : a;
-#else
-    union { uint32_t i; int8_t bytes[4]; } v{a};
-    v.bytes[0] = -v.bytes[0];
-    v.bytes[1] = -v.bytes[1];
-    v.bytes[2] = -v.bytes[2];
-    v.bytes[3] = -v.bytes[3];
-    return sign ? v.i : a;
-#endif
-  }
-
-  template <uint32_t BASE, uint32_t ORDER>
-  __host__ __device__ __forceinline__ void quantize_double_align(double value, int32_t expon, uint32_t (&code)[ORDER]) {
-    static_assert(4 <= BASE && BASE <= 7, "Integer quantization base need to be in [2^4,2^7].");
-    static_assert(1 <= ORDER && ORDER <= 4, "Integer quantization order need to be in [1,4] for FP64.");
-    constexpr int32_t BASE4x = 4 * BASE;
-
-#ifndef __CUDA_ARCH__
-    using std::signbit, std::fabs, std::scalbn, std::floor;
-#endif
-    uint32_t sign = signbit(value);
-    value = scalbn(fabs(value), expon);
-
-    if constexpr(1 <= ORDER && ORDER <= 2) {
-      uint64_t ir_hi = uint64_t(value);
-      code[0] = pack_4x_int<BASE>(uint32_t(ir_hi), sign);
-      if constexpr(2 == ORDER)
-        code[1] = pack_4x_int<BASE>(uint32_t(ir_hi >> BASE4x), sign);
-    }
-    else {
-      double fr_hi = floor(scalbn(value, -2 * BASE4x));
-      double fr_lo = value - scalbn(fr_hi, 2 * BASE4x);
-      uint64_t ir_hi = uint64_t(fr_hi);
-      uint64_t ir_lo = uint64_t(fr_lo);
-
-      code[0] = pack_4x_int<BASE>(uint32_t(ir_lo), sign);
-      code[1] = pack_4x_int<BASE>(uint32_t(ir_lo >> BASE4x), sign);
-      code[2] = pack_4x_int<BASE>(uint32_t(ir_hi), sign);
-      if constexpr(4 == ORDER)
-        code[3] = pack_4x_int<BASE>(uint32_t(ir_hi >> BASE4x), sign);
-    }
-  }
-
   template<int32_t i>
   __host__ __device__ __forceinline__ uint64_t u64_selector(int32_t x, const uint64_t (&b)[3]) {
     constexpr int32_t i1 = i - 1, i2 = i - 2;
@@ -152,7 +95,7 @@ namespace device::int8 {
     lo &= i63;
   }
 
-  __host__ __device__ __forceinline__ void quant_bounds(double xmin, double xmax, uint32_t umax, uint32_t c, uint64_t& s_lo, uint64_t& s_hi) {
+  __host__ __device__ __forceinline__ void quant_bounds(double xmin, double xmax, uint32_t umax, uint64_t& s_lo, uint64_t& s_hi) {
 #ifndef __CUDA_ARCH__
     using std::fabs, std::fmin, std::fmax, std::nextafter, std::scalbn, std::frexp, std::nearbyint;
 #endif
@@ -167,22 +110,36 @@ namespace device::int8 {
     double diff_neg = (diff == xmax) ? nextafter(diff, inf) : diff;
     diff = fmin((0. <= xmin) ? diff_pos : diff_neg, DBL_MAX);
 
-    int32_t expon, cel = int32_t(frexp(diff, &expon) == 0.5);
-    expon = int32_t(umax) - expon + cel;
-
-    uint32_t c_lo = uint32_t(63) < c ? uint32_t(63) : c; c -= c_lo;
-    uint64_t z_lo = 0x0080808080808080llu & ((uint64_t(1) << c_lo) - uint64_t(1));
-    int32_t z_hi = 0x01010101 & ((1 << c) - 1);
-    quantize_f64(xmin, expon, z_hi, z_lo);
-
-    int32_t neg_z_hi = -(z_hi + int32_t(z_lo != 0));
-    uint64_t neg_z_lo = -z_lo & i63;
-    s_hi = sgn ? neg_z_lo : z_lo;
-    s_lo = (uint64_t(sgn ? neg_z_hi : z_hi) << 32) | uint64_t(sgn << 31) | uint64_t(expon & i31);
+    int32_t expon, z_hi = 0, cel = int32_t(frexp(diff, &expon) == 0.5);
+    expon = int32_t(umax) - expon + cel; s_hi = uint64_t(0);
+    quantize_f64(sgn ? -xmin : xmin, expon, z_hi, s_hi);
+    s_lo = (uint64_t(z_hi) << 32) | uint64_t(sgn << 31) | uint64_t(expon & i31);
   }
 
   __host__ __device__ __forceinline__ void extract_scale(uint32_t scale, int32_t& sgn, int32_t& expon) {
     sgn = sgn ^ int32_t(scale >> 31); expon = expon + int32_t(((scale << 1) & u31) | (scale & i31));
+  }
+
+  __host__ __device__ __forceinline__ void conv_u8i8(uint32_t& code, uint32_t& carry) {
+    uint8_t* b = (uint8_t*)&code;
+    uint16_t a = uint16_t(carry) + uint16_t(b[0]);
+    b[0] = uint8_t(a); a = (a >> 8) + ((a >> 7) & uint16_t(1)) + uint16_t(b[1]);
+    b[1] = uint8_t(a); a = (a >> 8) + ((a >> 7) & uint16_t(1)) + uint16_t(b[2]);
+    b[2] = uint8_t(a); a = (a >> 8) + ((a >> 7) & uint16_t(1)) + uint16_t(b[3]);
+    b[3] = uint8_t(a); carry = uint32_t((a >> 8) + ((a >> 7) & uint16_t(1)));
+  }
+
+  __host__ __device__ __forceinline__ void quantize_double_align(double value, int32_t expon, uint32_t (&code)[3]) {
+    int32_t hi = 0; uint64_t lo = uint64_t(0);
+    quantize_f64(value, expon, hi, lo);
+    code[0] = uint32_t(lo);
+    code[1] = uint32_t(lo >> 32) | (uint32_t(hi) << 31);
+    code[2] = uint32_t(hi >> 1);
+
+    uint32_t carry = 0;
+    conv_u8i8(code[0], carry);
+    conv_u8i8(code[1], carry);
+    conv_u8i8(code[2], carry);
   }
 
 };

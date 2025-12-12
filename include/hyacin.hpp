@@ -8,12 +8,6 @@
 #include <cusolverDn.h>
 
 namespace device {
-  namespace Config {
-    // ------------ Changing Config requires recompile the library !! ------------
-    // Exponent BASE :: ranged from [4, 7] for integer quantization
-
-    constexpr int32_t exp_base = 7;
-  };
 
   enum class Precision { FP32, FP64, FP128_DD, FP128_QF };
 

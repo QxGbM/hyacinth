@@ -4,16 +4,16 @@
 #include <limits>
 
 inline void i8gemm_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32_t algnN, int32_t algnK, const int8_t* AT, const int8_t* A, int32_t orderA, uint64_t* C, int32_t orderC, int32_t* workspace) {
-  constexpr int32_t iter_k = 131072 << (14 - 2 * device::Config::exp_base), iter_h = iter_k / 2;
+  constexpr int32_t iter_k = 131072, iter_h = iter_k / 2;
   int64_t strideA = int64_t(algnK) * int64_t(N), strideC = int64_t(N) * int64_t(algnN);
   int32_t one = 1, zero = 0;
   
   if (algnK <= iter_k)
     for (int32_t i = 0; i < orderA; ++i) {
       int64_t AT_i = int64_t(i) * strideA;
-      cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * orderA, algnK, &one, 
+      cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * orderA, algnK, &one,
         &AT[AT_i], CUDA_R_8I, algnK, A, CUDA_R_8I, algnK, &zero, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
-      internal::int8::accumulate_i32tensor(stream, strideC, i, i + orderA, device::Config::exp_base, workspace, orderC, C);
+      internal::int8::accumulate_i32tensor(stream, strideC, i, i + orderA, workspace, orderC, C);
     }
   else {
     int32_t rem = algnK & (iter_k - 1);
@@ -26,28 +26,28 @@ inline void i8gemm_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_
         const int8_t* AT_k = &AT[int64_t(k) + AT_i];
         const int8_t* AN_k = &A[int64_t(k)];
 
-        cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * orderA, iter_k, &one, 
+        cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * orderA, iter_k, &one,
           AT_k, CUDA_R_8I, algnK, AN_k, CUDA_R_8I, algnK, &zero, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
-        internal::int8::accumulate_i32tensor(stream, strideC, i, i + orderA, device::Config::exp_base, workspace, orderC, C);
+        internal::int8::accumulate_i32tensor(stream, strideC, i, i + orderA, workspace, orderC, C);
       }
 
       const int8_t* AT_k = &AT[int64_t(range_k) + AT_i];
       const int8_t* AN_k = &A[int64_t(range_k)];
       if (rem <= iter_k)
-        cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * orderA, rem, &one, 
+        cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * orderA, rem, &one,
           AT_k, CUDA_R_8I, algnK, AN_k, CUDA_R_8I, algnK, &zero, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
       else {
         const int8_t* AT_k2 = &AT[int64_t(range_k + iter_h) + AT_i];
         const int8_t* AN_k2 = &A[int64_t(range_k + iter_h)];
 
-        cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * orderA, iter_h, &one, 
+        cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * orderA, iter_h, &one,
           AT_k, CUDA_R_8I, algnK, AN_k, CUDA_R_8I, algnK, &zero, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
-        internal::int8::accumulate_i32tensor(stream, strideC, i, i + orderA, device::Config::exp_base, workspace, orderC, C);
+        internal::int8::accumulate_i32tensor(stream, strideC, i, i + orderA, workspace, orderC, C);
 
-        cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * orderA, rem - iter_h, &one, 
+        cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * orderA, rem - iter_h, &one,
           AT_k2, CUDA_R_8I, algnK, AN_k2, CUDA_R_8I, algnK, &zero, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
       }
-      internal::int8::accumulate_i32tensor(stream, strideC, i, i + orderA, device::Config::exp_base, workspace, orderC, C);
+      internal::int8::accumulate_i32tensor(stream, strideC, i, i + orderA, workspace, orderC, C);
     }
   }
 }
@@ -74,7 +74,7 @@ void device::MixPrecAHA::igemm_params(double* epi, int32_t N, int32_t* algnN, in
 
 inline std::tuple<int32_t, int32_t, int32_t, int64_t, int64_t, int64_t, int64_t> i8gemm_ext_params(int32_t M, int32_t N, int32_t algnN, int32_t umax, int32_t Complex, device::Precision prec) {
   int32_t algnM = (M + 255) & (~255);
-  int32_t orderA = (umax + device::Config::exp_base - 1) / device::Config::exp_base;
+  int32_t orderA = (umax + 7) >> 3;
   int64_t elem_bytes = prec == device::Precision::FP32 ? sizeof(float) : (prec == device::Precision::FP64 ? sizeof(double) : sizeof(double2));
   int64_t C_bytes = int64_t(algnN) * int64_t(N) * elem_bytes;
   int64_t i8_bytes = int64_t(algnM) * int64_t(N) * int64_t(orderA);

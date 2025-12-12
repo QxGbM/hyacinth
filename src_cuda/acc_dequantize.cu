@@ -5,13 +5,13 @@
 #include <quad_float.hpp>
 #include <cuComplex.h>
 
-template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t const (&a)[ORDER], uint32_t e, double& f) { f = device::dd::conv_a63_f64(a, e); }
-template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t const (&a)[ORDER], uint32_t e, float& f) { f = float(device::dd::conv_a63_f64(a, e)); }
-template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t const (&a)[ORDER], uint32_t e, double2& f) { f = device::dd::conv_a63_dd(a, e); }
-template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t const (&a)[ORDER], uint32_t e, float4& f) { f = device::qf::conv_a63_qf(a, e); }
+template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t const (&a)[ORDER], int32_t e, double& f) { f = device::dd::conv_a63_f64(a, e); }
+template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t const (&a)[ORDER], int32_t e, float& f) { f = float(device::dd::conv_a63_f64(a, e)); }
+template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t const (&a)[ORDER], int32_t e, double2& f) { f = device::dd::conv_a63_dd(a, e); }
+template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t const (&a)[ORDER], int32_t e, float4& f) { f = device::qf::conv_a63_qf(a, e); }
 
 template<uint32_t orderA, class real_t, int32_t BLOCK_THREADS>
-__global__ void dequantize_kernel(int64_t N, const uint64_t* __restrict__ A, int64_t lda, int64_t strideA, const uint64_t* __restrict__ vec_expon, real_t* __restrict__ B, int64_t ldb) {
+__global__ void dequantize_kernel(int64_t N, const uint64_t* __restrict__ A, int64_t lda, int64_t strideA, const uint64_t* __restrict__ vec_expon, int32_t incv, real_t* __restrict__ B, int64_t ldb) {
   int64_t i = int64_t(blockIdx.x) * int64_t(BLOCK_THREADS) + int64_t(threadIdx.x);
   int64_t x = i / N, y = i - N * x;
 
@@ -25,7 +25,7 @@ __global__ void dequantize_kernel(int64_t N, const uint64_t* __restrict__ A, int
     int32_t sgn = 0, expon = 0;
     device::int8::extract_scale(uint32_t(vec_expon[x]), sgn, expon);
     device::int8::extract_scale(uint32_t(vec_expon[y]), sgn, expon);
-    fscal(acc, uint32_t((sgn << 31) | (expon & device::int8::i31)), B[y + x * ldb]);
+    fscal(acc, expon, B[y + x * ldb]);
   }
 }
 
@@ -39,7 +39,7 @@ template<uint32_t ORDER> __device__ __forceinline__ void cscal(uint64_t const (&
   f = device::qf::make_complex_float4(device::qf::conv_a63_qf(rl, e), device::qf::conv_a63_qf(im, e)); }
 
 template<uint32_t orderA, class complex_t, int32_t BLOCK_THREADS>
-__global__ void dequantize_complex_kernel(int64_t N, const uint64_t* __restrict__ A, int64_t lda, int64_t strideA, const uint64_t* __restrict__ vec_expon, complex_t* __restrict__ B, int64_t ldb) {
+__global__ void dequantize_complex_kernel(int64_t N, const uint64_t* __restrict__ A, int64_t lda, int64_t strideA, const uint64_t* __restrict__ vec_expon, int32_t incv, complex_t* __restrict__ B, int64_t ldb) {
   int64_t i = int64_t(blockIdx.x) * int64_t(BLOCK_THREADS) + int64_t(threadIdx.x);
   int64_t x = i / N, y = i - N * x;
 
@@ -59,7 +59,7 @@ __global__ void dequantize_complex_kernel(int64_t N, const uint64_t* __restrict_
     int32_t sgn = 0, expon = 0;
     device::int8::extract_scale(uint32_t(vec_expon[x]), sgn, expon);
     device::int8::extract_scale(uint32_t(vec_expon[y]), sgn, expon);
-    cscal(acc_rl, acc_im, uint32_t((sgn << 31) | (expon & device::int8::i31)), B[y + x * ldb]);
+    cscal(acc_rl, acc_im, expon, B[y + x * ldb]);
   }
 }
 
@@ -72,18 +72,18 @@ inline void dequantize_dispatcher(cudaStream_t stream, int32_t orderA, int32_t N
 
   if constexpr(COMPLEX)
     switch (orderA) {
-      case 1: dequantize_complex_kernel<1, matrix_t, block_threads> <<< grid, block_threads, 0, stream >>> (N, A, lda, strideA, vec_expon, B, ldb); break;
-      case 2: dequantize_complex_kernel<2, matrix_t, block_threads> <<< grid, block_threads, 0, stream >>> (N, A, lda, strideA, vec_expon, B, ldb); break;
-      case 3: dequantize_complex_kernel<3, matrix_t, block_threads> <<< grid, block_threads, 0, stream >>> (N, A, lda, strideA, vec_expon, B, ldb); break;
-      case 4: dequantize_complex_kernel<4, matrix_t, block_threads> <<< grid, block_threads, 0, stream >>> (N, A, lda, strideA, vec_expon, B, ldb); break;
+      case 1: dequantize_complex_kernel<1, matrix_t, block_threads> <<< grid, block_threads, 0, stream >>> (N, A, lda, strideA, vec_expon, incv, B, ldb); break;
+      case 2: dequantize_complex_kernel<2, matrix_t, block_threads> <<< grid, block_threads, 0, stream >>> (N, A, lda, strideA, vec_expon, incv, B, ldb); break;
+      case 3: dequantize_complex_kernel<3, matrix_t, block_threads> <<< grid, block_threads, 0, stream >>> (N, A, lda, strideA, vec_expon, incv, B, ldb); break;
+      case 4: dequantize_complex_kernel<4, matrix_t, block_threads> <<< grid, block_threads, 0, stream >>> (N, A, lda, strideA, vec_expon, incv, B, ldb); break;
       default: break;
     }
   else
     switch (orderA) {
-      case 1: dequantize_kernel<1, matrix_t, block_threads> <<< grid, block_threads, 0, stream >>> (N, A, lda, strideA, vec_expon, B, ldb); break;
-      case 2: dequantize_kernel<2, matrix_t, block_threads> <<< grid, block_threads, 0, stream >>> (N, A, lda, strideA, vec_expon, B, ldb); break;
-      case 3: dequantize_kernel<3, matrix_t, block_threads> <<< grid, block_threads, 0, stream >>> (N, A, lda, strideA, vec_expon, B, ldb); break;
-      case 4: dequantize_kernel<4, matrix_t, block_threads> <<< grid, block_threads, 0, stream >>> (N, A, lda, strideA, vec_expon, B, ldb); break;
+      case 1: dequantize_kernel<1, matrix_t, block_threads> <<< grid, block_threads, 0, stream >>> (N, A, lda, strideA, vec_expon, incv, B, ldb); break;
+      case 2: dequantize_kernel<2, matrix_t, block_threads> <<< grid, block_threads, 0, stream >>> (N, A, lda, strideA, vec_expon, incv, B, ldb); break;
+      case 3: dequantize_kernel<3, matrix_t, block_threads> <<< grid, block_threads, 0, stream >>> (N, A, lda, strideA, vec_expon, incv, B, ldb); break;
+      case 4: dequantize_kernel<4, matrix_t, block_threads> <<< grid, block_threads, 0, stream >>> (N, A, lda, strideA, vec_expon, incv, B, ldb); break;
       default: break;
     }
 }
