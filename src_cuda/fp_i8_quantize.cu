@@ -18,8 +18,7 @@ template <int32_t order, class real_t, class matrix_t> struct quantize_func {
   __device__ __forceinline__ void operator()(int64_t i) {
     union { uint32_t code[3]; int8_t bytes[order]; } c;
     int64_t x = i / M, y = i - M * x;
-    int32_t sgn = 0, expon = 0;
-    device::int8::extract_scale(uint32_t(vec_expon[x]), sgn, expon); expon = -expon;
+    int32_t expon = -int32_t(vec_expon[x]);
     int8_t* B_rl = &B[y + x * ldb];
     matrix_t A_i = A[y + x * lda];
 

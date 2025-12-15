@@ -26,13 +26,12 @@ template <class real_const_ptr, int32_t COMPLEX, int32_t BLOCK_THREADS>
 __global__ void vector_sum_kernel(int32_t M, real_const_ptr A, int64_t lda, const uint64_t* __restrict__ scale, uint64_t* __restrict__ vec_sum, int32_t incv) {
   real_const_ptr A_i = &A[int64_t(blockIdx.x) * lda];
   int64_t acc_hi = 0; uint64_t acc_mi = 0, acc_lo = 0;
-  int32_t sgn = 0, expon = 0;
-  device::int8::extract_scale(uint32_t(scale[blockIdx.x]), sgn, expon);
-  expon = -expon;
+  int32_t expon = -int32_t(scale[blockIdx.x]);
+  int32_t sgn = int32_t(scale[blockIdx.x] >> 63);
 
   for (int32_t i = threadIdx.x; i < M; i += BLOCK_THREADS) {
-    int32_t hi = 0; uint64_t lo = uint64_t(0);
-    device::int8::quantize_f64(A_i[i], expon, hi, lo);
+    int32_t hi; uint64_t lo;
+    device::int8::quantize_f64(A_i[i], sgn, expon, int64_t(0), uint32_t(0), hi, lo);
     acc_hi += hi; acc_mi += (lo >> 32); acc_lo += uint32_t(lo);
   }
 

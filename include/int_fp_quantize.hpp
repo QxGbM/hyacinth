@@ -84,20 +84,20 @@ namespace device::int8 {
 #endif
   }
 
-  __host__ __device__ __forceinline__ void quantize_f64(double x, int32_t expon, int32_t& hi, uint64_t& lo) {
+  __host__ __device__ __forceinline__ void quantize_f64(double x, int32_t sgn, int32_t expon, int64_t z, uint32_t sft, int32_t& hi, uint64_t& lo) {
 #ifndef __CUDA_ARCH__
     using std::ilogb, std::max, std::scalbn, std::llrint;
 #endif
     int32_t e = max(ilogb(x) + expon - 62, 0);
-    int64_t q = llrint(scalbn(x, expon - e));
-    lo += (uint64_t(q) << e) & i63;
-    hi += int32_t(q >> (63 - e)) + int32_t(lo >> 63);
+    int64_t q = llrint(scalbn(sgn ? -x : x, expon - e));
+    lo = ((uint64_t(q) << e) & i63) + ((uint64_t(z) << sft) & i63);
+    hi = int32_t(q >> (63 - e)) + int32_t(z >> (63 - sft)) + int32_t(lo >> 63);
     lo &= i63;
   }
 
   __host__ __device__ __forceinline__ void quant_bounds(double xmin, double xmax, uint32_t umax, uint64_t& s_lo, uint64_t& s_hi) {
 #ifndef __CUDA_ARCH__
-    using std::fabs, std::fmin, std::fmax, std::nextafter, std::scalbn, std::frexp, std::nearbyint;
+    using std::fabs, std::fmin, std::fmax, std::nextafter, std::scalbn, std::frexp, std::ilogb, std::max, std::llrint;
 #endif
     constexpr double inf = INFINITY;
     uint32_t sgn = (fabs(xmax) < fabs(xmin)) || (xmin == xmax && xmin < 0.);
@@ -110,14 +110,11 @@ namespace device::int8 {
     double diff_neg = (diff == xmax) ? nextafter(diff, inf) : diff;
     diff = fmin((0. <= xmin) ? diff_pos : diff_neg, DBL_MAX);
 
-    int32_t expon, z_hi = 0, cel = int32_t(frexp(diff, &expon) == 0.5);
-    expon = int32_t(umax) - expon + cel; s_hi = uint64_t(0);
-    quantize_f64(sgn ? -xmin : xmin, expon, z_hi, s_hi);
-    s_lo = (uint64_t(z_hi) << 32) | uint64_t(sgn << 31) | uint64_t(expon & i31);
-  }
-
-  __host__ __device__ __forceinline__ void extract_scale(uint32_t scale, int32_t& sgn, int32_t& expon) {
-    sgn = sgn ^ int32_t(scale >> 31); expon = expon + int32_t(((scale << 1) & u31) | (scale & i31));
+    int32_t expon, cel = int32_t(frexp(diff, &expon) == 0.5);
+    expon = int32_t(umax) - expon + cel;
+    int32_t e = max(ilogb(xmin) + expon - 62, 0);
+    s_hi = llrint(scalbn(xmin, expon - e));
+    s_lo = (uint64_t(sgn) << 63) | (uint64_t(e & i31) << 32) | uint64_t(expon);
   }
 
   __host__ __device__ __forceinline__ void conv_u8i8(uint32_t& code, uint32_t& carry) {
@@ -130,8 +127,8 @@ namespace device::int8 {
   }
 
   __host__ __device__ __forceinline__ void quantize_double_align(double value, int32_t expon, uint32_t (&code)[3]) {
-    int32_t hi = 0; uint64_t lo = uint64_t(0);
-    quantize_f64(value, expon, hi, lo);
+    int32_t hi; uint64_t lo;
+    quantize_f64(value, 0, expon, int64_t(0), uint32_t(0), hi, lo);
     code[0] = uint32_t(lo);
     code[1] = uint32_t(lo >> 32) | (uint32_t(hi) << 31);
     code[2] = uint32_t(hi >> 1);
