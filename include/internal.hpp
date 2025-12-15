@@ -103,7 +103,9 @@ namespace internal::int8 {
 
   void quantize_cf32(cudaStream_t stream, int32_t order, int32_t M, int32_t N, const std::complex<float>* C, int32_t ldc, const uint64_t* vec_expon, int8_t* A, int32_t lda);
 
-  void accumulate_i32tensor(cudaStream_t stream, int64_t N, int32_t depth_lo, int32_t depth_hi, const int32_t* X, int32_t orderA, uint64_t* A);
+  void accumulate_i32tensor(cudaStream_t stream, int64_t N, int32_t sft_lo, int32_t orderX, int32_t alpha, const int32_t* X, int32_t orderA, int32_t beta, uint64_t* A);
+
+  void accumulate_i32tensor_sft2x(cudaStream_t stream, int64_t N, int32_t orderX, const int32_t* X, int32_t orderA, int32_t beta, uint64_t* A);
 
   void dequantize_f64(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t lda, const uint64_t* vec_expon, int32_t incv, double* B, int32_t ldb);
 

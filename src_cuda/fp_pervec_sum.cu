@@ -73,14 +73,12 @@ __global__ void vector_correction_kernel(int64_t M, int32_t N, const uint64_t* _
   int32_t i = int32_t(blockIdx.x) * BLOCK_THREADS + int32_t(threadIdx.x);
 
   if (i < N) {
-    int32_t sgn = int32_t(vec_expon[i] >> 31) & 1;
     int32_t z_hi = int32_t(vec_expon[i] >> 32);
     uint64_t z_lo = vec_expon[i + incv];
-    M = sgn ? M : -M;
 
     uint64_t kz[2]{ vec_sum[i], vec_sum[i + incv] };
-    device::int8::ima_shifted(kz, int64_t(z_lo), M, uint32_t(0));
-    device::int8::ima_shifted(kz, int64_t(z_hi), M, uint32_t(63));
+    device::int8::ima_shifted(kz, int64_t(z_lo), -M, uint32_t(0));
+    device::int8::ima_shifted(kz, int64_t(z_hi), -M, uint32_t(63));
     vec_crr_sum[i] = kz[0];
     vec_crr_sum[i + incv] = kz[1];
   }

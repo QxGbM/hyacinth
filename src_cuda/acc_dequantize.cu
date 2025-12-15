@@ -5,10 +5,10 @@
 #include <quad_float.hpp>
 #include <cuComplex.h>
 
-template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t const (&a)[ORDER], int32_t e, double& f) { f = device::dd::conv_a63_f64(a, e); }
-template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t const (&a)[ORDER], int32_t e, float& f) { f = float(device::dd::conv_a63_f64(a, e)); }
-template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t const (&a)[ORDER], int32_t e, double2& f) { f = device::dd::conv_a63_dd(a, e); }
-template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t const (&a)[ORDER], int32_t e, float4& f) { f = device::qf::conv_a63_qf(a, e); }
+template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t const (&a)[ORDER], int32_t e, double& f) { f = device::dd::conv_a63_f64(a, e - 1); }
+template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t const (&a)[ORDER], int32_t e, float& f) { f = float(device::dd::conv_a63_f64(a, e - 1)); }
+template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t const (&a)[ORDER], int32_t e, double2& f) { f = device::dd::conv_a63_dd(a, e - 1); }
+template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t const (&a)[ORDER], int32_t e, float4& f) { f = device::qf::conv_a63_qf(a, e - 1); }
 
 template<uint32_t orderA, class real_t, int32_t BLOCK_THREADS>
 __global__ void dequantize_kernel(int64_t N, const uint64_t* __restrict__ A, int64_t lda, int64_t strideA, const uint64_t* __restrict__ vec_expon, int32_t incv, real_t* __restrict__ B, int64_t ldb) {
@@ -16,11 +16,16 @@ __global__ void dequantize_kernel(int64_t N, const uint64_t* __restrict__ A, int
   int64_t x = i / N, y = i - N * x;
 
   if (x < N && y < N) {
-    int64_t iter = y + x * lda;
+    int64_t iter = x + y * lda;
     uint64_t acc[orderA];
     #pragma unroll
     for (uint32_t r = 0; r < orderA; ++r)
     { acc[r] = A[iter]; iter += strideA; }
+
+    iter = y + x * lda;
+    #pragma unroll
+    for (uint32_t r = 0; r < orderA; ++r)
+    { device::int8::add_shifted(acc, int64_t(A[iter]), r * uint32_t(63)); iter += strideA; }
 
     int32_t sgn = 0, expon = 0;
     device::int8::extract_scale(uint32_t(vec_expon[x]), sgn, expon);
@@ -29,14 +34,14 @@ __global__ void dequantize_kernel(int64_t N, const uint64_t* __restrict__ A, int
   }
 }
 
-template<uint32_t ORDER> __device__ __forceinline__ void cscal(uint64_t const (&rl)[ORDER], uint64_t const (&im)[ORDER], uint32_t e, cuDoubleComplex& f) {
-  f = make_cuDoubleComplex(device::dd::conv_a63_f64(rl, e), device::dd::conv_a63_f64(im, e)); }
-template<uint32_t ORDER> __device__ __forceinline__ void cscal(uint64_t const (&rl)[ORDER], uint64_t const (&im)[ORDER], uint32_t e, cuComplex& f) {
-  f = make_cuComplex(float(device::dd::conv_a63_f64(rl, e)), float(device::dd::conv_a63_f64(im, e))); }
-template<uint32_t ORDER> __device__ __forceinline__ void cscal(uint64_t const (&rl)[ORDER], uint64_t const (&im)[ORDER], uint32_t e, complex_double2& f) {
-  f = device::dd::make_complex_double2(device::dd::conv_a63_dd(rl, e), device::dd::conv_a63_dd(im, e)); }
-template<uint32_t ORDER> __device__ __forceinline__ void cscal(uint64_t const (&rl)[ORDER], uint64_t const (&im)[ORDER], uint32_t e, complex_float4& f) {
-  f = device::qf::make_complex_float4(device::qf::conv_a63_qf(rl, e), device::qf::conv_a63_qf(im, e)); }
+template<uint32_t ORDER> __device__ __forceinline__ void cscal(uint64_t const (&rl)[ORDER], uint64_t const (&im)[ORDER], int32_t e, cuDoubleComplex& f) {
+  f = make_cuDoubleComplex(device::dd::conv_a63_f64(rl, e - 1), device::dd::conv_a63_f64(im, e)); }
+template<uint32_t ORDER> __device__ __forceinline__ void cscal(uint64_t const (&rl)[ORDER], uint64_t const (&im)[ORDER], int32_t e, cuComplex& f) {
+  f = make_cuComplex(float(device::dd::conv_a63_f64(rl, e - 1)), float(device::dd::conv_a63_f64(im, e))); }
+template<uint32_t ORDER> __device__ __forceinline__ void cscal(uint64_t const (&rl)[ORDER], uint64_t const (&im)[ORDER], int32_t e, complex_double2& f) {
+  f = device::dd::make_complex_double2(device::dd::conv_a63_dd(rl, e - 1), device::dd::conv_a63_dd(im, e)); }
+template<uint32_t ORDER> __device__ __forceinline__ void cscal(uint64_t const (&rl)[ORDER], uint64_t const (&im)[ORDER], int32_t e, complex_float4& f) {
+  f = device::qf::make_complex_float4(device::qf::conv_a63_qf(rl, e - 1), device::qf::conv_a63_qf(im, e)); }
 
 template<uint32_t orderA, class complex_t, int32_t BLOCK_THREADS>
 __global__ void dequantize_complex_kernel(int64_t N, const uint64_t* __restrict__ A, int64_t lda, int64_t strideA, const uint64_t* __restrict__ vec_expon, int32_t incv, complex_t* __restrict__ B, int64_t ldb) {
@@ -44,13 +49,22 @@ __global__ void dequantize_complex_kernel(int64_t N, const uint64_t* __restrict_
   int64_t x = i / N, y = i - N * x;
 
   if (x < N && y < N) {
-    int64_t iter = y + x * lda, imT = (x - y) + (y - x) * lda + int64_t(orderA) * strideA;
+    int64_t iter = x + y * lda;
     uint64_t acc_rl[orderA], acc_im[orderA];
 
     #pragma unroll
     for (uint32_t r = 0; r < orderA; ++r)
-    { acc_rl[r] = A[iter]; acc_im[r] = A[iter + imT]; iter += strideA; }
+    { acc_rl[r] = A[iter]; iter += strideA; }
+
+    #pragma unroll
+    for (uint32_t r = 0; r < orderA; ++r)
+    { acc_im[r] = A[iter]; iter += strideA; }
     device::int8::negate_shifted(acc_im);
+
+    iter = y + x * lda;
+    #pragma unroll
+    for (uint32_t r = 0; r < orderA; ++r)
+    { device::int8::add_shifted(acc_rl, int64_t(A[iter]), r * uint32_t(63)); iter += strideA; }
 
     #pragma unroll
     for (uint32_t r = 0; r < orderA; ++r)

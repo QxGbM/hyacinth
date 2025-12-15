@@ -4,7 +4,7 @@
 #include <vector>
 #include <numeric>
 
-const int32_t umax_exp_extra = 7; // extra bits for exponent difference;
+const int32_t umax_exp_extra = 6; // extra bits for exponent difference;
 
 int32_t device::interp_decomp_f64(cublasHandle_t handle, double epi, int32_t rank, int32_t M, int32_t N, const double* A, int32_t lda, int32_t* jpiv, double* X, int32_t ldx) {
   cudaStream_t stream; cublasGetStream(handle, &stream);
