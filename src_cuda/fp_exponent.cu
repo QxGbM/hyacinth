@@ -25,8 +25,8 @@ __global__ void vector_exponent_kernel(int32_t M, real_const_ptr A, int64_t lda,
     threadB = block_reduce.Reduce(threadB, amax_func);
 
   if (threadIdx.x == 0) {
-    int32_t e; frexp(threadB, &e);
-    vec_expon[blockIdx.x] = uint32_t(umax + e);
+    int32_t e, c = int32_t(frexp(threadB, &e) == 0.5);
+    vec_expon[blockIdx.x] = uint32_t(e - umax - c);
   }
 }
 
@@ -34,10 +34,10 @@ constexpr int32_t block_threads = 512;
 
 void internal::int8::vexp_f64(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int32_t umax, uint64_t* vec_expon) {
   vector_exponent_kernel <double, const double* __restrict__, block_threads>
-    <<< N, block_threads, 0, stream >>> (M, A, lda, -umax, vec_expon);
+    <<< N, block_threads, 0, stream >>> (M, A, lda, umax, vec_expon);
 }
 
 void internal::int8::vexp_f32(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, int32_t umax, uint64_t* vec_expon) {
   vector_exponent_kernel <float, const float* __restrict__, block_threads>
-    <<< N, block_threads, 0, stream >>> (M, A, lda, -umax, vec_expon);
+    <<< N, block_threads, 0, stream >>> (M, A, lda, umax, vec_expon);
 }

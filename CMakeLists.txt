@@ -21,8 +21,8 @@ set(CPP_SOURCES
 )
 
 set(CU_SOURCES
-  src_cuda/acc_dequantize.cu
-  src_cuda/fp_asq.cu
+  src_cuda/acc_dequant_complex.cu
+  src_cuda/acc_dequant_real.cu
   src_cuda/fp_exponent.cu
   src_cuda/fp_i8_quantize.cu
   src_cuda/fp_pervec_sum.cu
