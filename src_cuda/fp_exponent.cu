@@ -33,11 +33,9 @@ __global__ void vector_exponent_kernel(int32_t M, real_const_ptr A, int64_t lda,
 constexpr int32_t block_threads = 512;
 
 void internal::int8::vexp_f64(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int32_t umax, uint64_t* vec_expon) {
-  vector_exponent_kernel <double, const double* __restrict__, block_threads>
-    <<< N, block_threads, 0, stream >>> (M, A, lda, umax, vec_expon);
+  vector_exponent_kernel<double, const double* __restrict__, block_threads> <<< N, block_threads, 0, stream >>> (M, A, lda, umax, vec_expon);
 }
 
 void internal::int8::vexp_f32(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, int32_t umax, uint64_t* vec_expon) {
-  vector_exponent_kernel <float, const float* __restrict__, block_threads>
-    <<< N, block_threads, 0, stream >>> (M, A, lda, umax, vec_expon);
+  vector_exponent_kernel<float, const float* __restrict__, block_threads> <<< N, block_threads, 0, stream >>> (M, A, lda, umax, vec_expon);
 }

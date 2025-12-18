@@ -58,15 +58,7 @@ inline void acc_dispatcher(cudaStream_t stream, int64_t N, uint32_t sft_lo, uint
 }
 
 void internal::int8::accumulate_i32tensor(cudaStream_t stream, int64_t N, int32_t sft_lo, int32_t orderX, int32_t alpha, const int32_t* X, int32_t orderA, int32_t beta, uint64_t* A) {
-  if (beta == 1)
-    switch (orderA) {
-      case 1: acc_dispatcher<1, 8, 1>(stream, N, uint32_t(sft_lo), uint32_t(orderX), alpha, X, A); break;
-      case 2: acc_dispatcher<2, 8, 1>(stream, N, uint32_t(sft_lo), uint32_t(orderX), alpha, X, A); break;
-      case 3: acc_dispatcher<3, 8, 1>(stream, N, uint32_t(sft_lo), uint32_t(orderX), alpha, X, A); break;
-      case 4: acc_dispatcher<4, 8, 1>(stream, N, uint32_t(sft_lo), uint32_t(orderX), alpha, X, A); break;
-      default: break;
-    }
-  else
+  if (beta == 0)
     switch (orderA) {
       case 1: acc_dispatcher<1, 8, 0>(stream, N, uint32_t(sft_lo), uint32_t(orderX), alpha, X, A); break;
       case 2: acc_dispatcher<2, 8, 0>(stream, N, uint32_t(sft_lo), uint32_t(orderX), alpha, X, A); break;
@@ -74,23 +66,31 @@ void internal::int8::accumulate_i32tensor(cudaStream_t stream, int64_t N, int32_
       case 4: acc_dispatcher<4, 8, 0>(stream, N, uint32_t(sft_lo), uint32_t(orderX), alpha, X, A); break;
       default: break;
     }
+  else
+    switch (orderA) {
+      case 1: acc_dispatcher<1, 8, 1>(stream, N, uint32_t(sft_lo), uint32_t(orderX), alpha, X, A); break;
+      case 2: acc_dispatcher<2, 8, 1>(stream, N, uint32_t(sft_lo), uint32_t(orderX), alpha, X, A); break;
+      case 3: acc_dispatcher<3, 8, 1>(stream, N, uint32_t(sft_lo), uint32_t(orderX), alpha, X, A); break;
+      case 4: acc_dispatcher<4, 8, 1>(stream, N, uint32_t(sft_lo), uint32_t(orderX), alpha, X, A); break;
+      default: break;
+    }
 }
 
 void internal::int8::accumulate_i32tensor_sft2x(cudaStream_t stream, int64_t N, int32_t orderX, const int32_t* X, int32_t orderA, int32_t beta, uint64_t* A) {
-  if (beta == 1)
-    switch (orderA) {
-      case 1: acc_dispatcher<1, 16, 1>(stream, N, uint32_t(0), uint32_t(orderX), 1, X, A); break;
-      case 2: acc_dispatcher<2, 16, 1>(stream, N, uint32_t(0), uint32_t(orderX), 1, X, A); break;
-      case 3: acc_dispatcher<3, 16, 1>(stream, N, uint32_t(0), uint32_t(orderX), 1, X, A); break;
-      case 4: acc_dispatcher<4, 16, 1>(stream, N, uint32_t(0), uint32_t(orderX), 1, X, A); break;
-      default: break;
-    }
-  else
+  if (beta == 0)
     switch (orderA) {
       case 1: acc_dispatcher<1, 16, 0>(stream, N, uint32_t(0), uint32_t(orderX), 1, X, A); break;
       case 2: acc_dispatcher<2, 16, 0>(stream, N, uint32_t(0), uint32_t(orderX), 1, X, A); break;
       case 3: acc_dispatcher<3, 16, 0>(stream, N, uint32_t(0), uint32_t(orderX), 1, X, A); break;
       case 4: acc_dispatcher<4, 16, 0>(stream, N, uint32_t(0), uint32_t(orderX), 1, X, A); break;
+      default: break;
+    }
+  else
+    switch (orderA) {
+      case 1: acc_dispatcher<1, 16, 1>(stream, N, uint32_t(0), uint32_t(orderX), 1, X, A); break;
+      case 2: acc_dispatcher<2, 16, 1>(stream, N, uint32_t(0), uint32_t(orderX), 1, X, A); break;
+      case 3: acc_dispatcher<3, 16, 1>(stream, N, uint32_t(0), uint32_t(orderX), 1, X, A); break;
+      case 4: acc_dispatcher<4, 16, 1>(stream, N, uint32_t(0), uint32_t(orderX), 1, X, A); break;
       default: break;
     }
 }
