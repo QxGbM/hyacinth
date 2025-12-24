@@ -3,6 +3,16 @@
 #include <internal.hpp>
 #include <int_fp_quantize.hpp>
 
+template <uint32_t ORDER>
+__device__ __forceinline__ void quantize_f64_i8limbs(double x, int32_t expon, int32_t umax, uint32_t (&code)[ORDER]) {
+  device::int8::quantize_f64_u32limbs(x, expon, umax, code);
+  uint32_t c = 0; device::int8::conv_u8i8(code[0], c);
+  if constexpr(1 < ORDER)
+    device::int8::conv_u8i8(code[1], c);
+  if constexpr(2 < ORDER)
+    device::int8::conv_u8i8(code[2], c);
+}
+
 template <uint32_t ORDER, class matrix_t, class matrix_const_ptr, int32_t COMPLEX, int32_t BLOCK_THREADS>
 __global__ void quantize_kernel(int64_t M, int64_t N, matrix_const_ptr A, int64_t lda, int32_t umax, const uint64_t* __restrict__ vec_expon, int8_t* __restrict__ B, int64_t ldb, int64_t strideB) {
   int64_t y = int64_t(blockIdx.x) * int64_t(BLOCK_THREADS) + int64_t(threadIdx.x);
@@ -12,11 +22,12 @@ __global__ void quantize_kernel(int64_t M, int64_t N, matrix_const_ptr A, int64_
     int8_t* B_i = &B[y + x * ldb];
     matrix_t A_i = A[y + x * lda];
 
-    uint32_t code[3]; int8_t* bytes = (int8_t*)&code[0];
+    constexpr uint32_t limbs = (ORDER + uint32_t(3)) >> 2;
+    uint32_t code[limbs]; int8_t* bytes = (int8_t*)&code[0];
     if constexpr(COMPLEX)
-      device::int8::quantize_f64_i8limbs(double(A_i.x), expon, umax, code);
+      quantize_f64_i8limbs(double(A_i.x), expon, umax, code);
     else
-      device::int8::quantize_f64_i8limbs(double(A_i), expon, umax, code);
+      quantize_f64_i8limbs(double(A_i), expon, umax, code);
 
     int64_t iter = 0;
     #pragma unroll
@@ -24,7 +35,7 @@ __global__ void quantize_kernel(int64_t M, int64_t N, matrix_const_ptr A, int64_
     { B_i[iter] = bytes[k]; iter += strideB; }
 
     if constexpr(COMPLEX) {
-      device::int8::quantize_f64_i8limbs(double(A_i.y), expon, umax, code);
+      quantize_f64_i8limbs(double(A_i.y), expon, umax, code);
       #pragma unroll
       for (uint32_t k = 0; k < ORDER; ++k)
       { B_i[iter] = bytes[k]; iter += strideB; }

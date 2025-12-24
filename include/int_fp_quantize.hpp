@@ -7,10 +7,10 @@
 
 namespace device::int8 {
 
-  constexpr uint64_t i63 = 0x7fffffffffffffffllu;
-  constexpr uint64_t u63 = 0x8000000000000000llu;
-  constexpr uint32_t i31 = 0x7fffffffu;
-  constexpr uint32_t u31 = 0x80000000u;
+  const uint64_t i63 = 0x7fffffffffffffffllu;
+  const uint64_t u63 = 0x8000000000000000llu;
+  const uint32_t i31 = 0x7fffffffu;
+  const uint32_t u31 = 0x80000000u;
 
   template<int32_t i>
   __host__ __device__ __forceinline__ uint64_t u64_selector(int32_t x, const uint64_t (&b)[3]) {
@@ -19,10 +19,6 @@ namespace device::int8 {
     uint64_t sel1 = b[1] & -(uint64_t)(x == i1);
     uint64_t sel2 = b[2] & -(uint64_t)(x <= i2);
     return sel0 | sel1 | sel2;
-  }
-
-  __host__ __device__ __forceinline__ uint64_t copy_bit_i63(uint64_t i) {
-    return ((i << 1) & u63) | (i & i63);
   }
 
   template <uint32_t ORDER>
@@ -45,7 +41,7 @@ namespace device::int8 {
     if constexpr(1 < ORDER) a[0] = a[0] & i63;
     if constexpr(2 < ORDER) a[1] = a[1] & i63;
     if constexpr(3 < ORDER) a[2] = a[2] & i63;
-    a[ORDER - 1] = copy_bit_i63(a[ORDER - 1]);
+    a[ORDER - 1] = ((a[ORDER - 1] << 1) & u63) | (a[ORDER - 1] & i63);
   }
 
   template <uint32_t ORDER>
@@ -60,7 +56,7 @@ namespace device::int8 {
     if constexpr(1 < ORDER) a[0] = (~a[0]) & i63;
     if constexpr(2 < ORDER) a[1] = (~a[1]) & i63;
     if constexpr(3 < ORDER) a[2] = (~a[2]) & i63;
-    a[ORDER - 1] = ~copy_bit_i63(a[ORDER - 1]);
+    a[ORDER - 1] = ~(((a[ORDER - 1] << 1) & u63) | (a[ORDER - 1] & i63));
   }
 
   __host__ __device__ __forceinline__ void round_f64(double x, int32_t expon, int64_t& q, int32_t& e) {
@@ -71,6 +67,22 @@ namespace device::int8 {
     q = llrint(scalbn(x, expon - e));
   }
 
+  template <uint32_t ORDER>
+  __host__ __device__ __forceinline__ void quantize_f64_u32limbs(double value, int32_t expon, int32_t umax, uint32_t (&code)[ORDER]) {
+    static_assert(1 <= ORDER && ORDER <= 3, "Quantized Integer order must be in [1,3]");
+
+    uint32_t hi = 63 < umax ? (uint32_t(1) << (umax - 63)) : uint32_t(0);
+    uint64_t lo = umax < 64 ? (uint64_t(1) << umax) : uint64_t(0);
+    int64_t q; round_f64(value, expon, q, expon);
+    lo += (uint64_t(q) << expon) & i63; code[0] = uint32_t(lo);
+
+    if constexpr(1 < ORDER) {
+      hi += uint32_t(q >> (63 - expon)) + uint32_t(lo >> 63);
+      code[1] = (hi << 31) | (uint32_t(lo >> 32) & i31);
+      if constexpr(2 < ORDER) code[2] = hi >> 1;
+    }
+  }
+
   __host__ __device__ __forceinline__ void conv_u8i8(uint32_t& code, uint32_t& carry) {
     uint8_t* b = (uint8_t*)&code;
     uint16_t a = uint16_t(carry) + uint16_t(b[0]);
@@ -78,23 +90,6 @@ namespace device::int8 {
     b[1] = uint8_t(a); a = (a >> 8) + ((a >> 7) & uint16_t(1)) + uint16_t(b[2]);
     b[2] = uint8_t(a); a = (a >> 8) + ((a >> 7) & uint16_t(1)) + uint16_t(b[3]);
     b[3] = uint8_t(a); carry = uint32_t((a >> 8) + ((a >> 7) & uint16_t(1)));
-  }
-
-  __host__ __device__ __forceinline__ void quantize_f64_i8limbs(double value, int32_t expon, int32_t umax, uint32_t (&code)[3]) {
-    int32_t hi = 63 < umax ? (1 << (umax - 63)) : 0;
-    uint64_t lo = umax < 64 ? (uint64_t(1) << umax) : uint64_t(0);
-    int64_t q; round_f64(value, expon, q, expon);
-    lo += (uint64_t(q) << expon) & i63;
-    hi += int32_t(q >> (63 - expon)) + int32_t(lo >> 63);
-
-    code[0] = uint32_t(lo);
-    code[1] = (uint32_t(hi) << 31) | (uint32_t(lo >> 32) & i31);
-    code[2] = uint32_t(hi >> 1);
-
-    uint32_t carry = 0;
-    conv_u8i8(code[0], carry);
-    conv_u8i8(code[1], carry);
-    conv_u8i8(code[2], carry);
   }
 
 };
