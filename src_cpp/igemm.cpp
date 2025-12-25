@@ -100,14 +100,14 @@ void device::MixPrecAHA::igemm_params(double* epi, int32_t N, int32_t* algnN, in
   double epi_f32 = std::sqrt(double(std::numeric_limits<float>::epsilon()));
   double epi_f64 = std::sqrt(std::numeric_limits<double>::epsilon());
   std::pair<Precision, double> f128 = (device == 800 || device == 900 || device == 1000) ? 
-    std::make_pair(device::Precision::FP128_DD, std::numeric_limits<double>::epsilon()) : 
+    std::make_pair(device::Precision::FP128_DD, std::numeric_limits<double>::epsilon()) :
     std::make_pair(device::Precision::FP128_QF, std::pow(double(std::numeric_limits<float>::epsilon()), 2));
 
   double machine_epi = precA == Precision::FP32 ? double(std::numeric_limits<float>::epsilon()) : f128.second;
   *algnN = (N + 63) & (~63);
   *epi = std::min(1., std::max(std::abs(*epi), machine_epi));
   *precC = epi_f32 <= *epi ? Precision::FP32 : (epi_f64 <= *epi ? Precision::FP64 : f128.first);
-  *umax += int32_t(std::ceil(-std::log2(*epi)));
+  *umax = ((*umax + int32_t(std::ceil(-std::log2(*epi))) + 9) & (~7)) - 2;
 }
 
 inline std::tuple<int32_t, int32_t, int32_t, int64_t, int64_t, int64_t, int64_t> i8gemm_ext_params(int32_t M, int32_t N, int32_t algnN, int32_t umax, int32_t Complex, device::Precision prec) {

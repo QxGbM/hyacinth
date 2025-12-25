@@ -71,13 +71,12 @@ namespace device::int8 {
   __host__ __device__ __forceinline__ void quantize_f64_u32limbs(double value, int32_t expon, int32_t umax, uint32_t (&code)[ORDER]) {
     static_assert(1 <= ORDER && ORDER <= 3, "Quantized Integer order must be in [1,3]");
 
-    uint32_t hi = 63 < umax ? (uint32_t(1) << (umax - 63)) : uint32_t(0);
-    uint64_t lo = umax < 64 ? (uint64_t(1) << umax) : uint64_t(0);
     int64_t q; round_f64(value, expon, q, expon);
-    lo += (uint64_t(q) << expon) & i63; code[0] = uint32_t(lo);
+    uint64_t lo = ((-uint64_t(umax < 64)) & (uint64_t(1) << umax)) + ((uint64_t(q) << expon) & i63);
+    code[0] = uint32_t(lo);
 
     if constexpr(1 < ORDER) {
-      hi += uint32_t(q >> (63 - expon)) + uint32_t(lo >> 63);
+      uint32_t hi = ((-uint32_t(63 < umax)) & (uint32_t(1) << (umax - 63))) + uint32_t(q >> (63 - expon)) + uint32_t(lo >> 63);
       code[1] = (hi << 31) | (uint32_t(lo >> 32) & i31);
       if constexpr(2 < ORDER) code[2] = hi >> 1;
     }
