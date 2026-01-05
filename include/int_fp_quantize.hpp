@@ -25,11 +25,10 @@ namespace device::int8 {
   __host__ __device__ __forceinline__ void add_shifted(uint64_t (&a)[ORDER], int64_t i, uint32_t expon) {
     static_assert(1 <= ORDER && ORDER <= 4, "Integer 64 accumulation order must be in [1,4]");
 
-    constexpr uint32_t m_num = uint32_t((uint64_t(1) << 32) / uint64_t(63));
 #ifdef __CUDA_ARCH__
-    uint32_t quo = __umulhi(expon, m_num);
+    uint32_t quo = __umulhi(expon, 0x82082082) >> 5;
 #else
-    uint32_t quo = (uint64_t(expon) * uint64_t(m_num)) >> 32;
+    uint32_t quo = uint32_t((uint64_t(expon) * 0x82082082llu) >> 37);
 #endif
     uint32_t rem = expon - quo * uint32_t(63);
     uint64_t b[3]{ (uint64_t(i) << rem) & i63, uint64_t(i >> (63 - rem)) & i63, -(uint64_t(i) >> 63) & i63 };
@@ -93,16 +92,24 @@ namespace device::int8 {
 
   template<uint16_t DIV>
   __host__ __device__ __forceinline__ uint32_t fast_rem_u32(uint32_t x) {
-    constexpr uint32_t m_num = DIV ? uint32_t(0x100000000llu / uint64_t(DIV)) : uint32_t(0);
+    constexpr uint32_t m_num = DIV ? uint32_t((0x800000000000llu / uint64_t(DIV))) : uint32_t(0);
 #ifdef __CUDA_ARCH__
-    return x - __umulhi(x, m_num) * uint32_t(DIV);
+    return x - (__umulhi(x, m_num) >> 15) * uint32_t(DIV);
 #else
-    return x - uint32_t((uint64_t(x) * uint64_t(m_num)) >> 32) * uint32_t(DIV);
+    return x - uint32_t((uint64_t(x) * uint64_t(m_num)) >> 47) * uint32_t(DIV);
+#endif
+  }
+
+  __host__ __device__ __forceinline__ uint32_t fast_rem_u32_255(uint32_t x) {
+#ifdef __CUDA_ARCH__
+    return x - (__umulhi(x, 0x80808080) >> 7) * uint32_t(255);
+#else
+    return x - uint32_t((uint64_t(x) * 0x80808080llu) >> 39) * uint32_t(255);
 #endif
   }
 
   __host__ __device__ __forceinline__ uint32_t conv_u16i8r(uint32_t x) {
-    uint32_t r255 = fast_rem_u32<255>(x);
+    uint32_t r255 = fast_rem_u32_255(x);
     return (x & uint32_t(255)) | ((r255 + (r255 >> 7)) << 8);
   }
 
@@ -144,10 +151,10 @@ namespace device::int8 {
     rem[2] = (uint32_t(r[5]) >> 16) + uint32_t(uint16_t(r[5])) + ((-uint32_t(r[5] < 0)) & uint32_t(254));
     rem[3] = (uint32_t(r[7]) >> 16) + uint32_t(uint16_t(r[7])) + ((-uint32_t(r[7] < 0)) & uint32_t(254));
 
-    rem[0] = (uint32_t(uint8_t(-uint32_t(r[0]))) * uint32_t(255)) + (fast_rem_u32<255>(rem[0]) << 8);
-    rem[1] = (uint32_t(uint8_t(-uint32_t(r[2]))) * uint32_t(255)) + (fast_rem_u32<255>(rem[1]) << 8);
-    rem[2] = (uint32_t(uint8_t(-uint32_t(r[4]))) * uint32_t(255)) + (fast_rem_u32<255>(rem[2]) << 8);
-    rem[3] = (uint32_t(uint8_t(-uint32_t(r[6]))) * uint32_t(255)) + (fast_rem_u32<255>(rem[3]) << 8);
+    rem[0] = (uint32_t(uint8_t(-uint32_t(r[0]))) * uint32_t(255)) + (fast_rem_u32_255(rem[0]) << 8);
+    rem[1] = (uint32_t(uint8_t(-uint32_t(r[2]))) * uint32_t(255)) + (fast_rem_u32_255(rem[1]) << 8);
+    rem[2] = (uint32_t(uint8_t(-uint32_t(r[4]))) * uint32_t(255)) + (fast_rem_u32_255(rem[2]) << 8);
+    rem[3] = (uint32_t(uint8_t(-uint32_t(r[6]))) * uint32_t(255)) + (fast_rem_u32_255(rem[3]) << 8);
 
     rem[0] += (-uint32_t(uint32_t(65280) < rem[0])) & uint32_t(-65280);
     rem[1] += (-uint32_t(uint32_t(65280) < rem[1])) & uint32_t(-65280);

@@ -30,6 +30,7 @@ set(CU_SOURCES
   src_cuda/gemv_pp.cu
   src_cuda/gemv_scal_f128.cu
   src_cuda/i32_accum.cu
+  src_cuda/i32_rem_accum.cu
   src_cuda/imax_diag.cu
   src_cuda/utils.cu
 )
