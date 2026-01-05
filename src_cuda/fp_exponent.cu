@@ -25,8 +25,8 @@ __global__ void vector_exponent_kernel(int32_t M, real_const_ptr A, int64_t lda,
     threadB = block_reduce.Reduce(threadB, amax_func);
 
   if (threadIdx.x == 0) {
-    int32_t e, c = int32_t(frexp(threadB, &e) == 0.5);
-    vec_expon[blockIdx.x] = uint32_t(e - umax - c);
+    int32_t e; frexp(threadB, &e);
+    vec_expon[blockIdx.x] = uint32_t(e - umax);
   }
 }
 

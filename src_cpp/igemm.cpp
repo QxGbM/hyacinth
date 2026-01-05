@@ -139,17 +139,16 @@ void device::MixPrecAHA::rATA(cudaStream_t stream, cublasHandle_t handle, int32_
   int8_t* iA = (int8_t*)(C), *workspace = &iA[i8_bytes];
   int8_t* acc = &workspace[scratch_bytes], *v_exp = &acc[acc_bytes];
   cudaMemsetAsync(iA, 0, i8_bytes, stream);
-  cudaMemsetAsync(v_exp, 0, vec_bytes, stream);
 
   if (precA == Precision::FP64) {
     internal::int8::vexp_f64(stream, M, N, (const double*)A, lda, umax, (uint64_t*)v_exp);
-    internal::int8::quantize_f64(stream, orderA, M, N, (const double*)A, lda, umax, (uint64_t*)v_exp, iA, algnM);
     internal::int8::vsum_f64(stream, M, N, (const double*)A, lda, (uint64_t*)v_exp, algnN);
+    internal::int8::quantize_f64(stream, orderA, M, N, (const double*)A, lda, umax, (uint64_t*)v_exp, iA, algnM);
   }
   else if (precA == Precision::FP32) {
     internal::int8::vexp_f32(stream, M, N, (const float*)A, lda, umax, (uint64_t*)v_exp);
-    internal::int8::quantize_f32(stream, orderA, M, N, (const float*)A, lda, umax, (uint64_t*)v_exp, iA, algnM);
     internal::int8::vsum_f32(stream, M, N, (const float*)A, lda, (uint64_t*)v_exp, algnN);
+    internal::int8::quantize_f32(stream, orderA, M, N, (const float*)A, lda, umax, (uint64_t*)v_exp, iA, algnM);
   }
 
   i8gemmt(stream, handle, N, algnN, algnM, iA, orderA, 0, (uint64_t*)acc, orderC, (int32_t*)workspace);
@@ -172,17 +171,16 @@ void device::MixPrecAHA::cAHA(cudaStream_t stream, cublasHandle_t handle, int32_
   int8_t* acc = &workspace[scratch_bytes], *v_exp = &acc[acc_bytes + acc_bytes];
   int8_t* iA_imag = &iA[i8_bytes], *acc_imag = &acc[acc_bytes];
   cudaMemsetAsync(iA, 0, i8_bytes + i8_bytes, stream);
-  cudaMemsetAsync(v_exp, 0, vec_bytes, stream);
 
   if (precA == Precision::FP64) {
     internal::int8::vexp_f64(stream, 2 * M, N, (const double*)A, 2 * lda, umax, (uint64_t*)v_exp);
-    internal::int8::quantize_cf64(stream, orderA, M, N, (const std::complex<double>*)A, lda, umax, (uint64_t*)v_exp, iA, algnM);
     internal::int8::vsum_cf64(stream, M, N, (const std::complex<double>*)A, lda, (uint64_t*)v_exp, algnN);
+    internal::int8::quantize_cf64(stream, orderA, M, N, (const std::complex<double>*)A, lda, umax, (uint64_t*)v_exp, iA, algnM);
   }
   else if (precA == Precision::FP32) {
     internal::int8::vexp_f32(stream, 2 * M, N, (const float*)A, 2 * lda, umax, (uint64_t*)v_exp);
-    internal::int8::quantize_cf32(stream, orderA, M, N, (const std::complex<float>*)A, lda, umax, (uint64_t*)v_exp, iA, algnM);
     internal::int8::vsum_cf32(stream, M, N, (const std::complex<float>*)A, lda, (uint64_t*)v_exp, algnN);
+    internal::int8::quantize_cf32(stream, orderA, M, N, (const std::complex<float>*)A, lda, umax, (uint64_t*)v_exp, iA, algnM);
   }
 
   i8gemmt(stream, handle, N, algnN, algnM, iA, orderA, 0, (uint64_t*)acc, orderC, (int32_t*)workspace);

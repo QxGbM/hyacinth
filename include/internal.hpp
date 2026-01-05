@@ -119,6 +119,8 @@ namespace internal::int8 {
 
   void dequantize_cf128_qf(cudaStream_t stream, int32_t orderA, int32_t M, int32_t N, const uint64_t* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, int32_t incv, complex_float4* B, int32_t ldb);
 
+  void normalize_remainder_i32tensor(cudaStream_t stream, int64_t N, int32_t* X, int32_t nbatch);
+
 };
 
 namespace internal::InterpolativeDecomposition {
