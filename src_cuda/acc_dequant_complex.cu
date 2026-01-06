@@ -14,9 +14,9 @@ template<uint32_t ORDER> __device__ __forceinline__ void cscal(uint64_t (&rl)[OR
 template<uint32_t ORDER> __device__ __forceinline__ void cscal(uint64_t (&rl)[ORDER], uint64_t (&im)[ORDER], int32_t e, complex_float4& f) {
   f = device::qf::make_complex_float4(device::qf::conv_a63_qf(rl, e - 1), device::qf::conv_a63_qf(im, e)); }
 
-template<uint32_t orderA, class complex_t, int32_t BLOCK_THREADS>
+template<uint32_t orderA, class complex_t>
 __global__ void dequantize_complex_kernel(int64_t M, int64_t N, const uint64_t* __restrict__ A, int64_t lda, int64_t strideA, int32_t umax, const int64_t* __restrict__ vec_expon, int64_t incv, complex_t* __restrict__ B, int64_t ldb) {
-  int64_t y = int64_t(blockIdx.x) * int64_t(BLOCK_THREADS) + int64_t(threadIdx.x);
+  int64_t y = int64_t(blockIdx.x) * int64_t(blockDim.x) + int64_t(threadIdx.x);
 
   if (y < N) {
     int64_t x = int64_t(blockIdx.y), iter = x + y * lda;
@@ -64,10 +64,10 @@ inline void dequantize_dispatcher(cudaStream_t stream, int32_t orderA, int64_t M
   dim3 grid((uint32_t(N) + uint32_t(block_threads - 1)) / uint32_t(block_threads), uint32_t(N));
 
   switch (orderA) {
-    case 1: dequantize_complex_kernel<1, complex_t, block_threads> <<< grid, block_threads, 0, stream >>> (-M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
-    case 2: dequantize_complex_kernel<2, complex_t, block_threads> <<< grid, block_threads, 0, stream >>> (-M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
-    case 3: dequantize_complex_kernel<3, complex_t, block_threads> <<< grid, block_threads, 0, stream >>> (-M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
-    case 4: dequantize_complex_kernel<4, complex_t, block_threads> <<< grid, block_threads, 0, stream >>> (-M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
+    case 1: dequantize_complex_kernel<1, complex_t> <<< grid, block_threads, 0, stream >>> (-M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
+    case 2: dequantize_complex_kernel<2, complex_t> <<< grid, block_threads, 0, stream >>> (-M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
+    case 3: dequantize_complex_kernel<3, complex_t> <<< grid, block_threads, 0, stream >>> (-M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
+    case 4: dequantize_complex_kernel<4, complex_t> <<< grid, block_threads, 0, stream >>> (-M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
     default: break;
   }
 }

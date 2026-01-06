@@ -11,7 +11,7 @@ __global__ void i32_remainder_normalize_kernel(int64_t N, int32_t* __restrict__ 
   if (i < N) {
     i += N * int64_t(blockIdx.y);
     if (int32_t(blockIdx.y) & 1) 
-    { int32_t r255 = X[i]; X[i] = int32_t(device::int8::fast_rem_u32<255>(uint32_t(r255))) - int32_t(r255 < 0); }
+    { int32_t r255 = X[i]; X[i] = int32_t(device::int8::fast_rem_u32_255(uint32_t(r255))) - int32_t(r255 < 0); }
     else
       X[i] = int32_t(uint8_t(X[i]));
   }
@@ -75,16 +75,16 @@ void internal::int8::normalize_remainder_i32tensor(cudaStream_t stream, int64_t 
   i32_remainder_normalize_kernel <<< grid, block_threads, 0, stream >>> (N, X);
 }
 
-template <int32_t n_moduli, int32_t mo_iter>
+template <int32_t n_moduli, int32_t iter>
 inline void crt_acc_dispatcher(cudaStream_t stream, int32_t option, int64_t N, const int32_t* X, uint64_t* A) {
-  constexpr int32_t orderM = CRT::active_moduli(n_moduli, mo_iter);
+  constexpr int32_t orderM = CRT::active_moduli(n_moduli, iter);
 
   if constexpr(0 < orderM) {
     constexpr int32_t orderA = CRT::order_p(n_moduli), orderPD = CRT::order_pd(n_moduli);
-    constexpr uint64_t MO = CRT::modular(mo_iter), MINV = CRT::modular_inv(n_moduli, mo_iter);
+    constexpr uint64_t MO = CRT::modular(iter), MINV = CRT::modular_inv(n_moduli, iter);
 
     constexpr int32_t pd_len = orderM * orderPD;
-    i32_array<pd_len> pd; std::copy_n(CRT::p_div(n_moduli, mo_iter), pd_len, &pd.arr[0]);
+    i32_array<pd_len> pd; std::copy_n(CRT::p_div(n_moduli, iter), pd_len, &pd.arr[0]);
     int32_t grid = int32_t((N + int64_t(block_threads - 1)) / int64_t(block_threads));
 
     if (option & 2) {
@@ -105,28 +105,28 @@ inline void crt_acc_dispatcher(cudaStream_t stream, int32_t option, int64_t N, c
   }
 }
 
-template <int32_t mo_iter>
+template <int32_t iter>
 inline void crt_acc_dispatcher(cudaStream_t stream, int32_t option, int64_t N, int32_t n_moduli, const int32_t* X, uint64_t* A) {
   switch (n_moduli) {
-    case 2: crt_acc_dispatcher<2, mo_iter>(stream, option, N, X, A); break;
-    case 3: crt_acc_dispatcher<3, mo_iter>(stream, option, N, X, A); break;
-    case 4: crt_acc_dispatcher<4, mo_iter>(stream, option, N, X, A); break;
-    case 5: crt_acc_dispatcher<5, mo_iter>(stream, option, N, X, A); break;
-    case 6: crt_acc_dispatcher<6, mo_iter>(stream, option, N, X, A); break;
-    case 7: crt_acc_dispatcher<7, mo_iter>(stream, option, N, X, A); break;
-    case 8: crt_acc_dispatcher<8, mo_iter>(stream, option, N, X, A); break;
-    case 9: crt_acc_dispatcher<9, mo_iter>(stream, option, N, X, A); break;
-    case 10: crt_acc_dispatcher<10, mo_iter>(stream, option, N, X, A); break;
-    case 11: crt_acc_dispatcher<11, mo_iter>(stream, option, N, X, A); break;
-    case 12: crt_acc_dispatcher<12, mo_iter>(stream, option, N, X, A); break;
-    case 13: crt_acc_dispatcher<13, mo_iter>(stream, option, N, X, A); break;
-    case 14: crt_acc_dispatcher<14, mo_iter>(stream, option, N, X, A); break;
+    case 2: crt_acc_dispatcher<2, iter>(stream, option, N, X, A); break;
+    case 3: crt_acc_dispatcher<3, iter>(stream, option, N, X, A); break;
+    case 4: crt_acc_dispatcher<4, iter>(stream, option, N, X, A); break;
+    case 5: crt_acc_dispatcher<5, iter>(stream, option, N, X, A); break;
+    case 6: crt_acc_dispatcher<6, iter>(stream, option, N, X, A); break;
+    case 7: crt_acc_dispatcher<7, iter>(stream, option, N, X, A); break;
+    case 8: crt_acc_dispatcher<8, iter>(stream, option, N, X, A); break;
+    case 9: crt_acc_dispatcher<9, iter>(stream, option, N, X, A); break;
+    case 10: crt_acc_dispatcher<10, iter>(stream, option, N, X, A); break;
+    case 11: crt_acc_dispatcher<11, iter>(stream, option, N, X, A); break;
+    case 12: crt_acc_dispatcher<12, iter>(stream, option, N, X, A); break;
+    case 13: crt_acc_dispatcher<13, iter>(stream, option, N, X, A); break;
+    case 14: crt_acc_dispatcher<14, iter>(stream, option, N, X, A); break;
     default: break;
   }
 }
 
-void internal::int8::accumulate_remainder_i32tensor(cudaStream_t stream, int32_t option, int64_t N, int32_t n_moduli, int32_t mo_iter, const int32_t* X, uint64_t* A) {
-  switch (mo_iter) {
+void internal::int8::accumulate_remainder_i32tensor(cudaStream_t stream, int32_t option, int64_t N, int32_t n_moduli, int32_t iter, const int32_t* X, uint64_t* A) {
+  switch (iter) {
     case 0: crt_acc_dispatcher<0>(stream, option, N, n_moduli, X, A); break;
     case 1: crt_acc_dispatcher<1>(stream, option, N, n_moduli, X, A); break;
     case 2: crt_acc_dispatcher<2>(stream, option, N, n_moduli, X, A); break;

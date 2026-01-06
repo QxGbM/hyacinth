@@ -127,10 +127,10 @@ namespace device::int8 {
       r65[3] = fast_rem_u32<m3>(r65[3]) + fast_rem_u32<m3>(code[1]) * uint32_t(r3);
 
       if constexpr(2 < ORDER) {
-        constexpr uint32_t R0 = (uint32_t(r0) * uint32_t(r0)) % uint32_t(m0);
-        constexpr uint32_t R1 = (uint32_t(r1) * uint32_t(r1)) % uint32_t(m1);
-        constexpr uint32_t R2 = (uint32_t(r2) * uint32_t(r2)) % uint32_t(m2);
-        constexpr uint32_t R3 = (uint32_t(r3) * uint32_t(r3)) % uint32_t(m3);
+        constexpr uint32_t R0 = (uint32_t(r0) * uint32_t(r0)) % (m0 ? uint32_t(m0) : uint32_t(1));
+        constexpr uint32_t R1 = (uint32_t(r1) * uint32_t(r1)) % (m1 ? uint32_t(m1) : uint32_t(1));
+        constexpr uint32_t R2 = (uint32_t(r2) * uint32_t(r2)) % (m2 ? uint32_t(m2) : uint32_t(1));
+        constexpr uint32_t R3 = (uint32_t(r3) * uint32_t(r3)) % (m3 ? uint32_t(m3) : uint32_t(1));
         r65[0] = fast_rem_u32<m0>(r65[0]) + fast_rem_u32<m0>(code[2]) * R0;
         r65[1] = fast_rem_u32<m1>(r65[1]) + fast_rem_u32<m1>(code[2]) * R1;
         r65[2] = fast_rem_u32<m2>(r65[2]) + fast_rem_u32<m2>(code[2]) * R2;

@@ -2,12 +2,12 @@
 #include <crt_constants.hpp>
 
 namespace CRT {
-  constexpr uint64_t modular(int32_t iter) { return iter < 4 ? Common::mo[iter] : uint64_t(0); }
-  constexpr uint64_t rem_e32(int32_t iter) { return iter < 4 ? Common::rem_e32[iter] : uint64_t(0); }
+  constexpr uint64_t modular(int32_t iter) { return 0 <= iter && iter < 4 ? Common::mo[iter] : uint64_t(0); }
+  constexpr uint64_t rem_e32(int32_t iter) { return 0 <= iter && iter < 4 ? Common::rem_e32[iter] : uint64_t(0); }
 
   constexpr int32_t active_moduli(int32_t n_moduli, int32_t iter) {
     n_moduli = n_moduli - (iter * 4);
-    return 4 < n_moduli ? 4 : n_moduli;
+    return 4 < n_moduli ? 4 : (n_moduli < 0 ? 0 : n_moduli);
   }
 
   constexpr int32_t order_p(int32_t n_moduli) {
@@ -50,19 +50,19 @@ namespace CRT {
 
   constexpr uint64_t modular_inv(int32_t n_moduli, int32_t iter) {
     switch(n_moduli) {
-      case 2: return iter < 1 ? Moduli2::minv[iter] : uint64_t(0);
-      case 3: return iter < 1 ? Moduli3::minv[iter] : uint64_t(0);
-      case 4: return iter < 1 ? Moduli4::minv[iter] : uint64_t(0);
-      case 5: return iter < 2 ? Moduli5::minv[iter] : uint64_t(0);
-      case 6: return iter < 2 ? Moduli6::minv[iter] : uint64_t(0);
-      case 7: return iter < 2 ? Moduli7::minv[iter] : uint64_t(0);
-      case 8: return iter < 2 ? Moduli8::minv[iter] : uint64_t(0);
-      case 9: return iter < 3 ? Moduli9::minv[iter] : uint64_t(0);
-      case 10: return iter < 3 ? Moduli10::minv[iter] : uint64_t(0);
-      case 11: return iter < 3 ? Moduli11::minv[iter] : uint64_t(0);
-      case 12: return iter < 3 ? Moduli12::minv[iter] : uint64_t(0);
-      case 13: return iter < 4 ? Moduli13::minv[iter] : uint64_t(0);
-      case 14: return iter < 4 ? Moduli14::minv[iter] : uint64_t(0);
+      case 2: return 0 <= iter && iter < 1 ? Moduli2::minv[iter] : uint64_t(0);
+      case 3: return 0 <= iter && iter < 1 ? Moduli3::minv[iter] : uint64_t(0);
+      case 4: return 0 <= iter && iter < 1 ? Moduli4::minv[iter] : uint64_t(0);
+      case 5: return 0 <= iter && iter < 2 ? Moduli5::minv[iter] : uint64_t(0);
+      case 6: return 0 <= iter && iter < 2 ? Moduli6::minv[iter] : uint64_t(0);
+      case 7: return 0 <= iter && iter < 2 ? Moduli7::minv[iter] : uint64_t(0);
+      case 8: return 0 <= iter && iter < 2 ? Moduli8::minv[iter] : uint64_t(0);
+      case 9: return 0 <= iter && iter < 3 ? Moduli9::minv[iter] : uint64_t(0);
+      case 10: return 0 <= iter && iter < 3 ? Moduli10::minv[iter] : uint64_t(0);
+      case 11: return 0 <= iter && iter < 3 ? Moduli11::minv[iter] : uint64_t(0);
+      case 12: return 0 <= iter && iter < 3 ? Moduli12::minv[iter] : uint64_t(0);
+      case 13: return 0 <= iter && iter < 4 ? Moduli13::minv[iter] : uint64_t(0);
+      case 14: return 0 <= iter && iter < 4 ? Moduli14::minv[iter] : uint64_t(0);
       default: return uint64_t(0);
     }
   }
@@ -88,19 +88,19 @@ namespace CRT {
 
   constexpr uint64_t domain_p(int32_t n_moduli, int32_t iter) {
     switch(n_moduli) {
-      case 2: return iter < 1 ? Moduli2::p[iter] : uint64_t(0);
-      case 3: return iter < 1 ? Moduli3::p[iter] : uint64_t(0);
-      case 4: return iter < 1 ? Moduli4::p[iter] : uint64_t(0);
-      case 5: return iter < 2 ? Moduli5::p[iter] : uint64_t(0);
-      case 6: return iter < 2 ? Moduli6::p[iter] : uint64_t(0);
-      case 7: return iter < 2 ? Moduli7::p[iter] : uint64_t(0);
-      case 8: return iter < 2 ? Moduli8::p[iter] : uint64_t(0);
-      case 9: return iter < 3 ? Moduli9::p[iter] : uint64_t(0);
-      case 10: return iter < 3 ? Moduli10::p[iter] : uint64_t(0);
-      case 11: return iter < 3 ? Moduli11::p[iter] : uint64_t(0);
-      case 12: return iter < 3 ? Moduli12::p[iter] : uint64_t(0);
-      case 13: return iter < 4 ? Moduli13::p[iter] : uint64_t(0);
-      case 14: return iter < 4 ? Moduli14::p[iter] : uint64_t(0);
+      case 2: return 0 <= iter && iter < 1 ? Moduli2::p[iter] : uint64_t(0);
+      case 3: return 0 <= iter && iter < 1 ? Moduli3::p[iter] : uint64_t(0);
+      case 4: return 0 <= iter && iter < 1 ? Moduli4::p[iter] : uint64_t(0);
+      case 5: return 0 <= iter && iter < 2 ? Moduli5::p[iter] : uint64_t(0);
+      case 6: return 0 <= iter && iter < 2 ? Moduli6::p[iter] : uint64_t(0);
+      case 7: return 0 <= iter && iter < 2 ? Moduli7::p[iter] : uint64_t(0);
+      case 8: return 0 <= iter && iter < 2 ? Moduli8::p[iter] : uint64_t(0);
+      case 9: return 0 <= iter && iter < 3 ? Moduli9::p[iter] : uint64_t(0);
+      case 10: return 0 <= iter && iter < 3 ? Moduli10::p[iter] : uint64_t(0);
+      case 11: return 0 <= iter && iter < 3 ? Moduli11::p[iter] : uint64_t(0);
+      case 12: return 0 <= iter && iter < 3 ? Moduli12::p[iter] : uint64_t(0);
+      case 13: return 0 <= iter && iter < 4 ? Moduli13::p[iter] : uint64_t(0);
+      case 14: return 0 <= iter && iter < 4 ? Moduli14::p[iter] : uint64_t(0);
       default: return uint64_t(0);
     }
   }

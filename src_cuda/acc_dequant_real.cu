@@ -9,9 +9,9 @@ template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t (&a)[ORD
 template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t (&a)[ORDER], int32_t e, double2& f) { f = device::dd::conv_a63_dd(a, e - 1); }
 template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t (&a)[ORDER], int32_t e, float4& f) { f = device::qf::conv_a63_qf(a, e - 1); }
 
-template<uint32_t orderA, class real_t, int32_t BLOCK_THREADS>
+template<uint32_t orderA, class real_t>
 __global__ void dequantize_kernel(int64_t M, int64_t N, const uint64_t* __restrict__ A, int64_t lda, int64_t strideA, int32_t umax, const int64_t* __restrict__ vec_expon, int64_t incv, real_t* __restrict__ B, int64_t ldb) {
-  int64_t y = int64_t(blockIdx.x) * int64_t(BLOCK_THREADS) + int64_t(threadIdx.x);
+  int64_t y = int64_t(blockIdx.x) * int64_t(blockDim.x) + int64_t(threadIdx.x);
 
   if (y < N) {
     int64_t x = int64_t(blockIdx.y), iter = x + y * lda;
@@ -44,10 +44,10 @@ inline void dequantize_dispatcher(cudaStream_t stream, int32_t orderA, int64_t M
   dim3 grid((uint32_t(N) + uint32_t(block_threads - 1)) / uint32_t(block_threads), uint32_t(N));
 
   switch (orderA) {
-    case 1: dequantize_kernel<1, real_t, block_threads> <<< grid, block_threads, 0, stream >>> (-M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
-    case 2: dequantize_kernel<2, real_t, block_threads> <<< grid, block_threads, 0, stream >>> (-M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
-    case 3: dequantize_kernel<3, real_t, block_threads> <<< grid, block_threads, 0, stream >>> (-M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
-    case 4: dequantize_kernel<4, real_t, block_threads> <<< grid, block_threads, 0, stream >>> (-M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
+    case 1: dequantize_kernel<1, real_t> <<< grid, block_threads, 0, stream >>> (-M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
+    case 2: dequantize_kernel<2, real_t> <<< grid, block_threads, 0, stream >>> (-M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
+    case 3: dequantize_kernel<3, real_t> <<< grid, block_threads, 0, stream >>> (-M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
+    case 4: dequantize_kernel<4, real_t> <<< grid, block_threads, 0, stream >>> (-M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
     default: break;
   }
 }
