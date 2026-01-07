@@ -2,7 +2,6 @@
 #include <crt_constants.hpp>
 
 namespace CRT {
-  constexpr int32_t n_moduli(int32_t bits) { int32_t a = 1 + (bits >> 4); return a < 2 ? 2 : (14 < a ? 14 : a); }
   constexpr uint64_t modular(int32_t iter) { return 0 <= iter && iter < 4 ? Common::mo[iter] : uint64_t(0); }
   constexpr uint64_t rem_e32(int32_t iter) { return 0 <= iter && iter < 4 ? Common::rem_e32[iter] : uint64_t(0); }
 

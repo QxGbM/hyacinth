@@ -12,7 +12,8 @@ find_package(CUDAToolkit REQUIRED)
 set(CPP_SOURCES
   src_cpp/gemv_cublas.cpp
   src_cpp/geqp3.cpp
-  src_cpp/igemm_cublas.cpp
+  src_cpp/igemm_crt.cpp
+  src_cpp/igemm_limbs.cpp
   src_cpp/igemm.cpp
   src_cpp/imax_host.cpp
   src_cpp/interp_decomp.cpp

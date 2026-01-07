@@ -58,27 +58,21 @@ namespace device::int8 {
     a[ORDER - 1] = ~(((a[ORDER - 1] << 1) & u63) | (a[ORDER - 1] & i63));
   }
 
-  __host__ __device__ __forceinline__ void round_f64(double x, int32_t expon, int64_t& q, int32_t& e) {
+  __host__ __device__ __forceinline__ int64_t round_f64(double x, int32_t expon, int32_t& e) {
 #ifndef __CUDA_ARCH__
     using std::ilogb, std::max, std::scalbn, std::llrint;
 #endif
     e = max(ilogb(x) + expon - 62, 0);
-    q = llrint(scalbn(x, expon - e));
+    return llrint(scalbn(x, expon - e));
   }
 
-  template <uint32_t ORDER>
-  __host__ __device__ __forceinline__ void quantize_f64_u32limbs(double value, int32_t expon, int32_t umax, uint32_t (&code)[ORDER]) {
-    static_assert(1 <= ORDER && ORDER <= 3, "Quantized Integer order must be in [1,3]");
-
-    int64_t q; round_f64(value, expon, q, expon);
+  __host__ __device__ __forceinline__ void quantize_f64_u32limbs(double value, int32_t expon, int32_t umax, uint32_t (&code)[3]) {
+    int64_t q = round_f64(value, expon, expon);
     uint64_t lo = ((-uint64_t(umax < 64)) & (uint64_t(1) << umax)) + ((uint64_t(q) << expon) & i63);
     code[0] = uint32_t(lo);
 
-    if constexpr(1 < ORDER) {
-      uint32_t hi = ((-uint32_t(63 < umax)) & (uint32_t(1) << (umax - 63))) + uint32_t(q >> (63 - expon)) + uint32_t(lo >> 63);
-      code[1] = (hi << 31) | (uint32_t(lo >> 32) & i31);
-      if constexpr(2 < ORDER) code[2] = hi >> 1;
-    }
+    uint32_t hi = ((-uint32_t(63 < umax)) & (uint32_t(1) << (umax - 63))) + uint32_t(q >> (63 - expon)) + uint32_t(lo >> 63);
+    code[1] = (hi << 31) | (uint32_t(lo >> 32) & i31); code[2] = hi >> 1;
   }
 
   __host__ __device__ __forceinline__ void conv_u8i8(uint32_t& code, uint32_t& carry) {
@@ -113,30 +107,25 @@ namespace device::int8 {
     return (x & uint32_t(255)) | ((r255 + (r255 >> 7)) << 8);
   }
 
-  template<uint64_t MO, uint64_t R32, uint32_t ORDER>
-  __host__ __device__ __forceinline__ uint64_t conv_u32i8_modular(const uint32_t (&code)[ORDER]) {
-    static_assert(1 <= ORDER && ORDER <= 3, "Quantized Integer order must be in [1,3]");
+  template<uint64_t MO, uint64_t R32>
+  __host__ __device__ __forceinline__ uint64_t conv_u32i8_modular(const uint32_t (&code)[3]) {
     constexpr uint16_t m0 = uint16_t(MO), m1 = uint16_t(MO >> 16), m2 = uint16_t(MO >> 32), m3 = uint16_t(MO >> 48);
-
     uint32_t r65[4] = { code[0], code[0], code[0], code[0] };
-    if constexpr(1 < ORDER) {
-      constexpr uint16_t r0 = uint16_t(R32), r1 = uint16_t(R32 >> 16), r2 = uint16_t(R32 >> 32), r3 = uint16_t(R32 >> 48);
-      r65[0] = fast_rem_u32<m0>(r65[0]) + fast_rem_u32<m0>(code[1]) * uint32_t(r0);
-      r65[1] = fast_rem_u32<m1>(r65[1]) + fast_rem_u32<m1>(code[1]) * uint32_t(r1);
-      r65[2] = fast_rem_u32<m2>(r65[2]) + fast_rem_u32<m2>(code[1]) * uint32_t(r2);
-      r65[3] = fast_rem_u32<m3>(r65[3]) + fast_rem_u32<m3>(code[1]) * uint32_t(r3);
 
-      if constexpr(2 < ORDER) {
-        constexpr uint32_t R0 = (uint32_t(r0) * uint32_t(r0)) % (m0 ? uint32_t(m0) : uint32_t(1));
-        constexpr uint32_t R1 = (uint32_t(r1) * uint32_t(r1)) % (m1 ? uint32_t(m1) : uint32_t(1));
-        constexpr uint32_t R2 = (uint32_t(r2) * uint32_t(r2)) % (m2 ? uint32_t(m2) : uint32_t(1));
-        constexpr uint32_t R3 = (uint32_t(r3) * uint32_t(r3)) % (m3 ? uint32_t(m3) : uint32_t(1));
-        r65[0] = fast_rem_u32<m0>(r65[0]) + fast_rem_u32<m0>(code[2]) * R0;
-        r65[1] = fast_rem_u32<m1>(r65[1]) + fast_rem_u32<m1>(code[2]) * R1;
-        r65[2] = fast_rem_u32<m2>(r65[2]) + fast_rem_u32<m2>(code[2]) * R2;
-        r65[3] = fast_rem_u32<m3>(r65[3]) + fast_rem_u32<m3>(code[2]) * R3;
-      }
-    }
+    constexpr uint16_t r0 = uint16_t(R32), r1 = uint16_t(R32 >> 16), r2 = uint16_t(R32 >> 32), r3 = uint16_t(R32 >> 48);
+    r65[0] = fast_rem_u32<m0>(r65[0]) + fast_rem_u32<m0>(code[1]) * uint32_t(r0);
+    r65[1] = fast_rem_u32<m1>(r65[1]) + fast_rem_u32<m1>(code[1]) * uint32_t(r1);
+    r65[2] = fast_rem_u32<m2>(r65[2]) + fast_rem_u32<m2>(code[1]) * uint32_t(r2);
+    r65[3] = fast_rem_u32<m3>(r65[3]) + fast_rem_u32<m3>(code[1]) * uint32_t(r3);
+
+    constexpr uint32_t R0 = (uint32_t(r0) * uint32_t(r0)) % (m0 ? uint32_t(m0) : uint32_t(1));
+    constexpr uint32_t R1 = (uint32_t(r1) * uint32_t(r1)) % (m1 ? uint32_t(m1) : uint32_t(1));
+    constexpr uint32_t R2 = (uint32_t(r2) * uint32_t(r2)) % (m2 ? uint32_t(m2) : uint32_t(1));
+    constexpr uint32_t R3 = (uint32_t(r3) * uint32_t(r3)) % (m3 ? uint32_t(m3) : uint32_t(1));
+    r65[0] = fast_rem_u32<m0>(r65[0]) + fast_rem_u32<m0>(code[2]) * R0;
+    r65[1] = fast_rem_u32<m1>(r65[1]) + fast_rem_u32<m1>(code[2]) * R1;
+    r65[2] = fast_rem_u32<m2>(r65[2]) + fast_rem_u32<m2>(code[2]) * R2;
+    r65[3] = fast_rem_u32<m3>(r65[3]) + fast_rem_u32<m3>(code[2]) * R3;
 
     uint32_t lo = conv_u16i8r(fast_rem_u32<m0>(r65[0])) | (conv_u16i8r(fast_rem_u32<m1>(r65[1])) << 16);
     uint32_t hi = conv_u16i8r(fast_rem_u32<m2>(r65[2])) | (conv_u16i8r(fast_rem_u32<m3>(r65[3])) << 16);

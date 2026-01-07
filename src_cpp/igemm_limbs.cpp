@@ -1,6 +1,5 @@
 
 #include <internal.hpp>
-#include <crt_selector.hpp>
 
 inline void gemm_accumulate(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, int32_t sft_lo, int32_t orderA, const int8_t* AT, const int8_t* A, int32_t op, uint64_t* C, int32_t orderC, int32_t* workspace) {
   constexpr int32_t iter_k = 131072, iter_h = iter_k / 2;
@@ -68,7 +67,7 @@ inline void gemm_accumulate_diag(cudaStream_t stream, cublasHandle_t handle, int
   }
 }
 
-void internal::int8::i8GemmF(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32_t algnN, int32_t algnK, const int8_t* AT, const int8_t* A, int32_t orderA, int32_t beta, uint64_t* C, int32_t orderC, int32_t* workspace) {
+inline void i8GemmF(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32_t algnN, int32_t algnK, const int8_t* AT, const int8_t* A, int32_t orderA, int32_t beta, uint64_t* C, int32_t orderC, int32_t* workspace) {
   int64_t strideA = int64_t(algnK) * int64_t(N);
   for (int32_t i = 0; i < orderA; ++i) {
     int64_t AT_i = int64_t(i) * strideA;
@@ -76,7 +75,7 @@ void internal::int8::i8GemmF(cudaStream_t stream, cublasHandle_t handle, int32_t
   }
 }
 
-void internal::int8::i8GemmT(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32_t algnN, int32_t algnK, const int8_t* A, int32_t orderA, int32_t beta, uint64_t* C, int32_t orderC, int32_t* workspace) {
+inline void i8GemmT(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32_t algnN, int32_t algnK, const int8_t* A, int32_t orderA, int32_t beta, uint64_t* C, int32_t orderC, int32_t* workspace) {
   int64_t strideA = int64_t(algnK) * int64_t(N);
   gemm_accumulate_diag(stream, handle, algnN, N, algnK, orderA, A, 4 | beta, C, orderC, workspace);
   for (int32_t i = 1; i < orderA; ++i) {
@@ -85,56 +84,51 @@ void internal::int8::i8GemmT(cudaStream_t stream, cublasHandle_t handle, int32_t
   }
 }
 
-inline void gemm_normalize_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, int32_t orderA, const int8_t* AT, const int8_t* A, int32_t beta, int32_t* C) {
-  constexpr int32_t iter_k = 131072, iter_h = iter_k / 2;
-  int32_t one = 1;
-  int64_t strideA = int64_t(N) * int64_t(K), strideC = int64_t(M) * int64_t(N);
-  if (K <= iter_k) {
-    cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, K, &one, AT, CUDA_R_8I, K, strideA, A, CUDA_R_8I, K, strideA,
-      &beta, C, CUDA_R_32I, M, strideC, orderA, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
-  }
-  else {
-    int32_t rem = K & (iter_k - 1); rem = rem < iter_h ? (rem + iter_k) : rem;
-    int32_t range_k = K - rem;
-
-    for (int32_t k = 0; k < range_k; k += iter_k) {
-      const int8_t* AT_k = &AT[int64_t(k)];
-      const int8_t* AN_k = &A[int64_t(k)];
-      cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, iter_k, &one, AT_k, CUDA_R_8I, K, strideA, AN_k, CUDA_R_8I, K, strideA,
-        &beta, C, CUDA_R_32I, M, strideC, orderA, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP); beta |= 1;
-      internal::int8::normalize_remainder_i32tensor(stream, strideC, C, orderA);
-    }
-
-    const int8_t* AT_k = &AT[int64_t(range_k)];
-    const int8_t* AN_k = &A[int64_t(range_k)];
-    cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, std::min(rem, iter_h), &one, AT_k, CUDA_R_8I, K, strideA, AN_k, CUDA_R_8I, K, strideA,
-      &beta, C, CUDA_R_32I, M, strideC, orderA, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
-    if (iter_h < rem) {
-      internal::int8::normalize_remainder_i32tensor(stream, strideC, C, orderA);
-      cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, rem - iter_h, &one, &AT_k[iter_h], CUDA_R_8I, K, strideA, &AN_k[iter_h], CUDA_R_8I, K, strideA,
-        &one, C, CUDA_R_32I, M, strideC, orderA, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
-    }
-  }
+inline std::tuple<int32_t, int32_t, int32_t> umax_order(int32_t umax, int32_t k, int32_t c) {
+  int32_t bits = int32_t(std::ceil(std::log2(k))) + (umax << 1) + c;
+  return std::make_tuple((k + 255) & (~255), (umax + 9) >> 3, 1 + (bits / 63));
 }
 
-void internal::int8::i8GemmR_CRT(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32_t algnN, int32_t algnK, int32_t n_moduli, int32_t iter, const int8_t* A, uint64_t* C, int32_t* workspace) {
-  int32_t orderA = 2 * CRT::active_moduli(n_moduli, iter);
-  int64_t strideC = int64_t(algnN) * int64_t(N);
-  int32_t accum = int32_t(0 < iter), last = int32_t(n_moduli <= ((iter + 1) << 2));
-  gemm_normalize_crt(stream, handle, algnN, N, algnK, orderA, A, A, 0, workspace);
-  internal::int8::accumulate_remainder_i32tensor(stream, accum | (last << 1), strideC, n_moduli, iter, workspace, C);
+void internal::int8::i63ATA_f64_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const double* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, uint64_t* C, int32_t ldc, int8_t* workspace) {
+  int32_t algnM, orderA, orderC; std::tie(algnM, orderA, orderC) = umax_order(umax, M, 0);
+  int64_t strideA = int64_t(M) * int64_t(N), i8_bytes = strideA * int64_t(orderA);
+  int32_t* scratch = (int32_t*)&workspace[i8_bytes];
+
+  cudaMemsetAsync(workspace, 0, i8_bytes, stream);
+  quantize_f64(stream, M, N, A, lda, umax, vec_expon, orderA, workspace, algnM);
+  i8GemmT(stream, handle, N, ldc, algnM, workspace, orderA, 0, C, orderC, scratch);
 }
 
-void internal::int8::i8GemmC_CRT(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32_t algnN, int32_t algnK, int32_t n_moduli, int32_t iter, const int8_t* A, uint64_t* C, int32_t* workspace) {
-  int32_t orderA = 2 * CRT::active_moduli(n_moduli, iter), orderC = CRT::order_p(n_moduli);
-  int64_t strideA = int64_t(orderA) * int64_t(algnK) * int64_t(N), strideC = int64_t(algnN) * int64_t(N);
-  int32_t accum = int32_t(0 < iter), last = int32_t(n_moduli <= ((iter + 1) << 2));
+void internal::int8::i63ATA_f32_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const float* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, uint64_t* C, int32_t ldc, int8_t* workspace) {
+  int32_t algnM, orderA, orderC; std::tie(algnM, orderA, orderC) = umax_order(umax, M, 0);
+  int64_t strideA = int64_t(M) * int64_t(N), i8_bytes = strideA * int64_t(orderA);
+  int32_t* scratch = (int32_t*)&workspace[i8_bytes];
 
-  gemm_normalize_crt(stream, handle, algnN, N, algnK, orderA, A, A, 0, workspace);
-  internal::int8::normalize_remainder_i32tensor(stream, strideC, workspace, orderA);
-  gemm_normalize_crt(stream, handle, algnN, N, algnK, orderA, &A[strideA], &A[strideA], 1, workspace);
-  internal::int8::accumulate_remainder_i32tensor(stream, accum | (last << 1), strideC, n_moduli, iter, workspace, C);
+  cudaMemsetAsync(workspace, 0, i8_bytes, stream);
+  quantize_f32(stream, M, N, A, lda, umax, vec_expon, orderA, workspace, algnM);
+  i8GemmT(stream, handle, N, ldc, algnM, workspace, orderA, 0, C, orderC, scratch);
+}
 
-  gemm_normalize_crt(stream, handle, algnN, N, algnK, orderA, A, &A[strideA], 0, workspace);
-  internal::int8::accumulate_remainder_i32tensor(stream, accum | (last << 1), strideC, n_moduli, iter, workspace, &C[int64_t(orderC) * strideC]);
+void internal::int8::i63AHA_cf64_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, uint64_t* C, int32_t ldc, int8_t* workspace) {
+  int32_t algnM, orderA, orderC; std::tie(algnM, orderA, orderC) = umax_order(umax, M, 1);
+  int64_t strideA = int64_t(M) * int64_t(N), i8_bytes = strideA * int64_t(orderA);
+  int32_t* scratch = (int32_t*)&workspace[i8_bytes << 1];
+
+  cudaMemsetAsync(workspace, 0, i8_bytes << 1, stream);
+  quantize_cf64(stream, M, N, A, lda, umax, vec_expon, orderA, workspace, algnM);
+  i8GemmT(stream, handle, N, ldc, algnM, workspace, orderA, 0, C, orderC, scratch);
+  i8GemmT(stream, handle, N, ldc, algnM, &workspace[i8_bytes], orderA, 1, C, orderC, scratch);
+  i8GemmF(stream, handle, N, ldc, algnM, workspace, &workspace[i8_bytes], orderA, 0, &C[int64_t(ldc) * int64_t(N) * int64_t(orderC)], orderC, scratch);
+}
+
+void internal::int8::i63AHA_cf32_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, uint64_t* C, int32_t ldc, int8_t* workspace) {
+  int32_t algnM, orderA, orderC; std::tie(algnM, orderA, orderC) = umax_order(umax, M, 1);
+  int64_t strideA = int64_t(M) * int64_t(N), i8_bytes = strideA * int64_t(orderA);
+  int32_t* scratch = (int32_t*)&workspace[i8_bytes << 1];
+
+  cudaMemsetAsync(workspace, 0, i8_bytes << 1, stream);
+  quantize_cf32(stream, M, N, A, lda, umax, vec_expon, orderA, workspace, algnM);
+  i8GemmT(stream, handle, N, ldc, algnM, workspace, orderA, 0, C, orderC, scratch);
+  i8GemmT(stream, handle, N, ldc, algnM, &workspace[i8_bytes], orderA, 1, C, orderC, scratch);
+  i8GemmF(stream, handle, N, ldc, algnM, workspace, &workspace[i8_bytes], orderA, 0, &C[int64_t(ldc) * int64_t(N) * int64_t(orderC)], orderC, scratch);
 }
