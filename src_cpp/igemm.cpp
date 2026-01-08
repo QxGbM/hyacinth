@@ -27,7 +27,7 @@ void device::MixPrecAHA::igemm_params(double* epi, int32_t N, int32_t* algnN, in
 inline std::tuple<int32_t, int64_t, int64_t, int64_t, int64_t> i8gemm_ext_params(int32_t M, int32_t N, int32_t algnN, int32_t umax, int32_t Complex, device::Precision prec) {
   int32_t algnM = (M + 255) & (~255);
   //int32_t orderA = (umax + 9) >> 3;
-  int32_t orderA = 4;
+  int32_t orderA = 8;
   int64_t elem_bytes = prec == device::Precision::FP32 ? sizeof(float) : (prec == device::Precision::FP64 ? sizeof(double) : sizeof(double2));
   int64_t C_bytes = int64_t(algnN) * int64_t(N) * elem_bytes;
   int64_t i8_bytes = int64_t(algnM) * int64_t(N) * int64_t(orderA);

@@ -73,11 +73,11 @@ namespace device::int8 {
 
   __host__ __device__ __forceinline__ void conv_u8i8(uint32_t& code, uint32_t& carry) {
     uint8_t* b = (uint8_t*)&code;
-    uint16_t a = uint16_t(carry) + uint16_t(b[0]);
-    b[0] = uint8_t(a); a = (a >> 8) + ((a >> 7) & uint16_t(1)) + uint16_t(b[1]);
-    b[1] = uint8_t(a); a = (a >> 8) + ((a >> 7) & uint16_t(1)) + uint16_t(b[2]);
-    b[2] = uint8_t(a); a = (a >> 8) + ((a >> 7) & uint16_t(1)) + uint16_t(b[3]);
-    b[3] = uint8_t(a); carry = uint32_t((a >> 8) + ((a >> 7) & uint16_t(1)));
+    uint32_t a = uint32_t(carry) + uint32_t(b[0]);
+    b[0] = uint8_t(a); a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint32_t(b[1]);
+    b[1] = uint8_t(a); a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint32_t(b[2]);
+    b[2] = uint8_t(a); a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint32_t(b[3]);
+    b[3] = uint8_t(a); carry = uint32_t((a >> 8) + ((a >> 7) & uint32_t(1)));
   }
 
   template<uint32_t DIV>
@@ -96,51 +96,47 @@ namespace device::int8 {
 
   template<uint32_t MO, uint32_t R32>
   __host__ __device__ __forceinline__ uint32_t conv_u32i8_modular(const uint32_t (&code)[3]) {
-    constexpr uint32_t m0 = (MO & uint32_t(255)) == uint32_t(0) ? uint32_t(256) : MO & uint32_t(255);
-    constexpr uint32_t m1 = uint8_t(MO >> 8), m2 = uint8_t(MO >> 16), m3 = uint16_t(MO >> 24);
+    constexpr uint32_t m[4]{ uint8_t(MO) ? uint32_t(uint8_t(MO)) : uint32_t(256), uint8_t(MO >> 8), uint8_t(MO >> 16), uint8_t(MO >> 24) };
+    constexpr uint32_t r32[4]{ uint8_t(R32), uint8_t(R32 >> 8), uint8_t(R32 >> 16), uint8_t(R32 >> 24) };
+    constexpr uint32_t R0 = (r32[0] * r32[0]) % (m[0] ? m[0] : uint32_t(1));
+    constexpr uint32_t R1 = (r32[1] * r32[1]) % (m[1] ? m[1] : uint32_t(1));
+    constexpr uint32_t R2 = (r32[2] * r32[2]) % (m[2] ? m[2] : uint32_t(1));
+    constexpr uint32_t R3 = (r32[3] * r32[3]) % (m[3] ? m[3] : uint32_t(1));
     uint32_t r[4];
 
-    constexpr uint32_t r0 = uint8_t(R32), r1 = uint8_t(R32 >> 8);
-    constexpr uint32_t r2 = uint8_t(R32 >> 16), r3 = uint8_t(R32 >> 24);
-    constexpr uint32_t R0 = (r0 * r0) % (m0 ? m0 : uint32_t(1));
-    constexpr uint32_t R1 = (r1 * r1) % (m1 ? m1 : uint32_t(1));
-    constexpr uint32_t R2 = (r2 * r2) % (m2 ? m2 : uint32_t(1));
-    constexpr uint32_t R3 = (r3 * r3) % (m3 ? m3 : uint32_t(1));
+    r[0] = fast_rem_u32<m[0]>(fast_rem_u32<m[0]>(code[0]) + fast_rem_u32<m[0]>(code[1]) * r32[0] + fast_rem_u32<m[0]>(code[2]) * R0);
+    r[1] = fast_rem_u32<m[1]>(fast_rem_u32<m[1]>(code[0]) + fast_rem_u32<m[1]>(code[1]) * r32[1] + fast_rem_u32<m[1]>(code[2]) * R1);
+    r[2] = fast_rem_u32<m[2]>(fast_rem_u32<m[2]>(code[0]) + fast_rem_u32<m[2]>(code[1]) * r32[2] + fast_rem_u32<m[2]>(code[2]) * R2);
+    r[3] = fast_rem_u32<m[3]>(fast_rem_u32<m[3]>(code[0]) + fast_rem_u32<m[3]>(code[1]) * r32[3] + fast_rem_u32<m[3]>(code[2]) * R3);
 
-    r[0] = fast_rem_u32<m0>(fast_rem_u32<m0>(code[0]) + fast_rem_u32<m0>(code[1]) * r0 + fast_rem_u32<m0>(code[2]) * R0);
-    r[1] = fast_rem_u32<m1>(fast_rem_u32<m1>(code[0]) + fast_rem_u32<m1>(code[1]) * r1 + fast_rem_u32<m1>(code[2]) * R1);
-    r[2] = fast_rem_u32<m2>(fast_rem_u32<m2>(code[0]) + fast_rem_u32<m2>(code[1]) * r2 + fast_rem_u32<m2>(code[2]) * R2);
-    r[3] = fast_rem_u32<m3>(fast_rem_u32<m3>(code[0]) + fast_rem_u32<m3>(code[1]) * r3 + fast_rem_u32<m3>(code[2]) * R3);
-
-    r[0] = uint8_t(r[0] + ((-uint32_t(uint32_t(127) < r[0])) & (-m0)));
-    r[1] = uint8_t(r[1] + ((-uint32_t(uint32_t(127) < r[1])) & (-m1)));
-    r[2] = uint8_t(r[2] + ((-uint32_t(uint32_t(127) < r[2])) & (-m2)));
-    r[3] = uint8_t(r[3] + ((-uint32_t(uint32_t(127) < r[3])) & (-m3)));
+    r[0] = uint8_t(r[0] + ((-uint32_t(uint32_t(127) < r[0])) & (-m[0])));
+    r[1] = uint8_t(r[1] + ((-uint32_t(uint32_t(127) < r[1])) & (-m[1])));
+    r[2] = uint8_t(r[2] + ((-uint32_t(uint32_t(127) < r[2])) & (-m[2])));
+    r[3] = uint8_t(r[3] + ((-uint32_t(uint32_t(127) < r[3])) & (-m[3])));
     return r[0] | (r[1] << 8) | (r[2] << 16) | (r[3] << 24);
   }
 
   template<uint32_t MO, uint32_t R32, uint32_t MINV>
-  __host__ __device__ __forceinline__ void crt_recover(int32_t (&r)[4], int32_t(&nr)[4]) {
-    constexpr uint32_t m0 = (MO & uint32_t(255)) == uint32_t(0) ? uint32_t(256) : MO & uint32_t(255);
-    constexpr uint32_t m1 = uint8_t(MO >> 8), m2 = uint8_t(MO >> 16), m3 = uint16_t(MO >> 24);
-    constexpr uint32_t r0 = uint8_t(R32), r1 = uint8_t(R32 >> 8), r2 = uint8_t(R32 >> 16), r3 = uint8_t(R32 >> 24);
-    constexpr uint32_t i0 = uint8_t(MINV), i1 = uint8_t(MINV >> 8), i2 = uint8_t(MINV >> 16), i3 = uint8_t(MINV >> 24);
+  __host__ __device__ __forceinline__ void crt_recover(int32_t (&r)[4]) {
+    constexpr uint32_t m[4]{ uint8_t(MO) ? uint32_t(uint8_t(MO)) : uint32_t(256), uint8_t(MO >> 8), uint8_t(MO >> 16), uint8_t(MO >> 24) };
+    constexpr uint32_t r32[4]{ uint8_t(R32), uint8_t(R32 >> 8), uint8_t(R32 >> 16), uint8_t(R32 >> 24) };
+    constexpr uint32_t i[4]{ uint8_t(MINV), uint8_t(MINV >> 8), uint8_t(MINV >> 16), uint8_t(MINV >> 24) };
 
     uint32_t rem[4];
-    rem[0] = fast_rem_u32<m0>(uint32_t(r[0])) + ((-uint32_t(r[0] < 0)) & (m0 - r0)) ;
-    rem[1] = fast_rem_u32<m1>(uint32_t(r[1])) + ((-uint32_t(r[1] < 0)) & (m1 - r1)) ;
-    rem[2] = fast_rem_u32<m2>(uint32_t(r[2])) + ((-uint32_t(r[2] < 0)) & (m2 - r2)) ;
-    rem[3] = fast_rem_u32<m3>(uint32_t(r[3])) + ((-uint32_t(r[3] < 0)) & (m3 - r3)) ;
+    rem[0] = fast_rem_u32<m[0]>(uint32_t(r[0])) + ((-uint32_t(r[0] < 0)) & (m[0] - r32[0]));
+    rem[1] = fast_rem_u32<m[1]>(uint32_t(r[1])) + ((-uint32_t(r[1] < 0)) & (m[1] - r32[1]));
+    rem[2] = fast_rem_u32<m[2]>(uint32_t(r[2])) + ((-uint32_t(r[2] < 0)) & (m[2] - r32[2]));
+    rem[3] = fast_rem_u32<m[3]>(uint32_t(r[3])) + ((-uint32_t(r[3] < 0)) & (m[3] - r32[3]));
 
-    rem[0] += (-uint32_t(uint32_t(m0) < rem[0])) & (-m0);
-    rem[1] += (-uint32_t(uint32_t(m1) < rem[1])) & (-m1);
-    rem[2] += (-uint32_t(uint32_t(m2) < rem[2])) & (-m2);
-    rem[3] += (-uint32_t(uint32_t(m3) < rem[3])) & (-m3);
+    rem[0] += (-uint32_t(uint32_t(m[0]) < rem[0])) & (-m[0]);
+    rem[1] += (-uint32_t(uint32_t(m[1]) < rem[1])) & (-m[1]);
+    rem[2] += (-uint32_t(uint32_t(m[2]) < rem[2])) & (-m[2]);
+    rem[3] += (-uint32_t(uint32_t(m[3]) < rem[3])) & (-m[3]);
 
-    r[0] = int32_t(fast_rem_u32<m0>(rem[0] * i0)); nr[0] = r[0] - int32_t(m0);
-    r[1] = int32_t(fast_rem_u32<m1>(rem[1] * i1)); nr[1] = r[1] - int32_t(m1);
-    r[2] = int32_t(fast_rem_u32<m2>(rem[2] * i2)); nr[2] = r[2] - int32_t(m2);
-    r[3] = int32_t(fast_rem_u32<m3>(rem[3] * i3)); nr[3] = r[3] - int32_t(m3);
+    r[0] = int32_t(fast_rem_u32<m[0]>(rem[0] * i[0]));
+    r[1] = int32_t(fast_rem_u32<m[1]>(rem[1] * i[1]));
+    r[2] = int32_t(fast_rem_u32<m[2]>(rem[2] * i[2]));
+    r[3] = int32_t(fast_rem_u32<m[3]>(rem[3] * i[3]));
   }
 
 };

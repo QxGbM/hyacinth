@@ -6,12 +6,14 @@
 
 template<int32_t len> struct i32_array { int32_t arr[len]; };
 
-template<int32_t orderA, int32_t orderPD, int32_t orderM, uint32_t MO, uint32_t R32, uint32_t MINV, uint64_t P0, uint64_t P1, uint64_t P2, int32_t beta, int32_t pd_len>
+template<int32_t orderA, int32_t orderPD, int32_t orderM, uint64_t MO, uint64_t R32, uint64_t MINV, uint64_t P0, uint64_t P1, uint64_t P2, int32_t beta, int32_t pd_len>
 __global__ void i32_crt_accum_kernel(i32_array<pd_len> pd, int64_t N, const int32_t* __restrict__ X, uint64_t* __restrict__ A) {
   int64_t i = int64_t(blockIdx.x) * int64_t(blockDim.x) + int64_t(threadIdx.x);
   if (i < N) {
-    uint64_t acc[orderA]; int32_t rem[4], nr[4];
-    int64_t iter = i;
+    constexpr int32_t m[8]{ uint8_t(MO) ? uint32_t(uint8_t(MO)) : uint32_t(256), 
+      uint8_t(MO >> 8), uint8_t(MO >> 16), uint8_t(MO >> 24), uint8_t(MO >> 32), uint8_t(MO >> 40), uint8_t(MO >> 48), uint8_t(MO >> 56) };
+    uint64_t acc[orderA]; int64_t iter = i;
+    int32_t rem[8], (*rem_lo)[4] = (int32_t (*)[4])(&rem[0]), (*rem_hi)[4] = (int32_t (*)[4])(&rem[4]);
 
     if constexpr(beta) {
       #pragma unroll
@@ -27,11 +29,16 @@ __global__ void i32_crt_accum_kernel(i32_array<pd_len> pd, int64_t N, const int3
     #pragma unroll
     for (int32_t r = 0; r < orderM; ++r)
     { rem[r] = X[iter]; iter += N; } iter = i;
-    device::int8::crt_recover<MO, R32, MINV>(rem, nr);
+
+    constexpr uint32_t m_lo = uint32_t(MO), m_hi = uint32_t(MO >> 32);
+    constexpr uint32_t r_lo = uint32_t(R32), r_hi = uint32_t(R32 >> 32);
+    constexpr uint32_t i_lo = uint32_t(MINV), i_hi = uint32_t(MINV >> 32);
+    device::int8::crt_recover<m_lo, r_lo, i_lo>(*rem_lo);
+    device::int8::crt_recover<m_hi, r_hi, i_hi>(*rem_hi);
 
     #pragma unroll
     for (int32_t r = 0; r < orderM; ++r) {
-      int32_t ri = (acc[orderA - 1] >> 63) ? rem[r] : nr[r];
+      int32_t ri = (acc[orderA - 1] >> 63) ? rem[r] : (rem[r] - m[r]);
 
       #pragma unroll
       for (int32_t p = 0; p < orderPD; ++p) {
@@ -67,7 +74,7 @@ inline void crt_acc_dispatcher(cudaStream_t stream, int32_t option, int64_t N, c
 
   if constexpr(0 < orderM) {
     constexpr int32_t orderA = CRT::order_p(n_moduli), orderPD = CRT::order_pd(n_moduli);
-    constexpr uint32_t MO = CRT::modular(iter), R32 = CRT::rem_e32(iter), MINV = CRT::modular_inv(n_moduli, iter);
+    constexpr uint64_t MO = CRT::modular(iter), R32 = CRT::rem_e32(iter), MINV = CRT::modular_inv(n_moduli, iter);
 
     constexpr int32_t pd_len = orderM * orderPD;
     i32_array<pd_len> pd; std::copy_n(CRT::p_div(n_moduli, iter), pd_len, &pd.arr[0]);
@@ -124,9 +131,6 @@ void internal::int8::accumulate_remainder_i32tensor(cudaStream_t stream, int32_t
     case 0: crt_acc_dispatcher<0>(stream, option, N, n_moduli, X, A); break;
     case 1: crt_acc_dispatcher<1>(stream, option, N, n_moduli, X, A); break;
     case 2: crt_acc_dispatcher<2>(stream, option, N, n_moduli, X, A); break;
-    case 3: crt_acc_dispatcher<3>(stream, option, N, n_moduli, X, A); break;
-    case 4: crt_acc_dispatcher<4>(stream, option, N, n_moduli, X, A); break;
-    case 5: crt_acc_dispatcher<5>(stream, option, N, n_moduli, X, A); break;
     default: break;
   }
 }

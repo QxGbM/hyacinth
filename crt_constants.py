@@ -11,19 +11,14 @@ for (i, a), (j, b) in combinations(enumerate(moduli_all), 2):
     print(f"gcd(moduli[{i}]={a}, moduli[{j}]={b}) = {g}")
     all_ok = False
 
-def pack_u8x4(a):
+def pack_u8x8(a):
   b = []
   n = len(a)
-  for i in range(0, n, 4):
+  for i in range(0, n, 8):
     v = 0
-    if i < n:
-      v |= (a[i] & 255)
-    if i + 1 < n:
-      v |= (a[i + 1] & 255) << 8
-    if i + 2 < n:
-      v |= (a[i + 2] & 255) << 16
-    if i + 3 < n:
-      v |= (a[i + 3] & 255) << 24
+    for j in range(0, 8):
+      if i + j < n:
+        v |= (a[i + j] & 255) << (8 * j)
     b.append(v)
   return b
 
@@ -40,17 +35,16 @@ def pd_print(suffix, pd):
   print(f"  constexpr int32_t pd{suffix}[{len(limbs)}] =" + " { " + ", ".join(f"{l}" for l in limbs) + " };")
 
 if all_ok:
-  moduli_simd = pack_u8x4(moduli_all)
-  rem_e32 = pack_u8x4([(1 << 32) % m for m in moduli_all])
+  moduli_simd = pack_u8x8(moduli_all)
+  rem_e32 = pack_u8x8([(1 << 32) % m for m in moduli_all])
 
   print("#pragma once\n#include <cstdint>\n")
   print("namespace CRT::Common {")
-  print(f"  constexpr uint32_t mo[{len(moduli_simd)}] =" + " { " + ", ".join(f"{m}u" for m in moduli_simd) + " };")
-  print(f"  constexpr uint32_t rem_e32[{len(rem_e32)}] =" + " { " + ", ".join(f"{m}u" for m in rem_e32) + " };")
+  print(f"  constexpr uint64_t mo[{len(moduli_simd)}] =" + " { " + ", ".join(f"{m}llu" for m in moduli_simd) + " };")
+  print(f"  constexpr uint64_t rem_e32[{len(rem_e32)}] =" + " { " + ", ".join(f"{m}llu" for m in rem_e32) + " };")
   print("};\n")
 
   for n in range(2, len(moduli_all)+1):
-    order_pd = (((n - 1) * 8) + 30) // 31
     moduli = moduli_all[:n:]
     P = 1
     for m in moduli:
@@ -59,12 +53,14 @@ if all_ok:
     p_limbs = []
     extract_limbs(P, p_limbs, 63)
     P_div = [P // m for m in moduli]
-    inv = pack_u8x4([pow(Pd % m, -1, m) for Pd, m in zip(P_div, moduli)])
+    inv = pack_u8x8([pow(Pd % m, -1, m) for Pd, m in zip(P_div, moduli)])
+    order_p = 1 + (P.bit_length() // 63)
+    order_pd = (((n - 1) * 8) + 30) // 31
 
     print(f"namespace CRT::Moduli{n}" + " {")
-    print(f"  const int32_t order_p = {len(p_limbs)}, order_pd = {order_pd};")
-    print(f"  constexpr uint32_t minv[{len(inv)}] =" + " { " + ", ".join(f"{m}u" for m in inv) + " };")
+    print(f"  const int32_t order_p = {order_p}, order_pd = {order_pd};")
+    print(f"  constexpr uint64_t minv[{len(inv)}] =" + " { " + ", ".join(f"{m}llu" for m in inv) + " };")
     print(f"  constexpr uint64_t p[{len(p_limbs)}] =" + " { " + ", ".join(f"{l}llu" for l in p_limbs) + " };")
-    for i in range(0, n, 4):
-      pd_print((i//4)+1, P_div[i:min(i+4, n):])
+    for i in range(0, n, 8):
+      pd_print((i//8)+1, P_div[i:min(i+8, n):])
     print("};\n")
