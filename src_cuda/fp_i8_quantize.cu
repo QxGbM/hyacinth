@@ -20,7 +20,6 @@ __global__ void quantize_kernel(int64_t M, int64_t N, matrix_const_ptr A, int64_
   if (y < M) {
     int64_t x = int64_t(blockIdx.y);
     int32_t expon = -int32_t(vec_expon[x]);
-    int8_t* B_i = &B[y + x * ldb];
     matrix_t A_i = A[y + x * lda];
 
     uint32_t code[3]; uint64_t r; int8_t* bytes;
@@ -35,10 +34,10 @@ __global__ void quantize_kernel(int64_t M, int64_t N, matrix_const_ptr A, int64_
     else if constexpr(op == 3)
       r = quantize_f64_i8rems<MO, R32>(double(A_i.x), expon, umax, code);
 
-    int64_t iter = 0;
+    int64_t iter = y + x * ldb;
     #pragma unroll
     for (uint32_t k = 0; k < ORDER; ++k)
-    { B_i[iter] = bytes[k]; iter += strideB; }
+    { B[iter] = bytes[k]; iter += strideB; }
 
     if constexpr(op & 1) {
       if constexpr(op == 1)
@@ -48,7 +47,7 @@ __global__ void quantize_kernel(int64_t M, int64_t N, matrix_const_ptr A, int64_
 
       #pragma unroll
       for (uint32_t k = 0; k < ORDER; ++k)
-      { B_i[iter] = bytes[k]; iter += strideB; }
+      { B[iter] = bytes[k]; iter += strideB; }
     }
   }
 };

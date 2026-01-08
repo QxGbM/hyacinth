@@ -25,13 +25,9 @@ namespace device::int8 {
   __host__ __device__ __forceinline__ void add_shifted(uint64_t (&a)[ORDER], int64_t i, uint32_t expon) {
     static_assert(1 <= ORDER && ORDER <= 4, "Integer 64 accumulation order must be in [1,4]");
 
-#ifdef __CUDA_ARCH__
-    uint32_t quo = __umulhi(expon, 0x82082082) >> 5;
-#else
-    uint32_t quo = uint32_t((uint64_t(expon) * 0x82082082llu) >> 37);
-#endif
-    uint32_t rem = expon - quo * uint32_t(63);
-    uint64_t b[3]{ (uint64_t(i) << rem) & i63, uint64_t(i >> (63 - rem)) & i63, -(uint64_t(i) >> 63) & i63 };
+    uint32_t quo = uint32_t(63 <= expon) + uint32_t(126 <= expon) + uint32_t(189 <= expon) + uint32_t(252 <= expon);
+    uint32_t rem = (expon - quo * uint32_t(63)) & uint32_t(63);
+    uint64_t b[3]{ (uint64_t(i) << rem) & i63, uint64_t(i >> (uint32_t(63) - rem)) & i63, -(uint64_t(i) >> 63) & i63 };
     a[0] += u64_selector<0>(quo, b);
     if constexpr(1 < ORDER) a[1] += u64_selector<1>(quo, b) + (a[0] >> 63);
     if constexpr(2 < ORDER) a[2] += u64_selector<2>(quo, b) + (a[1] >> 63);
@@ -86,20 +82,25 @@ namespace device::int8 {
 
   template<uint16_t DIV>
   __host__ __device__ __forceinline__ uint32_t fast_rem_u32(uint32_t x) {
-    constexpr uint32_t m_num = DIV ? uint32_t((0x800000000000llu / uint64_t(DIV))) : uint32_t(0);
+    if constexpr(DIV) {
+      constexpr uint32_t m_num = uint32_t((0x800000000000llu / uint64_t(DIV)));
 #ifdef __CUDA_ARCH__
-    return x - (__umulhi(x, m_num) >> 15) * uint32_t(DIV);
+      uint32_t r = x - (__umulhi(x, m_num) >> 15) * uint32_t(DIV);
 #else
-    return x - uint32_t((uint64_t(x) * uint64_t(m_num)) >> 47) * uint32_t(DIV);
+      uint32_t r = x - uint32_t((uint64_t(x) * uint64_t(m_num)) >> 47) * uint32_t(DIV);
 #endif
+      return r + ((-uint32_t(uint32_t(DIV) <= r)) & (-uint32_t(DIV)));
+    }
+    return uint32_t(0);
   }
 
   __host__ __device__ __forceinline__ uint32_t fast_rem_u32_255(uint32_t x) {
 #ifdef __CUDA_ARCH__
-    return x - (__umulhi(x, 0x80808080) >> 7) * uint32_t(255);
+    uint32_t r = x - (__umulhi(x, 0x80808080) >> 7) * uint32_t(255);
 #else
-    return x - uint32_t((uint64_t(x) * 0x80808080llu) >> 39) * uint32_t(255);
+    uint32_t r = x - uint32_t((uint64_t(x) * 0x80808080llu) >> 39) * uint32_t(255);
 #endif
+    return r + ((-uint32_t(uint32_t(255) <= r)) & (-uint32_t(255)));
   }
 
   __host__ __device__ __forceinline__ uint32_t conv_u16i8r(uint32_t x) {
