@@ -8,13 +8,13 @@ __device__ __forceinline__ void quantize_f64_i8limbs(double x, int32_t expon, in
   device::int8::conv_u8i8(code[0], c); device::int8::conv_u8i8(code[1], c); device::int8::conv_u8i8(code[2], c);
 }
 
-template <uint64_t MO, uint64_t R32>
+template <uint32_t MO, uint32_t R32>
 __device__ __forceinline__ uint64_t quantize_f64_i8rems(double x, int32_t expon, int32_t umax, uint32_t (&code)[3]) {
   device::int8::quantize_f64_u32limbs(x, expon, umax, code);
   return device::int8::conv_u32i8_modular<MO, R32>(code);
 }
 
-template <uint32_t ORDER, uint64_t MO, uint64_t R32, class matrix_t, class matrix_const_ptr, int32_t op>
+template <uint32_t ORDER, uint32_t MO, uint32_t R32, class matrix_t, class matrix_const_ptr, int32_t op>
 __global__ void quantize_kernel(int64_t M, int64_t N, matrix_const_ptr A, int64_t lda, int32_t umax, const uint64_t* __restrict__ vec_expon, int8_t* __restrict__ B, int64_t ldb, int64_t strideB) {
   int64_t y = int64_t(blockIdx.x) * int64_t(blockDim.x) + int64_t(threadIdx.x);
   if (y < M) {
@@ -22,17 +22,17 @@ __global__ void quantize_kernel(int64_t M, int64_t N, matrix_const_ptr A, int64_
     int32_t expon = -int32_t(vec_expon[x]);
     matrix_t A_i = A[y + x * lda];
 
-    uint32_t code[3]; uint64_t r; int8_t* bytes;
-    if constexpr(op & 2) bytes = (int8_t*)&r; else bytes = (int8_t*)&code[0]; 
+    uint32_t code[3];
+    int8_t* bytes = (int8_t*)&code[0];
 
     if constexpr(op == 0)
       quantize_f64_i8limbs(double(A_i), expon, umax, code);
     else if constexpr(op == 1)
       quantize_f64_i8limbs(double(A_i.x), expon, umax, code);
     else if constexpr(op == 2)
-      r = quantize_f64_i8rems<MO, R32>(double(A_i), expon, umax, code);
+      code[0] = quantize_f64_i8rems<MO, R32>(double(A_i), expon, umax, code);
     else if constexpr(op == 3)
-      r = quantize_f64_i8rems<MO, R32>(double(A_i.x), expon, umax, code);
+      code[0] = quantize_f64_i8rems<MO, R32>(double(A_i.x), expon, umax, code);
 
     int64_t iter = y + x * ldb;
     #pragma unroll
@@ -43,7 +43,7 @@ __global__ void quantize_kernel(int64_t M, int64_t N, matrix_const_ptr A, int64_
       if constexpr(op == 1)
         quantize_f64_i8limbs(double(A_i.y), expon, umax, code);
       else if constexpr(op == 3)
-        r = quantize_f64_i8rems<MO, R32>(double(A_i.y), expon, umax, code);
+        code[0] = quantize_f64_i8rems<MO, R32>(double(A_i.y), expon, umax, code);
 
       #pragma unroll
       for (uint32_t k = 0; k < ORDER; ++k)
@@ -56,11 +56,18 @@ constexpr int32_t block_threads = 512;
 
 template <class matrix_t, class matrix_const_ptr, int32_t iter, int32_t op>
 inline void quantize_dispatcher(cudaStream_t stream, int64_t M, int64_t N, matrix_const_ptr C, int64_t ldc, int32_t umax, const uint64_t* vec_expon, int32_t orderA, int8_t* A, int64_t lda) {
-  constexpr uint64_t MO = CRT::modular(iter), R32 = CRT::rem_e32(iter);
+  constexpr uint32_t MO = CRT::modular(iter), R32 = CRT::rem_e32(iter);
   dim3 grid((uint32_t(M) + uint32_t(block_threads - 1)) / uint32_t(block_threads), uint32_t(N));
   int64_t strideA = N * lda;
 
-  switch (orderA) {
+  if constexpr(0 <= iter) switch (orderA) {
+    case 1: quantize_kernel<1, MO, R32, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, umax, vec_expon, A, lda, strideA); break;
+    case 2: quantize_kernel<2, MO, R32, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, umax, vec_expon, A, lda, strideA); break;
+    case 3: quantize_kernel<3, MO, R32, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, umax, vec_expon, A, lda, strideA); break;
+    case 4: quantize_kernel<4, MO, R32, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, umax, vec_expon, A, lda, strideA); break;
+    default: break;
+  }
+  else switch (orderA) {
     case 1: quantize_kernel<1, MO, R32, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, umax, vec_expon, A, lda, strideA); break;
     case 2: quantize_kernel<2, MO, R32, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, umax, vec_expon, A, lda, strideA); break;
     case 3: quantize_kernel<3, MO, R32, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, umax, vec_expon, A, lda, strideA); break;
@@ -83,6 +90,8 @@ inline void quantize_dispatcher(cudaStream_t stream, int32_t M, int32_t N, int32
     case 1: quantize_dispatcher<matrix_t, matrix_const_ptr, 1, op> (stream, M, N, C, ldc, umax, vec_expon, orderA, A, lda); break;
     case 2: quantize_dispatcher<matrix_t, matrix_const_ptr, 2, op> (stream, M, N, C, ldc, umax, vec_expon, orderA, A, lda); break;
     case 3: quantize_dispatcher<matrix_t, matrix_const_ptr, 3, op> (stream, M, N, C, ldc, umax, vec_expon, orderA, A, lda); break;
+    case 4: quantize_dispatcher<matrix_t, matrix_const_ptr, 4, op> (stream, M, N, C, ldc, umax, vec_expon, orderA, A, lda); break;
+    case 5: quantize_dispatcher<matrix_t, matrix_const_ptr, 5, op> (stream, M, N, C, ldc, umax, vec_expon, orderA, A, lda); break;
     default: break;
   }
 }

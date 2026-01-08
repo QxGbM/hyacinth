@@ -21,20 +21,22 @@ void device::MixPrecAHA::igemm_params(double* epi, int32_t N, int32_t* algnN, in
   *algnN = (N + 63) & (~63);
   *epi = std::min(1., std::max(std::abs(*epi), machine_epi));
   *precC = epi_f32 <= *epi ? Precision::FP32 : (epi_f64 <= *epi ? Precision::FP64 : f128.first);
-  *umax = ((*umax + int32_t(std::ceil(-std::log2(*epi))) + 9) & (~7)) - 2;
+  *umax = *umax + int32_t(std::ceil(-std::log2(*epi))); //((*umax + int32_t(std::ceil(-std::log2(*epi))) + 9) & (~7)) - 2;
 }
 
 inline std::tuple<int32_t, int64_t, int64_t, int64_t, int64_t> i8gemm_ext_params(int32_t M, int32_t N, int32_t algnN, int32_t umax, int32_t Complex, device::Precision prec) {
   int32_t algnM = (M + 255) & (~255);
-  int32_t orderA = (umax + 9) >> 3;
+  //int32_t orderA = (umax + 9) >> 3;
+  int32_t orderA = 4;
   int64_t elem_bytes = prec == device::Precision::FP32 ? sizeof(float) : (prec == device::Precision::FP64 ? sizeof(double) : sizeof(double2));
   int64_t C_bytes = int64_t(algnN) * int64_t(N) * elem_bytes;
   int64_t i8_bytes = int64_t(algnM) * int64_t(N) * int64_t(orderA);
   int64_t scratch_bytes = int64_t(algnN) * int64_t(N) * int64_t(orderA) * sizeof(int32_t);
   scratch_bytes = std::max(scratch_bytes, (C_bytes - i8_bytes) << Complex);
 
-  int32_t bits = int32_t(std::ceil(std::log2(double(algnM)))) + (umax << 1) + Complex;
-  int32_t orderC = 1 + (bits / 63);
+  int32_t bits = int32_t(std::ceil(std::log2(double(algnM)))) + (umax << 1) + 2 + Complex;
+  //int32_t orderC = 1 + (bits / 63);
+  int32_t orderC = CRT::order_p(1 + ((bits + 7) >> 3));
   int64_t acc_bytes = int64_t(algnN) * int64_t(N) * int64_t(orderC) * sizeof(uint64_t);
   int64_t vec_bytes = int64_t(algnN) * int64_t(Complex ? 5 : 3) * sizeof(uint64_t);
   return std::tie(orderC, i8_bytes, scratch_bytes, acc_bytes, vec_bytes);
@@ -56,7 +58,8 @@ void device::MixPrecAHA::rATA(cudaStream_t stream, cublasHandle_t handle, int32_
   if (precA == Precision::FP64) {
     internal::int8::vexp_f64(stream, M, N, (const double*)A, lda, umax, (uint64_t*)v_exp);
     internal::int8::vsum_f64(stream, M, N, (const double*)A, lda, (uint64_t*)v_exp, algnN);
-    internal::int8::i63ATA_f64_limbs(stream, handle, M, N, (const double*)A, lda, umax, (uint64_t*)v_exp, (uint64_t*)acc, algnN, iA);
+    //internal::int8::i63ATA_f64_limbs(stream, handle, M, N, (const double*)A, lda, umax, (uint64_t*)v_exp, (uint64_t*)acc, algnN, iA);
+    internal::int8::i63ATA_f64_crt(stream, handle, M, N, (const double*)A, lda, umax, (uint64_t*)v_exp, (uint64_t*)acc, algnN, iA);
   }
   else if (precA == Precision::FP32) {
     internal::int8::vexp_f32(stream, M, N, (const float*)A, lda, umax, (uint64_t*)v_exp);

@@ -86,7 +86,7 @@ inline void i8GemmT(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32
 
 inline std::tuple<int32_t, int32_t, int32_t> umax_order(int32_t umax, int32_t k, int32_t c) {
   int32_t algnK = (k + 255) & (~255);
-  int32_t bits = int32_t(std::ceil(std::log2(algnK))) + (umax << 1) + c;
+  int32_t bits = int32_t(std::ceil(std::log2(algnK))) + (umax << 1) + 2 + c;
   return std::make_tuple(algnK, (umax + 9) >> 3, 1 + (bits / 63));
 }
 
