@@ -62,13 +62,10 @@ namespace device::int8 {
     return llrint(scalbn(x, expon - e));
   }
 
-  __host__ __device__ __forceinline__ void quantize_f64_u32limbs(double value, int32_t expon, int32_t umax, uint32_t (&code)[3]) {
+  __host__ __device__ __forceinline__ void quantize_f64_u32limbs(double value, int32_t expon, uint64_t lo, uint32_t hi, uint32_t (&code)[3]) {
     int64_t q = round_f64(value, expon, expon);
-    uint64_t lo = ((-uint64_t(umax < 64)) & (uint64_t(1) << umax)) + ((uint64_t(q) << expon) & i63);
-    code[0] = uint32_t(lo);
-
-    uint32_t hi = ((-uint32_t(63 < umax)) & (uint32_t(1) << (umax - 63))) + uint32_t(q >> (63 - expon)) + uint32_t(lo >> 63);
-    code[1] = (hi << 31) | (uint32_t(lo >> 32) & i31); code[2] = hi >> 1;
+    lo += (uint64_t(q) << expon) & i63; hi += uint32_t(q >> (63 - expon)) + uint32_t(lo >> 63);
+    code[0] = uint32_t(lo); code[1] = (hi << 31) | (uint32_t(lo >> 32) & i31); code[2] = hi >> 1;
   }
 
   __host__ __device__ __forceinline__ void conv_u8i8(uint32_t& code, uint32_t& carry) {
@@ -85,11 +82,10 @@ namespace device::int8 {
     if constexpr(DIV) {
       constexpr uint32_t m_num = uint32_t((0x8000000000llu / uint64_t(DIV)));
 #ifdef __CUDA_ARCH__
-      uint32_t r = x - (__umulhi(x, m_num) >> 7) * DIV;
+      return x - (__umulhi(x, m_num) >> 7) * DIV;
 #else
-      uint32_t r = x - uint32_t((uint64_t(x) * uint64_t(m_num)) >> 39) * DIV;
+      return x - uint32_t((uint64_t(x) * uint64_t(m_num)) >> 39) * DIV;
 #endif
-      return r + ((-uint32_t(DIV <= r)) & (-DIV));
     }
     return uint32_t(0);
   }
@@ -119,24 +115,24 @@ namespace device::int8 {
   template<uint32_t MO, uint32_t R32, uint32_t MINV>
   __host__ __device__ __forceinline__ void crt_recover(int32_t (&r)[4]) {
     constexpr uint32_t m[4]{ uint8_t(MO) ? uint32_t(uint8_t(MO)) : uint32_t(256), uint8_t(MO >> 8), uint8_t(MO >> 16), uint8_t(MO >> 24) };
-    constexpr uint32_t r32[4]{ uint8_t(R32), uint8_t(R32 >> 8), uint8_t(R32 >> 16), uint8_t(R32 >> 24) };
+    constexpr uint32_t r32[4]{ m[0] - uint8_t(R32), m[1] - uint8_t(R32 >> 8), m[2] - uint8_t(R32 >> 16), m[3] - uint8_t(R32 >> 24) };
     constexpr uint32_t i[4]{ uint8_t(MINV), uint8_t(MINV >> 8), uint8_t(MINV >> 16), uint8_t(MINV >> 24) };
 
     uint32_t rem[4];
-    rem[0] = fast_rem_u32<m[0]>(uint32_t(r[0])) + ((-uint32_t(r[0] < 0)) & (m[0] - r32[0]));
-    rem[1] = fast_rem_u32<m[1]>(uint32_t(r[1])) + ((-uint32_t(r[1] < 0)) & (m[1] - r32[1]));
-    rem[2] = fast_rem_u32<m[2]>(uint32_t(r[2])) + ((-uint32_t(r[2] < 0)) & (m[2] - r32[2]));
-    rem[3] = fast_rem_u32<m[3]>(uint32_t(r[3])) + ((-uint32_t(r[3] < 0)) & (m[3] - r32[3]));
-
-    rem[0] += (-uint32_t(uint32_t(m[0]) < rem[0])) & (-m[0]);
-    rem[1] += (-uint32_t(uint32_t(m[1]) < rem[1])) & (-m[1]);
-    rem[2] += (-uint32_t(uint32_t(m[2]) < rem[2])) & (-m[2]);
-    rem[3] += (-uint32_t(uint32_t(m[3]) < rem[3])) & (-m[3]);
+    rem[0] = fast_rem_u32<m[0]>(uint32_t(r[0])) + ((-uint32_t(r[0] < 0)) & r32[0]);
+    rem[1] = fast_rem_u32<m[1]>(uint32_t(r[1])) + ((-uint32_t(r[1] < 0)) & r32[1]);
+    rem[2] = fast_rem_u32<m[2]>(uint32_t(r[2])) + ((-uint32_t(r[2] < 0)) & r32[2]);
+    rem[3] = fast_rem_u32<m[3]>(uint32_t(r[3])) + ((-uint32_t(r[3] < 0)) & r32[3]);
 
     r[0] = int32_t(fast_rem_u32<m[0]>(rem[0] * i[0]));
     r[1] = int32_t(fast_rem_u32<m[1]>(rem[1] * i[1]));
     r[2] = int32_t(fast_rem_u32<m[2]>(rem[2] * i[2]));
     r[3] = int32_t(fast_rem_u32<m[3]>(rem[3] * i[3]));
+
+    r[0] += int32_t((-uint32_t(int32_t(m[0]) < r[0])) & (-m[0]));
+    r[1] += int32_t((-uint32_t(int32_t(m[1]) < r[1])) & (-m[1]));
+    r[2] += int32_t((-uint32_t(int32_t(m[2]) < r[2])) & (-m[2]));
+    r[3] += int32_t((-uint32_t(int32_t(m[3]) < r[3])) & (-m[3]));
   }
 
 };

@@ -67,7 +67,6 @@ void internal::int8::i63ATA_f64_crt(cudaStream_t stream, cublasHandle_t handle, 
   int64_t strideA = int64_t(algnM) * int64_t(N), i8_bytes = strideA << 3;
   int32_t* scratch = (int32_t*)&workspace[i8_bytes];
 
-  cudaMemsetAsync(workspace, 0, i8_bytes, stream);
   for (int32_t i = 0; (i << 3) < n_moduli; ++i) {
     quantize_f64_modular(stream, M, N, i, A, lda, umax, vec_expon, CRT::active_moduli(n_moduli, i), workspace, algnM);
     i8GemmR_CRT(stream, handle, N, ldc, algnM, n_moduli, i, workspace, C, scratch);

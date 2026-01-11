@@ -95,7 +95,6 @@ void internal::int8::i63ATA_f64_limbs(cudaStream_t stream, cublasHandle_t handle
   int64_t strideA = int64_t(algnM) * int64_t(N), i8_bytes = strideA * int64_t(orderA);
   int32_t* scratch = (int32_t*)&workspace[i8_bytes];
 
-  cudaMemsetAsync(workspace, 0, i8_bytes, stream);
   quantize_f64(stream, M, N, A, lda, umax, vec_expon, orderA, workspace, algnM);
   i8GemmT(stream, handle, N, ldc, algnM, workspace, orderA, 0, C, orderC, scratch);
 }
@@ -105,7 +104,6 @@ void internal::int8::i63ATA_f32_limbs(cudaStream_t stream, cublasHandle_t handle
   int64_t strideA = int64_t(algnM) * int64_t(N), i8_bytes = strideA * int64_t(orderA);
   int32_t* scratch = (int32_t*)&workspace[i8_bytes];
 
-  cudaMemsetAsync(workspace, 0, i8_bytes, stream);
   quantize_f32(stream, M, N, A, lda, umax, vec_expon, orderA, workspace, algnM);
   i8GemmT(stream, handle, N, ldc, algnM, workspace, orderA, 0, C, orderC, scratch);
 }
@@ -115,7 +113,6 @@ void internal::int8::i63AHA_cf64_limbs(cudaStream_t stream, cublasHandle_t handl
   int64_t strideA = int64_t(algnM) * int64_t(N), i8_bytes = strideA * int64_t(orderA);
   int32_t* scratch = (int32_t*)&workspace[i8_bytes << 1];
 
-  cudaMemsetAsync(workspace, 0, i8_bytes << 1, stream);
   quantize_cf64(stream, M, N, A, lda, umax, vec_expon, orderA, workspace, algnM);
   i8GemmT(stream, handle, N, ldc, algnM, workspace, orderA, 0, C, orderC, scratch);
   i8GemmT(stream, handle, N, ldc, algnM, &workspace[i8_bytes], orderA, 1, C, orderC, scratch);
@@ -127,7 +124,6 @@ void internal::int8::i63AHA_cf32_limbs(cudaStream_t stream, cublasHandle_t handl
   int64_t strideA = int64_t(algnM) * int64_t(N), i8_bytes = strideA * int64_t(orderA);
   int32_t* scratch = (int32_t*)&workspace[i8_bytes << 1];
 
-  cudaMemsetAsync(workspace, 0, i8_bytes << 1, stream);
   quantize_cf32(stream, M, N, A, lda, umax, vec_expon, orderA, workspace, algnM);
   i8GemmT(stream, handle, N, ldc, algnM, workspace, orderA, 0, C, orderC, scratch);
   i8GemmT(stream, handle, N, ldc, algnM, &workspace[i8_bytes], orderA, 1, C, orderC, scratch);
