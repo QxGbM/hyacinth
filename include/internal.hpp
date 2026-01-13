@@ -133,8 +133,6 @@ namespace internal::int8 {
 
   void quantize_cf32_modular(cudaStream_t stream, int32_t M, int32_t N, int32_t iter, const std::complex<float>* C, int32_t ldc, int32_t umax, const uint64_t* vec_expon, int32_t orderA, int8_t* A, int32_t lda);
 
-  void normalize_remainder_i32tensor(cudaStream_t stream, int64_t N, int32_t* X, int32_t nbatch);
-
   void accumulate_remainder_i32tensor(cudaStream_t stream, int32_t option, int64_t N, int32_t n_moduli, int32_t iter, const int32_t* X, uint64_t* A);
 
   void i63ATA_f64_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const double* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, uint64_t* C, int32_t ldc, int8_t* workspace);

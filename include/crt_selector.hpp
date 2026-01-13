@@ -4,6 +4,7 @@
 namespace CRT {
   constexpr uint64_t modular(int32_t iter) { return 0 <= iter && iter < 3 ? Common::mo[iter] : uint64_t(0); }
   constexpr uint64_t rem_e32(int32_t iter) { return 0 <= iter && iter < 3 ? Common::rem_e32[iter] : uint64_t(0); }
+  constexpr uint64_t rem_e63(int32_t iter) { return 0 <= iter && iter < 3 ? Common::rem_e63[iter] : uint64_t(0); }
 
   constexpr int32_t active_moduli(int32_t n_moduli, int32_t iter) {
     n_moduli = n_moduli - (iter * 8);

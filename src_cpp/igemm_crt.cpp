@@ -19,7 +19,6 @@ inline void gemm_normalize_crt(cudaStream_t stream, cublasHandle_t handle, int32
       const int8_t* AN_k = &A[int64_t(k)];
       cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, iter_k, &one, AT_k, CUDA_R_8I, K, strideA, AN_k, CUDA_R_8I, K, strideA,
         &beta, C, CUDA_R_32I, M, strideC, orderA, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT); beta |= 1;
-      internal::int8::normalize_remainder_i32tensor(stream, strideC, C, orderA);
     }
 
     const int8_t* AT_k = &AT[int64_t(range_k)];
@@ -27,7 +26,6 @@ inline void gemm_normalize_crt(cudaStream_t stream, cublasHandle_t handle, int32
     cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, std::min(rem, iter_h), &one, AT_k, CUDA_R_8I, K, strideA, AN_k, CUDA_R_8I, K, strideA,
       &beta, C, CUDA_R_32I, M, strideC, orderA, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
     if (iter_h < rem) {
-      internal::int8::normalize_remainder_i32tensor(stream, strideC, C, orderA);
       cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, rem - iter_h, &one, &AT_k[iter_h], CUDA_R_8I, K, strideA, &AN_k[iter_h], CUDA_R_8I, K, strideA,
         &one, C, CUDA_R_32I, M, strideC, orderA, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
     }
@@ -48,7 +46,6 @@ void internal::int8::i8GemmC_CRT(cudaStream_t stream, cublasHandle_t handle, int
   int32_t accum = int32_t(0 < iter), last = int32_t(n_moduli <= ((iter + 1) << 3));
 
   gemm_normalize_crt(stream, handle, algnN, N, algnK, orderA, A, A, 0, workspace);
-  normalize_remainder_i32tensor(stream, strideC, workspace, orderA);
   gemm_normalize_crt(stream, handle, algnN, N, algnK, orderA, &A[strideA], &A[strideA], 1, workspace);
   accumulate_remainder_i32tensor(stream, accum | (last << 1), strideC, n_moduli, iter, workspace, C);
 

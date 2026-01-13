@@ -64,10 +64,6 @@ __global__ void i32_crt_accum_kernel(i32_array<pd_len> pd, int64_t N, const int3
 
 constexpr int32_t block_threads = 512;
 
-void internal::int8::normalize_remainder_i32tensor(cudaStream_t stream, int64_t N, int32_t* X, int32_t nbatch) {
-  
-}
-
 template <int32_t n_moduli, int32_t iter>
 inline void crt_acc_dispatcher(cudaStream_t stream, int32_t option, int64_t N, const int32_t* X, uint64_t* A) {
   constexpr int32_t orderM = CRT::active_moduli(n_moduli, iter);

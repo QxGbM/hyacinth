@@ -37,11 +37,13 @@ def pd_print(suffix, pd):
 if all_ok:
   moduli_simd = pack_u8x8(moduli_all)
   rem_e32 = pack_u8x8([(1 << 32) % m for m in moduli_all])
+  rem_e63 = pack_u8x8([(1 << 63) % m for m in moduli_all])
 
   print("#pragma once\n#include <cstdint>\n")
   print("namespace CRT::Common {")
   print(f"  constexpr uint64_t mo[{len(moduli_simd)}] =" + " { " + ", ".join(f"{m}llu" for m in moduli_simd) + " };")
   print(f"  constexpr uint64_t rem_e32[{len(rem_e32)}] =" + " { " + ", ".join(f"{m}llu" for m in rem_e32) + " };")
+  print(f"  constexpr uint64_t rem_e63[{len(rem_e63)}] =" + " { " + ", ".join(f"{m}llu" for m in rem_e63) + " };")
   print("};\n")
 
   for n in range(2, len(moduli_all)+1):
