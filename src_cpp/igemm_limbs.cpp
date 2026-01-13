@@ -3,7 +3,7 @@
 
 inline void gemm_accumulate(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, int32_t sft_lo, int32_t orderA, const int8_t* AT, const int8_t* A, int32_t op, uint64_t* C, int32_t orderC, int32_t* workspace) {
   constexpr int32_t iter_k = 131072, iter_h = iter_k / 2;
-  int32_t one = 1, zero = 0;
+  int32_t zero = 0, one = 1;
   int64_t strideC = int64_t(M) * int64_t(N);
   if (K <= iter_k) {
     cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N * orderA, K, &one, AT, CUDA_R_8I, K, A, CUDA_R_8I, K,

@@ -69,7 +69,7 @@ inline void crt_acc_dispatcher(cudaStream_t stream, int32_t option, int64_t N, c
   constexpr int32_t orderM = CRT::active_moduli(n_moduli, iter);
 
   if constexpr(0 < orderM) {
-    constexpr int32_t orderA = CRT::order_p(n_moduli), orderPD = CRT::order_pd(n_moduli);
+    constexpr int32_t orderA = 1 + ((n_moduli << 3) / 63), orderPD = CRT::order_pd(n_moduli);
     constexpr uint64_t MO = CRT::modular(iter), R32 = CRT::rem_e32(iter), MINV = CRT::modular_inv(n_moduli, iter);
 
     constexpr int32_t pd_len = orderM * orderPD;

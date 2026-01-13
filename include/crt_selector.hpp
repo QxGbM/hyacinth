@@ -11,34 +11,6 @@ namespace CRT {
     return 8 < n_moduli ? 8 : (n_moduli < 0 ? 0 : n_moduli);
   }
 
-  constexpr int32_t order_p(int32_t n_moduli) {
-    switch(n_moduli) {
-      case 2: return Moduli2::order_p;
-      case 3: return Moduli3::order_p;
-      case 4: return Moduli4::order_p;
-      case 5: return Moduli5::order_p;
-      case 6: return Moduli6::order_p;
-      case 7: return Moduli7::order_p;
-      case 8: return Moduli8::order_p;
-      case 9: return Moduli9::order_p;
-      case 10: return Moduli10::order_p;
-      case 11: return Moduli11::order_p;
-      case 12: return Moduli12::order_p;
-      case 13: return Moduli13::order_p;
-      case 14: return Moduli14::order_p;
-      case 15: return Moduli15::order_p;
-      case 16: return Moduli16::order_p;
-      case 17: return Moduli17::order_p;
-      case 18: return Moduli18::order_p;
-      case 19: return Moduli19::order_p;
-      case 20: return Moduli20::order_p;
-      case 21: return Moduli21::order_p;
-      case 22: return Moduli22::order_p;
-      case 23: return Moduli23::order_p;
-      default: return 0;
-    }
-  }
-
   constexpr int32_t order_pd(int32_t n_moduli) {
     switch(n_moduli) {
       case 2: return Moduli2::order_pd;

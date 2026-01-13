@@ -56,11 +56,10 @@ if all_ok:
     extract_limbs(P, p_limbs, 63)
     P_div = [P // m for m in moduli]
     inv = pack_u8x8([pow(Pd % m, -1, m) for Pd, m in zip(P_div, moduli)])
-    order_p = 1 + (P.bit_length() // 63)
     order_pd = (((n - 1) * 8) + 30) // 31
 
     print(f"namespace CRT::Moduli{n}" + " {")
-    print(f"  const int32_t order_p = {order_p}, order_pd = {order_pd};")
+    print(f"  const int32_t order_pd = {order_pd};")
     print(f"  constexpr uint64_t minv[{len(inv)}] =" + " { " + ", ".join(f"{m}llu" for m in inv) + " };")
     print(f"  constexpr uint64_t p[{len(p_limbs)}] =" + " { " + ", ".join(f"{l}llu" for l in p_limbs) + " };")
     for i in range(0, n, 8):
