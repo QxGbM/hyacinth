@@ -67,7 +67,6 @@ inline void dequantize_dispatcher(cudaStream_t stream, int32_t orderA, int64_t M
     case 1: dequantize_complex_kernel<1, complex_t> <<< grid, block_threads, 0, stream >>> (-M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
     case 2: dequantize_complex_kernel<2, complex_t> <<< grid, block_threads, 0, stream >>> (-M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
     case 3: dequantize_complex_kernel<3, complex_t> <<< grid, block_threads, 0, stream >>> (-M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
-    case 4: dequantize_complex_kernel<4, complex_t> <<< grid, block_threads, 0, stream >>> (-M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
     default: break;
   }
 }

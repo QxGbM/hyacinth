@@ -10,7 +10,7 @@ int32_t device::interp_decomp_f64(cublasHandle_t handle, double epi, int32_t ran
   cudaStream_t stream; cublasGetStream(handle, &stream);
   int32_t algnN, umax = umax_exp_extra; Precision precC; int64_t work_bytes;
   MixPrecAHA::igemm_params(&epi, N, &algnN, &umax, Precision::FP64, &precC);
-  MixPrecAHA::igemm_limbed_workspace(M, N, algnN, umax, 0, precC, &work_bytes);
+  MixPrecAHA::igemm_workspace(M, N, algnN, umax, 0, precC, &work_bytes);
 
   void* work = nullptr;
   int32_t* dpiv = nullptr;
@@ -44,7 +44,7 @@ int32_t device::interp_decomp_f32(cublasHandle_t handle, double epi, int32_t ran
   cudaStream_t stream; cublasGetStream(handle, &stream);
   int32_t algnN, umax = umax_exp_extra; Precision precC; int64_t work_bytes;
   MixPrecAHA::igemm_params(&epi, N, &algnN, &umax, Precision::FP32, &precC);
-  MixPrecAHA::igemm_limbed_workspace(M, N, algnN, umax, 0, precC, &work_bytes);
+  MixPrecAHA::igemm_workspace(M, N, algnN, umax, 0, precC, &work_bytes);
 
   void* work = nullptr;
   int32_t* dpiv = nullptr;
@@ -78,7 +78,7 @@ int32_t device::interp_decomp_cf64(cublasHandle_t handle, double epi, int32_t ra
   cudaStream_t stream; cublasGetStream(handle, &stream);
   int32_t algnN, umax = umax_exp_extra; Precision precC; int64_t work_bytes;
   MixPrecAHA::igemm_params(&epi, N, &algnN, &umax, Precision::FP64, &precC);
-  MixPrecAHA::igemm_limbed_workspace(M, N, algnN, umax, 1, precC, &work_bytes);
+  MixPrecAHA::igemm_workspace(M, N, algnN, umax, 1, precC, &work_bytes);
 
   void* work = nullptr;
   int32_t* dpiv = nullptr;
@@ -112,7 +112,7 @@ int32_t device::interp_decomp_cf32(cublasHandle_t handle, double epi, int32_t ra
   cudaStream_t stream; cublasGetStream(handle, &stream);
   int32_t algnN, umax = umax_exp_extra; Precision precC; int64_t work_bytes;
   MixPrecAHA::igemm_params(&epi, N, &algnN, &umax, Precision::FP32, &precC);
-  MixPrecAHA::igemm_limbed_workspace(M, N, algnN, umax, 1, precC, &work_bytes);
+  MixPrecAHA::igemm_workspace(M, N, algnN, umax, 1, precC, &work_bytes);
 
   void* work = nullptr;
   int32_t* dpiv = nullptr;

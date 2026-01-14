@@ -11,34 +11,6 @@ namespace CRT {
     return 8 < n_moduli ? 8 : (n_moduli < 0 ? 0 : n_moduli);
   }
 
-  constexpr int32_t order_pd(int32_t n_moduli) {
-    switch(n_moduli) {
-      case 2: return Moduli2::order_pd;
-      case 3: return Moduli3::order_pd;
-      case 4: return Moduli4::order_pd;
-      case 5: return Moduli5::order_pd;
-      case 6: return Moduli6::order_pd;
-      case 7: return Moduli7::order_pd;
-      case 8: return Moduli8::order_pd;
-      case 9: return Moduli9::order_pd;
-      case 10: return Moduli10::order_pd;
-      case 11: return Moduli11::order_pd;
-      case 12: return Moduli12::order_pd;
-      case 13: return Moduli13::order_pd;
-      case 14: return Moduli14::order_pd;
-      case 15: return Moduli15::order_pd;
-      case 16: return Moduli16::order_pd;
-      case 17: return Moduli17::order_pd;
-      case 18: return Moduli18::order_pd;
-      case 19: return Moduli19::order_pd;
-      case 20: return Moduli20::order_pd;
-      case 21: return Moduli21::order_pd;
-      case 22: return Moduli22::order_pd;
-      case 23: return Moduli23::order_pd;
-      default: return 0;
-    }
-  }
-
   constexpr uint64_t modular_inv(int32_t n_moduli, int32_t iter) {
     switch(n_moduli) {
       case 2: return 0 <= iter && iter < 1 ? Moduli2::minv[iter] : uint64_t(0);

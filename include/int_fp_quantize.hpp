@@ -23,34 +23,30 @@ namespace device::int8 {
 
   template <uint32_t ORDER>
   __host__ __device__ __forceinline__ void add_shifted(uint64_t (&a)[ORDER], int64_t i, uint32_t expon) {
-    static_assert(1 <= ORDER && ORDER <= 4, "Integer 64 accumulation order must be in [1,4]");
+    static_assert(1 <= ORDER && ORDER <= 3, "Integer 64 accumulation order must be in [1,3]");
 
-    uint32_t quo = uint32_t(63 <= expon) + uint32_t(126 <= expon) + uint32_t(189 <= expon) + uint32_t(252 <= expon);
+    uint32_t quo = uint32_t(63 <= expon) + uint32_t(126 <= expon) + uint32_t(189 <= expon);
     uint32_t rem = (expon - quo * uint32_t(63)) & uint32_t(63);
     uint64_t b[3]{ (uint64_t(i) << rem) & i63, uint64_t(i >> (uint32_t(63) - rem)) & i63, -(uint64_t(i) >> 63) & i63 };
     a[0] += u64_selector<0>(quo, b);
     if constexpr(1 < ORDER) a[1] += u64_selector<1>(quo, b) + (a[0] >> 63);
     if constexpr(2 < ORDER) a[2] += u64_selector<2>(quo, b) + (a[1] >> 63);
-    if constexpr(3 < ORDER) a[3] += u64_selector<3>(quo, b) + (a[2] >> 63);
 
     if constexpr(1 < ORDER) a[0] = a[0] & i63;
     if constexpr(2 < ORDER) a[1] = a[1] & i63;
-    if constexpr(3 < ORDER) a[2] = a[2] & i63;
     a[ORDER - 1] = ((a[ORDER - 1] << 1) & u63) | (a[ORDER - 1] & i63);
   }
 
   template <uint32_t ORDER>
   __host__ __device__ __forceinline__ void negate_shifted(uint64_t (&a)[ORDER]) {
-    static_assert(1 <= ORDER && ORDER <= 4, "Integer 64 accumulation order must be in [1,4]");
+    static_assert(1 <= ORDER && ORDER <= 3, "Integer 64 accumulation order must be in [1,3]");
 
     a[0] += i63;
     if constexpr(1 < ORDER) a[1] += i63 + (a[0] >> 63);
     if constexpr(2 < ORDER) a[2] += i63 + (a[1] >> 63);
-    if constexpr(3 < ORDER) a[3] += i63 + (a[2] >> 63);
     
     if constexpr(1 < ORDER) a[0] = (~a[0]) & i63;
     if constexpr(2 < ORDER) a[1] = (~a[1]) & i63;
-    if constexpr(3 < ORDER) a[2] = (~a[2]) & i63;
     a[ORDER - 1] = ~(((a[ORDER - 1] << 1) & u63) | (a[ORDER - 1] & i63));
   }
 
@@ -73,7 +69,7 @@ namespace device::int8 {
   }
 
   template<uint32_t DIV>
-  __host__ __device__ __forceinline__ uint32_t fast_rem_u32(uint32_t x) {
+  __host__ __device__ __forceinline__ uint32_t barrett_reduc(uint32_t x) {
     if constexpr(DIV) {
       constexpr uint32_t m_num = uint32_t((0x8000000000llu / uint64_t(DIV)));
 #ifdef __CUDA_ARCH__
@@ -92,10 +88,10 @@ namespace device::int8 {
     constexpr uint32_t r63[4]{ uint8_t(R63), uint8_t(R63 >> 8), uint8_t(R63 >> 16), uint8_t(R63 >> 24) };
     uint32_t r[4];
 
-    r[0] = fast_rem_u32<m[0]>(fast_rem_u32<m[0]>(lo) + fast_rem_u32<m[0]>(mi) * r32[0] + fast_rem_u32<m[0]>(hi) * r63[0]);
-    r[1] = fast_rem_u32<m[1]>(fast_rem_u32<m[1]>(lo) + fast_rem_u32<m[1]>(mi) * r32[1] + fast_rem_u32<m[1]>(hi) * r63[1]);
-    r[2] = fast_rem_u32<m[2]>(fast_rem_u32<m[2]>(lo) + fast_rem_u32<m[2]>(mi) * r32[2] + fast_rem_u32<m[2]>(hi) * r63[2]);
-    r[3] = fast_rem_u32<m[3]>(fast_rem_u32<m[3]>(lo) + fast_rem_u32<m[3]>(mi) * r32[3] + fast_rem_u32<m[3]>(hi) * r63[3]);
+    r[0] = barrett_reduc<m[0]>(barrett_reduc<m[0]>(lo) + barrett_reduc<m[0]>(mi) * r32[0] + barrett_reduc<m[0]>(hi) * r63[0]);
+    r[1] = barrett_reduc<m[1]>(barrett_reduc<m[1]>(lo) + barrett_reduc<m[1]>(mi) * r32[1] + barrett_reduc<m[1]>(hi) * r63[1]);
+    r[2] = barrett_reduc<m[2]>(barrett_reduc<m[2]>(lo) + barrett_reduc<m[2]>(mi) * r32[2] + barrett_reduc<m[2]>(hi) * r63[2]);
+    r[3] = barrett_reduc<m[3]>(barrett_reduc<m[3]>(lo) + barrett_reduc<m[3]>(mi) * r32[3] + barrett_reduc<m[3]>(hi) * r63[3]);
 
     r[0] = uint8_t(r[0] + ((-uint32_t(uint32_t(127) < r[0])) & (-m[0])));
     r[1] = uint8_t(r[1] + ((-uint32_t(uint32_t(127) < r[1])) & (-m[1])));
@@ -111,15 +107,15 @@ namespace device::int8 {
     constexpr uint32_t i[4]{ uint8_t(MINV), uint8_t(MINV >> 8), uint8_t(MINV >> 16), uint8_t(MINV >> 24) };
 
     uint32_t rem[4];
-    rem[0] = fast_rem_u32<m[0]>(uint32_t(r[0])) + ((-uint32_t(r[0] < 0)) & r32[0]);
-    rem[1] = fast_rem_u32<m[1]>(uint32_t(r[1])) + ((-uint32_t(r[1] < 0)) & r32[1]);
-    rem[2] = fast_rem_u32<m[2]>(uint32_t(r[2])) + ((-uint32_t(r[2] < 0)) & r32[2]);
-    rem[3] = fast_rem_u32<m[3]>(uint32_t(r[3])) + ((-uint32_t(r[3] < 0)) & r32[3]);
+    rem[0] = barrett_reduc<m[0]>(uint32_t(r[0])) + ((-uint32_t(r[0] < 0)) & r32[0]);
+    rem[1] = barrett_reduc<m[1]>(uint32_t(r[1])) + ((-uint32_t(r[1] < 0)) & r32[1]);
+    rem[2] = barrett_reduc<m[2]>(uint32_t(r[2])) + ((-uint32_t(r[2] < 0)) & r32[2]);
+    rem[3] = barrett_reduc<m[3]>(uint32_t(r[3])) + ((-uint32_t(r[3] < 0)) & r32[3]);
 
-    r[0] = int32_t(fast_rem_u32<m[0]>(rem[0] * i[0]));
-    r[1] = int32_t(fast_rem_u32<m[1]>(rem[1] * i[1]));
-    r[2] = int32_t(fast_rem_u32<m[2]>(rem[2] * i[2]));
-    r[3] = int32_t(fast_rem_u32<m[3]>(rem[3] * i[3]));
+    r[0] = int32_t(barrett_reduc<m[0]>(rem[0] * i[0]));
+    r[1] = int32_t(barrett_reduc<m[1]>(rem[1] * i[1]));
+    r[2] = int32_t(barrett_reduc<m[2]>(rem[2] * i[2]));
+    r[3] = int32_t(barrett_reduc<m[3]>(rem[3] * i[3]));
 
     r[0] += int32_t((-uint32_t(int32_t(m[0]) < r[0])) & (-m[0]));
     r[1] += int32_t((-uint32_t(int32_t(m[1]) < r[1])) & (-m[1]));

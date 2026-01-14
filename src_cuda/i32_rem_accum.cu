@@ -64,15 +64,12 @@ __global__ void i32_crt_accum_kernel(i32_array<pd_len> pd, int64_t N, const int3
 
 constexpr int32_t block_threads = 512;
 
-template <int32_t n_moduli, int32_t iter>
+template <int32_t n_moduli, int32_t orderA, int32_t orderPD, int32_t iter>
 inline void crt_acc_dispatcher(cudaStream_t stream, int32_t option, int64_t N, const int32_t* X, uint64_t* A) {
-  constexpr int32_t orderM = CRT::active_moduli(n_moduli, iter);
+  constexpr int32_t orderM = CRT::active_moduli(n_moduli, iter), pd_len = orderM * orderPD;
 
   if constexpr(0 < orderM) {
-    constexpr int32_t orderA = 1 + ((n_moduli << 3) / 63), orderPD = CRT::order_pd(n_moduli);
     constexpr uint64_t MO = CRT::modular(iter), R32 = CRT::rem_e32(iter), MINV = CRT::modular_inv(n_moduli, iter);
-
-    constexpr int32_t pd_len = orderM * orderPD;
     i32_array<pd_len> pd; std::copy_n(CRT::p_div(n_moduli, iter), pd_len, &pd.arr[0]);
     int32_t grid = int32_t((N + int64_t(block_threads - 1)) / int64_t(block_threads));
 
@@ -96,28 +93,28 @@ inline void crt_acc_dispatcher(cudaStream_t stream, int32_t option, int64_t N, c
 template <int32_t iter>
 inline void crt_acc_dispatcher(cudaStream_t stream, int32_t option, int64_t N, int32_t n_moduli, const int32_t* X, uint64_t* A) {
   switch (n_moduli) {
-    case 2: crt_acc_dispatcher<2, iter>(stream, option, N, X, A); break;
-    case 3: crt_acc_dispatcher<3, iter>(stream, option, N, X, A); break;
-    case 4: crt_acc_dispatcher<4, iter>(stream, option, N, X, A); break;
-    case 5: crt_acc_dispatcher<5, iter>(stream, option, N, X, A); break;
-    case 6: crt_acc_dispatcher<6, iter>(stream, option, N, X, A); break;
-    case 7: crt_acc_dispatcher<7, iter>(stream, option, N, X, A); break;
-    case 8: crt_acc_dispatcher<8, iter>(stream, option, N, X, A); break;
-    case 9: crt_acc_dispatcher<9, iter>(stream, option, N, X, A); break;
-    case 10: crt_acc_dispatcher<10, iter>(stream, option, N, X, A); break;
-    case 11: crt_acc_dispatcher<11, iter>(stream, option, N, X, A); break;
-    case 12: crt_acc_dispatcher<12, iter>(stream, option, N, X, A); break;
-    case 13: crt_acc_dispatcher<13, iter>(stream, option, N, X, A); break;
-    case 14: crt_acc_dispatcher<14, iter>(stream, option, N, X, A); break;
-    case 15: crt_acc_dispatcher<15, iter>(stream, option, N, X, A); break;
-    case 16: crt_acc_dispatcher<16, iter>(stream, option, N, X, A); break;
-    case 17: crt_acc_dispatcher<17, iter>(stream, option, N, X, A); break;
-    case 18: crt_acc_dispatcher<18, iter>(stream, option, N, X, A); break;
-    case 19: crt_acc_dispatcher<19, iter>(stream, option, N, X, A); break;
-    case 20: crt_acc_dispatcher<20, iter>(stream, option, N, X, A); break;
-    case 21: crt_acc_dispatcher<21, iter>(stream, option, N, X, A); break;
-    case 22: crt_acc_dispatcher<22, iter>(stream, option, N, X, A); break;
-    case 23: crt_acc_dispatcher<23, iter>(stream, option, N, X, A); break;
+    case 2: crt_acc_dispatcher<2, 1, 1, iter>(stream, option, N, X, A); break;
+    case 3: crt_acc_dispatcher<3, 1, 1, iter>(stream, option, N, X, A); break;
+    case 4: crt_acc_dispatcher<4, 1, 1, iter>(stream, option, N, X, A); break;
+    case 5: crt_acc_dispatcher<5, 1, 2, iter>(stream, option, N, X, A); break;
+    case 6: crt_acc_dispatcher<6, 1, 2, iter>(stream, option, N, X, A); break;
+    case 7: crt_acc_dispatcher<7, 1, 2, iter>(stream, option, N, X, A); break;
+    case 8: crt_acc_dispatcher<8, 2, 2, iter>(stream, option, N, X, A); break;
+    case 9: crt_acc_dispatcher<9, 2, 3, iter>(stream, option, N, X, A); break;
+    case 10: crt_acc_dispatcher<10, 2, 3, iter>(stream, option, N, X, A); break;
+    case 11: crt_acc_dispatcher<11, 2, 3, iter>(stream, option, N, X, A); break;
+    case 12: crt_acc_dispatcher<12, 2, 3, iter>(stream, option, N, X, A); break;
+    case 13: crt_acc_dispatcher<13, 2, 4, iter>(stream, option, N, X, A); break;
+    case 14: crt_acc_dispatcher<14, 2, 4, iter>(stream, option, N, X, A); break;
+    case 15: crt_acc_dispatcher<15, 2, 4, iter>(stream, option, N, X, A); break;
+    case 16: crt_acc_dispatcher<16, 3, 4, iter>(stream, option, N, X, A); break;
+    case 17: crt_acc_dispatcher<17, 3, 5, iter>(stream, option, N, X, A); break;
+    case 18: crt_acc_dispatcher<18, 3, 5, iter>(stream, option, N, X, A); break;
+    case 19: crt_acc_dispatcher<19, 3, 5, iter>(stream, option, N, X, A); break;
+    case 20: crt_acc_dispatcher<20, 3, 5, iter>(stream, option, N, X, A); break;
+    case 21: crt_acc_dispatcher<21, 3, 6, iter>(stream, option, N, X, A); break;
+    case 22: crt_acc_dispatcher<22, 3, 6, iter>(stream, option, N, X, A); break;
+    case 23: crt_acc_dispatcher<23, 3, 6, iter>(stream, option, N, X, A); break;
     default: break;
   }
 }
