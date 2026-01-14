@@ -2,7 +2,7 @@
 #include <internal.hpp>
 #include <crt_selector.hpp>
 
-inline void gemm_normalize_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, int32_t orderA, const int8_t* AT, const int8_t* A, int32_t n_moduli, int32_t iter, int32_t accum, int32_t last, uint64_t* C, int32_t* workspace) {
+inline void gemm_accumulate_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, int32_t orderA, const int8_t* AT, const int8_t* A, int32_t n_moduli, int32_t iter, int32_t accum, int32_t last, uint64_t* C, int32_t* workspace) {
   constexpr int32_t iter_k = 131072, iter_h = iter_k / 2;
   int32_t zero = 0, one = 1;
   int64_t strideA = int64_t(N) * int64_t(K), strideC = int64_t(M) * int64_t(N);
@@ -41,20 +41,20 @@ inline void gemm_normalize_crt(cudaStream_t stream, cublasHandle_t handle, int32
   }
 }
 
-void internal::int8::i8GemmR_CRT(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32_t algnN, int32_t algnK, int32_t n_moduli, int32_t iter, const int8_t* A, uint64_t* C, int32_t* workspace) {
+inline void i8GemmR_CRT(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32_t algnN, int32_t algnK, int32_t n_moduli, int32_t iter, const int8_t* A, uint64_t* C, int32_t* workspace) {
   int32_t orderA = CRT::active_moduli(n_moduli, iter);
   int32_t accum = int32_t(0 < iter), last = int32_t(n_moduli <= ((iter + 1) << 3));
-  gemm_normalize_crt(stream, handle, algnN, N, algnK, orderA, A, A, n_moduli, iter, accum, last, C, workspace);
+  gemm_accumulate_crt(stream, handle, algnN, N, algnK, orderA, A, A, n_moduli, iter, accum, last, C, workspace);
 }
 
-void internal::int8::i8GemmC_CRT(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32_t algnN, int32_t algnK, int32_t n_moduli, int32_t iter, const int8_t* A, uint64_t* C, int32_t* workspace) {
-  int32_t orderA = CRT::active_moduli(n_moduli, iter);
-  int64_t strideA = int64_t(orderA) * int64_t(algnK) * int64_t(N);
+inline void i8GemmC_CRT(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32_t algnN, int32_t algnK, int32_t n_moduli, int32_t iter, const int8_t* A, uint64_t* C, int32_t* workspace) {
+  int32_t orderA = CRT::active_moduli(n_moduli, iter), orderC = 1 + ((n_moduli << 3) / 63);
+  int64_t strideA = int64_t(orderA) * int64_t(algnK) * int64_t(N), strideC = int64_t(orderC) * int64_t(algnN) * int64_t(N);
   int32_t accum = int32_t(0 < iter), last = int32_t(n_moduli <= ((iter + 1) << 3));
 
-  gemm_normalize_crt(stream, handle, algnN, N, algnK, orderA, A, A, n_moduli, iter, accum, 0, C, workspace);
-  gemm_normalize_crt(stream, handle, algnN, N, algnK, orderA, &A[strideA], &A[strideA], n_moduli, iter, 1, last, C, workspace);
-  gemm_normalize_crt(stream, handle, algnN, N, algnK, orderA, A, &A[strideA], n_moduli, iter, accum, last, C, workspace);
+  gemm_accumulate_crt(stream, handle, algnN, N, algnK, orderA, A, A, n_moduli, iter, accum, 0, C, workspace);
+  gemm_accumulate_crt(stream, handle, algnN, N, algnK, orderA, &A[strideA], &A[strideA], n_moduli, iter, 1, last, C, workspace);
+  gemm_accumulate_crt(stream, handle, algnN, N, algnK, orderA, A, &A[strideA], n_moduli, iter, accum, last, &C[strideC], workspace);
 }
 
 inline std::pair<int32_t, int32_t> umax_moduli(int32_t umax, int32_t k, int32_t c) {
@@ -65,11 +65,44 @@ inline std::pair<int32_t, int32_t> umax_moduli(int32_t umax, int32_t k, int32_t 
 
 void internal::int8::i63ATA_f64_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const double* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, uint64_t* C, int32_t ldc, int8_t* workspace) {
   int32_t algnM, n_moduli; std::tie(algnM, n_moduli) = umax_moduli(umax, M, 0);
-  int64_t strideA = int64_t(algnM) * int64_t(N), i8_bytes = strideA << 3;
-  int32_t* scratch = (int32_t*)&workspace[i8_bytes];
+  int64_t strideA = int64_t(algnM) * int64_t(N);
+  int32_t* scratch = (int32_t*)&workspace[strideA << 3];
 
   for (int32_t i = 0; (i << 3) < n_moduli; ++i) {
     quantize_f64_modular(stream, M, N, i, A, lda, umax, vec_expon, CRT::active_moduli(n_moduli, i), workspace, algnM);
     i8GemmR_CRT(stream, handle, N, ldc, algnM, n_moduli, i, workspace, C, scratch);
+  }
+}
+
+void internal::int8::i63ATA_f32_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const float* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, uint64_t* C, int32_t ldc, int8_t* workspace) {
+  int32_t algnM, n_moduli; std::tie(algnM, n_moduli) = umax_moduli(umax, M, 0);
+  int64_t strideA = int64_t(algnM) * int64_t(N);
+  int32_t* scratch = (int32_t*)&workspace[strideA << 3];
+
+  for (int32_t i = 0; (i << 3) < n_moduli; ++i) {
+    quantize_f32_modular(stream, M, N, i, A, lda, umax, vec_expon, CRT::active_moduli(n_moduli, i), workspace, algnM);
+    i8GemmR_CRT(stream, handle, N, ldc, algnM, n_moduli, i, workspace, C, scratch);
+  }
+}
+
+void internal::int8::i63ATA_cf64_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, uint64_t* C, int32_t ldc, int8_t* workspace) {
+  int32_t algnM, n_moduli; std::tie(algnM, n_moduli) = umax_moduli(umax, M, 0);
+  int64_t strideA = int64_t(algnM) * int64_t(N);
+  int32_t* scratch = (int32_t*)&workspace[strideA << 4];
+
+  for (int32_t i = 0; (i << 3) < n_moduli; ++i) {
+    quantize_cf64_modular(stream, M, N, i, A, lda, umax, vec_expon, CRT::active_moduli(n_moduli, i), workspace, algnM);
+    i8GemmC_CRT(stream, handle, N, ldc, algnM, n_moduli, i, workspace, C, scratch);
+  }
+}
+
+void internal::int8::i63ATA_cf32_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, uint64_t* C, int32_t ldc, int8_t* workspace) {
+  int32_t algnM, n_moduli; std::tie(algnM, n_moduli) = umax_moduli(umax, M, 0);
+  int64_t strideA = int64_t(algnM) * int64_t(N);
+  int32_t* scratch = (int32_t*)&workspace[strideA << 4];
+
+  for (int32_t i = 0; (i << 3) < n_moduli; ++i) {
+    quantize_cf32_modular(stream, M, N, i, A, lda, umax, vec_expon, CRT::active_moduli(n_moduli, i), workspace, algnM);
+    i8GemmC_CRT(stream, handle, N, ldc, algnM, n_moduli, i, workspace, C, scratch);
   }
 }

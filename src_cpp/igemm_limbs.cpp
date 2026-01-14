@@ -87,13 +87,13 @@ inline void i8GemmT(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32
 inline std::tuple<int32_t, int32_t, int32_t> umax_order(int32_t umax, int32_t k, int32_t c) {
   int32_t algnK = (k + 255) & (~255);
   int32_t bits = int32_t(std::ceil(std::log2(algnK))) + (umax << 1) + 2 + c;
-  return std::make_tuple(algnK, (umax + 9) >> 3, 1 + (bits / 63));
+  return std::make_tuple(algnK, (umax + 9) >> 3, 1 + ((8 + (bits & (~7))) / 63));
 }
 
 void internal::int8::i63ATA_f64_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const double* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, uint64_t* C, int32_t ldc, int8_t* workspace) {
   int32_t algnM, orderA, orderC; std::tie(algnM, orderA, orderC) = umax_order(umax, M, 0);
-  int64_t strideA = int64_t(algnM) * int64_t(N), i8_bytes = strideA * int64_t(orderA);
-  int32_t* scratch = (int32_t*)&workspace[i8_bytes];
+  int64_t strideA = int64_t(algnM) * int64_t(N) * int64_t(orderA);
+  int32_t* scratch = (int32_t*)&workspace[strideA];
 
   quantize_f64(stream, M, N, A, lda, umax, vec_expon, orderA, workspace, algnM);
   i8GemmT(stream, handle, N, ldc, algnM, workspace, orderA, 0, C, orderC, scratch);
@@ -101,8 +101,8 @@ void internal::int8::i63ATA_f64_limbs(cudaStream_t stream, cublasHandle_t handle
 
 void internal::int8::i63ATA_f32_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const float* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, uint64_t* C, int32_t ldc, int8_t* workspace) {
   int32_t algnM, orderA, orderC; std::tie(algnM, orderA, orderC) = umax_order(umax, M, 0);
-  int64_t strideA = int64_t(algnM) * int64_t(N), i8_bytes = strideA * int64_t(orderA);
-  int32_t* scratch = (int32_t*)&workspace[i8_bytes];
+  int64_t strideA = int64_t(algnM) * int64_t(N) * int64_t(orderA);
+  int32_t* scratch = (int32_t*)&workspace[strideA];
 
   quantize_f32(stream, M, N, A, lda, umax, vec_expon, orderA, workspace, algnM);
   i8GemmT(stream, handle, N, ldc, algnM, workspace, orderA, 0, C, orderC, scratch);
@@ -110,22 +110,22 @@ void internal::int8::i63ATA_f32_limbs(cudaStream_t stream, cublasHandle_t handle
 
 void internal::int8::i63AHA_cf64_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, uint64_t* C, int32_t ldc, int8_t* workspace) {
   int32_t algnM, orderA, orderC; std::tie(algnM, orderA, orderC) = umax_order(umax, M, 1);
-  int64_t strideA = int64_t(algnM) * int64_t(N), i8_bytes = strideA * int64_t(orderA);
-  int32_t* scratch = (int32_t*)&workspace[i8_bytes << 1];
+  int64_t strideA = int64_t(algnM) * int64_t(N) * int64_t(orderA);
+  int32_t* scratch = (int32_t*)&workspace[strideA << 1];
 
   quantize_cf64(stream, M, N, A, lda, umax, vec_expon, orderA, workspace, algnM);
   i8GemmT(stream, handle, N, ldc, algnM, workspace, orderA, 0, C, orderC, scratch);
-  i8GemmT(stream, handle, N, ldc, algnM, &workspace[i8_bytes], orderA, 1, C, orderC, scratch);
-  i8GemmF(stream, handle, N, ldc, algnM, workspace, &workspace[i8_bytes], orderA, 0, &C[int64_t(ldc) * int64_t(N) * int64_t(orderC)], orderC, scratch);
+  i8GemmT(stream, handle, N, ldc, algnM, &workspace[strideA], orderA, 1, C, orderC, scratch);
+  i8GemmF(stream, handle, N, ldc, algnM, workspace, &workspace[strideA], orderA, 0, &C[int64_t(ldc) * int64_t(N) * int64_t(orderC)], orderC, scratch);
 }
 
 void internal::int8::i63AHA_cf32_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, uint64_t* C, int32_t ldc, int8_t* workspace) {
   int32_t algnM, orderA, orderC; std::tie(algnM, orderA, orderC) = umax_order(umax, M, 1);
-  int64_t strideA = int64_t(algnM) * int64_t(N), i8_bytes = strideA * int64_t(orderA);
-  int32_t* scratch = (int32_t*)&workspace[i8_bytes << 1];
+  int64_t strideA = int64_t(algnM) * int64_t(N) * int64_t(orderA);
+  int32_t* scratch = (int32_t*)&workspace[strideA << 1];
 
   quantize_cf32(stream, M, N, A, lda, umax, vec_expon, orderA, workspace, algnM);
   i8GemmT(stream, handle, N, ldc, algnM, workspace, orderA, 0, C, orderC, scratch);
-  i8GemmT(stream, handle, N, ldc, algnM, &workspace[i8_bytes], orderA, 1, C, orderC, scratch);
-  i8GemmF(stream, handle, N, ldc, algnM, workspace, &workspace[i8_bytes], orderA, 0, &C[int64_t(ldc) * int64_t(N) * int64_t(orderC)], orderC, scratch);
+  i8GemmT(stream, handle, N, ldc, algnM, &workspace[strideA], orderA, 1, C, orderC, scratch);
+  i8GemmF(stream, handle, N, ldc, algnM, workspace, &workspace[strideA], orderA, 0, &C[int64_t(ldc) * int64_t(N) * int64_t(orderC)], orderC, scratch);
 }
