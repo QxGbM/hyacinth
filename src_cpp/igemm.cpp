@@ -3,6 +3,7 @@
 #include <internal.hpp>
 #include <crt_selector.hpp>
 #include <limits>
+#include <tuple>
 
 const int32_t umax_threshold = 30; // umax <= 30 : Limbs, 31 <= umax : CRT
 
