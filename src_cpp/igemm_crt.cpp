@@ -85,7 +85,7 @@ void internal::int8::i63ATA_f32_crt(cudaStream_t stream, cublasHandle_t handle, 
   }
 }
 
-void internal::int8::i63ATA_cf64_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, uint64_t* C, int32_t ldc, int8_t* workspace) {
+void internal::int8::i63AHA_cf64_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, uint64_t* C, int32_t ldc, int8_t* workspace) {
   int32_t algnM, n_moduli; std::tie(algnM, n_moduli) = umax_moduli(umax, M, 0);
   int64_t strideA = int64_t(algnM) * int64_t(N);
   int32_t* scratch = (int32_t*)&workspace[strideA << 4];
@@ -96,7 +96,7 @@ void internal::int8::i63ATA_cf64_crt(cudaStream_t stream, cublasHandle_t handle,
   }
 }
 
-void internal::int8::i63ATA_cf32_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, uint64_t* C, int32_t ldc, int8_t* workspace) {
+void internal::int8::i63AHA_cf32_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, uint64_t* C, int32_t ldc, int8_t* workspace) {
   int32_t algnM, n_moduli; std::tie(algnM, n_moduli) = umax_moduli(umax, M, 0);
   int64_t strideA = int64_t(algnM) * int64_t(N);
   int32_t* scratch = (int32_t*)&workspace[strideA << 4];
