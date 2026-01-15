@@ -3,18 +3,6 @@
 #include <hyacin.hpp>
 #include <cuComplex.h>
 
-inline void workspace_realloc(cudaStream_t stream, void** ptr, int64_t* bytes_old, int64_t bytes_required) {
-  if (*bytes_old < bytes_required) {
-    void* workspace = nullptr;
-    cudaStreamSynchronize(stream);
-    cudaMalloc(&workspace, bytes_required);
-    if (*ptr)
-      cudaFree(*ptr);
-    *ptr = workspace;
-    *bytes_old = bytes_required;
-  }
-}
-
 constexpr int64_t ws_rows = 8192;
 
 void internal::Orthogonalize::qr_pp_f64(cudaStream_t stream, cusolverDnHandle_t cusolverH, int32_t M, int32_t N, int32_t K, double* A, int32_t lda, const int32_t* ipiv, double* tau, void** Workspace, int64_t* Lwork) {
@@ -24,11 +12,11 @@ void internal::Orthogonalize::qr_pp_f64(cudaStream_t stream, cusolverDnHandle_t 
   if (K < N)
     cusolverDnDormqr_bufferSize(cusolverH, CUBLAS_SIDE_LEFT, CUBLAS_OP_T, M, N - K, K, A, lda, tau, R, lda, &l2);
   int64_t bytes_required = std::max(ws_rows * int64_t(N), int64_t(1 + std::max(l1, l2))) * int64_t(sizeof(double));
-  workspace_realloc(stream, Workspace, Lwork, bytes_required);
+  device::Utils::workspace_realloc(stream, Workspace, Lwork, bytes_required);
 
   cudaMemcpyAsync(tau, ipiv, sizeof(int32_t) * N, cudaMemcpyDefault, stream);
   double* work = (double*)*Workspace;
-  device::inplace_gather(stream, M, N, (int32_t*)tau, A, lda, work, *Lwork, device::Precision::FP64);
+  device::Utils::inplace_gather(stream, M, N, (int32_t*)tau, A, lda, work, *Lwork, device::Precision::FP64);
   cusolverDnDgeqrf(cusolverH, M, K, A, lda, tau, work, l1, (int32_t*)&work[l1]);
 
   if (K < N) {
@@ -44,11 +32,11 @@ void internal::Orthogonalize::qr_pp_f32(cudaStream_t stream, cusolverDnHandle_t 
   if (K < N)
     cusolverDnSormqr_bufferSize(cusolverH, CUBLAS_SIDE_LEFT, CUBLAS_OP_T, M, N - K, K, A, lda, tau, R, lda, &l2);
   int64_t bytes_required = std::max(ws_rows * int64_t(N), int64_t(1 + std::max(l1, l2))) * int64_t(sizeof(float));
-  workspace_realloc(stream, Workspace, Lwork, bytes_required);
+  device::Utils::workspace_realloc(stream, Workspace, Lwork, bytes_required);
 
   cudaMemcpyAsync(tau, ipiv, sizeof(int32_t) * N, cudaMemcpyDefault, stream);
   float* work = (float*)*Workspace;
-  device::inplace_gather(stream, M, N, (int32_t*)tau, A, lda, work, *Lwork, device::Precision::FP32);
+  device::Utils::inplace_gather(stream, M, N, (int32_t*)tau, A, lda, work, *Lwork, device::Precision::FP32);
   cusolverDnSgeqrf(cusolverH, M, K, A, lda, tau, work, l1, (int32_t*)&work[l1]);
 
   if (K < N) {
@@ -64,11 +52,11 @@ void internal::Orthogonalize::qr_pp_cf64(cudaStream_t stream, cusolverDnHandle_t
   if (K < N)
     cusolverDnZunmqr_bufferSize(cusolverH, CUBLAS_SIDE_LEFT, CUBLAS_OP_C, M, N - K, K, (cuDoubleComplex*)A, lda, (cuDoubleComplex*)tau, R, lda, &l2);
   int64_t bytes_required = std::max(ws_rows * int64_t(N), int64_t(1 + std::max(l1, l2))) * int64_t(sizeof(cuDoubleComplex));
-  workspace_realloc(stream, Workspace, Lwork, bytes_required);
+  device::Utils::workspace_realloc(stream, Workspace, Lwork, bytes_required);
 
   cudaMemcpyAsync(tau, ipiv, sizeof(int32_t) * N, cudaMemcpyDefault, stream);
   cuDoubleComplex* work = (cuDoubleComplex*)*Workspace;
-  device::inplace_gather(stream, 2 * M, N, (int32_t*)tau, A, 2 * lda, work, *Lwork, device::Precision::FP64);
+  device::Utils::inplace_gather(stream, M, N, (int32_t*)tau, A, lda, work, *Lwork, device::Precision::FP64_COMPLEX);
   cusolverDnZgeqrf(cusolverH, M, K, (cuDoubleComplex*)A, lda, (cuDoubleComplex*)tau, work, l1, (int32_t*)&work[l1]);
 
   if (K < N) {
@@ -84,11 +72,11 @@ void internal::Orthogonalize::qr_pp_cf32(cudaStream_t stream, cusolverDnHandle_t
   if (K < N)
     cusolverDnCunmqr_bufferSize(cusolverH, CUBLAS_SIDE_LEFT, CUBLAS_OP_C, M, N - K, K, (cuComplex*)A, lda, (cuComplex*)tau, R, lda, &l2);
   int64_t bytes_required = std::max(ws_rows * int64_t(N), int64_t(1 + std::max(l1, l2))) * int64_t(sizeof(cuComplex));
-  workspace_realloc(stream, Workspace, Lwork, bytes_required);
+  device::Utils::workspace_realloc(stream, Workspace, Lwork, bytes_required);
 
   cudaMemcpyAsync(tau, ipiv, sizeof(int32_t) * N, cudaMemcpyDefault, stream);
   cuComplex* work = (cuComplex*)*Workspace;
-  device::inplace_gather(stream, 2 * M, N, (int32_t*)tau, A, 2 * lda, work, *Lwork, device::Precision::FP32);
+  device::Utils::inplace_gather(stream, M, N, (int32_t*)tau, A, lda, work, *Lwork, device::Precision::FP32_COMPLEX);
   cusolverDnCgeqrf(cusolverH, M, K, (cuComplex*)A, lda, (cuComplex*)tau, work, l1, (int32_t*)&work[l1]);
 
   if (K < N) {

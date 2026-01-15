@@ -51,7 +51,7 @@ __global__ void dequantize_complex_kernel(int64_t M, int64_t N, const uint64_t* 
     device::int8::add_shifted(acc_im, vec_expon[iter += incv], uint32_t(umax));
     device::int8::add_shifted(acc_im, vec_expon[iter += incv], uint32_t(umax + 63));
 
-    int32_t expon = int32_t(vec_expon[x]) + int32_t(vec_expon[y]);
+    int32_t expon = int32_t(vec_expon[x]) + int32_t(vec_expon[y]) - (umax << 1);
     cscal(acc_rl, acc_im, expon, B[y + x * ldb]);
   }
 }

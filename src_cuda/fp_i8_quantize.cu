@@ -30,9 +30,9 @@ __device__ __forceinline__ void quantize_f64_i8rems(double x, int32_t expon, uin
 }
 
 template <uint32_t ORDER, uint64_t MO, uint64_t R32, uint64_t R63, class matrix_t, class matrix_const_ptr, int32_t op>
-__global__ void quantize_kernel(int64_t M, int64_t N, matrix_const_ptr A, int64_t lda, uint64_t lo, uint32_t hi, const uint64_t* __restrict__ vec_expon, int8_t* __restrict__ B, int64_t ldb, int64_t strideB) {
+__global__ void quantize_kernel(int64_t M, int64_t N, matrix_const_ptr A, int64_t lda, uint64_t lo, uint32_t hi, int32_t umax, const uint64_t* __restrict__ vec_expon, int8_t* __restrict__ B, int64_t ldb, int64_t strideB) {
   int64_t y = (int64_t(blockIdx.x) << 8) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
-  int32_t expon = -int32_t(vec_expon[x]);
+  int32_t expon = umax - int32_t(vec_expon[x]);
   matrix_t A_i = y < M ? A[y + x * lda] : matrix_t();
   uint32_t code[3]; int8_t* bytes = (int8_t*)&code[0];
 
@@ -77,17 +77,17 @@ inline void quantize_dispatcher(cudaStream_t stream, int64_t M, int64_t N, matri
   uint32_t hi = (-uint32_t(63 < umax)) & (uint32_t(1) << (umax - 63));
 
   switch (orderA) {
-    case 1: quantize_kernel<1, MO, R32, R63, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, vec_expon, A, lda, strideA); break;
-    case 2: quantize_kernel<2, MO, R32, R63, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, vec_expon, A, lda, strideA); break;
-    case 3: quantize_kernel<3, MO, R32, R63, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, vec_expon, A, lda, strideA); break;
-    case 4: quantize_kernel<4, MO, R32, R63, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, vec_expon, A, lda, strideA); break;
-    case 5: quantize_kernel<5, MO, R32, R63, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, vec_expon, A, lda, strideA); break;
-    case 6: quantize_kernel<6, MO, R32, R63, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, vec_expon, A, lda, strideA); break;
-    case 7: quantize_kernel<7, MO, R32, R63, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, vec_expon, A, lda, strideA); break;
-    case 8: quantize_kernel<8, MO, R32, R63, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, vec_expon, A, lda, strideA); break;
-    case 9: quantize_kernel<9, MO, R32, R63, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, vec_expon, A, lda, strideA); break;
-    case 10: quantize_kernel<10, MO, R32, R63, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, vec_expon, A, lda, strideA); break;
-    case 11: quantize_kernel<11, MO, R32, R63, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, vec_expon, A, lda, strideA); break;
+    case 1: quantize_kernel<1, MO, R32, R63, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, lda, strideA); break;
+    case 2: quantize_kernel<2, MO, R32, R63, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, lda, strideA); break;
+    case 3: quantize_kernel<3, MO, R32, R63, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, lda, strideA); break;
+    case 4: quantize_kernel<4, MO, R32, R63, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, lda, strideA); break;
+    case 5: quantize_kernel<5, MO, R32, R63, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, lda, strideA); break;
+    case 6: quantize_kernel<6, MO, R32, R63, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, lda, strideA); break;
+    case 7: quantize_kernel<7, MO, R32, R63, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, lda, strideA); break;
+    case 8: quantize_kernel<8, MO, R32, R63, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, lda, strideA); break;
+    case 9: quantize_kernel<9, MO, R32, R63, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, lda, strideA); break;
+    case 10: quantize_kernel<10, MO, R32, R63, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, lda, strideA); break;
+    case 11: quantize_kernel<11, MO, R32, R63, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, lda, strideA); break;
     default: break;
   }
 }

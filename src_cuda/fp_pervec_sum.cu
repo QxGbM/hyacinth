@@ -26,10 +26,10 @@ __device__ __forceinline__ void acc_normalize(int64_t hi, int64_t& mi, int64_t& 
 }
 
 template <class matrix_const_ptr, int32_t COMPLEX, int32_t BLOCK_THREADS>
-__global__ void vector_sum_kernel(int32_t M, matrix_const_ptr A, int64_t lda, uint64_t* __restrict__ vec_expon, int32_t incv) {
+__global__ void vector_sum_kernel(int32_t M, matrix_const_ptr A, int64_t lda, int32_t umax, uint64_t* __restrict__ vec_expon, int32_t incv) {
   matrix_const_ptr A_i = &A[int64_t(blockIdx.x) * lda];
   i64x3 threadA; int64_t iter;
-  int32_t expon = -int32_t(vec_expon[blockIdx.x]);
+  int32_t expon = umax - int32_t(vec_expon[blockIdx.x]);
   threadA.e[0] = threadA.e[1] = threadA.e[2] = int64_t(0);
 
   for (int32_t i = threadIdx.x; i < M; i += BLOCK_THREADS)
@@ -69,18 +69,18 @@ __global__ void vector_sum_kernel(int32_t M, matrix_const_ptr A, int64_t lda, ui
 
 constexpr int32_t block_threads = 512;
 
-void internal::int8::vsum_f64(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, uint64_t* vec_expon, int32_t incv) {
-  vector_sum_kernel<const double* __restrict__, 0, block_threads> <<< N, block_threads, 0, stream >>> (M, A, lda, vec_expon, incv);
+void internal::int8::vsum_f64(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int32_t umax, uint64_t* vec_expon, int32_t incv) {
+  vector_sum_kernel<const double* __restrict__, 0, block_threads> <<< N, block_threads, 0, stream >>> (M, A, lda, umax, vec_expon, incv);
 }
 
-void internal::int8::vsum_f32(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, uint64_t* vec_expon, int32_t incv) {
-  vector_sum_kernel<const float* __restrict__, 0, block_threads> <<< N, block_threads, 0, stream >>> (M, A, lda, vec_expon, incv);
+void internal::int8::vsum_f32(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, int32_t umax, uint64_t* vec_expon, int32_t incv) {
+  vector_sum_kernel<const float* __restrict__, 0, block_threads> <<< N, block_threads, 0, stream >>> (M, A, lda, umax, vec_expon, incv);
 }
 
-void internal::int8::vsum_cf64(cudaStream_t stream, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, uint64_t* vec_expon, int32_t incv) {
-  vector_sum_kernel<const double* __restrict__, 1, block_threads> <<< N, block_threads, 0, stream >>> (2 * M, (double*)A, 2 * lda, vec_expon, incv);
+void internal::int8::vsum_cf64(cudaStream_t stream, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int32_t umax, uint64_t* vec_expon, int32_t incv) {
+  vector_sum_kernel<const double* __restrict__, 1, block_threads> <<< N, block_threads, 0, stream >>> (2 * M, (double*)A, 2 * lda, umax, vec_expon, incv);
 }
 
-void internal::int8::vsum_cf32(cudaStream_t stream, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, uint64_t* vec_expon, int32_t incv) {
-  vector_sum_kernel<const float* __restrict__, 1, block_threads> <<< N, block_threads, 0, stream >>> (2 * M, (float*)A, 2 * lda, vec_expon, incv);
+void internal::int8::vsum_cf32(cudaStream_t stream, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int32_t umax, uint64_t* vec_expon, int32_t incv) {
+  vector_sum_kernel<const float* __restrict__, 1, block_threads> <<< N, block_threads, 0, stream >>> (2 * M, (float*)A, 2 * lda, umax, vec_expon, incv);
 }

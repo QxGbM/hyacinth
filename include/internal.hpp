@@ -79,17 +79,17 @@ namespace internal::Cholesky {
 
 namespace internal::int8 {
 
-  void vexp_f64(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int32_t umax, uint64_t* vec_expon);
+  void vexp_f64(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, uint64_t* vec_expon);
 
-  void vexp_f32(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, int32_t umax, uint64_t* vec_expon);
+  void vexp_f32(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, uint64_t* vec_expon);
 
-  void vsum_f64(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, uint64_t* vec_expon, int32_t incv);
+  void vsum_f64(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int32_t umax, uint64_t* vec_expon, int32_t incv);
 
-  void vsum_f32(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, uint64_t* vec_expon, int32_t incv);
+  void vsum_f32(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, int32_t umax, uint64_t* vec_expon, int32_t incv);
 
-  void vsum_cf64(cudaStream_t stream, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, uint64_t* vec_expon, int32_t incv);
+  void vsum_cf64(cudaStream_t stream, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int32_t umax, uint64_t* vec_expon, int32_t incv);
 
-  void vsum_cf32(cudaStream_t stream, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, uint64_t* vec_expon, int32_t incv);
+  void vsum_cf32(cudaStream_t stream, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int32_t umax, uint64_t* vec_expon, int32_t incv);
 
   void quantize_f64(cudaStream_t stream, int32_t M, int32_t N, const double* C, int32_t ldc, int32_t umax, const uint64_t* vec_expon, int32_t orderA, int8_t* A, int32_t lda);
 
@@ -131,37 +131,37 @@ namespace internal::int8 {
 
 namespace internal::InterpolativeDecomposition {
 
-  void interp_pp_f64_f64(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, double* A, int32_t lda, const int32_t* ipiv, double* X, int32_t ldx);
+  void interp_pp_f64_f64(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, double* R, int32_t ldr, const int32_t* ipiv, double* X, int32_t ldx);
 
-  void interp_pp_f32_f64(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, float* A, int32_t lda, const int32_t* ipiv, double* X, int32_t ldx);
+  void interp_pp_f32_f64(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, float* R, int32_t ldr, const int32_t* ipiv, double* X, int32_t ldx);
 
-  void interp_pp_f128_dd_f64(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, double2* A, int32_t lda, const int32_t* ipiv, double* X, int32_t ldx);
+  void interp_pp_f128_dd_f64(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, double2* R, int32_t ldr, const int32_t* ipiv, double* X, int32_t ldx);
 
-  void interp_pp_f128_qf_f64(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, float4* A, int32_t lda, const int32_t* ipiv, double* X, int32_t ldx);
+  void interp_pp_f128_qf_f64(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, float4* R, int32_t ldr, const int32_t* ipiv, double* X, int32_t ldx);
 
-  void interp_pp_f64_f32(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, double* A, int32_t lda, const int32_t* ipiv, float* X, int32_t ldx);
+  void interp_pp_f64_f32(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, double* R, int32_t ldr, const int32_t* ipiv, float* X, int32_t ldx);
 
-  void interp_pp_f32_f32(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, float* A, int32_t lda, const int32_t* ipiv, float* X, int32_t ldx);
+  void interp_pp_f32_f32(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, float* R, int32_t ldr, const int32_t* ipiv, float* X, int32_t ldx);
 
-  void interp_pp_f128_dd_f32(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, double2* A, int32_t lda, const int32_t* ipiv, float* X, int32_t ldx);
+  void interp_pp_f128_dd_f32(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, double2* R, int32_t ldr, const int32_t* ipiv, float* X, int32_t ldx);
 
-  void interp_pp_f128_qf_f32(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, float4* A, int32_t lda, const int32_t* ipiv, float* X, int32_t ldx);
+  void interp_pp_f128_qf_f32(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, float4* R, int32_t ldr, const int32_t* ipiv, float* X, int32_t ldx);
 
-  void interp_pp_cf64_cf64(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, std::complex<double>* A, int32_t lda, const int32_t* ipiv, std::complex<double>* X, int32_t ldx);
+  void interp_pp_cf64_cf64(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, std::complex<double>* R, int32_t ldr, const int32_t* ipiv, std::complex<double>* X, int32_t ldx);
 
-  void interp_pp_cf32_cf64(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, std::complex<float>* A, int32_t lda, const int32_t* ipiv, std::complex<double>* X, int32_t ldx);
+  void interp_pp_cf32_cf64(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, std::complex<float>* R, int32_t ldr, const int32_t* ipiv, std::complex<double>* X, int32_t ldx);
 
-  void interp_pp_cf128_dd_cf64(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, complex_double2* A, int32_t lda, const int32_t* ipiv, std::complex<double>* X, int32_t ldx);
+  void interp_pp_cf128_dd_cf64(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, complex_double2* R, int32_t ldr, const int32_t* ipiv, std::complex<double>* X, int32_t ldx);
 
-  void interp_pp_cf128_qf_cf64(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, complex_float4* A, int32_t lda, const int32_t* ipiv, std::complex<double>* X, int32_t ldx);
+  void interp_pp_cf128_qf_cf64(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, complex_float4* R, int32_t ldr, const int32_t* ipiv, std::complex<double>* X, int32_t ldx);
 
-  void interp_pp_cf64_cf32(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, std::complex<double>* A, int32_t lda, const int32_t* ipiv, std::complex<float>* X, int32_t ldx);
+  void interp_pp_cf64_cf32(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, std::complex<double>* R, int32_t ldr, const int32_t* ipiv, std::complex<float>* X, int32_t ldx);
 
-  void interp_pp_cf32_cf32(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, std::complex<float>* A, int32_t lda, const int32_t* ipiv, std::complex<float>* X, int32_t ldx);
+  void interp_pp_cf32_cf32(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, std::complex<float>* R, int32_t ldr, const int32_t* ipiv, std::complex<float>* X, int32_t ldx);
 
-  void interp_pp_cf128_dd_cf32(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, complex_double2* A, int32_t lda, const int32_t* ipiv, std::complex<float>* X, int32_t ldx);
+  void interp_pp_cf128_dd_cf32(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, complex_double2* R, int32_t ldr, const int32_t* ipiv, std::complex<float>* X, int32_t ldx);
 
-  void interp_pp_cf128_qf_cf32(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, complex_float4* A, int32_t lda, const int32_t* ipiv, std::complex<float>* X, int32_t ldx);
+  void interp_pp_cf128_qf_cf32(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, complex_float4* R, int32_t ldr, const int32_t* ipiv, std::complex<float>* X, int32_t ldx);
 
 };
 

@@ -31,7 +31,7 @@ __global__ void dequantize_kernel(int64_t M, int64_t N, const uint64_t* __restri
     device::int8::add_shifted(acc, vec_expon[iter += incv], uint32_t(umax + 64));
     device::int8::add_shifted(acc, M, uint32_t((umax << 1) | 1));
 
-    int32_t expon = int32_t(vec_expon[x]) + int32_t(vec_expon[y]);
+    int32_t expon = int32_t(vec_expon[x]) + int32_t(vec_expon[y]) - (umax << 1);
     fscal(acc, expon, B[y + x * ldb]);
   }
 }
