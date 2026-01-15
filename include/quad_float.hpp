@@ -35,13 +35,15 @@ namespace device::qf {
     err = make_float2((a.x - s_delta.x) + b_delta.x, (a.y - s_delta.y) + b_delta.y);
   }
 
-  __host__ __device__ __forceinline__ float4 normalize(float4 a) {
-    float2 a0, a1;
-    fadd2_err(make_float2(a.x, a.y), make_float2(a.z, a.w), a0, a1);
-    fadd2_err(make_float2(a0.x, a1.x), make_float2(a0.y, a1.y), a0, a1);
-    fadd_err(a0.y, a1.x, a0.y, a1.x);
-    fadd_err(a1.x, a1.y, a1.x, a1.y);
-    return make_float4(a0.x, a0.y, a1.x, a1.y);
+  __host__ __device__ __forceinline__ float4 renormalize(float4 a) {
+    float s0, s1, d0, d1; 
+    s0 = a.x + a.y; d0 = a.x - s0; a.x = s0; a.y += d0;
+    s0 = a.x + a.z; d0 = a.x - s0; a.x = s0; a.z += d0;
+    s1 = a.y + a.z; d1 = a.y - s1; a.y = s1; a.z += d1;
+    s0 = a.x + a.w; d0 = a.x - s0; a.x = s0; a.w += d0;
+    s1 = a.y + a.w; d1 = a.y - s1; a.y = s1; a.w += d1;
+    s1 = a.z + a.w; d1 = a.z - s1; a.z = s1; a.w += d1;
+    return a;
   }
 
   __host__ __device__ __forceinline__ float4 add(float4 a, float4 b) {
@@ -52,7 +54,7 @@ namespace device::qf {
     float r0 = a0.x;
     fadd2_err(make_float2(a0.y, a.z), a1, a0, a1); // 2233 - 2334, 4@a1.y
     fadd_err(a0.y, a1.x, a0.y, a1.x); // 33 - 34, 4@a1.x
-    return normalize(make_float4(r0, a0.x, a0.y, a.w + (b.w + b.z) + (a1.y + a1.x)));
+    return renormalize(make_float4(r0, a0.x, a0.y, a.w + (b.w + b.z) + (a1.y + a1.x)));
   }
 
   __host__ __device__ __forceinline__ void fmul2_err(float2 a, float2 b, float2& prod, float2& err) {
@@ -85,7 +87,7 @@ namespace device::qf {
     fadd_err(c23.y, prod.x, c23.y, prod.x);
     c4 += (prod.x + prod.y) + (err.x + err.y);
 
-    return normalize(make_float4(c1, c23.x, c23.y, c4));
+    return renormalize(make_float4(c1, c23.x, c23.y, c4));
   }
 
   __host__ __device__ __forceinline__ float4 square(float4 a) {
@@ -104,7 +106,7 @@ namespace device::qf {
     fadd_err(c23.y, prod.x, c23.y, prod.x);
     c4 += (prod.x + prod.y) + (err.x + err.y);
 
-    return normalize(make_float4(c1, c23.x, c23.y, c4));
+    return renormalize(make_float4(c1, c23.x, c23.y, c4));
   }
 
   __host__ __device__ __forceinline__ float4 fscalbn(float4 a, int32_t e) {
@@ -121,7 +123,7 @@ namespace device::qf {
     float r0 = a0.x;
     fadd2_err(make_float2(a0.y, a.z), a1, a0, a1);
     fadd_err(a0.y, a1.x, a0.y, a1.x);
-    return normalize(make_float4(r0, a0.x, a0.y, a.w + a1.y + a1.x));
+    return renormalize(make_float4(r0, a0.x, a0.y, a.w + a1.y + a1.x));
   }
 
   __host__ __device__ __forceinline__ float4 frsqrt(float4 a) {
@@ -142,24 +144,26 @@ namespace device::qf {
     return fscalbn(x, p);
   }
 
-  __host__ __device__ __forceinline__ float4 conv_i64_qf_m126(int64_t i) {
+  __host__ __device__ __forceinline__ float4 conv_i64_qf_m126(uint64_t i) {
 #ifndef __CUDA_ARCH__
     using std::scalbnf;
 #endif
     constexpr uint32_t i24 = (uint32_t(1) << 24) - uint32_t(1);
-    float x = float(int16_t(uint64_t(i) >> 48)), y = float(uint32_t(i >> 24) & i24), z = float(uint32_t(i) & i24);
-    return normalize(make_float4(scalbnf(x, -78), scalbnf(y, -102), scalbnf(z, -126), 0.f));
+    float x = scalbnf(float(int16_t(i >> 48)), -78), y = scalbnf(float(uint32_t(i >> 24) & i24), -102), z = scalbnf(float(uint32_t(i) & i24), -126);
+    float sum = x + y, delta = x - sum; x = sum; y += delta;
+    sum = x + z; delta = x - sum; x = sum; z += delta;
+    sum = y + z; delta = y - sum; y = sum; z += delta;
+    return make_float4(x, y, z, 0.f);
   }
 
   template <uint32_t ORDER>
   __host__ __device__ __forceinline__ float4 conv_a63_qf(uint64_t const (&a)[ORDER], int32_t e) {
-    static_assert(1 <= ORDER && ORDER <= 4, "Integer 64 accumulation order must be in [1,4]");
+    static_assert(1 <= ORDER && ORDER <= 3, "Integer 64 accumulation order must be in [1,3]");
 
     float4 res = conv_i64_qf_m126(a[ORDER - 1]);
-    if constexpr(3 < ORDER) res = add(fscalbn(res, 63), conv_i64_qf_m126(a[2]));
     if constexpr(2 < ORDER) res = add(fscalbn(res, 63), conv_i64_qf_m126(a[1]));
     if constexpr(1 < ORDER) res = add(fscalbn(res, 63), conv_i64_qf_m126(a[0]));
-    return fscalbn(res, 126 + e);
+    return fscalbn(res, e + 126);
   }
 
   __host__ __device__ __forceinline__ double qf2double(float4 a) {
