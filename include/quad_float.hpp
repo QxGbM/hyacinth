@@ -116,31 +116,21 @@ namespace device::qf {
     return make_float4(scalbnf(a.x, e), scalbnf(a.y, e), scalbnf(a.z, e), scalbnf(a.w, e));
   }
 
-  __host__ __device__ __forceinline__ float4 add_float2(float4 a, float2 b) {
-    float2 a0, a1;
-    fadd2_err(make_float2(a.x, a.y), make_float2(b.x, b.y), a0, a1);
-
-    float r0 = a0.x;
-    fadd2_err(make_float2(a0.y, a.z), a1, a0, a1);
-    fadd_err(a0.y, a1.x, a0.y, a1.x);
-    return renormalize(make_float4(r0, a0.x, a0.y, a.w + a1.y + a1.x));
-  }
-
   __host__ __device__ __forceinline__ float4 frsqrt(float4 a) {
-    float rsq; int32_t p;
+    int32_t p;
 #ifndef __CUDA_ARCH__
-    rsq = 1. / std::sqrt(a.x);
+    float rsq = 1. / std::sqrt(a.x);
     float4 x = make_float4(std::frexp(rsq, &p), 0.f, 0.f, 0.f);
 #else
-    rsq = rsqrtf(a.x);
+    float rsq = rsqrtf(a.x);
     float4 x = make_float4(frexpf(rsq, &p), 0.f, 0.f, 0.f);
 #endif
-    float2 c = make_float2(1.5f, 0.f);
+    float4 c = make_float4(1.5f, 0.f, 0.f, 0.f);
     a = fscalbn(negate(a), (p << 1) - 1);
 
-    x = mul(x, add_float2(mul(x, mul(a, x)), c));
-    x = mul(x, add_float2(mul(x, mul(a, x)), c));
-    x = mul(x, add_float2(mul(x, mul(a, x)), c));
+    x = mul(x, add(mul(x, mul(a, x)), c));
+    x = mul(x, add(mul(x, mul(a, x)), c));
+    x = mul(x, add(mul(x, mul(a, x)), c));
     return fscalbn(x, p);
   }
 
@@ -174,24 +164,6 @@ namespace device::qf {
     float a0 = float(a); a = a - double(a0);
     float a1 = float(a);
     return make_float4(a0, a1, a - double(a1), 0.f);
-  }
-
-  __host__ __device__ __forceinline__ float4 dd2qf(double2 a) {
-    float a0 = float(a.x); a.x = a.x - double(a0);
-    float a1 = float(a.x); a.y = a.y + (a.x - double(a1));
-    float a2 = float(a.y);
-    return make_float4(a0, a1, a2, a.y - double(a2));
-  }
-  
-  __host__ __device__ __forceinline__ double2 qf2dd(float4 a) {
-    double2 c = make_double2(a.x, a.y);
-    double2 d = make_double2(a.z, a.w);
-    double2 s0 = make_double2(c.x + c.y, d.x + d.y);
-    double delta0 = c.y + (c.x - s0.x);
-
-    double s1 = s0.x + s0.y;
-    double delta1 = s0.y + (s0.x - s1);
-    return make_double2(s1, delta0 + delta1);
   }
 
 };

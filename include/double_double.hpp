@@ -60,24 +60,20 @@ namespace device::dd {
     return make_double2(scalbn(a.x, e), scalbn(a.y, e));
   }
 
-  __host__ __device__ __forceinline__ double2 add_double(double2 a, double b) {
-    fadd_err(a.x, b, a.x, b);
-    return renormalize(make_double2(a.x, a.y + b));
-  }
-
   __host__ __device__ __forceinline__ double2 frsqrt(double2 a) {
-    double rsq; int32_t p;
+    int32_t p;
 #ifndef __CUDA_ARCH__
     using std::frexp;
-    rsq = 1. / std::sqrt(a.x);
+    double rsq = 1. / std::sqrt(a.x);
 #else
-    rsq = rsqrt(a.x);
+    double rsq = rsqrt(a.x);
 #endif
     double2 x = make_double2(frexp(rsq, &p), 0.);
+    double2 c = make_double2(1.5, 0.);
     a = fscalbn(negate(a), (p << 1) - 1);
 
-    x = mul(x, add_double(mul(x, mul(a, x)), 1.5));
-    x = mul(x, add_double(mul(x, mul(a, x)), 1.5));
+    x = mul(x, add(mul(x, mul(a, x)), c));
+    x = mul(x, add(mul(x, mul(a, x)), c));
     return fscalbn(x, p);
   }
 

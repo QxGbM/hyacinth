@@ -27,7 +27,7 @@ namespace device::int8 {
     static_assert(1 <= ORDER && ORDER <= 3, "Integer 64 accumulation order must be in [1,3]");
 
     int32_t quo = int32_t(uint32_t(63) <= expon) + int32_t(uint32_t(126) <= expon) + int32_t(uint32_t(189) <= expon);
-    uint32_t rem = (expon - uint32_t(quo) * uint32_t(63)) & uint32_t(63);
+    uint32_t rem = (expon - uint32_t(quo * 63)) & uint32_t(63);
     uint64_t q0 = (uint64_t(i) << rem) & i63, q1 = uint64_t(i >> (uint32_t(63) - rem)) & i63, q2 = -(uint64_t(i) >> 63) & i63;
     a[0] += u64_selector<0>(quo, q0, q1, q2);
     if constexpr(1 < ORDER) a[1] += u64_selector<1>(quo, q0, q1, q2) + (a[0] >> 63);
@@ -71,7 +71,7 @@ namespace device::int8 {
 
     uint64_t q_sign = -uint64_t(sign), q_lo = uint64_t(q) << rem, q_hi = rem ? uint64_t(q >> rem2) : q_sign;
     uint64_t lo = u64_selector<0>(quo, q_lo, q_hi, q_sign);
-    int64_t hi = u64_selector<1>(quo, q_lo, q_hi, q_sign);
+    int64_t hi = int64_t(u64_selector<1>(quo, q_lo, q_hi, q_sign));
     return hi + int64_t(r < lo);
   }
 
