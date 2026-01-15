@@ -13,7 +13,7 @@ struct i64_add {
 };
 
 __device__ __forceinline__ void accumulate(double x, int32_t expon, int64_t& acc_hi, int64_t& acc_mi, int64_t& acc_lo) {
-  int64_t q = device::int8::round_f64(x, expon, expon);
+  int64_t q = device::int8::round_f64(x, 0x7fffffffffffffffllu, expon, expon);
   acc_hi -= int64_t(q >> (63 - expon)); uint64_t q_sft = uint64_t(q) << expon;
   acc_mi -= int64_t(uint32_t(q_sft >> 32) & device::int8::i31);
   acc_lo -= int64_t(uint32_t(q_sft));

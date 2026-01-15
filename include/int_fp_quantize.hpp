@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cmath>
 #include <cfloat>
+#include <cstring>
 #include <cuda_runtime.h>
 
 namespace device::int8 {
@@ -13,11 +14,11 @@ namespace device::int8 {
   const uint32_t u31 = 0x80000000u;
 
   template<int32_t i>
-  __host__ __device__ __forceinline__ uint64_t u64_selector(int32_t x, const uint64_t (&b)[3]) {
+  __host__ __device__ __forceinline__ uint64_t u64_selector(int32_t x, uint64_t x0, uint64_t x1, uint64_t x2) {
     constexpr int32_t i1 = i - 1, i2 = i - 2;
-    uint64_t sel0 = b[0] & -(uint64_t)(x == i);
-    uint64_t sel1 = b[1] & -(uint64_t)(x == i1);
-    uint64_t sel2 = b[2] & -(uint64_t)(x <= i2);
+    uint64_t sel0 = x0 & -(uint64_t)(x == i);
+    uint64_t sel1 = x1 & -(uint64_t)(x == i1);
+    uint64_t sel2 = x2 & -(uint64_t)(x <= i2);
     return sel0 | sel1 | sel2;
   }
 
@@ -25,12 +26,12 @@ namespace device::int8 {
   __host__ __device__ __forceinline__ void add_shifted(uint64_t (&a)[ORDER], int64_t i, uint32_t expon) {
     static_assert(1 <= ORDER && ORDER <= 3, "Integer 64 accumulation order must be in [1,3]");
 
-    uint32_t quo = uint32_t(63 <= expon) + uint32_t(126 <= expon) + uint32_t(189 <= expon);
-    uint32_t rem = (expon - quo * uint32_t(63)) & uint32_t(63);
-    uint64_t b[3]{ (uint64_t(i) << rem) & i63, uint64_t(i >> (uint32_t(63) - rem)) & i63, -(uint64_t(i) >> 63) & i63 };
-    a[0] += u64_selector<0>(quo, b);
-    if constexpr(1 < ORDER) a[1] += u64_selector<1>(quo, b) + (a[0] >> 63);
-    if constexpr(2 < ORDER) a[2] += u64_selector<2>(quo, b) + (a[1] >> 63);
+    int32_t quo = int32_t(uint32_t(63) <= expon) + int32_t(uint32_t(126) <= expon) + int32_t(uint32_t(189) <= expon);
+    uint32_t rem = (expon - uint32_t(quo) * uint32_t(63)) & uint32_t(63);
+    uint64_t q0 = (uint64_t(i) << rem) & i63, q1 = uint64_t(i >> (uint32_t(63) - rem)) & i63, q2 = -(uint64_t(i) >> 63) & i63;
+    a[0] += u64_selector<0>(quo, q0, q1, q2);
+    if constexpr(1 < ORDER) a[1] += u64_selector<1>(quo, q0, q1, q2) + (a[0] >> 63);
+    if constexpr(2 < ORDER) a[2] += u64_selector<2>(quo, q0, q1, q2) + (a[1] >> 63);
 
     if constexpr(1 < ORDER) a[0] = a[0] & i63;
     if constexpr(2 < ORDER) a[1] = a[1] & i63;
@@ -49,13 +50,29 @@ namespace device::int8 {
     if constexpr(2 < ORDER) a[1] = (~a[1]) & i63;
     a[ORDER - 1] = ~(((a[ORDER - 1] << 1) & u63) | (a[ORDER - 1] & i63));
   }
-
-  __host__ __device__ __forceinline__ int64_t round_f64(double x, int32_t expon, int32_t& e) {
+  
+  __host__ __device__ __forceinline__ int64_t round_f64(double x, uint64_t r, int32_t expon, int32_t& e) {
+    if (x == 0.) { e = 0; return int64_t(0); }
 #ifndef __CUDA_ARCH__
-    using std::ilogb, std::max, std::scalbn, std::llrint;
+    using std::max, std::signbit;
+    uint64_t p; std::memcpy(&p, &x, sizeof(uint64_t));
+#else
+    uint64_t p = __double_as_longlong(x);
 #endif
-    e = max(ilogb(x) + expon - 62, 0);
-    return llrint(scalbn(x, expon - e));
+    int32_t sign = signbit(x), exp_bias = (int32_t(p >> 52) & 0x7ff) - 1021;
+    uint64_t sn = -uint64_t(-1021 < exp_bias);
+    int64_t q = int64_t((sn & 0x4000000000000000llu) | ((p << 10) & 0x3ffffffffffffc00llu));
+
+    e = max((expon += exp_bias) - 64, 0);
+    expon -= e;
+    int32_t quo = int32_t(64 <= expon) - int32_t(expon < 0) - int32_t(expon < -64);
+    int32_t rem = (expon - (quo << 6)) & 63, rem2 = (64 - rem) & 63;
+    q = sign ? -q : q;
+
+    uint64_t q_sign = -uint64_t(sign), q_lo = uint64_t(q) << rem, q_hi = rem ? uint64_t(q >> rem2) : q_sign;
+    uint64_t lo = u64_selector<0>(quo, q_lo, q_hi, q_sign);
+    int64_t hi = u64_selector<1>(quo, q_lo, q_hi, q_sign);
+    return hi + int64_t(r < lo);
   }
 
   __host__ __device__ __forceinline__ uint32_t conv_u8i8(uint32_t code, uint32_t& carry) {

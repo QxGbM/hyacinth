@@ -4,7 +4,7 @@
 #include <crt_selector.hpp>
 
 __device__ __forceinline__ void quantize_f64_i8limbs(double x, int32_t expon, uint64_t lo, uint32_t hi, uint32_t (&code)[3]) {
-  int64_t q = device::int8::round_f64(x, expon, expon);
+  int64_t q = device::int8::round_f64(x, 0x7fffffffffffffffllu, expon, expon);
   lo += (uint64_t(q) << expon) & device::int8::i63;
   hi += uint32_t(q >> (63 - expon)) + uint32_t(lo >> 63);
 
@@ -20,7 +20,7 @@ __device__ __forceinline__ void quantize_f64_i8rems(double x, int32_t expon, uin
   constexpr uint32_t r32_lo = uint32_t(R32), r32_hi = uint32_t(R32 >> 32);
   constexpr uint32_t r63_lo = uint32_t(R63), r63_hi = uint32_t(R63 >> 32);
 
-  int64_t q = device::int8::round_f64(x, expon, expon);
+  int64_t q = device::int8::round_f64(x, 0x7fffffffffffffffllu, expon, expon);
   lo += (uint64_t(q) << expon) & device::int8::i63;
   hi += uint32_t(q >> (63 - expon)) + uint32_t(lo >> 63);
   uint32_t lo_32 = uint32_t(lo), mi = uint32_t(lo >> 32) & device::int8::i31;

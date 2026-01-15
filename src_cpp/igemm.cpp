@@ -40,7 +40,7 @@ inline std::tuple<int32_t, int32_t, int32_t, int32_t, int64_t, int64_t, int64_t,
   scratch_bytes = std::max(scratch_bytes, C_bytes - i8_bytes);
 
   int32_t bits = int32_t(std::ceil(std::log2(double(algnM)))) + (umax << 1) + 2 + Complex;
-  int32_t n_moduli = 1 + (bits >> 3);
+  int32_t n_moduli = (bits + 8) >> 3;
   int32_t orderC = (alg == device::Algorithm::Limbs) ? (1 + (bits / 63)) : (1 + ((n_moduli << 3) / 63));
   int64_t acc_bytes = (int64_t(algnN) * int64_t(N) * int64_t(orderC) * sizeof(uint64_t)) << Complex;
   int64_t vec_bytes = int64_t(algnN) * int64_t(Complex ? 5 : 3) * sizeof(uint64_t);
