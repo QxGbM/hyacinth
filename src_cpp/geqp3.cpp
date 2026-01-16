@@ -10,7 +10,7 @@ int32_t device::dgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cha
   cudaStream_t stream; cublasGetStream(cublasH, &stream);
   int32_t algnN, umax = umax_exp_extra; Precision precC; Algorithm alg; int64_t work_bytes;
   MixPrecAHA::igemm_params(&epi, N, &algnN, &umax, Precision::FP64, &precC, &alg);
-  MixPrecAHA::igemm_workspace(M, N, algnN, umax, 0, precC, alg, &work_bytes);
+  MixPrecAHA::igemm_workspace(M, N, algnN, umax, precC, alg, &work_bytes);
 
   void* work = nullptr;
   int32_t* dpiv = nullptr;
@@ -20,8 +20,8 @@ int32_t device::dgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cha
   std::iota(hpiv.begin(), hpiv.end(), 1);
 
   int32_t iters = N; 
-  MixPrecAHA::rATA(stream, cublasH, M, N, algnN, umax, A, lda, Precision::FP64, work, precC, alg);
-  Cholesky::rpotrfp(stream, cublasH, epi, &iters, N, work, algnN, precC, &hpiv[0], dpiv);
+  MixPrecAHA::iAHA(stream, cublasH, M, N, algnN, umax, A, lda, Precision::FP64, work, precC, alg);
+  Cholesky::Xpotrfp(stream, cublasH, epi, &iters, N, work, algnN, precC, &hpiv[0], dpiv);
   if (mode == 'R' || mode == 'r')
     device::Utils::convert_and_copy(stream, iters, iters, work, algnN, precC, A, lda, Precision::FP64);
   else if (mode != 'P' && mode != 'p')
@@ -38,7 +38,7 @@ int32_t device::sgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cha
   cudaStream_t stream; cublasGetStream(cublasH, &stream);
   int32_t algnN, umax = umax_exp_extra; Precision precC; Algorithm alg; int64_t work_bytes;
   MixPrecAHA::igemm_params(&epi, N, &algnN, &umax, Precision::FP32, &precC, &alg);
-  MixPrecAHA::igemm_workspace(M, N, algnN, umax, 0, precC, alg, &work_bytes);
+  MixPrecAHA::igemm_workspace(M, N, algnN, umax, precC, alg, &work_bytes);
 
   void* work = nullptr;
   int32_t* dpiv = nullptr;
@@ -48,8 +48,8 @@ int32_t device::sgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cha
   std::iota(hpiv.begin(), hpiv.end(), 1);
 
   int32_t iters = N; 
-  MixPrecAHA::rATA(stream, cublasH, M, N, algnN, umax, A, lda, Precision::FP32, work, precC, alg);
-  Cholesky::rpotrfp(stream, cublasH, epi, &iters, N, work, algnN, precC, &hpiv[0], dpiv);
+  MixPrecAHA::iAHA(stream, cublasH, M, N, algnN, umax, A, lda, Precision::FP32, work, precC, alg);
+  Cholesky::Xpotrfp(stream, cublasH, epi, &iters, N, work, algnN, precC, &hpiv[0], dpiv);
   if (mode == 'R' || mode == 'r')
     device::Utils::convert_and_copy(stream, iters, iters, work, algnN, precC, A, lda, Precision::FP32);
   else if (mode != 'P' && mode != 'p')
@@ -65,8 +65,8 @@ int32_t device::sgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cha
 int32_t device::zgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, char mode, double epi, int32_t M, int32_t N, std::complex<double>* A, int32_t lda, int32_t* jpiv, std::complex<double>* tau) {
   cudaStream_t stream; cublasGetStream(cublasH, &stream);
   int32_t algnN, umax = umax_exp_extra; Precision precC; Algorithm alg; int64_t work_bytes;
-  MixPrecAHA::igemm_params(&epi, N, &algnN, &umax, Precision::FP64, &precC, &alg);
-  MixPrecAHA::igemm_workspace(M, N, algnN, umax, 1, precC, alg, &work_bytes);
+  MixPrecAHA::igemm_params(&epi, N, &algnN, &umax, Precision::FP64_COMPLEX, &precC, &alg);
+  MixPrecAHA::igemm_workspace(M, N, algnN, umax, precC, alg, &work_bytes);
 
   void* work = nullptr;
   int32_t* dpiv = nullptr;
@@ -76,10 +76,10 @@ int32_t device::zgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cha
   std::iota(hpiv.begin(), hpiv.end(), 1);
 
   int32_t iters = N; 
-  MixPrecAHA::cAHA(stream, cublasH, M, N, algnN, umax, A, lda, Precision::FP64, work, precC, alg);
-  Cholesky::cpotrfp(stream, cublasH, epi, &iters, N, work, algnN, precC, &hpiv[0], dpiv);
+  MixPrecAHA::iAHA(stream, cublasH, M, N, algnN, umax, A, lda, Precision::FP64_COMPLEX, work, precC, alg);
+  Cholesky::Xpotrfp(stream, cublasH, epi, &iters, N, work, algnN, precC, &hpiv[0], dpiv);
   if (mode == 'R' || mode == 'r')
-    device::Utils::convert_and_copy(stream, 2 * iters, iters, work, 2 * algnN, precC, A, 2 * lda, Precision::FP64);
+    device::Utils::convert_and_copy(stream, iters, iters, work, algnN, precC, A, lda, Precision::FP64_COMPLEX);
   else if (mode != 'P' && mode != 'p')
     internal::Orthogonalize::qr_pp_cf64(stream, cusolverH, M, N, iters, A, lda, &hpiv[0], tau, &work, &work_bytes);
 
@@ -93,8 +93,8 @@ int32_t device::zgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cha
 int32_t device::cgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, char mode, double epi, int32_t M, int32_t N, std::complex<float>* A, int32_t lda, int32_t* jpiv, std::complex<float>* tau) {
   cudaStream_t stream; cublasGetStream(cublasH, &stream);
   int32_t algnN, umax = umax_exp_extra; Precision precC; Algorithm alg; int64_t work_bytes;
-  MixPrecAHA::igemm_params(&epi, N, &algnN, &umax, Precision::FP32, &precC, &alg);
-  MixPrecAHA::igemm_workspace(M, N, algnN, umax, 1, precC, alg, &work_bytes);
+  MixPrecAHA::igemm_params(&epi, N, &algnN, &umax, Precision::FP32_COMPLEX, &precC, &alg);
+  MixPrecAHA::igemm_workspace(M, N, algnN, umax, precC, alg, &work_bytes);
 
   void* work = nullptr;
   int32_t* dpiv = nullptr;
@@ -104,10 +104,10 @@ int32_t device::cgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cha
   std::iota(hpiv.begin(), hpiv.end(), 1);
 
   int32_t iters = N; 
-  MixPrecAHA::cAHA(stream, cublasH, M, N, algnN, umax, A, lda, Precision::FP32, work, precC, alg);
-  Cholesky::cpotrfp(stream, cublasH, epi, &iters, N, work, algnN, precC, &hpiv[0], dpiv);
+  MixPrecAHA::iAHA(stream, cublasH, M, N, algnN, umax, A, lda, Precision::FP32_COMPLEX, work, precC, alg);
+  Cholesky::Xpotrfp(stream, cublasH, epi, &iters, N, work, algnN, precC, &hpiv[0], dpiv);
   if (mode == 'R' || mode == 'r')
-    device::Utils::convert_and_copy(stream, 2 * iters, iters, work, 2 * algnN, precC, A, 2 * lda, Precision::FP32);
+    device::Utils::convert_and_copy(stream, iters, iters, work, algnN, precC, A, lda, Precision::FP32_COMPLEX);
   else if (mode != 'P' && mode != 'p')
     internal::Orthogonalize::qr_pp_cf32(stream, cusolverH, M, N, iters, A, lda, &hpiv[0], tau, &work, &work_bytes);
 
