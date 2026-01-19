@@ -5,7 +5,7 @@
 #include <limits>
 #include <tuple>
 
-const int32_t umax_threshold = 30; // umax <= 30 : Limbs, 31 <= umax : CRT
+const int32_t umax_threshold = 30; // umax < 30 : Limbs, 30 <= umax : CRT
 
 inline device::Precision real_precision(device::Precision prec) {
   switch (prec) {
@@ -48,16 +48,16 @@ void device::MixPrecAHA::igemm_params(double* epi, int32_t N, int32_t* algnN, in
 
   Precision prec = epi_f32 <= *epi ? Precision::FP32 : (epi_f64 <= *epi ? Precision::FP64 : f128.first);
   *precC = precA == precR ? prec : complex_precision(prec);
-  *alg = (*umax <= umax_threshold) ? Algorithm::Limbs : Algorithm::CRT;
+  *alg = (*umax < umax_threshold) ? Algorithm::Limbs : Algorithm::CRT;
   if (*alg == Algorithm::Limbs)
-    *umax = ((*umax + 9) & (~7)) - 2;
+    *umax = ((*umax + 10) & (~7)) - 3;
 }
 
 inline std::tuple<int32_t, int32_t, int32_t, int32_t, int64_t, int64_t, int64_t, int64_t> i8gemm_ext_params(int32_t M, int32_t N, int32_t algnN, int32_t umax, device::Precision prec, device::Algorithm alg) {
   device::Precision precR = real_precision(prec);
   int32_t Complex = int32_t(prec != precR);
   int32_t algnM = (M + 255) & (~255);
-  int32_t orderA = (alg == device::Algorithm::Limbs) ? ((umax + 9) >> 3) : 8;
+  int32_t orderA = (alg == device::Algorithm::Limbs) ? ((umax + 10) >> 3) : 8;
   int64_t elem_bytes = precR == device::Precision::FP32 ? sizeof(float) : (precR == device::Precision::FP64 ? sizeof(double) : sizeof(double2));
   int64_t C_bytes = (int64_t(algnN) * int64_t(N) * elem_bytes) << Complex;
   int64_t i8_bytes = (int64_t(algnM) * int64_t(N) * int64_t(orderA)) << Complex;
@@ -66,7 +66,7 @@ inline std::tuple<int32_t, int32_t, int32_t, int32_t, int64_t, int64_t, int64_t,
 
   int32_t bits = int32_t(std::ceil(std::log2(double(algnM)))) + (umax << 1) + 2 + Complex;
   int32_t n_moduli = (bits + 8) >> 3;
-  int32_t orderC = (alg == device::Algorithm::Limbs) ? (1 + (bits / 63)) : (1 + ((n_moduli << 3) / 63));
+  int32_t orderC = (alg == device::Algorithm::Limbs) ? ((bits + 63) / 63) : (((n_moduli << 3) + 63) / 63);
   int64_t acc_bytes = (int64_t(algnN) * int64_t(N) * int64_t(orderC) * sizeof(uint64_t)) << Complex;
   int64_t vec_bytes = int64_t(algnN) * int64_t(Complex ? 5 : 3) * sizeof(uint64_t);
   return std::tie(algnM, orderA, orderC, n_moduli, i8_bytes, scratch_bytes, acc_bytes, vec_bytes);
