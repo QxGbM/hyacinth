@@ -111,7 +111,7 @@ namespace device::qf {
 
   __host__ __device__ __forceinline__ float4 fldexp(float4 a, int32_t e) {
 #ifndef __CUDA_ARCH__
-    return make_float4(ldexp(a.x, e), ldexp(a.y, e), ldexp(a.z, e), ldexp(a.w, e));
+    return make_float4(std::ldexp(a.x, e), std::ldexp(a.y, e), std::ldexp(a.z, e), std::ldexp(a.w, e));
 #else
     return make_float4(ldexpf(a.x, e), ldexpf(a.y, e), ldexpf(a.z, e), ldexpf(a.w, e));
 #endif
@@ -138,7 +138,7 @@ namespace device::qf {
   __host__ __device__ __forceinline__ float4 conv_i64_qf_m126(uint64_t i) {
     constexpr uint32_t i24 = 0xffffff;
 #ifndef __CUDA_ARCH__
-    float x = ldexp(float(int16_t(i >> 48)), -78), y = ldexp(float(uint32_t(i >> 24) & i24), -102), z = ldexp(float(uint32_t(i) & i24), -126);
+    float x = std::ldexp(float(int16_t(i >> 48)), -78), y = std::ldexp(float(uint32_t(i >> 24) & i24), -102), z = std::ldexp(float(uint32_t(i) & i24), -126);
 #else
     float x = ldexpf(float(int16_t(i >> 48)), -78), y = ldexpf(float(uint32_t(i >> 24) & i24), -102), z = ldexpf(float(uint32_t(i) & i24), -126);
 #endif
