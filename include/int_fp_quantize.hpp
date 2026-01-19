@@ -51,28 +51,12 @@ namespace device::int8 {
     a[ORDER - 1] = ~(((a[ORDER - 1] << 1) & u63) | (a[ORDER - 1] & i63));
   }
   
-  __host__ __device__ __forceinline__ int64_t round_f64(double x, uint64_t r, int32_t expon, int32_t& e) {
-    if (x == 0.) { e = 0; return int64_t(0); }
+  __host__ __device__ __forceinline__ int64_t round_f64(double x, int32_t expon, int32_t& e) {
 #ifndef __CUDA_ARCH__
-    using std::max, std::signbit;
-    uint64_t p; std::memcpy(&p, &x, sizeof(uint64_t));
-#else
-    uint64_t p = __double_as_longlong(x);
+    using std::ilogb, std::max, std::scalbn, std::llrint;
 #endif
-    int32_t sign = signbit(x), exp_bias = (int32_t(p >> 52) & 0x7ff) - 1021;
-    uint64_t sn = -uint64_t(-1021 < exp_bias);
-    int64_t q = int64_t((sn & 0x4000000000000000llu) | ((p << 10) & 0x3ffffffffffffc00llu));
-
-    e = max((expon += exp_bias) - 64, 0);
-    expon -= e;
-    int32_t quo = int32_t(64 <= expon) - int32_t(expon < 0) - int32_t(expon < -64);
-    int32_t rem = (expon - (quo << 6)) & 63, rem2 = (64 - rem) & 63;
-    q = sign ? -q : q;
-
-    uint64_t q_sign = -uint64_t(sign), q_lo = uint64_t(q) << rem, q_hi = rem ? uint64_t(q >> rem2) : q_sign;
-    uint64_t lo = u64_selector<0>(quo, q_lo, q_hi, q_sign);
-    int64_t hi = int64_t(u64_selector<1>(quo, q_lo, q_hi, q_sign));
-    return hi + int64_t(r < lo);
+    e = max(ilogb(x) + expon - 62, 0);
+    return llrint(scalbn(x, expon - e));
   }
 
   __host__ __device__ __forceinline__ uint32_t conv_u8i8(uint32_t code, uint32_t& carry) {

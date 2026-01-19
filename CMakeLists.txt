@@ -44,7 +44,7 @@ add_library(hyacin SHARED ${CPP_SOURCES} ${CU_SOURCES})
 set_property(TARGET hyacin PROPERTY CUDA_ARCHITECTURES ${SM_TARGETS})
 
 target_include_directories(hyacin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_link_libraries(hyacin PRIVATE CUDA::cudart CUDA::cublas CUDA::cusolver CUDA::curand)
+target_link_libraries(hyacin PRIVATE CUDA::cudart CUDA::cublas CUDA::cusolver)
 
 find_package(BLAS REQUIRED)
 find_package(LAPACK REQUIRED)

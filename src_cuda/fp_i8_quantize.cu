@@ -4,7 +4,7 @@
 #include <crt_selector.hpp>
 
 __device__ __forceinline__ void quantize_f64_i8limbs(double x, int32_t expon, uint64_t lo, uint32_t hi, uint32_t (&code)[3]) {
-  int64_t q = device::int8::round_f64(x, 0x8000000000000000llu, expon, expon);
+  int64_t q = device::int8::round_f64(x, expon, expon);
   lo += (uint64_t(q) << expon) & device::int8::i63;
   hi += uint32_t(q >> (63 - expon)) + uint32_t(lo >> 63);
 
@@ -20,7 +20,7 @@ __device__ __forceinline__ void quantize_f64_i8rems(double x, int32_t expon, uin
   constexpr uint32_t r32_lo = uint32_t(R32), r32_hi = uint32_t(R32 >> 32);
   constexpr uint32_t r63_lo = uint32_t(R63), r63_hi = uint32_t(R63 >> 32);
 
-  int64_t q = device::int8::round_f64(x, 0x8000000000000000llu, expon, expon);
+  int64_t q = device::int8::round_f64(x, expon, expon);
   lo += (uint64_t(q) << expon) & device::int8::i63;
   hi += uint32_t(q >> (63 - expon)) + uint32_t(lo >> 63);
   uint32_t lo_32 = uint32_t(lo), mi = uint32_t(lo >> 32) & device::int8::i31;
@@ -31,9 +31,9 @@ __device__ __forceinline__ void quantize_f64_i8rems(double x, int32_t expon, uin
 
 template <uint32_t ORDER, uint64_t MO, uint64_t R32, uint64_t R63, class matrix_t, class matrix_const_ptr, int32_t op>
 __global__ void quantize_kernel(int64_t M, int64_t N, matrix_const_ptr A, int64_t lda, uint64_t lo, uint32_t hi, int32_t umax, const uint64_t* __restrict__ vec_expon, int8_t* __restrict__ B, int64_t ldb, int64_t strideB) {
-  int64_t y = (int64_t(blockIdx.x) << 8) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
-  int32_t expon = umax - int32_t(vec_expon[x]);
-  matrix_t A_i = y < M ? A[y + x * lda] : matrix_t();
+  int64_t y = (int64_t(blockIdx.x) << 8) + int64_t(threadIdx.x), iter = y + (int64_t(blockIdx.y) * lda);
+  int32_t expon = umax - int32_t(vec_expon[blockIdx.y]);
+  matrix_t A_i = y < M ? A[iter] : matrix_t();
   uint32_t code[3]; int8_t* bytes = (int8_t*)&code[0];
 
   if constexpr(op == 0)
@@ -48,7 +48,7 @@ __global__ void quantize_kernel(int64_t M, int64_t N, matrix_const_ptr A, int64_
   if (M <= y)
     code[0] = code[1] = code[2] = uint32_t(0);
 
-  int64_t iter = y + x * ldb;
+  iter = y + (int64_t(blockIdx.y) * ldb);
   #pragma unroll
   for (uint32_t k = 0; k < ORDER; ++k)
   { B[iter] = bytes[k]; iter += strideB; }

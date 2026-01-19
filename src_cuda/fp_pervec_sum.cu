@@ -6,14 +6,12 @@
 struct i64x3 { int64_t e[3]; };
 
 struct i64_add {
-  __device__ __forceinline__ i64x3 operator()(i64x3 a, i64x3 b) {
-    a.e[0] += b.e[0]; a.e[1] += b.e[1]; a.e[2] += b.e[2];
-    return a;
-  }
+  __device__ __forceinline__ i64x3 operator()(i64x3 a, i64x3 b) 
+  { a.e[0] += b.e[0]; a.e[1] += b.e[1]; a.e[2] += b.e[2]; return a; }
 };
 
 __device__ __forceinline__ void accumulate(double x, int32_t expon, int64_t& acc_hi, int64_t& acc_mi, int64_t& acc_lo) {
-  int64_t q = device::int8::round_f64(x, 0x8000000000000000llu, expon, expon);
+  int64_t q = device::int8::round_f64(x, expon, expon);
   acc_hi -= int64_t(q >> (63 - expon)); uint64_t q_sft = uint64_t(q) << expon;
   acc_mi -= int64_t(uint32_t(q_sft >> 32) & device::int8::i31);
   acc_lo -= int64_t(uint32_t(q_sft));
@@ -26,14 +24,14 @@ __device__ __forceinline__ void acc_normalize(int64_t hi, int64_t& mi, int64_t& 
 }
 
 template <class matrix_const_ptr, int32_t COMPLEX, int32_t BLOCK_THREADS>
-__global__ void vector_sum_kernel(int32_t M, matrix_const_ptr A, int64_t lda, int32_t umax, uint64_t* __restrict__ vec_expon, int32_t incv) {
-  matrix_const_ptr A_i = &A[int64_t(blockIdx.x) * lda];
-  i64x3 threadA; int64_t iter;
+__global__ void vector_sum_kernel(int64_t M, matrix_const_ptr A, int64_t lda, int32_t umax, uint64_t* __restrict__ vec_expon, int64_t incv) {
+  constexpr int64_t inci = int64_t(BLOCK_THREADS);
+  int64_t iter = int64_t(blockIdx.x) * lda + int64_t(threadIdx.x), iter_end = iter + M;
   int32_t expon = umax - int32_t(vec_expon[blockIdx.x]);
-  threadA.e[0] = threadA.e[1] = threadA.e[2] = int64_t(0);
+  i64x3 threadA; threadA.e[0] = threadA.e[1] = threadA.e[2] = int64_t(0);
 
-  for (int32_t i = threadIdx.x; i < M; i += BLOCK_THREADS)
-    accumulate(A_i[i], expon, threadA.e[2], threadA.e[1], threadA.e[0]);
+  for (int64_t i = iter; i < iter_end; i += inci)
+    accumulate(A[i], expon, threadA.e[2], threadA.e[1], threadA.e[0]);
 
   if constexpr(COMPLEX) {
     __shared__ typename cub::BlockReduce<i64x3, BLOCK_THREADS>::TempStorage temp_reduce[2];
@@ -48,7 +46,7 @@ __global__ void vector_sum_kernel(int32_t M, matrix_const_ptr A, int64_t lda, in
     if (threadIdx.x == 0) {
       acc_normalize(threadA.e[2], threadA.e[1], threadA.e[0]);
       acc_normalize(threadB.e[2], threadB.e[1], threadB.e[0]);
-      vec_expon[iter = int64_t(blockIdx.x) + int64_t(incv)] = threadA.e[0];
+      vec_expon[iter = int64_t(blockIdx.x) + incv] = threadA.e[0];
       vec_expon[iter += incv] = threadA.e[1];
       vec_expon[iter += incv] = threadB.e[0];
       vec_expon[iter += incv] = threadB.e[1];
@@ -61,7 +59,7 @@ __global__ void vector_sum_kernel(int32_t M, matrix_const_ptr A, int64_t lda, in
 
     if (threadIdx.x == 0) {
       acc_normalize(threadA.e[2], threadA.e[1], threadA.e[0]);
-      vec_expon[iter = int64_t(blockIdx.x) + int64_t(incv)] = threadA.e[0];
+      vec_expon[iter = int64_t(blockIdx.x) + incv] = threadA.e[0];
       vec_expon[iter += incv] = threadA.e[1];
     }
   }
