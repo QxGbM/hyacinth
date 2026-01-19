@@ -6,7 +6,7 @@
 
 template<int32_t len> struct i32_array { int32_t arr[len]; };
 
-template<int32_t orderA, int32_t orderPD, int32_t orderM, uint64_t MO, uint64_t R32, uint64_t MINV, uint64_t P0, uint64_t P1, uint64_t P2, int32_t beta, int32_t pd_len>
+template<int32_t orderA, int32_t orderPD, int32_t orderM, uint64_t MO, uint64_t R32, uint64_t MINV, int64_t P0, int64_t P1, int64_t P2, int32_t beta, int32_t pd_len>
 __global__ void i32_crt_accum_kernel(i32_array<pd_len> pd, int64_t N, const int32_t* __restrict__ X, uint64_t* __restrict__ A) {
   int64_t i = int64_t(blockIdx.x) * int64_t(blockDim.x) + int64_t(threadIdx.x);
   if (i < N) {
@@ -74,14 +74,14 @@ inline void crt_acc_dispatcher(cudaStream_t stream, int32_t option, int64_t N, c
     int32_t grid = int32_t((N + int64_t(block_threads - 1)) / int64_t(block_threads));
 
     if (option & 2) {
-      constexpr uint64_t P0 = CRT::domain_p(n_moduli, 0), P1 = CRT::domain_p(n_moduli, 1), P2 = CRT::domain_p(n_moduli, 2);
+      constexpr int64_t P0 = int64_t(CRT::domain_p(n_moduli, 0)), P1 = int64_t(CRT::domain_p(n_moduli, 1)), P2 = int64_t(CRT::domain_p(n_moduli, 2));
       if (option & 1)
         i32_crt_accum_kernel<orderA, orderPD, orderM, MO, R32, MINV, P0, P1, P2, 1> <<< grid, block_threads, 0, stream >>> (pd, N, X, A);
       else
         i32_crt_accum_kernel<orderA, orderPD, orderM, MO, R32, MINV, P0, P1, P2, 0> <<< grid, block_threads, 0, stream >>> (pd, N, X, A);
     }
     else {
-      constexpr uint64_t z = uint64_t(0);
+      constexpr int64_t z = int64_t(0);
       if (option & 1)
         i32_crt_accum_kernel<orderA, orderPD, orderM, MO, R32, MINV, z, z, z, 1> <<< grid, block_threads, 0, stream >>> (pd, N, X, A);
       else

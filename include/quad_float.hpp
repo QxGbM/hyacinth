@@ -109,11 +109,12 @@ namespace device::qf {
     return renormalize(make_float4(c1, c23.x, c23.y, c4));
   }
 
-  __host__ __device__ __forceinline__ float4 fscalbn(float4 a, int32_t e) {
+  __host__ __device__ __forceinline__ float4 fldexp(float4 a, int32_t e) {
 #ifndef __CUDA_ARCH__
-    using std::scalbnf;
+    return make_float4(ldexp(a.x, e), ldexp(a.y, e), ldexp(a.z, e), ldexp(a.w, e));
+#else
+    return make_float4(ldexpf(a.x, e), ldexpf(a.y, e), ldexpf(a.z, e), ldexpf(a.w, e));
 #endif
-    return make_float4(scalbnf(a.x, e), scalbnf(a.y, e), scalbnf(a.z, e), scalbnf(a.w, e));
   }
 
   __host__ __device__ __forceinline__ float4 frsqrt(float4 a) {
@@ -126,20 +127,21 @@ namespace device::qf {
     float4 x = make_float4(frexpf(rsq, &p), 0.f, 0.f, 0.f);
 #endif
     float4 c = make_float4(1.5f, 0.f, 0.f, 0.f);
-    a = fscalbn(negate(a), (p << 1) - 1);
+    a = fldexp(negate(a), (p << 1) - 1);
 
     x = mul(x, add(mul(x, mul(a, x)), c));
     x = mul(x, add(mul(x, mul(a, x)), c));
     x = mul(x, add(mul(x, mul(a, x)), c));
-    return fscalbn(x, p);
+    return fldexp(x, p);
   }
 
   __host__ __device__ __forceinline__ float4 conv_i64_qf_m126(uint64_t i) {
+    constexpr uint32_t i24 = 0xffffff;
 #ifndef __CUDA_ARCH__
-    using std::scalbnf;
+    float x = ldexp(float(int16_t(i >> 48)), -78), y = ldexp(float(uint32_t(i >> 24) & i24), -102), z = ldexp(float(uint32_t(i) & i24), -126);
+#else
+    float x = ldexpf(float(int16_t(i >> 48)), -78), y = ldexpf(float(uint32_t(i >> 24) & i24), -102), z = ldexpf(float(uint32_t(i) & i24), -126);
 #endif
-    constexpr uint32_t i24 = (uint32_t(1) << 24) - uint32_t(1);
-    float x = scalbnf(float(int16_t(i >> 48)), -78), y = scalbnf(float(uint32_t(i >> 24) & i24), -102), z = scalbnf(float(uint32_t(i) & i24), -126);
     float sum = x + y, delta = x - sum; x = sum; y += delta;
     sum = x + z; delta = x - sum; x = sum; z += delta;
     sum = y + z; delta = y - sum; y = sum; z += delta;
@@ -151,9 +153,9 @@ namespace device::qf {
     static_assert(1 <= ORDER && ORDER <= 3, "Integer 64 accumulation order must be in [1,3]");
 
     float4 res = conv_i64_qf_m126(a[ORDER - 1]);
-    if constexpr(2 < ORDER) res = add(fscalbn(res, 63), conv_i64_qf_m126(a[1]));
-    if constexpr(1 < ORDER) res = add(fscalbn(res, 63), conv_i64_qf_m126(a[0]));
-    return fscalbn(res, e + 126);
+    if constexpr(2 < ORDER) res = add(fldexp(res, 63), conv_i64_qf_m126(a[1]));
+    if constexpr(1 < ORDER) res = add(fldexp(res, 63), conv_i64_qf_m126(a[0]));
+    return fldexp(res, e + 126);
   }
 
   __host__ __device__ __forceinline__ double qf2double(float4 a) {

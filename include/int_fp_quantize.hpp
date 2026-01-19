@@ -45,7 +45,6 @@ namespace device::int8 {
     a[0] += i63;
     if constexpr(1 < ORDER) a[1] += i63 + (a[0] >> 63);
     if constexpr(2 < ORDER) a[2] += i63 + (a[1] >> 63);
-    
     if constexpr(1 < ORDER) a[0] = (~a[0]) & i63;
     if constexpr(2 < ORDER) a[1] = (~a[1]) & i63;
     a[ORDER - 1] = ~(((a[ORDER - 1] << 1) & u63) | (a[ORDER - 1] & i63));

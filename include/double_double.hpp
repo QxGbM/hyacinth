@@ -53,11 +53,11 @@ namespace device::dd {
     return renormalize(make_double2(p, fma(a.x + a.x, a.y, fma(a.x, a.x, -p))));
   }
 
-  __host__ __device__ __forceinline__ double2 fscalbn(double2 a, int32_t e) {
+  __host__ __device__ __forceinline__ double2 fldexp(double2 a, int32_t e) {
 #ifndef __CUDA_ARCH__
-    using std::scalbn;
+    using std::ldexp;
 #endif
-    return make_double2(scalbn(a.x, e), scalbn(a.y, e));
+    return make_double2(ldexp(a.x, e), ldexp(a.y, e));
   }
 
   __host__ __device__ __forceinline__ double2 frsqrt(double2 a) {
@@ -70,30 +70,30 @@ namespace device::dd {
 #endif
     double2 x = make_double2(frexp(rsq, &p), 0.);
     double2 c = make_double2(1.5, 0.);
-    a = fscalbn(negate(a), (p << 1) - 1);
+    a = fldexp(negate(a), (p << 1) - 1);
 
     x = mul(x, add(mul(x, mul(a, x)), c));
     x = mul(x, add(mul(x, mul(a, x)), c));
-    return fscalbn(x, p);
+    return fldexp(x, p);
+  }
+
+  __host__ __device__ __forceinline__ double2 conv_i64_dd_m1022(uint64_t i) {
+#ifndef __CUDA_ARCH__
+    using std::ldexp;
+#endif
+    return make_double2(ldexp(double(int32_t(i >> 32)), -990), ldexp(double(uint32_t(i)), -1022));
   }
 
   template <uint32_t ORDER>
   __host__ __device__ __forceinline__ double conv_a63_f64(uint64_t const (&a)[ORDER], int32_t e) {
     static_assert(1 <= ORDER && ORDER <= 3, "Integer 64 accumulation order must be in [1,3]");
 #ifndef __CUDA_ARCH__
-    using std::scalbn;
+    using std::ldexp;
 #endif
-    double res = scalbn(double(int64_t(a[ORDER - 1])), -1022);
-    if constexpr(2 < ORDER) res = scalbn(res, 63) + scalbn(double(a[1]), -1022);
-    if constexpr(1 < ORDER) res = scalbn(res, 63) + scalbn(double(a[0]), -1022);
-    return scalbn(res, 1022 + e);
-  }
-
-  __host__ __device__ __forceinline__ double2 conv_i64_dd_m1022(uint64_t i) {
-#ifndef __CUDA_ARCH__
-    using std::scalbn;
-#endif
-    return renormalize(make_double2(scalbn(double(int32_t(i >> 32)), -990), scalbn(double(uint32_t(i)), -1022)));
+    double res = ldexp(double(int64_t(a[ORDER - 1])), -1022);
+    if constexpr(2 < ORDER) { double2 i = conv_i64_dd_m1022(a[1]); res = (ldexp(res, 63) + i.x) + i.y; }
+    if constexpr(1 < ORDER) { double2 i = conv_i64_dd_m1022(a[0]); res = (ldexp(res, 63) + i.x) + i.y; }
+    return ldexp(res, 1022 + e);
   }
 
   template <uint32_t ORDER>
@@ -101,9 +101,9 @@ namespace device::dd {
     static_assert(1 <= ORDER && ORDER <= 3, "Integer 64 accumulation order must be in [1,3]");
 
     double2 res = conv_i64_dd_m1022(a[ORDER - 1]);
-    if constexpr(2 < ORDER) res = add(fscalbn(res, 63), conv_i64_dd_m1022(a[1]));
-    if constexpr(1 < ORDER) res = add(fscalbn(res, 63), conv_i64_dd_m1022(a[0]));
-    return fscalbn(res, 1022 + e);
+    if constexpr(2 < ORDER) res = add(fldexp(res, 63), renormalize(conv_i64_dd_m1022(a[1])));
+    if constexpr(1 < ORDER) res = add(fldexp(res, 63), renormalize(conv_i64_dd_m1022(a[0])));
+    return fldexp(res, 1022 + e);
   }
 
   __host__ __device__ __forceinline__ double dd2double(double2 a) {
