@@ -11,7 +11,7 @@ struct __align__(32) complex_float4 {
 
 namespace device::qf {
 
-  __host__ __device__ __forceinline__ complex_float4 make_complex_float4(float4 real, float4 imag) {
+__host__ __device__ __forceinline__ complex_float4 make_complex_float4(float4 real, float4 imag) {
     return complex_float4({ real, imag });
   }
 
@@ -35,13 +35,15 @@ namespace device::qf {
     err = make_float2((a.x - s_delta.x) + b_delta.x, (a.y - s_delta.y) + b_delta.y);
   }
 
-  __host__ __device__ __forceinline__ float4 normalize(float4 a) {
-    float2 a0, a1;
-    fadd2_err(make_float2(a.x, a.y), make_float2(a.z, a.w), a0, a1);
-    fadd2_err(make_float2(a0.x, a1.x), make_float2(a0.y, a1.y), a0, a1);
-    fadd_err(a0.y, a1.x, a0.y, a1.x);
-    fadd_err(a1.x, a1.y, a1.x, a1.y);
-    return make_float4(a0.x, a0.y, a1.x, a1.y);
+  __host__ __device__ __forceinline__ float4 renormalize(float4 a) {
+    float s0, s1, d0, d1; 
+    s0 = a.x + a.y; d0 = a.x - s0; a.x = s0; a.y += d0;
+    s0 = a.x + a.z; d0 = a.x - s0; a.x = s0; a.z += d0;
+    s1 = a.y + a.z; d1 = a.y - s1; a.y = s1; a.z += d1;
+    s0 = a.x + a.w; d0 = a.x - s0; a.x = s0; a.w += d0;
+    s1 = a.y + a.w; d1 = a.y - s1; a.y = s1; a.w += d1;
+    s1 = a.z + a.w; d1 = a.z - s1; a.z = s1; a.w += d1;
+    return a;
   }
 
   __host__ __device__ __forceinline__ float4 add(float4 a, float4 b) {
@@ -52,7 +54,7 @@ namespace device::qf {
     float r0 = a0.x;
     fadd2_err(make_float2(a0.y, a.z), a1, a0, a1); // 2233 - 2334, 4@a1.y
     fadd_err(a0.y, a1.x, a0.y, a1.x); // 33 - 34, 4@a1.x
-    return normalize(make_float4(r0, a0.x, a0.y, a.w + (b.w + b.z) + (a1.y + a1.x)));
+    return renormalize(make_float4(r0, a0.x, a0.y, a.w + (b.w + b.z) + (a1.y + a1.x)));
   }
 
   __host__ __device__ __forceinline__ void fmul2_err(float2 a, float2 b, float2& prod, float2& err) {
@@ -85,7 +87,7 @@ namespace device::qf {
     fadd_err(c23.y, prod.x, c23.y, prod.x);
     c4 += (prod.x + prod.y) + (err.x + err.y);
 
-    return normalize(make_float4(c1, c23.x, c23.y, c4));
+    return renormalize(make_float4(c1, c23.x, c23.y, c4));
   }
 
   __host__ __device__ __forceinline__ float4 square(float4 a) {
@@ -104,14 +106,32 @@ namespace device::qf {
     fadd_err(c23.y, prod.x, c23.y, prod.x);
     c4 += (prod.x + prod.y) + (err.x + err.y);
 
-    return normalize(make_float4(c1, c23.x, c23.y, c4));
+    return renormalize(make_float4(c1, c23.x, c23.y, c4));
   }
 
-  __host__ __device__ __forceinline__ float4 fscalbn(float4 a, int32_t exp) {
+  __host__ __device__ __forceinline__ float4 fscalbn(float4 a, int32_t e) {
 #ifndef __CUDA_ARCH__
     using std::scalbnf;
 #endif
-    return make_float4(scalbnf(a.x, exp), scalbnf(a.y, exp), scalbnf(a.z, exp), scalbnf(a.w, exp));
+    return make_float4(scalbnf(a.x, e), scalbnf(a.y, e), scalbnf(a.z, e), scalbnf(a.w, e));
+  }
+
+  __host__ __device__ __forceinline__ float4 frsqrt(float4 a) {
+    int32_t p;
+#ifndef __CUDA_ARCH__
+    float rsq = 1. / std::sqrt(a.x);
+    float4 x = make_float4(std::frexp(rsq, &p), 0.f, 0.f, 0.f);
+#else
+    float rsq = rsqrtf(a.x);
+    float4 x = make_float4(frexpf(rsq, &p), 0.f, 0.f, 0.f);
+#endif
+    float4 c = make_float4(1.5f, 0.f, 0.f, 0.f);
+    a = fscalbn(negate(a), (p << 1) - 1);
+
+    x = mul(x, add(mul(x, mul(a, x)), c));
+    x = mul(x, add(mul(x, mul(a, x)), c));
+    x = mul(x, add(mul(x, mul(a, x)), c));
+    return fscalbn(x, p);
   }
 
   __host__ __device__ __forceinline__ float4 add_float2(float4 a, float2 b) {
@@ -121,25 +141,7 @@ namespace device::qf {
     float r0 = a0.x;
     fadd2_err(make_float2(a0.y, a.z), a1, a0, a1);
     fadd_err(a0.y, a1.x, a0.y, a1.x);
-    return normalize(make_float4(r0, a0.x, a0.y, a.w + a1.y + a1.x));
-  }
-
-  __host__ __device__ __forceinline__ float4 frsqrt(float4 a) {
-    float rsq; int32_t p;
-#ifndef __CUDA_ARCH__
-    rsq = 1. / std::sqrt(a.x);
-    float4 x = make_float4(std::frexp(rsq, &p), 0.f, 0.f, 0.f);
-#else
-    rsq = rsqrtf(a.x);
-    float4 x = make_float4(frexpf(rsq, &p), 0.f, 0.f, 0.f);
-#endif
-    float2 c = make_float2(1.5f, 0.f);
-    a = fscalbn(negate(a), (p << 1) - 1);
-
-    x = mul(x, add_float2(mul(x, mul(a, x)), c));
-    x = mul(x, add_float2(mul(x, mul(a, x)), c));
-    x = mul(x, add_float2(mul(x, mul(a, x)), c));
-    return fscalbn(x, p);
+    return renormalize(make_float4(r0, a0.x, a0.y, a.w + a1.y + a1.x));
   }
 
   template <uint32_t ORDER>
@@ -183,24 +185,6 @@ namespace device::qf {
     float a0 = float(a); a = a - double(a0);
     float a1 = float(a);
     return make_float4(a0, a1, a - double(a1), 0.f);
-  }
-
-  __host__ __device__ __forceinline__ float4 dd2qf(double2 a) {
-    float a0 = float(a.x); a.x = a.x - double(a0);
-    float a1 = float(a.x); a.y = a.y + (a.x - double(a1));
-    float a2 = float(a.y);
-    return make_float4(a0, a1, a2, a.y - double(a2));
-  }
-  
-  __host__ __device__ __forceinline__ double2 qf2dd(float4 a) {
-    double2 c = make_double2(a.x, a.y);
-    double2 d = make_double2(a.z, a.w);
-    double2 s0 = make_double2(c.x + c.y, d.x + d.y);
-    double delta0 = c.y + (c.x - s0.x);
-
-    double s1 = s0.x + s0.y;
-    double delta1 = s0.y + (s0.x - s1);
-    return make_double2(s1, delta0 + delta1);
   }
 
 };

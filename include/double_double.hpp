@@ -27,48 +27,54 @@ namespace device::dd {
     err = (a - s_delta) + b_delta;
   }
 
-  __host__ __device__ __forceinline__ double2 normalize(double2 a) {
-    fadd_err(a.x, a.y, a.x, a.y);
-    return a;
+  __host__ __device__ __forceinline__ double2 renormalize(double2 a) {
+    double sum = a.x + a.y, delta = a.x - sum;
+    return make_double2(sum, a.y + delta);
   }
 
   __host__ __device__ __forceinline__ double2 add(double2 a, double2 b) {
     fadd_err(a.x, b.x, a.x, b.x);
-    a.y += b.x + b.y;
-    b.x = a.x + a.y;
-    b.y = a.y + (a.x - b.x);
-    return b;
+    return renormalize(make_double2(a.x, a.y + b.x + b.y));
   }
 
   __host__ __device__ __forceinline__ double2 mul(double2 a, double2 b) {
 #ifndef __CUDA_ARCH__
     using std::fma;
 #endif
-    double s = fma(a.x, b.y, a.y * b.x);
-    a.y = a.x * b.x;
-    s += fma(a.x, b.x, -a.y);
-    b.x = a.y + s;
-    b.y = s + (a.y - b.x);
-    return b;
+    double p = a.x * b.x;
+    return renormalize(make_double2(p, fma(a.x, b.y, a.y * b.x) + fma(a.x, b.x, -p)));
   }
 
   __host__ __device__ __forceinline__ double2 square(double2 a) {
 #ifndef __CUDA_ARCH__
     using std::fma;
 #endif
-    double b = (a.x + a.x) * a.y;
-    a.y = a.x * a.x;
-    b += fma(a.x, a.x, -a.y);
-    a.x = a.y + b;
-    a.y = b + (a.y - a.x);
-    return a;
+    double p = a.x * a.x;
+    return renormalize(make_double2(p, fma(a.x + a.x, a.y, fma(a.x, a.x, -p))));
   }
 
-  __host__ __device__ __forceinline__ double2 fscalbn(double2 a, int32_t exp) {
+  __host__ __device__ __forceinline__ double2 fscalbn(double2 a, int32_t e) {
 #ifndef __CUDA_ARCH__
     using std::scalbn;
 #endif
-    return make_double2(scalbn(a.x, exp), scalbn(a.y, exp));
+    return make_double2(scalbn(a.x, e), scalbn(a.y, e));
+  }
+
+  __host__ __device__ __forceinline__ double2 frsqrt(double2 a) {
+    int32_t p;
+#ifndef __CUDA_ARCH__
+    using std::frexp;
+    double rsq = 1. / std::sqrt(a.x);
+#else
+    double rsq = rsqrt(a.x);
+#endif
+    double2 x = make_double2(frexp(rsq, &p), 0.);
+    double2 c = make_double2(1.5, 0.);
+    a = fscalbn(negate(a), (p << 1) - 1);
+
+    x = mul(x, add(mul(x, mul(a, x)), c));
+    x = mul(x, add(mul(x, mul(a, x)), c));
+    return fscalbn(x, p);
   }
 
   __host__ __device__ __forceinline__ double2 add_double(double2 a, double b) {
@@ -77,22 +83,6 @@ namespace device::dd {
     double s = a.x + a.y;
     b = a.x - s;
     return make_double2(s, a.y + b);
-  }
-
-  __host__ __device__ __forceinline__ double2 frsqrt(double2 a) {
-    double rsq; int32_t p;
-#ifndef __CUDA_ARCH__
-    using std::frexp;
-    rsq = 1. / std::sqrt(a.x);
-#else
-    rsq = rsqrt(a.x);
-#endif
-    double2 x = make_double2(frexp(rsq, &p), 0.);
-    a = fscalbn(negate(a), (p << 1) - 1);
-
-    x = mul(x, add_double(mul(x, mul(a, x)), 1.5));
-    x = mul(x, add_double(mul(x, mul(a, x)), 1.5));
-    return fscalbn(x, p);
   }
 
   template <uint32_t ORDER>

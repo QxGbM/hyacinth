@@ -87,7 +87,7 @@ inline void i8gemm_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_
         dequantize_dispatcher<prec>(stream, i - orderA, i, N, C, workspace, algnN);
 
         cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, algnN, N * orderA, rem - iter_h, &one, 
-          AT_k2, CUDA_R_8I, algnK, AN_k2, CUDA_R_8I, algnK, &one, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+          AT_k2, CUDA_R_8I, algnK, AN_k2, CUDA_R_8I, algnK, &zero, workspace, CUDA_R_32I, algnN, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
       }
       dequantize_dispatcher<prec>(stream, i - orderA, i, N, C, workspace, algnN);
     }
