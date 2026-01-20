@@ -114,7 +114,7 @@ inline void copy_permute(cudaStream_t stream, int32_t M, int32_t N, const int32_
 }
 
 void device::Utils::inplace_gather(cudaStream_t stream, int32_t M, int32_t N, const int32_t* jpiv, void* A, int32_t lda, void* workspace, int64_t Lwork, Precision prec) {
-  int64_t elem_bytes = prec == Precision::FP32 ? sizeof(float) : sizeof(double);
+  int64_t elem_bytes = prec == Precision::FP32 ? sizeof(int32_t) : (prec == Precision::FP64_COMPLEX ? sizeof(int4) : sizeof(int64_t));
   int32_t ws_rows = int32_t(Lwork / (int64_t(N) * elem_bytes)) & (~255);
   thrust::counting_iterator<int64_t> iter(0);
   if (N <= clen)
