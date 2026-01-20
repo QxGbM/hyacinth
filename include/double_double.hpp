@@ -100,7 +100,7 @@ namespace device::dd {
   __host__ __device__ __forceinline__ double2 conv_a63_dd(uint64_t const (&a)[ORDER], int32_t e) {
     static_assert(1 <= ORDER && ORDER <= 3, "Integer 64 accumulation order must be in [1,3]");
 
-    double2 res = conv_i64_dd_m1022(a[ORDER - 1]);
+    double2 res = renormalize(conv_i64_dd_m1022(a[ORDER - 1]));
     if constexpr(2 < ORDER) res = add(fldexp(res, 63), renormalize(conv_i64_dd_m1022(a[1])));
     if constexpr(1 < ORDER) res = add(fldexp(res, 63), renormalize(conv_i64_dd_m1022(a[0])));
     return fldexp(res, 1022 + e);

@@ -71,7 +71,7 @@ foreach (test ${TEST_SOURCES})
   add_test(NAME ${src}.app COMMAND ${src}.app)
 
   target_include_directories(${src}.app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-  target_link_libraries(${src}.app PRIVATE hyacin BLAS::BLAS LAPACK::LAPACK CUDA::cudart CUDA::cublas CUDA::cusolver CUDA::curand)
+  target_link_libraries(${src}.app PRIVATE hyacin BLAS::BLAS LAPACK::LAPACK CUDA::cudart CUDA::cublas CUDA::cusolver)
   if(BLAS_LIBS MATCHES "mkl")
     target_compile_options(${src}.app PRIVATE "-DUSE_MKL")
   else()
