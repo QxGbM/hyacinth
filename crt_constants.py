@@ -59,7 +59,7 @@ if all_ok:
 
     print(f"namespace CRT::Moduli{n}" + " {")
     print(f"  constexpr uint64_t minv[{len(inv)}] =" + " { " + ", ".join(f"{m}llu" for m in inv) + " };")
-    print(f"  constexpr uint64_t p[{len(p_limbs)}] =" + " { " + ", ".join(f"{l}llu" for l in p_limbs) + " };")
+    print(f"  constexpr int64_t p[{len(p_limbs)}] =" + " { " + ", ".join(f"{l}ll" for l in p_limbs) + " };")
     for i in range(0, n, 8):
       pd_print((i//8)+1, P_div[i:min(i+8, n):])
     print("};\n")

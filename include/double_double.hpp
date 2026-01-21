@@ -77,11 +77,11 @@ namespace device::dd {
     return fldexp(x, p);
   }
 
-  __host__ __device__ __forceinline__ double2 conv_i64_dd_m1022(uint64_t i) {
+  __host__ __device__ __forceinline__ double2 conv_i64_dd(uint64_t i) {
 #ifndef __CUDA_ARCH__
     using std::ldexp;
 #endif
-    return make_double2(ldexp(double(int32_t(i >> 32)), -990), ldexp(double(uint32_t(i)), -1022));
+    return make_double2(ldexp(double(int32_t(i >> 32)), 32), double(uint32_t(i)));
   }
 
   template <uint32_t ORDER>
@@ -90,20 +90,20 @@ namespace device::dd {
 #ifndef __CUDA_ARCH__
     using std::ldexp;
 #endif
-    double res = ldexp(double(int64_t(a[ORDER - 1])), -1022);
-    if constexpr(2 < ORDER) { double2 i = conv_i64_dd_m1022(a[1]); res = (ldexp(res, 63) + i.x) + i.y; }
-    if constexpr(1 < ORDER) { double2 i = conv_i64_dd_m1022(a[0]); res = (ldexp(res, 63) + i.x) + i.y; }
-    return ldexp(res, 1022 + e);
+    double res = double(int64_t(a[ORDER - 1]));
+    if constexpr(2 < ORDER) { double2 i = conv_i64_dd(a[1]); res = (ldexp(res, 63) + i.x) + i.y; }
+    if constexpr(1 < ORDER) { double2 i = conv_i64_dd(a[0]); res = (ldexp(res, 63) + i.x) + i.y; }
+    return ldexp(res, e);
   }
 
   template <uint32_t ORDER>
   __host__ __device__ __forceinline__ double2 conv_a63_dd(uint64_t const (&a)[ORDER], int32_t e) {
     static_assert(1 <= ORDER && ORDER <= 3, "Integer 64 accumulation order must be in [1,3]");
 
-    double2 res = renormalize(conv_i64_dd_m1022(a[ORDER - 1]));
-    if constexpr(2 < ORDER) res = add(fldexp(res, 63), renormalize(conv_i64_dd_m1022(a[1])));
-    if constexpr(1 < ORDER) res = add(fldexp(res, 63), renormalize(conv_i64_dd_m1022(a[0])));
-    return fldexp(res, 1022 + e);
+    double2 res = renormalize(conv_i64_dd(a[ORDER - 1]));
+    if constexpr(2 < ORDER) res = add(fldexp(res, 63), renormalize(conv_i64_dd(a[1])));
+    if constexpr(1 < ORDER) res = add(fldexp(res, 63), renormalize(conv_i64_dd(a[0])));
+    return fldexp(res, e);
   }
 
   __host__ __device__ __forceinline__ double dd2double(double2 a) {

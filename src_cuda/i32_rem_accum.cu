@@ -74,7 +74,7 @@ inline void crt_acc_dispatcher(cudaStream_t stream, int32_t option, int64_t N, c
     int32_t grid = int32_t((N + int64_t(block_threads - 1)) / int64_t(block_threads));
 
     if (option & 2) {
-      constexpr int64_t P0 = int64_t(CRT::domain_p(n_moduli, 0)), P1 = int64_t(CRT::domain_p(n_moduli, 1)), P2 = int64_t(CRT::domain_p(n_moduli, 2));
+      constexpr int64_t P0 = CRT::domain_p(n_moduli, 0), P1 = CRT::domain_p(n_moduli, 1), P2 = CRT::domain_p(n_moduli, 2);
       if (option & 1)
         i32_crt_accum_kernel<orderA, orderPD, orderM, MO, R32, MINV, P0, P1, P2, 1> <<< grid, block_threads, 0, stream >>> (pd, N, X, A);
       else

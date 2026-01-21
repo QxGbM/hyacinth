@@ -38,7 +38,7 @@ set(CU_SOURCES
 set_source_files_properties(${CPP_SOURCES} PROPERTIES COMPILE_OPTIONS 
   "-march=native;-Wall;-Wextra;-fexceptions")
 set_source_files_properties(${CU_SOURCES} PROPERTIES COMPILE_OPTIONS 
-  "-Xcompiler=-march=native;-Xcompiler=-Wall;-Xcompiler=-Wextra;-Xcompiler=-fexceptions")
+  "-Xcompiler=-march=native;-Xcompiler=-Wall;-Xcompiler=-Wextra;-Xcompiler=-fexceptions;--use_fast_math")
 
 add_library(hyacin SHARED ${CPP_SOURCES} ${CU_SOURCES})
 set_property(TARGET hyacin PROPERTY CUDA_ARCHITECTURES ${SM_TARGETS})
