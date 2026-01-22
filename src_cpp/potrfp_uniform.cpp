@@ -1,12 +1,11 @@
 
-#include <hyacin.hpp>
 #include <internal.hpp>
 #include <double_double.hpp>
 #include <quad_float.hpp>
 
 template <int32_t prec, class real_t>
 inline void imax_dispatcher(cudaStream_t stream, int32_t N, const real_t* X, int32_t incx, real_t* D, real_t* diag_piv) {
-  constexpr int32_t sft = prec >> 3;
+  constexpr uint32_t sft = uint32_t(prec) >> 3;
   if constexpr((prec & 7) == 0)
     internal::Cholesky::imax_f64(stream, N, X, incx << sft, D, diag_piv);
   else if constexpr((prec & 7) == 1)
@@ -43,14 +42,15 @@ inline double conv_f64(real_t r) {
   if constexpr((prec & 7) == 0) return r;
   else if constexpr((prec & 7) == 1) return double(r);
   else if constexpr((prec & 7) == 2) return r.x;
-  else if constexpr((prec & 7) == 3) return double(r.x) + double(r.y);
+  else if constexpr((prec & 7) == 3) return double(r.x) + double(r.y) + double(r.z);
 }
 
 template <int32_t prec, class real_t, class matrix_t>
-inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t iters, int32_t N, matrix_t* A, int32_t lda, int32_t* jpiv, real_t* scale) {
+inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank, int32_t N, matrix_t* A, int32_t lda, int32_t* jpiv, real_t* scale) {
   real_t* diag = (real_t*)(&A[int64_t(N) * int64_t(lda)]);
   imax_dispatcher<prec>(stream, N, (real_t*)A, lda + 1, diag, scale);
-  int32_t* pivot_i = (int32_t*)&scale[2];
+  int32_t* pivot_i = (int32_t*)&scale[2], iters = 0 < rank ? std::min(N, rank) : N;
+  epi = std::min(1., std::max(0., std::abs(epi)));
 
   for (int32_t i = 0; i < iters; ++i) {
     int64_t A_col = int64_t(i) * int64_t(lda);
@@ -65,29 +65,34 @@ inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, double epi, in
   return iters;
 }
 
-void device::Cholesky::Xpotrfp(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t* iters, int32_t N, void* A, int32_t lda, Precision precA, int32_t* jpiv, void* pinned_work) {
-  epi = std::min(1., std::max(0., std::abs(epi)));
-  int32_t rank = std::min(N, std::max(0, *iters));
-  
-  switch (precA) {
-    case Precision::FP64:
-      *iters = potrfp<0>(stream, handle, epi, rank, N, (double*)A, lda, jpiv, (double*)pinned_work); break;
-    case Precision::FP32:
-      *iters = potrfp<1>(stream, handle, epi, rank, N, (float*)A, lda, jpiv, (float*)pinned_work); break;
-    case Precision::FP128_DD:
-      *iters = potrfp<2>(stream, handle, epi, rank, N, (double2*)A, lda, jpiv, (double2*)pinned_work); break;
-    case Precision::FP128_QF:
-      *iters = potrfp<3>(stream, handle, epi, rank, N, (float4*)A, lda, jpiv, (float4*)pinned_work); break;
-    case Precision::FP64_COMPLEX:
-      *iters = potrfp<8>(stream, handle, epi, rank, N, (std::complex<double>*)A, lda, jpiv, (double*)pinned_work); break;
-    case Precision::FP32_COMPLEX:
-      *iters = potrfp<9>(stream, handle, epi, rank, N, (std::complex<float>*)A, lda, jpiv, (float*)pinned_work); break;
-    case Precision::FP128_DD_COMPLEX:
-      *iters = potrfp<10>(stream, handle, epi, rank, N, (complex_double2*)A, lda, jpiv, (double2*)pinned_work); break;
-    case Precision::FP128_QF_COMPLEX:
-      *iters = potrfp<11>(stream, handle, epi, rank, N, (complex_float4*)A, lda, jpiv, (float4*)pinned_work); break;
-    default:
-      *iters = 0; break;
-  }
+int32_t internal::Cholesky::potrfp_f64(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank, int32_t N, double* A, int32_t lda, int32_t* jpiv, void* pinned_work) {
+  return potrfp<0>(stream, handle, epi, rank, N, A, lda, jpiv, (double*)pinned_work);
 }
 
+int32_t internal::Cholesky::potrfp_f32(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank, int32_t N, float* A, int32_t lda, int32_t* jpiv, void* pinned_work) {
+  return potrfp<1>(stream, handle, epi, rank, N, A, lda, jpiv, (float*)pinned_work);
+}
+
+int32_t internal::Cholesky::potrfp_f128_dd(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank, int32_t N, double2* A, int32_t lda, int32_t* jpiv, void* pinned_work) {
+  return potrfp<2>(stream, handle, epi, rank, N, A, lda, jpiv, (double2*)pinned_work);
+}
+
+int32_t internal::Cholesky::potrfp_f128_qf(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank, int32_t N, float4* A, int32_t lda, int32_t* jpiv, void* pinned_work) {
+  return potrfp<3>(stream, handle, epi, rank, N, A, lda, jpiv, (float4*)pinned_work);
+}
+
+int32_t internal::Cholesky::potrfp_cf64(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank, int32_t N, std::complex<double>* A, int32_t lda, int32_t* jpiv, void* pinned_work) {
+  return potrfp<8>(stream, handle, epi, rank, N, A, lda, jpiv, (double*)pinned_work);
+}
+
+int32_t internal::Cholesky::potrfp_cf32(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank, int32_t N, std::complex<float>* A, int32_t lda, int32_t* jpiv, void* pinned_work) {
+  return potrfp<9>(stream, handle, epi, rank, N, A, lda, jpiv, (float*)pinned_work);
+}
+
+int32_t internal::Cholesky::potrfp_cf128_dd(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank, int32_t N, complex_double2* A, int32_t lda, int32_t* jpiv, void* pinned_work) {
+  return potrfp<10>(stream, handle, epi, rank, N, A, lda, jpiv, (double2*)pinned_work);
+}
+
+int32_t internal::Cholesky::potrfp_cf128_qf(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t rank, int32_t N, complex_float4* A, int32_t lda, int32_t* jpiv, void* pinned_work) {
+  return potrfp<11>(stream, handle, epi, rank, N, A, lda, jpiv, (float4*)pinned_work);
+}

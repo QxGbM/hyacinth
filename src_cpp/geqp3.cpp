@@ -19,19 +19,30 @@ int32_t device::dgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cha
   std::vector<int32_t> hpiv(N);
   std::iota(hpiv.begin(), hpiv.end(), 1);
 
-  int32_t iters = N; 
+  int32_t rank = N; 
   MixPrecAHA::iAHA(stream, cublasH, M, N, algnN, umax, A, lda, Precision::FP64, work, precC, alg);
-  Cholesky::Xpotrfp(stream, cublasH, epi, &iters, N, work, algnN, precC, &hpiv[0], dpiv);
+  switch (precC) {
+    case Precision::FP64:
+      rank = internal::Cholesky::potrfp_f64(stream, cublasH, epi, rank, N, (double*)work, algnN, &hpiv[0], dpiv); break;
+    case Precision::FP32:
+      rank = internal::Cholesky::potrfp_f32(stream, cublasH, epi, rank, N, (float*)work, algnN, &hpiv[0], dpiv); break;
+    case Precision::FP128_DD:
+      rank = internal::Cholesky::potrfp_f128_dd(stream, cublasH, epi, rank, N, (double2*)work, algnN, &hpiv[0], dpiv); break;
+    case Precision::FP128_QF:
+      rank = internal::Cholesky::potrfp_f128_qf(stream, cublasH, epi, rank, N, (float4*)work, algnN, &hpiv[0], dpiv); break;
+    default: break;
+  }
+
   if (mode == 'R' || mode == 'r')
-    device::Utils::convert_and_copy(stream, iters, iters, work, algnN, precC, A, lda, Precision::FP64);
+    device::Utils::convert_and_copy(stream, rank, rank, work, algnN, precC, A, lda, Precision::FP64);
   else if (mode != 'P' && mode != 'p')
-    internal::Orthogonalize::qr_pp_f64(stream, cusolverH, M, N, iters, A, lda, &hpiv[0], tau, &work, &work_bytes);
+    internal::Orthogonalize::qr_pp_f64(stream, cusolverH, M, N, rank, A, lda, &hpiv[0], tau, &work, &work_bytes);
 
   cudaStreamSynchronize(stream);
   cudaMemcpy(jpiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyDefault);
   cudaFree(work);
   cudaFreeHost(dpiv);
-  return iters == N ? 0 : (iters + 1);
+  return rank == N ? 0 : (rank + 1);
 }
 
 int32_t device::sgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, char mode, double epi, int32_t M, int32_t N, float* A, int32_t lda, int32_t* jpiv, float* tau) {
@@ -47,19 +58,30 @@ int32_t device::sgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cha
   std::vector<int32_t> hpiv(N);
   std::iota(hpiv.begin(), hpiv.end(), 1);
 
-  int32_t iters = N; 
+  int32_t rank = N; 
   MixPrecAHA::iAHA(stream, cublasH, M, N, algnN, umax, A, lda, Precision::FP32, work, precC, alg);
-  Cholesky::Xpotrfp(stream, cublasH, epi, &iters, N, work, algnN, precC, &hpiv[0], dpiv);
+  switch (precC) {
+    case Precision::FP64:
+      rank = internal::Cholesky::potrfp_f64(stream, cublasH, epi, rank, N, (double*)work, algnN, &hpiv[0], dpiv); break;
+    case Precision::FP32:
+      rank = internal::Cholesky::potrfp_f32(stream, cublasH, epi, rank, N, (float*)work, algnN, &hpiv[0], dpiv); break;
+    case Precision::FP128_DD:
+      rank = internal::Cholesky::potrfp_f128_dd(stream, cublasH, epi, rank, N, (double2*)work, algnN, &hpiv[0], dpiv); break;
+    case Precision::FP128_QF:
+      rank = internal::Cholesky::potrfp_f128_qf(stream, cublasH, epi, rank, N, (float4*)work, algnN, &hpiv[0], dpiv); break;
+    default: break;
+  }
+
   if (mode == 'R' || mode == 'r')
-    device::Utils::convert_and_copy(stream, iters, iters, work, algnN, precC, A, lda, Precision::FP32);
+    device::Utils::convert_and_copy(stream, rank, rank, work, algnN, precC, A, lda, Precision::FP32);
   else if (mode != 'P' && mode != 'p')
-    internal::Orthogonalize::qr_pp_f32(stream, cusolverH, M, N, iters, A, lda, &hpiv[0], tau, &work, &work_bytes);
+    internal::Orthogonalize::qr_pp_f32(stream, cusolverH, M, N, rank, A, lda, &hpiv[0], tau, &work, &work_bytes);
 
   cudaStreamSynchronize(stream);
   cudaMemcpy(jpiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyDefault);
   cudaFree(work);
   cudaFreeHost(dpiv);
-  return iters == N ? 0 : (iters + 1);
+  return rank == N ? 0 : (rank + 1);
 }
 
 int32_t device::zgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, char mode, double epi, int32_t M, int32_t N, std::complex<double>* A, int32_t lda, int32_t* jpiv, std::complex<double>* tau) {
@@ -75,19 +97,30 @@ int32_t device::zgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cha
   std::vector<int32_t> hpiv(N);
   std::iota(hpiv.begin(), hpiv.end(), 1);
 
-  int32_t iters = N; 
+  int32_t rank = N; 
   MixPrecAHA::iAHA(stream, cublasH, M, N, algnN, umax, A, lda, Precision::FP64_COMPLEX, work, precC, alg);
-  Cholesky::Xpotrfp(stream, cublasH, epi, &iters, N, work, algnN, precC, &hpiv[0], dpiv);
+  switch (precC) {
+    case Precision::FP64_COMPLEX:
+      rank = internal::Cholesky::potrfp_cf64(stream, cublasH, epi, rank, N, (std::complex<double>*)work, algnN, &hpiv[0], dpiv); break;
+    case Precision::FP32_COMPLEX:
+      rank = internal::Cholesky::potrfp_cf32(stream, cublasH, epi, rank, N, (std::complex<float>*)work, algnN, &hpiv[0], dpiv); break;
+    case Precision::FP128_DD_COMPLEX:
+      rank = internal::Cholesky::potrfp_cf128_dd(stream, cublasH, epi, rank, N, (complex_double2*)work, algnN, &hpiv[0], dpiv); break;
+    case Precision::FP128_QF_COMPLEX:
+      rank = internal::Cholesky::potrfp_cf128_qf(stream, cublasH, epi, rank, N, (complex_float4*)work, algnN, &hpiv[0], dpiv); break;
+    default: break;
+  }
+  
   if (mode == 'R' || mode == 'r')
-    device::Utils::convert_and_copy(stream, iters, iters, work, algnN, precC, A, lda, Precision::FP64_COMPLEX);
+    device::Utils::convert_and_copy(stream, rank, rank, work, algnN, precC, A, lda, Precision::FP64_COMPLEX);
   else if (mode != 'P' && mode != 'p')
-    internal::Orthogonalize::qr_pp_cf64(stream, cusolverH, M, N, iters, A, lda, &hpiv[0], tau, &work, &work_bytes);
+    internal::Orthogonalize::qr_pp_cf64(stream, cusolverH, M, N, rank, A, lda, &hpiv[0], tau, &work, &work_bytes);
 
   cudaStreamSynchronize(stream);
   cudaMemcpy(jpiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyDefault);
   cudaFree(work);
   cudaFreeHost(dpiv);
-  return iters == N ? 0 : (iters + 1);
+  return rank == N ? 0 : (rank + 1);
 }
 
 int32_t device::cgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, char mode, double epi, int32_t M, int32_t N, std::complex<float>* A, int32_t lda, int32_t* jpiv, std::complex<float>* tau) {
@@ -103,18 +136,29 @@ int32_t device::cgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cha
   std::vector<int32_t> hpiv(N);
   std::iota(hpiv.begin(), hpiv.end(), 1);
 
-  int32_t iters = N; 
+  int32_t rank = N; 
   MixPrecAHA::iAHA(stream, cublasH, M, N, algnN, umax, A, lda, Precision::FP32_COMPLEX, work, precC, alg);
-  Cholesky::Xpotrfp(stream, cublasH, epi, &iters, N, work, algnN, precC, &hpiv[0], dpiv);
+  switch (precC) {
+    case Precision::FP64_COMPLEX:
+      rank = internal::Cholesky::potrfp_cf64(stream, cublasH, epi, rank, N, (std::complex<double>*)work, algnN, &hpiv[0], dpiv); break;
+    case Precision::FP32_COMPLEX:
+      rank = internal::Cholesky::potrfp_cf32(stream, cublasH, epi, rank, N, (std::complex<float>*)work, algnN, &hpiv[0], dpiv); break;
+    case Precision::FP128_DD_COMPLEX:
+      rank = internal::Cholesky::potrfp_cf128_dd(stream, cublasH, epi, rank, N, (complex_double2*)work, algnN, &hpiv[0], dpiv); break;
+    case Precision::FP128_QF_COMPLEX:
+      rank = internal::Cholesky::potrfp_cf128_qf(stream, cublasH, epi, rank, N, (complex_float4*)work, algnN, &hpiv[0], dpiv); break;
+    default: break;
+  }
+
   if (mode == 'R' || mode == 'r')
-    device::Utils::convert_and_copy(stream, iters, iters, work, algnN, precC, A, lda, Precision::FP32_COMPLEX);
+    device::Utils::convert_and_copy(stream, rank, rank, work, algnN, precC, A, lda, Precision::FP32_COMPLEX);
   else if (mode != 'P' && mode != 'p')
-    internal::Orthogonalize::qr_pp_cf32(stream, cusolverH, M, N, iters, A, lda, &hpiv[0], tau, &work, &work_bytes);
+    internal::Orthogonalize::qr_pp_cf32(stream, cusolverH, M, N, rank, A, lda, &hpiv[0], tau, &work, &work_bytes);
 
   cudaStreamSynchronize(stream);
   cudaMemcpy(jpiv, &hpiv[0], sizeof(int32_t) * N, cudaMemcpyDefault);
   cudaFree(work);
   cudaFreeHost(dpiv);
-  return iters == N ? 0 : (iters + 1);
+  return rank == N ? 0 : (rank + 1);
 }
 
