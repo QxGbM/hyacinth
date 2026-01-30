@@ -39,6 +39,34 @@ namespace CRT {
     }
   }
 
+  constexpr uint64_t inv_r32(int32_t n_moduli, int32_t iter) {
+    switch(n_moduli) {
+      case 2: return 0 <= iter && iter < 1 ? Moduli2::rem_e32[iter] : uint64_t(0);
+      case 3: return 0 <= iter && iter < 1 ? Moduli3::rem_e32[iter] : uint64_t(0);
+      case 4: return 0 <= iter && iter < 1 ? Moduli4::rem_e32[iter] : uint64_t(0);
+      case 5: return 0 <= iter && iter < 1 ? Moduli5::rem_e32[iter] : uint64_t(0);
+      case 6: return 0 <= iter && iter < 1 ? Moduli6::rem_e32[iter] : uint64_t(0);
+      case 7: return 0 <= iter && iter < 1 ? Moduli7::rem_e32[iter] : uint64_t(0);
+      case 8: return 0 <= iter && iter < 1 ? Moduli8::rem_e32[iter] : uint64_t(0);
+      case 9: return 0 <= iter && iter < 2 ? Moduli9::rem_e32[iter] : uint64_t(0);
+      case 10: return 0 <= iter && iter < 2 ? Moduli10::rem_e32[iter] : uint64_t(0);
+      case 11: return 0 <= iter && iter < 2 ? Moduli11::rem_e32[iter] : uint64_t(0);
+      case 12: return 0 <= iter && iter < 2 ? Moduli12::rem_e32[iter] : uint64_t(0);
+      case 13: return 0 <= iter && iter < 2 ? Moduli13::rem_e32[iter] : uint64_t(0);
+      case 14: return 0 <= iter && iter < 2 ? Moduli14::rem_e32[iter] : uint64_t(0);
+      case 15: return 0 <= iter && iter < 2 ? Moduli15::rem_e32[iter] : uint64_t(0);
+      case 16: return 0 <= iter && iter < 2 ? Moduli16::rem_e32[iter] : uint64_t(0);
+      case 17: return 0 <= iter && iter < 3 ? Moduli17::rem_e32[iter] : uint64_t(0);
+      case 18: return 0 <= iter && iter < 3 ? Moduli18::rem_e32[iter] : uint64_t(0);
+      case 19: return 0 <= iter && iter < 3 ? Moduli19::rem_e32[iter] : uint64_t(0);
+      case 20: return 0 <= iter && iter < 3 ? Moduli20::rem_e32[iter] : uint64_t(0);
+      case 21: return 0 <= iter && iter < 3 ? Moduli21::rem_e32[iter] : uint64_t(0);
+      case 22: return 0 <= iter && iter < 3 ? Moduli22::rem_e32[iter] : uint64_t(0);
+      case 23: return 0 <= iter && iter < 3 ? Moduli23::rem_e32[iter] : uint64_t(0);
+      default: return uint64_t(0);
+    }
+  }
+
   constexpr const int32_t* p_div(int32_t n_moduli, int32_t iter) {
     switch(n_moduli) {
       case 2: return iter == 0 ? &Moduli2::pd1[0] : nullptr;

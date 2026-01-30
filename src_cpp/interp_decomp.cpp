@@ -19,16 +19,17 @@ int32_t device::interp_decomp_f64(cublasHandle_t handle, double epi, int32_t ran
   std::vector<int32_t> hpiv(N);
   std::iota(hpiv.begin(), hpiv.end(), 1);
 
+  int32_t p = 0;
   MixPrecAHA::iAHA(stream, handle, M, N, algnN, umax, A, lda, Precision::FP64, work, precC, alg);
   switch (precC) {
     case Precision::FP64:
-      rank = internal::Cholesky::potrfp_f64(stream, handle, epi, rank, N, (double*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_f64(stream, handle, epi, rank, p, N, (double*)work, algnN, &hpiv[0], dpiv); break;
     case Precision::FP32:
-      rank = internal::Cholesky::potrfp_f32(stream, handle, epi, rank, N, (float*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_f32(stream, handle, epi, rank, p, N, (float*)work, algnN, &hpiv[0], dpiv); break;
     case Precision::FP128_DD:
-      rank = internal::Cholesky::potrfp_f128_dd(stream, handle, epi, rank, N, (double2*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_f128_dd(stream, handle, epi, rank, p, N, (double2*)work, algnN, &hpiv[0], dpiv); break;
     case Precision::FP128_QF:
-      rank = internal::Cholesky::potrfp_f128_qf(stream, handle, epi, rank, N, (float4*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_f128_qf(stream, handle, epi, rank, p, N, (float4*)work, algnN, &hpiv[0], dpiv); break;
     default: break;
   }
 
@@ -64,16 +65,17 @@ int32_t device::interp_decomp_f32(cublasHandle_t handle, double epi, int32_t ran
   std::vector<int32_t> hpiv(N);
   std::iota(hpiv.begin(), hpiv.end(), 1);
 
+  int32_t p = 0;
   MixPrecAHA::iAHA(stream, handle, M, N, algnN, umax, A, lda, Precision::FP32, work, precC, alg);
   switch (precC) {
     case Precision::FP64:
-      rank = internal::Cholesky::potrfp_f64(stream, handle, epi, rank, N, (double*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_f64(stream, handle, epi, rank, p, N, (double*)work, algnN, &hpiv[0], dpiv); break;
     case Precision::FP32:
-      rank = internal::Cholesky::potrfp_f32(stream, handle, epi, rank, N, (float*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_f32(stream, handle, epi, rank, p, N, (float*)work, algnN, &hpiv[0], dpiv); break;
     case Precision::FP128_DD:
-      rank = internal::Cholesky::potrfp_f128_dd(stream, handle, epi, rank, N, (double2*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_f128_dd(stream, handle, epi, rank, p, N, (double2*)work, algnN, &hpiv[0], dpiv); break;
     case Precision::FP128_QF:
-      rank = internal::Cholesky::potrfp_f128_qf(stream, handle, epi, rank, N, (float4*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_f128_qf(stream, handle, epi, rank, p, N, (float4*)work, algnN, &hpiv[0], dpiv); break;
     default: break;
   }
 
@@ -109,16 +111,17 @@ int32_t device::interp_decomp_cf64(cublasHandle_t handle, double epi, int32_t ra
   std::vector<int32_t> hpiv(N);
   std::iota(hpiv.begin(), hpiv.end(), 1);
 
+  int32_t p = 0;
   MixPrecAHA::iAHA(stream, handle, M, N, algnN, umax, A, lda, Precision::FP64_COMPLEX, work, precC, alg);
   switch (precC) {
     case Precision::FP64_COMPLEX:
-      rank = internal::Cholesky::potrfp_cf64(stream, handle, epi, rank, N, (std::complex<double>*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_cf64(stream, handle, epi, rank, p, N, (std::complex<double>*)work, algnN, &hpiv[0], dpiv); break;
     case Precision::FP32_COMPLEX:
-      rank = internal::Cholesky::potrfp_cf32(stream, handle, epi, rank, N, (std::complex<float>*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_cf32(stream, handle, epi, rank, p, N, (std::complex<float>*)work, algnN, &hpiv[0], dpiv); break;
     case Precision::FP128_DD_COMPLEX:
-      rank = internal::Cholesky::potrfp_cf128_dd(stream, handle, epi, rank, N, (complex_double2*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_cf128_dd(stream, handle, epi, rank, p, N, (complex_double2*)work, algnN, &hpiv[0], dpiv); break;
     case Precision::FP128_QF_COMPLEX:
-      rank = internal::Cholesky::potrfp_cf128_qf(stream, handle, epi, rank, N, (complex_float4*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_cf128_qf(stream, handle, epi, rank, p, N, (complex_float4*)work, algnN, &hpiv[0], dpiv); break;
     default: break;
   }
 
@@ -154,16 +157,17 @@ int32_t device::interp_decomp_cf32(cublasHandle_t handle, double epi, int32_t ra
   std::vector<int32_t> hpiv(N);
   std::iota(hpiv.begin(), hpiv.end(), 1);
 
+  int32_t p = 0;
   MixPrecAHA::iAHA(stream, handle, M, N, algnN, umax, A, lda, Precision::FP32_COMPLEX, work, precC, alg);
   switch (precC) {
     case Precision::FP64_COMPLEX:
-      rank = internal::Cholesky::potrfp_cf64(stream, handle, epi, rank, N, (std::complex<double>*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_cf64(stream, handle, epi, rank, p, N, (std::complex<double>*)work, algnN, &hpiv[0], dpiv); break;
     case Precision::FP32_COMPLEX:
-      rank = internal::Cholesky::potrfp_cf32(stream, handle, epi, rank, N, (std::complex<float>*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_cf32(stream, handle, epi, rank, p, N, (std::complex<float>*)work, algnN, &hpiv[0], dpiv); break;
     case Precision::FP128_DD_COMPLEX:
-      rank = internal::Cholesky::potrfp_cf128_dd(stream, handle, epi, rank, N, (complex_double2*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_cf128_dd(stream, handle, epi, rank, p, N, (complex_double2*)work, algnN, &hpiv[0], dpiv); break;
     case Precision::FP128_QF_COMPLEX:
-      rank = internal::Cholesky::potrfp_cf128_qf(stream, handle, epi, rank, N, (complex_float4*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_cf128_qf(stream, handle, epi, rank, p, N, (complex_float4*)work, algnN, &hpiv[0], dpiv); break;
     default: break;
   }
 

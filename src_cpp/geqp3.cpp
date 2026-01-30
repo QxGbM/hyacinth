@@ -19,17 +19,17 @@ int32_t device::dgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cha
   std::vector<int32_t> hpiv(N);
   std::iota(hpiv.begin(), hpiv.end(), 1);
 
-  int32_t rank = N; 
+  int32_t rank = N, p = 0; 
   MixPrecAHA::iAHA(stream, cublasH, M, N, algnN, umax, A, lda, Precision::FP64, work, precC, alg);
   switch (precC) {
     case Precision::FP64:
-      rank = internal::Cholesky::potrfp_f64(stream, cublasH, epi, rank, N, (double*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_f64(stream, cublasH, epi, rank, p, N, (double*)work, algnN, &hpiv[0], dpiv); break;
     case Precision::FP32:
-      rank = internal::Cholesky::potrfp_f32(stream, cublasH, epi, rank, N, (float*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_f32(stream, cublasH, epi, rank, p, N, (float*)work, algnN, &hpiv[0], dpiv); break;
     case Precision::FP128_DD:
-      rank = internal::Cholesky::potrfp_f128_dd(stream, cublasH, epi, rank, N, (double2*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_f128_dd(stream, cublasH, epi, rank, p, N, (double2*)work, algnN, &hpiv[0], dpiv); break;
     case Precision::FP128_QF:
-      rank = internal::Cholesky::potrfp_f128_qf(stream, cublasH, epi, rank, N, (float4*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_f128_qf(stream, cublasH, epi, rank, p, N, (float4*)work, algnN, &hpiv[0], dpiv); break;
     default: break;
   }
 
@@ -58,17 +58,17 @@ int32_t device::sgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cha
   std::vector<int32_t> hpiv(N);
   std::iota(hpiv.begin(), hpiv.end(), 1);
 
-  int32_t rank = N; 
+  int32_t rank = N, p = 0; 
   MixPrecAHA::iAHA(stream, cublasH, M, N, algnN, umax, A, lda, Precision::FP32, work, precC, alg);
   switch (precC) {
     case Precision::FP64:
-      rank = internal::Cholesky::potrfp_f64(stream, cublasH, epi, rank, N, (double*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_f64(stream, cublasH, epi, rank, p, N, (double*)work, algnN, &hpiv[0], dpiv); break;
     case Precision::FP32:
-      rank = internal::Cholesky::potrfp_f32(stream, cublasH, epi, rank, N, (float*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_f32(stream, cublasH, epi, rank, p, N, (float*)work, algnN, &hpiv[0], dpiv); break;
     case Precision::FP128_DD:
-      rank = internal::Cholesky::potrfp_f128_dd(stream, cublasH, epi, rank, N, (double2*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_f128_dd(stream, cublasH, epi, rank, p, N, (double2*)work, algnN, &hpiv[0], dpiv); break;
     case Precision::FP128_QF:
-      rank = internal::Cholesky::potrfp_f128_qf(stream, cublasH, epi, rank, N, (float4*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_f128_qf(stream, cublasH, epi, rank, p, N, (float4*)work, algnN, &hpiv[0], dpiv); break;
     default: break;
   }
 
@@ -97,17 +97,17 @@ int32_t device::zgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cha
   std::vector<int32_t> hpiv(N);
   std::iota(hpiv.begin(), hpiv.end(), 1);
 
-  int32_t rank = N; 
+  int32_t rank = N, p = 0; 
   MixPrecAHA::iAHA(stream, cublasH, M, N, algnN, umax, A, lda, Precision::FP64_COMPLEX, work, precC, alg);
   switch (precC) {
     case Precision::FP64_COMPLEX:
-      rank = internal::Cholesky::potrfp_cf64(stream, cublasH, epi, rank, N, (std::complex<double>*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_cf64(stream, cublasH, epi, rank, p, N, (std::complex<double>*)work, algnN, &hpiv[0], dpiv); break;
     case Precision::FP32_COMPLEX:
-      rank = internal::Cholesky::potrfp_cf32(stream, cublasH, epi, rank, N, (std::complex<float>*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_cf32(stream, cublasH, epi, rank, p, N, (std::complex<float>*)work, algnN, &hpiv[0], dpiv); break;
     case Precision::FP128_DD_COMPLEX:
-      rank = internal::Cholesky::potrfp_cf128_dd(stream, cublasH, epi, rank, N, (complex_double2*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_cf128_dd(stream, cublasH, epi, rank, p, N, (complex_double2*)work, algnN, &hpiv[0], dpiv); break;
     case Precision::FP128_QF_COMPLEX:
-      rank = internal::Cholesky::potrfp_cf128_qf(stream, cublasH, epi, rank, N, (complex_float4*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_cf128_qf(stream, cublasH, epi, rank, p, N, (complex_float4*)work, algnN, &hpiv[0], dpiv); break;
     default: break;
   }
   
@@ -136,17 +136,17 @@ int32_t device::cgeqp3(cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cha
   std::vector<int32_t> hpiv(N);
   std::iota(hpiv.begin(), hpiv.end(), 1);
 
-  int32_t rank = N; 
+  int32_t rank = N, p = 0; 
   MixPrecAHA::iAHA(stream, cublasH, M, N, algnN, umax, A, lda, Precision::FP32_COMPLEX, work, precC, alg);
   switch (precC) {
     case Precision::FP64_COMPLEX:
-      rank = internal::Cholesky::potrfp_cf64(stream, cublasH, epi, rank, N, (std::complex<double>*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_cf64(stream, cublasH, epi, rank, p, N, (std::complex<double>*)work, algnN, &hpiv[0], dpiv); break;
     case Precision::FP32_COMPLEX:
-      rank = internal::Cholesky::potrfp_cf32(stream, cublasH, epi, rank, N, (std::complex<float>*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_cf32(stream, cublasH, epi, rank, p, N, (std::complex<float>*)work, algnN, &hpiv[0], dpiv); break;
     case Precision::FP128_DD_COMPLEX:
-      rank = internal::Cholesky::potrfp_cf128_dd(stream, cublasH, epi, rank, N, (complex_double2*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_cf128_dd(stream, cublasH, epi, rank, p, N, (complex_double2*)work, algnN, &hpiv[0], dpiv); break;
     case Precision::FP128_QF_COMPLEX:
-      rank = internal::Cholesky::potrfp_cf128_qf(stream, cublasH, epi, rank, N, (complex_float4*)work, algnN, &hpiv[0], dpiv); break;
+      rank = internal::Cholesky::potrfp_cf128_qf(stream, cublasH, epi, rank, p, N, (complex_float4*)work, algnN, &hpiv[0], dpiv); break;
     default: break;
   }
 

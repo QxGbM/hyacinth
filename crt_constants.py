@@ -55,10 +55,15 @@ if all_ok:
     p_limbs = []
     extract_limbs(P, p_limbs, 63)
     P_div = [P // m for m in moduli]
-    inv = pack_u8x8([pow(Pd % m, -1, m) for Pd, m in zip(P_div, moduli)])
+    inv = [pow(Pd % m, -1, m) for Pd, m in zip(P_div, moduli)]
+    rem_e32 = [(i * (-(1 << 32))) % m for i, m in zip(inv, moduli)]
+
+    inv = pack_u8x8(inv)
+    rem_e32 = pack_u8x8(rem_e32)
 
     print(f"namespace CRT::Moduli{n}" + " {")
     print(f"  constexpr uint64_t minv[{len(inv)}] =" + " { " + ", ".join(f"{m}llu" for m in inv) + " };")
+    print(f"  constexpr uint64_t rem_e32[{len(rem_e32)}] =" + " { " + ", ".join(f"{m}llu" for m in rem_e32) + " };")
     print(f"  constexpr int64_t p[{len(p_limbs)}] =" + " { " + ", ".join(f"{l}ll" for l in p_limbs) + " };")
     for i in range(0, n, 8):
       pd_print((i//8)+1, P_div[i:min(i+8, n):])

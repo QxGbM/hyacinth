@@ -10,6 +10,7 @@ set(SM_TARGETS "80;86;89;90;100;120")
 find_package(CUDAToolkit REQUIRED)
 
 set(CPP_SOURCES
+  src_cpp/autotune.cpp
   src_cpp/gemv_cublas.cpp
   src_cpp/geqp3.cpp
   src_cpp/igemm.cpp
@@ -43,7 +44,7 @@ set_source_files_properties(${CU_SOURCES} PROPERTIES COMPILE_OPTIONS
 add_library(hyacin SHARED ${CPP_SOURCES} ${CU_SOURCES})
 set_property(TARGET hyacin PROPERTY CUDA_ARCHITECTURES ${SM_TARGETS})
 
-target_include_directories(hyacin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(hyacin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(hyacin PRIVATE CUDA::cudart CUDA::cublas CUDA::cusolver)
 
 find_package(BLAS REQUIRED)

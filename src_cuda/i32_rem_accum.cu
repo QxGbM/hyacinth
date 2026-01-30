@@ -6,7 +6,7 @@
 
 template<int32_t len> struct i32_array { int32_t arr[len]; };
 
-template<int32_t orderA, int32_t orderPD, int32_t orderM, uint64_t MO, uint64_t R32, uint64_t MINV, int64_t P0, int64_t P1, int64_t P2, int32_t beta, int32_t pd_len>
+template<int32_t orderA, int32_t orderPD, int32_t orderM, uint64_t MO, uint64_t MINV, uint64_t R32, int64_t P0, int64_t P1, int64_t P2, int32_t beta, int32_t pd_len>
 __global__ void i32_crt_accum_kernel(i32_array<pd_len> pd, int64_t N, const int32_t* __restrict__ X, uint64_t* __restrict__ A) {
   int64_t i = int64_t(blockIdx.x) * int64_t(blockDim.x) + int64_t(threadIdx.x);
   if (i < N) {
@@ -31,10 +31,11 @@ __global__ void i32_crt_accum_kernel(i32_array<pd_len> pd, int64_t N, const int3
     { rem[r] = X[iter]; iter += N; } iter = i;
 
     constexpr uint32_t m_lo = uint32_t(MO), m_hi = uint32_t(MO >> 32);
-    constexpr uint32_t r_lo = uint32_t(R32), r_hi = uint32_t(R32 >> 32);
     constexpr uint32_t i_lo = uint32_t(MINV), i_hi = uint32_t(MINV >> 32);
-    device::int8::crt_recover<m_lo, r_lo, i_lo>(*rem_lo);
-    device::int8::crt_recover<m_hi, r_hi, i_hi>(*rem_hi);
+    constexpr uint32_t r_lo = uint32_t(R32), r_hi = uint32_t(R32 >> 32);
+    device::int8::crt_recover<m_lo, i_lo, r_lo>(*rem_lo);
+    device::int8::crt_recover<m_hi, i_hi, r_hi>(*rem_hi);
+    const int32_t* pdx = &pd.arr[0];
 
     #pragma unroll
     for (int32_t r = 0; r < orderM; ++r) {
@@ -42,8 +43,8 @@ __global__ void i32_crt_accum_kernel(i32_array<pd_len> pd, int64_t N, const int3
 
       #pragma unroll
       for (int32_t p = 0; p < orderPD; ++p) {
-        int32_t idx = r * orderPD + p;
-        uint32_t lo = uint32_t(ri * pd.arr[idx]), hi = uint32_t(__mulhi(ri, pd.arr[idx]));
+        int32_t pdi = *pdx; ++pdx;
+        uint32_t lo = uint32_t(ri * pdi), hi = uint32_t(__mulhi(ri, pdi));
         int64_t prod = int64_t(uint64_t(lo) | (uint64_t(hi) << 32));
         device::int8::add_shifted(acc, prod, uint32_t(p * 31));
       }
@@ -69,23 +70,23 @@ inline void crt_acc_dispatcher(cudaStream_t stream, int32_t option, int64_t N, c
   constexpr int32_t orderM = CRT::active_moduli(n_moduli, iter), pd_len = orderM * orderPD;
 
   if constexpr(0 < orderM) {
-    constexpr uint64_t MO = CRT::modular(iter), R32 = CRT::rem_e32(iter), MINV = CRT::modular_inv(n_moduli, iter);
+    constexpr uint64_t MO = CRT::modular(iter), MINV = CRT::modular_inv(n_moduli, iter), R32 = CRT::inv_r32(n_moduli, iter);
     i32_array<pd_len> pd; std::copy_n(CRT::p_div(n_moduli, iter), pd_len, &pd.arr[0]);
     int32_t grid = int32_t((N + int64_t(block_threads - 1)) / int64_t(block_threads));
 
     if (option & 2) {
       constexpr int64_t P0 = CRT::domain_p(n_moduli, 0), P1 = CRT::domain_p(n_moduli, 1), P2 = CRT::domain_p(n_moduli, 2);
       if (option & 1)
-        i32_crt_accum_kernel<orderA, orderPD, orderM, MO, R32, MINV, P0, P1, P2, 1> <<< grid, block_threads, 0, stream >>> (pd, N, X, A);
+        i32_crt_accum_kernel<orderA, orderPD, orderM, MO, MINV, R32, P0, P1, P2, 1> <<< grid, block_threads, 0, stream >>> (pd, N, X, A);
       else
-        i32_crt_accum_kernel<orderA, orderPD, orderM, MO, R32, MINV, P0, P1, P2, 0> <<< grid, block_threads, 0, stream >>> (pd, N, X, A);
+        i32_crt_accum_kernel<orderA, orderPD, orderM, MO, MINV, R32, P0, P1, P2, 0> <<< grid, block_threads, 0, stream >>> (pd, N, X, A);
     }
     else {
       constexpr int64_t z = int64_t(0);
       if (option & 1)
-        i32_crt_accum_kernel<orderA, orderPD, orderM, MO, R32, MINV, z, z, z, 1> <<< grid, block_threads, 0, stream >>> (pd, N, X, A);
+        i32_crt_accum_kernel<orderA, orderPD, orderM, MO, MINV, R32, z, z, z, 1> <<< grid, block_threads, 0, stream >>> (pd, N, X, A);
       else
-        i32_crt_accum_kernel<orderA, orderPD, orderM, MO, R32, MINV, z, z, z, 0> <<< grid, block_threads, 0, stream >>> (pd, N, X, A);
+        i32_crt_accum_kernel<orderA, orderPD, orderM, MO, MINV, R32, z, z, z, 0> <<< grid, block_threads, 0, stream >>> (pd, N, X, A);
     }
   }
 }

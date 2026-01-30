@@ -46,11 +46,10 @@ void device::MixPrecAHA::igemm_params(double* epi, int32_t N, int32_t* algnN, in
   *epi = std::min(1., std::max(std::abs(*epi), machine_epi));
   *umax = *umax + int32_t(std::ceil(-std::log2(*epi)));
 
+  int32_t Complex = int32_t(precA != precR);
   Precision prec = epi_f32 <= *epi ? Precision::FP32 : (epi_f64 <= *epi ? Precision::FP64 : f128.first);
-  *precC = precA == precR ? prec : complex_precision(prec);
+  *precC = Complex ? complex_precision(prec) : prec;
   *alg = (*umax < umax_threshold) ? Algorithm::Limbs : Algorithm::CRT;
-  if (*alg == Algorithm::Limbs)
-    *umax = ((*umax + 10) & (~7)) - 3;
 }
 
 inline std::tuple<int32_t, int32_t, int32_t, int32_t, int64_t, int64_t, int64_t, int64_t> i8gemm_ext_params(int32_t M, int32_t N, int32_t algnN, int32_t umax, device::Precision prec, device::Algorithm alg) {
@@ -64,7 +63,7 @@ inline std::tuple<int32_t, int32_t, int32_t, int32_t, int64_t, int64_t, int64_t,
   int64_t scratch_bytes = int64_t(algnN) * int64_t(N) * int64_t(orderA) * sizeof(int32_t);
   scratch_bytes = std::max(scratch_bytes, C_bytes - i8_bytes);
 
-  int32_t bits = int32_t(std::ceil(std::log2(double(algnM)))) + (umax << 1) + 2 + Complex;
+  int32_t bits = int32_t(std::ceil(std::log2(double(M)))) + (umax << 1) + 2 + Complex;
   int32_t n_moduli = (bits + 8) >> 3;
   int32_t orderC = (alg == device::Algorithm::Limbs) ? ((bits + 63) / 63) : (((n_moduli << 3) + 63) / 63);
   int64_t acc_bytes = (int64_t(algnN) * int64_t(N) * int64_t(orderC) * sizeof(uint64_t)) << Complex;

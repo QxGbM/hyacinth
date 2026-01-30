@@ -73,8 +73,8 @@ inline void quantize_dispatcher(cudaStream_t stream, int64_t M, int64_t N, matri
   constexpr uint64_t MO = CRT::modular(iter), R32 = CRT::rem_e32(iter), R63 = CRT::rem_e63(iter);
   dim3 grid(uint32_t(lda >> 8), uint32_t(N)), block_threads(uint32_t(256));
   int64_t strideA = N * lda;
-  uint64_t lo = (-uint64_t(umax < 64)) & (uint64_t(1) << umax);
-  uint32_t hi = (-uint32_t(63 < umax)) & (uint32_t(1) << (umax - 63));
+  uint64_t lo = umax < 64 ? (uint64_t(1) << umax) : uint64_t(0);
+  uint32_t hi = 63 < umax ? (uint32_t(1) << (umax - 63)) : uint32_t(0);
 
   switch (orderA) {
     case 1: quantize_kernel<1, MO, R32, R63, matrix_t, matrix_const_ptr, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, lda, strideA); break;
