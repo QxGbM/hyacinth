@@ -15,25 +15,33 @@ namespace device::int8 {
 
   template <uint32_t ORDER>
   __host__ __device__ __forceinline__ void add_shifted(uint64_t (&a)[ORDER], int64_t i, uint32_t expon) {
-    static_assert(1 <= ORDER && ORDER <= 3, "Integer 64 accumulation order must be in [1,3]");
+    static_assert(1 <= ORDER && ORDER <= 4, "Integer 64 accumulation order must be in [1,4]");
 
-    int32_t p0 = int32_t(expon < uint32_t(63));
-    int32_t p1 = int32_t(uint32_t(63) <= expon);
-    int32_t p2 = int32_t(uint32_t(126) <= expon);
-    uint32_t rem = (expon - uint32_t((p1 + p2) * 63)) & uint32_t(63);
+    constexpr uint32_t bits = uint32_t(63);
+    int32_t p0 = int32_t(expon < bits);
+    int32_t p1 = int32_t((expon - uint32_t(63)) < bits);
+    int32_t p2 = int32_t((expon - uint32_t(126)) < bits);
+    int32_t p3 = int32_t((expon - uint32_t(189)) < bits);
+    uint32_t rem = (expon - uint32_t(p1 * 63 + p2 * 126 + p3 * 189)) & bits;
 
     uint64_t q0 = (uint64_t(i) << rem) & i63, m0 = -uint64_t(p0);
     a[0] += q0 & m0;
 
     if constexpr(1 < ORDER) {
-      uint64_t q1 = uint64_t(i >> (uint32_t(63) - rem)) & i63, m1 = -uint64_t(p1);
-      a[1] += ((q1 & m0) | (q0 & m1)) + (a[0] >> 63);
+      uint64_t q1 = uint64_t(i >> (bits - rem)) & i63, m1 = -uint64_t(p1);
+      a[1] += ((q1 & m0) | (q0 & m1)) + (a[0] >> bits);
       a[0] = a[0] & i63;
 
       if constexpr(2 < ORDER) {
-        uint64_t q2 = -(uint64_t(i) >> 63) & i63, m2 = -uint64_t(p2);
-        a[2] += ((q2 & m0) | (q1 & m1) | (q0 & m2)) + (a[1] >> 63);
+        uint64_t q2 = (-(uint64_t(i) >> bits)) & i63, m2 = -uint64_t(p2);
+        a[2] += ((q2 & m0) | (q1 & m1) | (q0 & m2)) + (a[1] >> bits);
         a[1] = a[1] & i63;
+
+        if constexpr(3 < ORDER) {
+          uint64_t m01 = -uint64_t(p0 | p1), m3 = -uint64_t(p3);
+          a[3] += ((q2 & m01) | (q1 & m2) | (q0 & m3)) + (a[2] >> bits);
+          a[2] = a[2] & i63;
+        }
       }
     }
 
@@ -42,11 +50,12 @@ namespace device::int8 {
 
   template <uint32_t ORDER>
   __host__ __device__ __forceinline__ void negate_shifted(uint64_t (&a)[ORDER]) {
-    static_assert(1 <= ORDER && ORDER <= 3, "Integer 64 accumulation order must be in [1,3]");
+    static_assert(1 <= ORDER && ORDER <= 4, "Integer 64 accumulation order must be in [1,4]");
 
     a[0] += i63;
     if constexpr(1 < ORDER) { a[1] += i63 + (a[0] >> 63); a[0] = (~a[0]) & i63; }
     if constexpr(2 < ORDER) { a[2] += i63 + (a[1] >> 63); a[1] = (~a[1]) & i63; }
+    if constexpr(3 < ORDER) { a[3] += i63 + (a[2] >> 63); a[2] = (~a[2]) & i63; }
     a[ORDER - 1] = ~(((a[ORDER - 1] << 1) & u63) | (a[ORDER - 1] & i63));
   }
   

@@ -86,11 +86,12 @@ namespace device::dd {
 
   template <uint32_t ORDER>
   __host__ __device__ __forceinline__ double conv_a63_f64(uint64_t const (&a)[ORDER], int32_t e) {
-    static_assert(1 <= ORDER && ORDER <= 3, "Integer 64 accumulation order must be in [1,3]");
+    static_assert(1 <= ORDER && ORDER <= 4, "Integer 64 accumulation order must be in [1,4]");
 #ifndef __CUDA_ARCH__
     using std::ldexp;
 #endif
     double res = double(int64_t(a[ORDER - 1]));
+    if constexpr(3 < ORDER) { double2 i = conv_i64_dd(a[2]); res = (ldexp(res, 63) + i.x) + i.y; }
     if constexpr(2 < ORDER) { double2 i = conv_i64_dd(a[1]); res = (ldexp(res, 63) + i.x) + i.y; }
     if constexpr(1 < ORDER) { double2 i = conv_i64_dd(a[0]); res = (ldexp(res, 63) + i.x) + i.y; }
     return ldexp(res, e);
@@ -98,9 +99,10 @@ namespace device::dd {
 
   template <uint32_t ORDER>
   __host__ __device__ __forceinline__ double2 conv_a63_dd(uint64_t const (&a)[ORDER], int32_t e) {
-    static_assert(1 <= ORDER && ORDER <= 3, "Integer 64 accumulation order must be in [1,3]");
+    static_assert(1 <= ORDER && ORDER <= 4, "Integer 64 accumulation order must be in [1,4]");
 
     double2 res = renormalize(conv_i64_dd(a[ORDER - 1]));
+    if constexpr(3 < ORDER) res = add(fldexp(res, 63), renormalize(conv_i64_dd(a[2])));
     if constexpr(2 < ORDER) res = add(fldexp(res, 63), renormalize(conv_i64_dd(a[1])));
     if constexpr(1 < ORDER) res = add(fldexp(res, 63), renormalize(conv_i64_dd(a[0])));
     return fldexp(res, e);

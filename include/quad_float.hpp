@@ -150,9 +150,10 @@ namespace device::qf {
 
   template <uint32_t ORDER>
   __host__ __device__ __forceinline__ float4 conv_a63_qf(uint64_t const (&a)[ORDER], int32_t e) {
-    static_assert(1 <= ORDER && ORDER <= 3, "Integer 64 accumulation order must be in [1,3]");
+    static_assert(1 <= ORDER && ORDER <= 4, "Integer 64 accumulation order must be in [1,4]");
 
     float4 res = conv_i64_qf_m126(a[ORDER - 1]);
+    if constexpr(3 < ORDER) res = add(fldexp(res, 63), conv_i64_qf_m126(a[2]));
     if constexpr(2 < ORDER) res = add(fldexp(res, 63), conv_i64_qf_m126(a[1]));
     if constexpr(1 < ORDER) res = add(fldexp(res, 63), conv_i64_qf_m126(a[0]));
     return fldexp(res, e + 126);

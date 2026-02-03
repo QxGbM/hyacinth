@@ -13,6 +13,7 @@ set(CPP_SOURCES
   src_cpp/autotune.cpp
   src_cpp/gemv_cublas.cpp
   src_cpp/geqp3.cpp
+  src_cpp/i63syrk.cpp
   src_cpp/igemm.cpp
   src_cpp/imax_host.cpp
   src_cpp/interp_decomp.cpp

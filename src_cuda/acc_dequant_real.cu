@@ -44,9 +44,10 @@ inline void dequantize_dispatcher(cudaStream_t stream, int32_t orderA, int64_t M
   dim3 grid((uint32_t(N) + uint32_t(block_threads - 1)) / uint32_t(block_threads), uint32_t(N));
 
   switch (orderA) {
-    case 1: dequantize_kernel<1, real_t> <<< grid, block_threads, 0, stream >>> (-M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
-    case 2: dequantize_kernel<2, real_t> <<< grid, block_threads, 0, stream >>> (-M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
-    case 3: dequantize_kernel<3, real_t> <<< grid, block_threads, 0, stream >>> (-M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
+    case 1: dequantize_kernel<1, real_t> <<< grid, block_threads, 0, stream >>> (M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
+    case 2: dequantize_kernel<2, real_t> <<< grid, block_threads, 0, stream >>> (M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
+    case 3: dequantize_kernel<3, real_t> <<< grid, block_threads, 0, stream >>> (M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
+    case 4: dequantize_kernel<4, real_t> <<< grid, block_threads, 0, stream >>> (M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
     default: break;
   }
 }

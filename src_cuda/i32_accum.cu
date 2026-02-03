@@ -54,6 +54,7 @@ inline void acc_dispatcher(cudaStream_t stream, int64_t N, uint32_t sft_lo, uint
     case 9: i32_accum_kernel<9, orderA, sft_iter, beta> <<< grid, block_threads, 0, stream >>> (sft, N, X, A); break;
     case 10: i32_accum_kernel<10, orderA, sft_iter, beta> <<< grid, block_threads, 0, stream >>> (sft, N, X, A); break;
     case 11: i32_accum_kernel<11, orderA, sft_iter, beta> <<< grid, block_threads, 0, stream >>> (sft, N, X, A); break;
+    case 12: i32_accum_kernel<12, orderA, sft_iter, beta> <<< grid, block_threads, 0, stream >>> (sft, N, X, A); break;
     default: break;
   }
 }
@@ -76,6 +77,7 @@ void internal::int8::accumulate_i32tensor(cudaStream_t stream, int32_t option, i
     case 1: acc_dispatcher<1>(stream, option, N, uint32_t(sft_lo), uint32_t(orderX), X, A); break;
     case 2: acc_dispatcher<2>(stream, option, N, uint32_t(sft_lo), uint32_t(orderX), X, A); break;
     case 3: acc_dispatcher<3>(stream, option, N, uint32_t(sft_lo), uint32_t(orderX), X, A); break;
+    case 4: acc_dispatcher<4>(stream, option, N, uint32_t(sft_lo), uint32_t(orderX), X, A); break;
     default: break;
   }
 }

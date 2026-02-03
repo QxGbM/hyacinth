@@ -1,10 +1,9 @@
 
 #pragma once
 
-#include <cstdint>
 #include <complex>
 #include <cuda_runtime_api.h>
-#include <cublas_v2.h>
+#include <../hyacin.h>
 #include <cusolverDn.h>
 
 namespace device {
@@ -31,7 +30,7 @@ namespace device {
 
   namespace MixPrecAHA {
 
-    void igemm_params(double* epi, int32_t N, int32_t* algnN, int32_t* umax, Precision precA, Precision* precC, Algorithm* alg);
+    void igemm_params(double epi, int32_t M, int32_t u_extra, int32_t* umax, Precision Atype, Precision* ComputeType, Algorithm* alg);
 
     void igemm_workspace(int32_t M, int32_t N, int32_t algnN, int32_t umax, Precision precC, Algorithm alg, int64_t* workspace);
 

@@ -22,8 +22,8 @@ template <class typeA, class typeB> struct convert_copy {
 
   __device__ __forceinline__ void conv(double a, float& b) { b = float(a); }
   __device__ __forceinline__ void conv(float a, float& b) { b = a; }
-  __device__ __forceinline__ void conv(double2 a, float& b) { b = float(a.x) + float(a.y); }
-  __device__ __forceinline__ void conv(float4 a, float& b) { b = a.x + a.y + a.z + a.w; }
+  __device__ __forceinline__ void conv(double2 a, float& b) { b = float(a.x); }
+  __device__ __forceinline__ void conv(float4 a, float& b) { b = a.x; }
 
   __device__ __forceinline__ void conv(double a, double2& b) { b = device::dd::double2dd(a); }
   __device__ __forceinline__ void conv(float a, double2& b) { b = make_double2(double(a), 0.); }
