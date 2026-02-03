@@ -10,11 +10,9 @@ set(SM_TARGETS "80;86;89;90;100;120")
 find_package(CUDAToolkit REQUIRED)
 
 set(CPP_SOURCES
-  src_cpp/autotune.cpp
   src_cpp/gemv_cublas.cpp
   src_cpp/geqp3.cpp
   src_cpp/i63syrk.cpp
-  src_cpp/igemm.cpp
   src_cpp/imax_host.cpp
   src_cpp/interp_decomp.cpp
   src_cpp/interp_pp.cpp
@@ -31,6 +29,7 @@ set(CU_SOURCES
   src_cuda/gemv_pp_nopiv.cu
   src_cuda/gemv_pp.cu
   src_cuda/gemv_scal_f128.cu
+  src_cuda/hyacin.cu
   src_cuda/i32_accum.cu
   src_cuda/i32_rem_accum.cu
   src_cuda/imax_diag.cu

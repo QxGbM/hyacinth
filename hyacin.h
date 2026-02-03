@@ -35,11 +35,9 @@ void hyacinXcpqrk_autoTune(
 );
 
 void hyacinXcpqrk_bufferSize(
-  double epi,
   int32_t M,
   int32_t N,
   int32_t umax,
-  hyacinPrecision_t Atype,
   hyacinPrecision_t ComputeType,
   hyacinAlgorithm_t alg,
   uint64_t* dev_work_bytes,

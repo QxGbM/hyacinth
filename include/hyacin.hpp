@@ -32,9 +32,9 @@ namespace device {
 
     void igemm_params(double epi, int32_t M, int32_t u_extra, int32_t* umax, Precision Atype, Precision* ComputeType, Algorithm* alg);
 
-    void igemm_workspace(int32_t M, int32_t N, int32_t algnN, int32_t umax, Precision precC, Algorithm alg, int64_t* workspace);
+    void igemm_workspace(int32_t M, int32_t N, int32_t umax, Precision ComputeType, Algorithm alg, uint64_t* dev_work_bytes, uint64_t* pinned_work_bytes);
 
-    void iAHA(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t algnN, int32_t umax, const void* A, int32_t lda, Precision precA, void* C, Precision precC, Algorithm alg);
+    int32_t iAHA(cublasHandle_t handle, char mode, double epi, int32_t M, int32_t N, int32_t K, int32_t p, int32_t umax, Precision AType, const void* A, int32_t lda, int32_t* jpiv, Precision RType, void* R, int32_t ldr, Precision ComputeType, void* dev_work, void* pinned_work, Algorithm alg);
 
   };
 
@@ -42,7 +42,7 @@ namespace device {
     
     void convert_and_copy(cudaStream_t stream, int32_t M, int32_t N, const void* A, int32_t lda, Precision precA, void* B, int32_t ldb, Precision precB);
 
-    void inplace_gather(cudaStream_t stream, int32_t M, int32_t N, const int32_t* jpiv, void* A, int32_t lda, void* workspace, int64_t Lwork, Precision prec);
+    void inplace_gather(cudaStream_t stream, int32_t M, int32_t N, const int32_t* jpiv, void* A, int32_t lda, void* workspace, uint64_t Lwork, Precision prec);
 
     void copy_gather(cudaStream_t stream, int32_t M, int32_t N, const int32_t* jpiv, const void* A, int32_t lda, void* B, int32_t ldb, Precision prec);
 
@@ -50,7 +50,7 @@ namespace device {
 
     void strided_identity(cudaStream_t stream, int32_t M, int32_t N, void* A, int32_t lda, Precision prec);
 
-    void workspace_realloc(cudaStream_t stream, void** ptr, int64_t* bytes_old, int64_t bytes_required);
+    void workspace_realloc(cudaStream_t stream, void** ptr, uint64_t* bytes_old, uint64_t bytes_required);
 
   };
 

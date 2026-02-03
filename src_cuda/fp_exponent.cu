@@ -17,11 +17,11 @@ __global__ void vector_exponent_kernel(int32_t M, real_const_ptr A, int64_t lda,
   cub::BlockReduce<double, BLOCK_THREADS> block_reduce(temp_reduce);
   f64max max_func;
 
-  real_const_ptr A_i = &A[int64_t(blockIdx.x) * lda];
+  A = &A[int64_t(blockIdx.x) * lda];
   double thread_data = 0.;
 
   for (int32_t i = threadIdx.x; i < M; i += BLOCK_THREADS)
-    thread_data = max_func(conv_abs(A_i[i]), thread_data);
+    thread_data = max_func(conv_abs(A[i]), thread_data);
 
   thread_data = block_reduce.Reduce(thread_data, max_func);
   if (threadIdx.x == 0) {

@@ -47,7 +47,7 @@ __global__ void dequantize_complex_kernel(int64_t M, int64_t N, const uint64_t* 
 
     device::int8::add_shifted(acc_rl, vec_expon[iter = x + incv], uint32_t(umax + 1));
     device::int8::add_shifted(acc_rl, vec_expon[iter += incv], uint32_t(umax + 64));
-    device::int8::add_shifted(acc_rl, M, uint32_t((umax << 1) | 1));
+    device::int8::add_shifted(acc_rl, M, uint32_t((umax + 1) << 1));
     device::int8::add_shifted(acc_im, vec_expon[iter += incv], uint32_t(umax));
     device::int8::add_shifted(acc_im, vec_expon[iter += incv], uint32_t(umax + 63));
 

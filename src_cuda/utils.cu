@@ -113,9 +113,9 @@ inline void copy_permute(cudaStream_t stream, int32_t M, int32_t N, const int32_
   }
 }
 
-void device::Utils::inplace_gather(cudaStream_t stream, int32_t M, int32_t N, const int32_t* jpiv, void* A, int32_t lda, void* workspace, int64_t Lwork, Precision prec) {
-  int64_t elem_bytes = prec == Precision::FP32 ? sizeof(int32_t) : (prec == Precision::FP64_COMPLEX ? sizeof(int4) : sizeof(int64_t));
-  int32_t ws_rows = int32_t(Lwork / (int64_t(N) * elem_bytes)) & (~255);
+void device::Utils::inplace_gather(cudaStream_t stream, int32_t M, int32_t N, const int32_t* jpiv, void* A, int32_t lda, void* workspace, uint64_t Lwork, Precision prec) {
+  uint64_t elem_bytes = prec == Precision::FP32 ? sizeof(int32_t) : (prec == Precision::FP64_COMPLEX ? sizeof(int4) : sizeof(int64_t));
+  int32_t ws_rows = int32_t(Lwork / (uint64_t(N) * elem_bytes)) & (~255);
   thrust::counting_iterator<int64_t> iter(0);
   if (N <= clen)
     cudaMemcpyToSymbolAsync(cpiv, jpiv, int64_t(N) * sizeof(int32_t), 0, cudaMemcpyDefault, stream);
@@ -191,7 +191,7 @@ void device::Utils::strided_identity(cudaStream_t stream, int32_t M, int32_t N, 
   }
 }
 
-void device::Utils::workspace_realloc(cudaStream_t stream, void** ptr, int64_t* bytes_old, int64_t bytes_required) {
+void device::Utils::workspace_realloc(cudaStream_t stream, void** ptr, uint64_t* bytes_old, uint64_t bytes_required) {
   if (*bytes_old < bytes_required) {
     void* workspace = nullptr;
     cudaStreamSynchronize(stream);

@@ -3,15 +3,15 @@
 #include <hyacin.hpp>
 #include <cuComplex.h>
 
-constexpr int64_t ws_rows = 8192;
+constexpr uint64_t ws_rows = 8192;
 
-void internal::Orthogonalize::qr_pp_f64(cudaStream_t stream, cusolverDnHandle_t cusolverH, int32_t M, int32_t N, int32_t K, double* A, int32_t lda, const int32_t* ipiv, double* tau, void** Workspace, int64_t* Lwork) {
+void internal::Orthogonalize::qr_pp_f64(cudaStream_t stream, cusolverDnHandle_t cusolverH, int32_t M, int32_t N, int32_t K, double* A, int32_t lda, const int32_t* ipiv, double* tau, void** Workspace, uint64_t* Lwork) {
   int32_t l1 = 0, l2 = 0;
   double* R = &A[int64_t(K) * int64_t(lda)];
   cusolverDnDgeqrf_bufferSize(cusolverH, M, K, A, lda, &l1);
   if (K < N)
     cusolverDnDormqr_bufferSize(cusolverH, CUBLAS_SIDE_LEFT, CUBLAS_OP_T, M, N - K, K, A, lda, tau, R, lda, &l2);
-  int64_t bytes_required = std::max(ws_rows * int64_t(N), int64_t(1 + std::max(l1, l2))) * int64_t(sizeof(double));
+  uint64_t bytes_required = std::max(ws_rows * uint64_t(N), uint64_t(1 + std::max(l1, l2))) * uint64_t(sizeof(double));
   device::Utils::workspace_realloc(stream, Workspace, Lwork, bytes_required);
 
   cudaMemcpyAsync(tau, ipiv, sizeof(int32_t) * N, cudaMemcpyDefault, stream);
@@ -25,13 +25,13 @@ void internal::Orthogonalize::qr_pp_f64(cudaStream_t stream, cusolverDnHandle_t 
   }
 }
 
-void internal::Orthogonalize::qr_pp_f32(cudaStream_t stream, cusolverDnHandle_t cusolverH, int32_t M, int32_t N, int32_t K, float* A, int32_t lda, const int32_t* ipiv, float* tau, void** Workspace, int64_t* Lwork) {
+void internal::Orthogonalize::qr_pp_f32(cudaStream_t stream, cusolverDnHandle_t cusolverH, int32_t M, int32_t N, int32_t K, float* A, int32_t lda, const int32_t* ipiv, float* tau, void** Workspace, uint64_t* Lwork) {
   int32_t l1 = 0, l2 = 0;
   float* R = &A[int64_t(K) * int64_t(lda)];
   cusolverDnSgeqrf_bufferSize(cusolverH, M, K, A, lda, &l1);
   if (K < N)
     cusolverDnSormqr_bufferSize(cusolverH, CUBLAS_SIDE_LEFT, CUBLAS_OP_T, M, N - K, K, A, lda, tau, R, lda, &l2);
-  int64_t bytes_required = std::max(ws_rows * int64_t(N), int64_t(1 + std::max(l1, l2))) * int64_t(sizeof(float));
+  uint64_t bytes_required = std::max(ws_rows * uint64_t(N), uint64_t(1 + std::max(l1, l2))) * uint64_t(sizeof(float));
   device::Utils::workspace_realloc(stream, Workspace, Lwork, bytes_required);
 
   cudaMemcpyAsync(tau, ipiv, sizeof(int32_t) * N, cudaMemcpyDefault, stream);
@@ -45,13 +45,13 @@ void internal::Orthogonalize::qr_pp_f32(cudaStream_t stream, cusolverDnHandle_t 
   }
 }
 
-void internal::Orthogonalize::qr_pp_cf64(cudaStream_t stream, cusolverDnHandle_t cusolverH, int32_t M, int32_t N, int32_t K, std::complex<double>* A, int32_t lda, const int32_t* ipiv, std::complex<double>* tau, void** Workspace, int64_t* Lwork) {
+void internal::Orthogonalize::qr_pp_cf64(cudaStream_t stream, cusolverDnHandle_t cusolverH, int32_t M, int32_t N, int32_t K, std::complex<double>* A, int32_t lda, const int32_t* ipiv, std::complex<double>* tau, void** Workspace, uint64_t* Lwork) {
   int32_t l1 = 0, l2 = 0;
   cuDoubleComplex* R = (cuDoubleComplex*)&A[int64_t(K) * int64_t(lda)];
   cusolverDnZgeqrf_bufferSize(cusolverH, M, K, (cuDoubleComplex*)A, lda, &l1);
   if (K < N)
     cusolverDnZunmqr_bufferSize(cusolverH, CUBLAS_SIDE_LEFT, CUBLAS_OP_C, M, N - K, K, (cuDoubleComplex*)A, lda, (cuDoubleComplex*)tau, R, lda, &l2);
-  int64_t bytes_required = std::max(ws_rows * int64_t(N), int64_t(1 + std::max(l1, l2))) * int64_t(sizeof(cuDoubleComplex));
+  uint64_t bytes_required = std::max(ws_rows * uint64_t(N), uint64_t(1 + std::max(l1, l2))) * uint64_t(sizeof(cuDoubleComplex));
   device::Utils::workspace_realloc(stream, Workspace, Lwork, bytes_required);
 
   cudaMemcpyAsync(tau, ipiv, sizeof(int32_t) * N, cudaMemcpyDefault, stream);
@@ -65,13 +65,13 @@ void internal::Orthogonalize::qr_pp_cf64(cudaStream_t stream, cusolverDnHandle_t
   }
 }
 
-void internal::Orthogonalize::qr_pp_cf32(cudaStream_t stream, cusolverDnHandle_t cusolverH, int32_t M, int32_t N, int32_t K, std::complex<float>* A, int32_t lda, const int32_t* ipiv, std::complex<float>* tau, void** Workspace, int64_t* Lwork) {
+void internal::Orthogonalize::qr_pp_cf32(cudaStream_t stream, cusolverDnHandle_t cusolverH, int32_t M, int32_t N, int32_t K, std::complex<float>* A, int32_t lda, const int32_t* ipiv, std::complex<float>* tau, void** Workspace, uint64_t* Lwork) {
   int32_t l1 = 0, l2 = 0;
   cuComplex* R = (cuComplex*)&A[int64_t(K) * int64_t(lda)];
   cusolverDnCgeqrf_bufferSize(cusolverH, M, K, (cuComplex*)A, lda, &l1);
   if (K < N)
     cusolverDnCunmqr_bufferSize(cusolverH, CUBLAS_SIDE_LEFT, CUBLAS_OP_C, M, N - K, K, (cuComplex*)A, lda, (cuComplex*)tau, R, lda, &l2);
-  int64_t bytes_required = std::max(ws_rows * int64_t(N), int64_t(1 + std::max(l1, l2))) * int64_t(sizeof(cuComplex));
+  uint64_t bytes_required = std::max(ws_rows * uint64_t(N), uint64_t(1 + std::max(l1, l2))) * uint64_t(sizeof(cuComplex));
   device::Utils::workspace_realloc(stream, Workspace, Lwork, bytes_required);
 
   cudaMemcpyAsync(tau, ipiv, sizeof(int32_t) * N, cudaMemcpyDefault, stream);
