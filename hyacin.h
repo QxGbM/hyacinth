@@ -54,7 +54,7 @@ int32_t hyacinXcpqrk(
   int32_t p,
   int32_t umax,
   hyacinPrecision_t Atype,
-  void* A,
+  const void* A,
   int32_t lda,
   int32_t* jpiv,
   hyacinPrecision_t Rtype,

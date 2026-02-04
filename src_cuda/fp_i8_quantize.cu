@@ -7,10 +7,10 @@ __device__ __forceinline__ void quantize_f64_i8limbs(double x, int32_t expon, ui
   int64_t q = device::int8::round_f64(x, expon, expon);
   lo += (uint64_t(q) << expon) & device::int8::i63;
   hi += uint32_t(q >> (63 - expon)) + uint32_t(lo >> 63);
+  uint32_t lo_32 = uint32_t(lo), mi = (uint32_t(lo >> 32) & device::int8::i31) | (hi << 31), c = 0;
 
-  uint32_t c = 0;
-  code[0] = device::int8::conv_u8i8(uint32_t(lo), c);
-  code[1] = device::int8::conv_u8i8((uint32_t(lo >> 32) & device::int8::i31) | (hi << 31), c);
+  code[0] = device::int8::conv_u8i8(lo_32, c);
+  code[1] = device::int8::conv_u8i8(mi, c);
   code[2] = device::int8::conv_u8i8(hi >> 1, c);
 }
 

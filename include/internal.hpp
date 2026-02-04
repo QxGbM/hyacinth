@@ -2,9 +2,7 @@
 
 #include <cstdint>
 #include <complex>
-#include <cuda_runtime_api.h>
 #include <cublas_v2.h>
-#include <cusolverDn.h>
 
 struct complex_double2;
 struct complex_float4;
@@ -158,53 +156,5 @@ namespace internal::int8 {
   void i63AHA_cf64_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, int32_t algnM, int32_t n_moduli, int32_t orderC, uint64_t* C, int32_t ldc, int8_t* workspace);
 
   void i63AHA_cf32_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, int32_t algnM, int32_t n_moduli, int32_t orderC, uint64_t* C, int32_t ldc, int8_t* workspace);
-
-};
-
-namespace internal::InterpolativeDecomposition {
-
-  void interp_pp_f64_f64(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, double* R, int32_t ldr, const int32_t* ipiv, double* X, int32_t ldx);
-
-  void interp_pp_f32_f64(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, float* R, int32_t ldr, const int32_t* ipiv, double* X, int32_t ldx);
-
-  void interp_pp_f128_dd_f64(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, double2* R, int32_t ldr, const int32_t* ipiv, double* X, int32_t ldx);
-
-  void interp_pp_f128_qf_f64(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, float4* R, int32_t ldr, const int32_t* ipiv, double* X, int32_t ldx);
-
-  void interp_pp_f64_f32(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, double* R, int32_t ldr, const int32_t* ipiv, float* X, int32_t ldx);
-
-  void interp_pp_f32_f32(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, float* R, int32_t ldr, const int32_t* ipiv, float* X, int32_t ldx);
-
-  void interp_pp_f128_dd_f32(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, double2* R, int32_t ldr, const int32_t* ipiv, float* X, int32_t ldx);
-
-  void interp_pp_f128_qf_f32(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, float4* R, int32_t ldr, const int32_t* ipiv, float* X, int32_t ldx);
-
-  void interp_pp_cf64_cf64(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, std::complex<double>* R, int32_t ldr, const int32_t* ipiv, std::complex<double>* X, int32_t ldx);
-
-  void interp_pp_cf32_cf64(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, std::complex<float>* R, int32_t ldr, const int32_t* ipiv, std::complex<double>* X, int32_t ldx);
-
-  void interp_pp_cf128_dd_cf64(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, complex_double2* R, int32_t ldr, const int32_t* ipiv, std::complex<double>* X, int32_t ldx);
-
-  void interp_pp_cf128_qf_cf64(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, complex_float4* R, int32_t ldr, const int32_t* ipiv, std::complex<double>* X, int32_t ldx);
-
-  void interp_pp_cf64_cf32(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, std::complex<double>* R, int32_t ldr, const int32_t* ipiv, std::complex<float>* X, int32_t ldx);
-
-  void interp_pp_cf32_cf32(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, std::complex<float>* R, int32_t ldr, const int32_t* ipiv, std::complex<float>* X, int32_t ldx);
-
-  void interp_pp_cf128_dd_cf32(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, complex_double2* R, int32_t ldr, const int32_t* ipiv, std::complex<float>* X, int32_t ldx);
-
-  void interp_pp_cf128_qf_cf32(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, complex_float4* R, int32_t ldr, const int32_t* ipiv, std::complex<float>* X, int32_t ldx);
-
-};
-
-namespace internal::Orthogonalize {
-
-  void qr_pp_f64(cudaStream_t stream, cusolverDnHandle_t cusolverH, int32_t M, int32_t N, int32_t K, double* A, int32_t lda, const int32_t* ipiv, double* tau, void** Workspace, uint64_t* Lwork);
-
-  void qr_pp_f32(cudaStream_t stream, cusolverDnHandle_t cusolverH, int32_t M, int32_t N, int32_t K, float* A, int32_t lda, const int32_t* ipiv, float* tau, void** Workspace, uint64_t* Lwork);
-
-  void qr_pp_cf64(cudaStream_t stream, cusolverDnHandle_t cusolverH, int32_t M, int32_t N, int32_t K, std::complex<double>* A, int32_t lda, const int32_t* ipiv, std::complex<double>* tau, void** Workspace, uint64_t* Lwork);
-
-  void qr_pp_cf32(cudaStream_t stream, cusolverDnHandle_t cusolverH, int32_t M, int32_t N, int32_t K, std::complex<float>* A, int32_t lda, const int32_t* ipiv, std::complex<float>* tau, void** Workspace, uint64_t* Lwork);
 
 };
