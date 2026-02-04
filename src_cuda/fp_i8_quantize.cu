@@ -94,7 +94,7 @@ inline void quantize_dispatcher(cudaStream_t stream, int64_t M, int64_t N, matri
 }
 
 template <class matrix_t, class matrix_const_ptr, int32_t op>
-inline void quantize_dispatcher(cudaStream_t stream, int32_t M, int32_t N, int32_t iter, matrix_const_ptr C, int64_t ldc, int32_t umax, const uint64_t* vec_expon, int32_t orderA, int8_t* A, int64_t lda) {
+inline void quantize_dispatcher(cudaStream_t stream, int64_t M, int64_t N, int32_t iter, matrix_const_ptr C, int64_t ldc, int32_t umax, const uint64_t* vec_expon, int32_t orderA, int8_t* A, int64_t lda) {
   switch (iter) {
     case 0: quantize_dispatcher<matrix_t, matrix_const_ptr, 0, op> (stream, M, N, C, ldc, umax, vec_expon, orderA, A, lda); break;
     case 1: quantize_dispatcher<matrix_t, matrix_const_ptr, 1, op> (stream, M, N, C, ldc, umax, vec_expon, orderA, A, lda); break;
@@ -104,33 +104,33 @@ inline void quantize_dispatcher(cudaStream_t stream, int32_t M, int32_t N, int32
 }
 
 void internal::int8::quantize_f64(cudaStream_t stream, int32_t M, int32_t N, const double* C, int32_t ldc, int32_t umax, const uint64_t* vec_expon, int32_t orderA, int8_t* A, int32_t lda) {
-  quantize_dispatcher<double, const double* __restrict__, -1, 0>(stream, M, N, C, ldc, umax, vec_expon, orderA, A, lda);
+  quantize_dispatcher<double, const double* __restrict__, -1, 0>(stream, int64_t(M), int64_t(N), C, int64_t(ldc), umax, vec_expon, orderA, A, int64_t(lda));
 }
 
 void internal::int8::quantize_cf64(cudaStream_t stream, int32_t M, int32_t N, const std::complex<double>* C, int32_t ldc, int32_t umax, const uint64_t* vec_expon, int32_t orderA, int8_t* A, int32_t lda) {
-  quantize_dispatcher<double2, const double2* __restrict__, -1, 1>(stream, M, N, (double2*)C, ldc, umax, vec_expon, orderA, A, lda);
+  quantize_dispatcher<double2, const double2* __restrict__, -1, 1>(stream, int64_t(M), int64_t(N), (double2*)C, int64_t(ldc), umax, vec_expon, orderA, A, int64_t(lda));
 }
 
 void internal::int8::quantize_f32(cudaStream_t stream, int32_t M, int32_t N, const float* C, int32_t ldc, int32_t umax, const uint64_t* vec_expon, int32_t orderA, int8_t* A, int32_t lda) {
-  quantize_dispatcher<float, const float* __restrict__, -1, 0>(stream, M, N, C, ldc, umax, vec_expon, orderA, A, lda);
+  quantize_dispatcher<float, const float* __restrict__, -1, 0>(stream, int64_t(M), int64_t(N), C, int64_t(ldc), umax, vec_expon, orderA, A, int64_t(lda));
 }
 
 void internal::int8::quantize_cf32(cudaStream_t stream, int32_t M, int32_t N, const std::complex<float>* C, int32_t ldc, int32_t umax, const uint64_t* vec_expon, int32_t orderA, int8_t* A, int32_t lda) {
-  quantize_dispatcher<float2, const float2* __restrict__, -1, 1>(stream, M, N, (float2*)C, ldc, umax, vec_expon, orderA, A, lda);
+  quantize_dispatcher<float2, const float2* __restrict__, -1, 1>(stream, int64_t(M), int64_t(N), (float2*)C, int64_t(ldc), umax, vec_expon, orderA, A, int64_t(lda));
 }
 
 void internal::int8::quantize_f64_modular(cudaStream_t stream, int32_t M, int32_t N, int32_t iter, const double* C, int32_t ldc, int32_t umax, const uint64_t* vec_expon, int32_t orderA, int8_t* A, int32_t lda) {
-  quantize_dispatcher<double, const double* __restrict__, 2>(stream, M, N, iter, C, ldc, umax, vec_expon, orderA, A, lda);
+  quantize_dispatcher<double, const double* __restrict__, 2>(stream, int64_t(M), int64_t(N), iter, C, int64_t(ldc), umax, vec_expon, orderA, A, int64_t(lda));
 }
 
 void internal::int8::quantize_cf64_modular(cudaStream_t stream, int32_t M, int32_t N, int32_t iter, const std::complex<double>* C, int32_t ldc, int32_t umax, const uint64_t* vec_expon, int32_t orderA, int8_t* A, int32_t lda) {
-  quantize_dispatcher<double2, const double2* __restrict__, 3>(stream, M, N, iter, (double2*)C, ldc, umax, vec_expon, orderA, A, lda);
+  quantize_dispatcher<double2, const double2* __restrict__, 3>(stream, int64_t(M), int64_t(N), iter, (double2*)C, int64_t(ldc), umax, vec_expon, orderA, A, int64_t(lda));
 }
 
 void internal::int8::quantize_f32_modular(cudaStream_t stream, int32_t M, int32_t N, int32_t iter, const float* C, int32_t ldc, int32_t umax, const uint64_t* vec_expon, int32_t orderA, int8_t* A, int32_t lda) {
-  quantize_dispatcher<float, const float* __restrict__, 2>(stream, M, N, iter, C, ldc, umax, vec_expon, orderA, A, lda);
+  quantize_dispatcher<float, const float* __restrict__, 2>(stream, int64_t(M), int64_t(N), iter, C, int64_t(ldc), umax, vec_expon, orderA, A, int64_t(lda));
 }
 
 void internal::int8::quantize_cf32_modular(cudaStream_t stream, int32_t M, int32_t N, int32_t iter, const std::complex<float>* C, int32_t ldc, int32_t umax, const uint64_t* vec_expon, int32_t orderA, int8_t* A, int32_t lda) {
-  quantize_dispatcher<float2, const float2* __restrict__, 3>(stream, M, N, iter, (float2*)C, ldc, umax, vec_expon, orderA, A, lda);
+  quantize_dispatcher<float2, const float2* __restrict__, 3>(stream, int64_t(M), int64_t(N), iter, (float2*)C, int64_t(ldc), umax, vec_expon, orderA, A, int64_t(lda));
 }

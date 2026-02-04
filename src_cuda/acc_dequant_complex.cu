@@ -73,17 +73,17 @@ inline void dequantize_dispatcher(cudaStream_t stream, int32_t orderA, int64_t M
 }
 
 void internal::int8::dequantize_cf64(cudaStream_t stream, int32_t orderA, int32_t M, int32_t N, const uint64_t* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, int32_t incv, std::complex<double>* B, int32_t ldb) {
-  dequantize_dispatcher(stream, orderA, M, N, A, lda, umax, (const int64_t*)vec_expon, incv, (cuDoubleComplex*)B, ldb);
+  dequantize_dispatcher(stream, orderA, int64_t(M), int64_t(N), A, int64_t(lda), umax, (const int64_t*)vec_expon, int64_t(incv), (cuDoubleComplex*)B, int64_t(ldb));
 }
 
 void internal::int8::dequantize_cf32(cudaStream_t stream, int32_t orderA, int32_t M, int32_t N, const uint64_t* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, int32_t incv, std::complex<float>* B, int32_t ldb) {
-  dequantize_dispatcher(stream, orderA, M, N, A, lda, umax, (const int64_t*)vec_expon, incv, (cuComplex*)B, ldb);
+  dequantize_dispatcher(stream, orderA, int64_t(M), int64_t(N), A, int64_t(lda), umax, (const int64_t*)vec_expon, int64_t(incv), (cuComplex*)B, int64_t(ldb));
 }
 
 void internal::int8::dequantize_cf128_dd(cudaStream_t stream, int32_t orderA, int32_t M, int32_t N, const uint64_t* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, int32_t incv, complex_double2* B, int32_t ldb) {
-  dequantize_dispatcher(stream, orderA, M, N, A, lda, umax, (const int64_t*)vec_expon, incv, B, ldb);
+  dequantize_dispatcher(stream, orderA, int64_t(M), int64_t(N), A, int64_t(lda), umax, (const int64_t*)vec_expon, int64_t(incv), B, int64_t(ldb));
 }
 
 void internal::int8::dequantize_cf128_qf(cudaStream_t stream, int32_t orderA, int32_t M, int32_t N, const uint64_t* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, int32_t incv, complex_float4* B, int32_t ldb) {
-  dequantize_dispatcher(stream, orderA, M, N, A, lda, umax, (const int64_t*)vec_expon, incv, B, ldb);
+  dequantize_dispatcher(stream, orderA, int64_t(M), int64_t(N), A, int64_t(lda), umax, (const int64_t*)vec_expon, int64_t(incv), B, int64_t(ldb));
 }

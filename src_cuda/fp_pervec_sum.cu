@@ -69,23 +69,23 @@ constexpr int32_t block_threads = 512;
 void internal::int8::vsum_f64(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int32_t umax, uint64_t* vec_expon, int32_t incv) {
   uint64_t lo = umax < 63 ? (uint64_t(1) << umax) : uint64_t(0);
   uint32_t hi = 63 <= umax ? (uint32_t(1) << (umax - 63)) : uint32_t(0);
-  vector_sum_kernel<const double* __restrict__, 0, block_threads> <<< N, block_threads, 0, stream >>> (M, A, lda, lo, hi, umax, vec_expon, incv);
+  vector_sum_kernel<const double* __restrict__, 0, block_threads> <<< N, block_threads, 0, stream >>> (int64_t(M), A, int64_t(lda), lo, hi, umax, vec_expon, incv);
 }
 
 void internal::int8::vsum_f32(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, int32_t umax, uint64_t* vec_expon, int32_t incv) {
   uint64_t lo = umax < 63 ? (uint64_t(1) << umax) : uint64_t(0);
   uint32_t hi = 63 <= umax ? (uint32_t(1) << (umax - 63)) : uint32_t(0);
-  vector_sum_kernel<const float* __restrict__, 0, block_threads> <<< N, block_threads, 0, stream >>> (M, A, lda, lo, hi, umax, vec_expon, incv);
+  vector_sum_kernel<const float* __restrict__, 0, block_threads> <<< N, block_threads, 0, stream >>> (int64_t(M), A, int64_t(lda), lo, hi, umax, vec_expon, incv);
 }
 
 void internal::int8::vsum_cf64(cudaStream_t stream, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int32_t umax, uint64_t* vec_expon, int32_t incv) {
   uint64_t lo = umax < 63 ? (uint64_t(1) << umax) : uint64_t(0);
   uint32_t hi = 63 <= umax ? (uint32_t(1) << (umax - 63)) : uint32_t(0);
-  vector_sum_kernel<const double* __restrict__, 1, block_threads> <<< N, block_threads, 0, stream >>> (2 * M, (double*)A, 2 * lda, lo, hi, umax, vec_expon, incv);
+  vector_sum_kernel<const double* __restrict__, 1, block_threads> <<< N, block_threads, 0, stream >>> (int64_t(M) << 1, (double*)A, int64_t(lda) << 1, lo, hi, umax, vec_expon, incv);
 }
 
 void internal::int8::vsum_cf32(cudaStream_t stream, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int32_t umax, uint64_t* vec_expon, int32_t incv) {
   uint64_t lo = umax < 63 ? (uint64_t(1) << umax) : uint64_t(0);
   uint32_t hi = 63 <= umax ? (uint32_t(1) << (umax - 63)) : uint32_t(0);
-  vector_sum_kernel<const float* __restrict__, 1, block_threads> <<< N, block_threads, 0, stream >>> (2 * M, (float*)A, 2 * lda, lo, hi, umax, vec_expon, incv);
+  vector_sum_kernel<const float* __restrict__, 1, block_threads> <<< N, block_threads, 0, stream >>> (int64_t(M) << 1, (float*)A, int64_t(lda) << 1, lo, hi, umax, vec_expon, incv);
 }

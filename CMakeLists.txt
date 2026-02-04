@@ -42,8 +42,8 @@ set_property(TARGET hyacin PROPERTY CUDA_ARCHITECTURES ${SM_TARGETS})
 
 target_include_directories(hyacin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(hyacin PRIVATE CUDA::cudart CUDA::cublas)
-install(TARGETS hyacin LIBRARY DESTINATION lib)
-install(FILES hyacin.h DESTINATION include)
+install(TARGETS hyacin LIBRARY DESTINATION .)
+install(FILES hyacin.h DESTINATION .)
 
 if (BUILD_EXAMPLES)
   message(STATUS "Will build: Example files")

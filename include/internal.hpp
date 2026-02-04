@@ -17,6 +17,14 @@ namespace internal::Cholesky {
 
   void imax_f128_qf(cudaStream_t stream, int32_t N, const float4* X, int32_t incx, float4* D, float4* diag_piv);
 
+  void imax_cf64(cudaStream_t stream, int32_t N, const std::complex<double>* X, int32_t incx, double* D, double* scale);
+
+  void imax_cf32(cudaStream_t stream, int32_t N, const std::complex<float>* X, int32_t incx, float* D, float* scale);
+
+  void imax_cf128_dd(cudaStream_t stream, int32_t N, const complex_double2* X, int32_t incx, double2* D, double2* scale);
+
+  void imax_cf128_qf(cudaStream_t stream, int32_t N, const complex_float4* X, int32_t incx, float4* D, float4* scale);
+
   void imax_f64_host_sync(cudaStream_t stream, int32_t maxN, int32_t lenX, double* X);
 
   void imax_f32_host_sync(cudaStream_t stream, int32_t maxN, int32_t lenX, float* X);
@@ -96,6 +104,10 @@ namespace internal::int8 {
   void vexp_f64(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, uint64_t* vec_expon);
 
   void vexp_f32(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, uint64_t* vec_expon);
+
+  void vexp_cf64(cudaStream_t stream, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, uint64_t* vec_expon);
+
+  void vexp_cf32(cudaStream_t stream, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, uint64_t* vec_expon);
 
   void vsum_f64(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int32_t umax, uint64_t* vec_expon, int32_t incv);
 

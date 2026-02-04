@@ -97,34 +97,10 @@ inline void conv_copy_dispatcher(cudaStream_t stream, int32_t M, int32_t N, cons
   }
 }
 
-inline hyacinPrecision_t real_precision(hyacinPrecision_t prec) {
-  switch (prec) {
-    case HYACIN_F64_COMPLEX: return HYACIN_F64;
-    case HYACIN_F32_COMPLEX: return HYACIN_F32;
-    case HYACIN_DD_COMPLEX: return HYACIN_DD;
-    case HYACIN_QF_COMPLEX: return HYACIN_QF;
-    default: return prec;
-  }
-}
-
-inline hyacinPrecision_t complex_precision(hyacinPrecision_t prec) {
-  switch (prec) {
-    case HYACIN_F64: return HYACIN_F64_COMPLEX;
-    case HYACIN_F32: return HYACIN_F32_COMPLEX;
-    case HYACIN_DD: return HYACIN_DD_COMPLEX;
-    case HYACIN_QF: return HYACIN_QF_COMPLEX;
-    default: return prec;
-  }
-}
-
-inline int32_t pad_u_limbs(int32_t umax) {
-  return ((umax + 10) & (~7)) - 3;
-}
-
-inline int32_t pad_u_crt(int32_t umax, int32_t extra) {
-  int32_t b = ((umax * 2) + extra) | 7;
-  return (b - extra) / 2;
-}
+inline hyacinPrecision_t real_precision(hyacinPrecision_t prec) { return hyacinPrecision_t(int32_t(prec) & 7); }
+inline hyacinPrecision_t complex_precision(hyacinPrecision_t prec) { return hyacinPrecision_t(int32_t(prec) | 8); }
+inline int32_t pad_u_limbs(int32_t umax) { return ((umax + 10) & (~7)) - 3; }
+inline int32_t pad_u_crt(int32_t umax, int32_t extra) { int32_t b = ((umax * 2) + extra) | 7; return (b - extra) / 2; }
 
 extern "C" void hyacinXcpqrk_autoTune(double epi, int32_t M, int32_t u_extra, int32_t* umax, hyacinPrecision_t Atype, hyacinPrecision_t* ComputeType, hyacinAlgorithm_t* alg) {
   int32_t device, major, minor;
@@ -212,7 +188,7 @@ extern "C" int32_t hyacinXcpqrk(cublasHandle_t handle, char mode, double epi, in
       internal::int8::i63ATA_f32_crt(stream, handle, M, N, (const float*)A, lda, umax, (uint64_t*)v_exp, algnM, n_moduli, (uint64_t*)acc, algnN, iA);
   }
   else if (Atype == HYACIN_F64_COMPLEX) {
-    internal::int8::vexp_f64(stream, 2 * M, N, (const double*)A, 2 * lda, (uint64_t*)v_exp);
+    internal::int8::vexp_cf64(stream, M, N, (const std::complex<double>*)A, lda, (uint64_t*)v_exp);
     internal::int8::vsum_cf64(stream, M, N, (const std::complex<double>*)A, lda, umax, (uint64_t*)v_exp, algnN);
     if (alg == HYACIN_ALG_LIMBS)
       internal::int8::i63AHA_cf64_limbs(stream, handle, M, N, (const std::complex<double>*)A, lda, umax, (uint64_t*)v_exp, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA);
@@ -220,7 +196,7 @@ extern "C" int32_t hyacinXcpqrk(cublasHandle_t handle, char mode, double epi, in
       internal::int8::i63AHA_cf64_crt(stream, handle, M, N, (const std::complex<double>*)A, lda, umax, (uint64_t*)v_exp, algnM, n_moduli, orderC, (uint64_t*)acc, algnN, iA);
   }
   else if (Atype == HYACIN_F32_COMPLEX) {
-    internal::int8::vexp_f32(stream, 2 * M, N, (const float*)A, 2 * lda, (uint64_t*)v_exp);
+    internal::int8::vexp_cf32(stream, M, N, (const std::complex<float>*)A, lda, (uint64_t*)v_exp);
     internal::int8::vsum_cf32(stream, M, N, (const std::complex<float>*)A, lda, umax, (uint64_t*)v_exp, algnN);
     if (alg == HYACIN_ALG_LIMBS)
       internal::int8::i63AHA_cf32_limbs(stream, handle, M, N, (const std::complex<float>*)A, lda, umax, (uint64_t*)v_exp, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA);

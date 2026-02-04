@@ -4,10 +4,10 @@
 #include <double_double.hpp>
 #include <quad_float.hpp>
 
-template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t (&a)[ORDER], int32_t e, double& f) { f = device::dd::conv_a63_f64(a, e - 1); }
-template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t (&a)[ORDER], int32_t e, float& f) { f = float(device::dd::conv_a63_f64(a, e - 1)); }
-template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t (&a)[ORDER], int32_t e, double2& f) { f = device::dd::conv_a63_dd(a, e - 1); }
-template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t (&a)[ORDER], int32_t e, float4& f) { f = device::qf::conv_a63_qf(a, e - 1); }
+template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t (&a)[ORDER], int32_t e, double& f) { f = device::dd::conv_a63_f64(a, e); }
+template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t (&a)[ORDER], int32_t e, float& f) { f = float(device::dd::conv_a63_f64(a, e)); }
+template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t (&a)[ORDER], int32_t e, double2& f) { f = device::dd::conv_a63_dd(a, e); }
+template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t (&a)[ORDER], int32_t e, float4& f) { f = device::qf::conv_a63_qf(a, e); }
 
 template<uint32_t orderA, class real_t>
 __global__ void dequantize_kernel(int64_t M, int64_t N, const uint64_t* __restrict__ A, int64_t lda, int64_t strideA, int32_t umax, const int64_t* __restrict__ vec_expon, int64_t incv, real_t* __restrict__ B, int64_t ldb) {
@@ -29,9 +29,9 @@ __global__ void dequantize_kernel(int64_t M, int64_t N, const uint64_t* __restri
     device::int8::add_shifted(acc, vec_expon[iter += incv], uint32_t(umax + 64));
     device::int8::add_shifted(acc, vec_expon[iter = x + incv], uint32_t(umax + 1));
     device::int8::add_shifted(acc, vec_expon[iter += incv], uint32_t(umax + 64));
-    device::int8::add_shifted(acc, M, uint32_t((umax << 1) | 1));
+    device::int8::add_shifted(acc, M, uint32_t(umax = (umax << 1) | 1));
 
-    int32_t expon = int32_t(vec_expon[x]) + int32_t(vec_expon[y]) - (umax << 1);
+    int32_t expon = int32_t(vec_expon[x]) + int32_t(vec_expon[y]) - umax;
     fscal(acc, expon, B[y + x * ldb]);
   }
 }
@@ -53,17 +53,17 @@ inline void dequantize_dispatcher(cudaStream_t stream, int32_t orderA, int64_t M
 }
 
 void internal::int8::dequantize_f64(cudaStream_t stream, int32_t orderA, int32_t M, int32_t N, const uint64_t* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, int32_t incv, double* B, int32_t ldb) {
-  dequantize_dispatcher(stream, orderA, M, N, A, lda, umax, (const int64_t*)vec_expon, incv, B, ldb);
+  dequantize_dispatcher(stream, orderA, int64_t(M), int64_t(N), A, int64_t(lda), umax, (const int64_t*)vec_expon, int64_t(incv), B, int64_t(ldb));
 }
 
 void internal::int8::dequantize_f32(cudaStream_t stream, int32_t orderA, int32_t M, int32_t N, const uint64_t* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, int32_t incv, float* B, int32_t ldb) {
-  dequantize_dispatcher(stream, orderA, M, N, A, lda, umax, (const int64_t*)vec_expon, incv, B, ldb);
+  dequantize_dispatcher(stream, orderA, int64_t(M), int64_t(N), A, int64_t(lda), umax, (const int64_t*)vec_expon, int64_t(incv), B, int64_t(ldb));
 }
 
 void internal::int8::dequantize_f128_dd(cudaStream_t stream, int32_t orderA, int32_t M, int32_t N, const uint64_t* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, int32_t incv, double2* B, int32_t ldb) {
-  dequantize_dispatcher(stream, orderA, M, N, A, lda, umax, (const int64_t*)vec_expon, incv, B, ldb);
+  dequantize_dispatcher(stream, orderA, int64_t(M), int64_t(N), A, int64_t(lda), umax, (const int64_t*)vec_expon, int64_t(incv), B, int64_t(ldb));
 }
 
 void internal::int8::dequantize_f128_qf(cudaStream_t stream, int32_t orderA, int32_t M, int32_t N, const uint64_t* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, int32_t incv, float4* B, int32_t ldb) {
-  dequantize_dispatcher(stream, orderA, M, N, A, lda, umax, (const int64_t*)vec_expon, incv, B, ldb);
+  dequantize_dispatcher(stream, orderA, int64_t(M), int64_t(N), A, int64_t(lda), umax, (const int64_t*)vec_expon, int64_t(incv), B, int64_t(ldb));
 }
