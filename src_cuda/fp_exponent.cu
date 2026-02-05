@@ -11,7 +11,7 @@ __device__ __forceinline__ double conv_abs(double a) { return fabs(a); }
 __device__ __forceinline__ double conv_abs(float a) { return double(fabsf(a)); }
 
 template <class real_t, class real_const_ptr, int32_t BLOCK_THREADS>
-__global__ void vector_exponent_kernel(int64_t M, real_const_ptr A, int64_t lda, uint64_t* __restrict__ vec_expon) {
+__global__ void vector_exponent_kernel(int64_t M, real_const_ptr A, int64_t lda, int32_t* __restrict__ vec_expon) {
   constexpr int64_t inci = int64_t(BLOCK_THREADS);
   __shared__ typename cub::BlockReduce<double, BLOCK_THREADS>::TempStorage temp_reduce;
   cub::BlockReduce<double, BLOCK_THREADS> block_reduce(temp_reduce);
@@ -24,26 +24,24 @@ __global__ void vector_exponent_kernel(int64_t M, real_const_ptr A, int64_t lda,
     thread_data = max_func(conv_abs(A[i]), thread_data);
 
   thread_data = block_reduce.Reduce(thread_data, max_func);
-  if (threadIdx.x == 0) {
-    int32_t emax; frexp(thread_data, &emax);
-    vec_expon[blockIdx.x] = uint32_t(emax);
-  }
+  if (threadIdx.x == 0)
+    frexp(thread_data, &vec_expon[blockIdx.x]);
 }
 
 constexpr int32_t block_threads = 512;
 
 void internal::int8::vexp_f64(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, uint64_t* vec_expon) {
-  vector_exponent_kernel<double, const double* __restrict__, block_threads> <<< N, block_threads, 0, stream >>> (int64_t(M), A, int64_t(lda), vec_expon);
+  vector_exponent_kernel<double, const double* __restrict__, block_threads> <<< N, block_threads, 0, stream >>> (int64_t(M), A, int64_t(lda), (int32_t*)vec_expon);
 }
 
 void internal::int8::vexp_f32(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, uint64_t* vec_expon) {
-  vector_exponent_kernel<float, const float* __restrict__, block_threads> <<< N, block_threads, 0, stream >>> (int64_t(M), A, int64_t(lda), vec_expon);
+  vector_exponent_kernel<float, const float* __restrict__, block_threads> <<< N, block_threads, 0, stream >>> (int64_t(M), A, int64_t(lda), (int32_t*)vec_expon);
 }
 
 void internal::int8::vexp_cf64(cudaStream_t stream, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, uint64_t* vec_expon) {
-  vector_exponent_kernel<double, const double* __restrict__, block_threads> <<< N, block_threads, 0, stream >>> (int64_t(M) << 1, (const double*)A, int64_t(lda) << 1, vec_expon);
+  vector_exponent_kernel<double, const double* __restrict__, block_threads> <<< N, block_threads, 0, stream >>> (int64_t(M) << 1, (const double*)A, int64_t(lda) << 1, (int32_t*)vec_expon);
 }
 
 void internal::int8::vexp_cf32(cudaStream_t stream, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, uint64_t* vec_expon) {
-  vector_exponent_kernel<float, const float* __restrict__, block_threads> <<< N, block_threads, 0, stream >>> (int64_t(M) << 1, (const float*)A, int64_t(lda) << 1, vec_expon);
+  vector_exponent_kernel<float, const float* __restrict__, block_threads> <<< N, block_threads, 0, stream >>> (int64_t(M) << 1, (const float*)A, int64_t(lda) << 1, (int32_t*)vec_expon);
 }

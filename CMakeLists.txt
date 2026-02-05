@@ -4,6 +4,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_BUILD_TYPE Release)
 set(BUILD_EXAMPLES ON)
+set(USE_NCCL ON)
 
 project ("hyacin" LANGUAGES CXX CUDA)
 set(SM_TARGETS "80;86;89;90;100;120")
@@ -29,6 +30,7 @@ set(CU_SOURCES
   src_cuda/hyacin.cu
   src_cuda/i32_accum.cu
   src_cuda/i32_rem_accum.cu
+  src_cuda/i63_i42_accum_conv.cu
   src_cuda/imax_diag.cu
 )
 
@@ -42,6 +44,12 @@ set_property(TARGET hyacin PROPERTY CUDA_ARCHITECTURES ${SM_TARGETS})
 
 target_include_directories(hyacin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(hyacin PRIVATE CUDA::cudart CUDA::cublas)
+
+if (USE_NCCL)
+  target_compile_definitions(hyacin PRIVATE "USE_NCCL")
+  target_link_libraries(hyacin PRIVATE nccl)
+endif()
+
 install(TARGETS hyacin LIBRARY DESTINATION .)
 install(FILES hyacin.h DESTINATION .)
 

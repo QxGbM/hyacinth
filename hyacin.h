@@ -4,6 +4,10 @@
 #include <stdint.h>
 #include <cublas_v2.h>
 
+#ifdef USE_NCCL
+#include <nccl.h>
+#endif
+
 typedef enum { 
   HYACIN_F64 = 0,
   HYACIN_F32 = 1,
@@ -65,6 +69,45 @@ int32_t hyacinXcpqrk(
   void* pinned_work,
   hyacinAlgorithm_t alg
 );
+
+#ifdef USE_NCCL
+
+void hyacinXcpqrkD_bufferSize(
+  int32_t localM,
+  int64_t globalM,
+  int32_t N,
+  int32_t umax,
+  hyacinPrecision_t ComputeType,
+  hyacinAlgorithm_t alg,
+  uint64_t* dev_work_bytes,
+  uint64_t* pinned_work_bytes
+);
+
+int32_t hyacinXcpqrkD(
+  cublasHandle_t handle,
+  ncclComm_t comm,
+  char mode,
+  double epi,
+  int32_t localM,
+  int64_t globalM,
+  int32_t N,
+  int32_t K,
+  int32_t p,
+  int32_t umax,
+  hyacinPrecision_t Atype,
+  const void* A,
+  int32_t lda,
+  int32_t* jpiv,
+  hyacinPrecision_t Rtype,
+  void* R,
+  int32_t ldr,
+  hyacinPrecision_t ComputeType,
+  void* dev_work,
+  void* pinned_work,
+  hyacinAlgorithm_t alg
+);
+
+#endif
 
 #ifdef __cplusplus
 }

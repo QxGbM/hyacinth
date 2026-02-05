@@ -14,31 +14,49 @@ template<uint32_t ORDER> __device__ __forceinline__ void cscal(uint64_t (&rl)[OR
 template<uint32_t ORDER> __device__ __forceinline__ void cscal(uint64_t (&rl)[ORDER], uint64_t (&im)[ORDER], int32_t e, complex_float4& f) {
   f = device::qf::make_complex_float4(device::qf::conv_a63_qf(rl, e - 1), device::qf::conv_a63_qf(im, e)); }
 
-template<uint32_t orderA, class complex_t>
-__global__ void dequantize_complex_kernel(int64_t M, int64_t N, const uint64_t* __restrict__ A, int64_t lda, int64_t strideA, int32_t umax, const int64_t* __restrict__ vec_expon, int64_t incv, complex_t* __restrict__ B, int64_t ldb) {
+template<uint32_t orderA, uint32_t lSize, class complex_t>
+__global__ void dequantize_complex_kernel(int64_t K, int64_t N, const uint64_t* __restrict__ A, int64_t lda, int64_t strideA, int32_t umax, const int64_t* __restrict__ vec_expon, int64_t incv, complex_t* __restrict__ B, int64_t ldb) {
   int64_t y = int64_t(blockIdx.x) * int64_t(blockDim.x) + int64_t(threadIdx.x);
 
   if (y < N) {
+    constexpr int32_t i63_limbs = int32_t(lSize == uint32_t(63));
+    constexpr uint32_t orderL = i63_limbs ? orderA : (orderA + ((orderA + uint32_t(1)) >> 1));
     int64_t x = int64_t(blockIdx.y), iter = x + y * lda;
-    uint64_t acc_rl[orderA], acc_im[orderA];
 
-    #pragma unroll
-    for (uint32_t r = 0; r < orderA; ++r)
-    { acc_rl[r] = A[iter]; iter += strideA; }
+    uint64_t acc_rl[orderA] { A[iter] };
+    if constexpr(i63_limbs) {
+      #pragma unroll
+      for (uint32_t limb = 1; limb < orderA; ++limb)
+        acc_rl[limb] = A[iter += strideA];
+    }
+    else {
+      #pragma unroll
+      for (uint32_t limb = 1; limb < orderL; ++limb)
+        device::int8::add_shifted(acc_rl, int64_t(A[iter += strideA]), limb * lSize);
+    }
 
-    #pragma unroll
-    for (uint32_t r = 0; r < orderA; ++r)
-    { acc_im[r] = A[iter]; iter += strideA; }
-    device::int8::negate_shifted(acc_im);
+    uint64_t acc_im[orderA] { A[iter += strideA] };
+    if constexpr(i63_limbs) {
+      #pragma unroll
+      for (uint32_t limb = 1; limb < orderA; ++limb)
+        acc_im[limb] = A[iter += strideA];
+    }
+    else {
+      #pragma unroll
+      for (uint32_t limb = 1; limb < orderL; ++limb)
+        device::int8::add_shifted(acc_im, int64_t(A[iter += strideA]), limb * lSize);
+    }  
 
     iter = y + x * lda;
-    #pragma unroll
-    for (uint32_t r = 0; r < orderA; ++r)
-    { device::int8::add_shifted(acc_rl, int64_t(A[iter]), r * uint32_t(63)); iter += strideA; }
+    device::int8::negate_shifted(acc_im);
 
     #pragma unroll
-    for (uint32_t r = 0; r < orderA; ++r)
-    { device::int8::add_shifted(acc_im, int64_t(A[iter]), r * uint32_t(63)); iter += strideA; }
+    for (uint32_t limb = 0; limb < orderL; ++limb)
+    { device::int8::add_shifted(acc_rl, int64_t(A[iter]), limb * lSize); iter += strideA; }
+
+    #pragma unroll
+    for (uint32_t limb = 0; limb < orderL; ++limb)
+    { device::int8::add_shifted(acc_im, int64_t(A[iter]), limb * lSize); iter += strideA; }
 
     device::int8::add_shifted(acc_rl, vec_expon[iter = y + incv], uint32_t(umax + 1));
     device::int8::add_shifted(acc_rl, vec_expon[iter += incv], uint32_t(umax + 64));
@@ -47,43 +65,59 @@ __global__ void dequantize_complex_kernel(int64_t M, int64_t N, const uint64_t* 
 
     device::int8::add_shifted(acc_rl, vec_expon[iter = x + incv], uint32_t(umax + 1));
     device::int8::add_shifted(acc_rl, vec_expon[iter += incv], uint32_t(umax + 64));
-    device::int8::add_shifted(acc_rl, M, uint32_t((umax + 1) << 1));
+    device::int8::add_shifted(acc_rl, K, uint32_t((umax + 1) << 1));
     device::int8::add_shifted(acc_im, vec_expon[iter += incv], uint32_t(umax));
     device::int8::add_shifted(acc_im, vec_expon[iter += incv], uint32_t(umax + 63));
 
-    int32_t expon = int32_t(vec_expon[x]) + int32_t(vec_expon[y]) - (umax << 1);
+    int32_t expon = ((int32_t*)vec_expon)[x] + ((int32_t*)vec_expon)[y] - (umax << 1);
     cscal(acc_rl, acc_im, expon, B[y + x * ldb]);
   }
 }
 
 constexpr int32_t block_threads = 512;
 
-template<class complex_t>
-inline void dequantize_dispatcher(cudaStream_t stream, int32_t orderA, int64_t M, int64_t N, const uint64_t* A, int64_t lda, int32_t umax, const int64_t* vec_expon, int64_t incv, complex_t* B, int64_t ldb) {
+template<uint32_t lSize, class complex_t>
+inline void dequantize_dispatcher(cudaStream_t stream, int32_t orderA, int64_t K, int64_t N, const uint64_t* A, int64_t lda, int32_t umax, const int64_t* vec_expon, int64_t incv, complex_t* B, int64_t ldb) {
   int64_t strideA = N * lda;
   dim3 grid((uint32_t(N) + uint32_t(block_threads - 1)) / uint32_t(block_threads), uint32_t(N));
 
   switch (orderA) {
-    case 1: dequantize_complex_kernel<1, complex_t> <<< grid, block_threads, 0, stream >>> (M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
-    case 2: dequantize_complex_kernel<2, complex_t> <<< grid, block_threads, 0, stream >>> (M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
-    case 3: dequantize_complex_kernel<3, complex_t> <<< grid, block_threads, 0, stream >>> (M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
-    case 4: dequantize_complex_kernel<4, complex_t> <<< grid, block_threads, 0, stream >>> (M, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
+    case 1: dequantize_complex_kernel<1, lSize, complex_t> <<< grid, block_threads, 0, stream >>> (K, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
+    case 2: dequantize_complex_kernel<2, lSize, complex_t> <<< grid, block_threads, 0, stream >>> (K, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
+    case 3: dequantize_complex_kernel<3, lSize, complex_t> <<< grid, block_threads, 0, stream >>> (K, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
+    case 4: dequantize_complex_kernel<4, lSize, complex_t> <<< grid, block_threads, 0, stream >>> (K, N, A, lda, strideA, umax, vec_expon, incv, B, ldb); break;
     default: break;
   }
 }
 
-void internal::int8::dequantize_cf64(cudaStream_t stream, int32_t orderA, int32_t M, int32_t N, const uint64_t* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, int32_t incv, std::complex<double>* B, int32_t ldb) {
-  dequantize_dispatcher(stream, orderA, int64_t(M), int64_t(N), A, int64_t(lda), umax, (const int64_t*)vec_expon, int64_t(incv), (cuDoubleComplex*)B, int64_t(ldb));
+void internal::int8::dequantize_i63_cf64(cudaStream_t stream, int32_t orderA, int64_t K, int32_t N, const uint64_t* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, int32_t incv, std::complex<double>* B, int32_t ldb) {
+  dequantize_dispatcher<63>(stream, orderA, K, int64_t(N), A, int64_t(lda), umax, (const int64_t*)vec_expon, int64_t(incv), (cuDoubleComplex*)B, int64_t(ldb));
 }
 
-void internal::int8::dequantize_cf32(cudaStream_t stream, int32_t orderA, int32_t M, int32_t N, const uint64_t* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, int32_t incv, std::complex<float>* B, int32_t ldb) {
-  dequantize_dispatcher(stream, orderA, int64_t(M), int64_t(N), A, int64_t(lda), umax, (const int64_t*)vec_expon, int64_t(incv), (cuComplex*)B, int64_t(ldb));
+void internal::int8::dequantize_i63_cf32(cudaStream_t stream, int32_t orderA, int64_t K, int32_t N, const uint64_t* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, int32_t incv, std::complex<float>* B, int32_t ldb) {
+  dequantize_dispatcher<63>(stream, orderA, K, int64_t(N), A, int64_t(lda), umax, (const int64_t*)vec_expon, int64_t(incv), (cuComplex*)B, int64_t(ldb));
 }
 
-void internal::int8::dequantize_cf128_dd(cudaStream_t stream, int32_t orderA, int32_t M, int32_t N, const uint64_t* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, int32_t incv, complex_double2* B, int32_t ldb) {
-  dequantize_dispatcher(stream, orderA, int64_t(M), int64_t(N), A, int64_t(lda), umax, (const int64_t*)vec_expon, int64_t(incv), B, int64_t(ldb));
+void internal::int8::dequantize_i63_cf128_dd(cudaStream_t stream, int32_t orderA, int64_t K, int32_t N, const uint64_t* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, int32_t incv, complex_double2* B, int32_t ldb) {
+  dequantize_dispatcher<63>(stream, orderA, K, int64_t(N), A, int64_t(lda), umax, (const int64_t*)vec_expon, int64_t(incv), B, int64_t(ldb));
 }
 
-void internal::int8::dequantize_cf128_qf(cudaStream_t stream, int32_t orderA, int32_t M, int32_t N, const uint64_t* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, int32_t incv, complex_float4* B, int32_t ldb) {
-  dequantize_dispatcher(stream, orderA, int64_t(M), int64_t(N), A, int64_t(lda), umax, (const int64_t*)vec_expon, int64_t(incv), B, int64_t(ldb));
+void internal::int8::dequantize_i63_cf128_qf(cudaStream_t stream, int32_t orderA, int64_t K, int32_t N, const uint64_t* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, int32_t incv, complex_float4* B, int32_t ldb) {
+  dequantize_dispatcher<63>(stream, orderA, K, int64_t(N), A, int64_t(lda), umax, (const int64_t*)vec_expon, int64_t(incv), B, int64_t(ldb));
+}
+
+void internal::int8::dequantize_i42_cf64(cudaStream_t stream, int32_t orderA, int64_t K, int32_t N, const uint64_t* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, int32_t incv, std::complex<double>* B, int32_t ldb) {
+  dequantize_dispatcher<42>(stream, orderA, K, int64_t(N), A, int64_t(lda), umax, (const int64_t*)vec_expon, int64_t(incv), (cuDoubleComplex*)B, int64_t(ldb));
+}
+
+void internal::int8::dequantize_i42_cf32(cudaStream_t stream, int32_t orderA, int64_t K, int32_t N, const uint64_t* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, int32_t incv, std::complex<float>* B, int32_t ldb) {
+  dequantize_dispatcher<42>(stream, orderA, K, int64_t(N), A, int64_t(lda), umax, (const int64_t*)vec_expon, int64_t(incv), (cuComplex*)B, int64_t(ldb));
+}
+
+void internal::int8::dequantize_i42_cf128_dd(cudaStream_t stream, int32_t orderA, int64_t K, int32_t N, const uint64_t* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, int32_t incv, complex_double2* B, int32_t ldb) {
+  dequantize_dispatcher<42>(stream, orderA, K, int64_t(N), A, int64_t(lda), umax, (const int64_t*)vec_expon, int64_t(incv), B, int64_t(ldb));
+}
+
+void internal::int8::dequantize_i42_cf128_qf(cudaStream_t stream, int32_t orderA, int64_t K, int32_t N, const uint64_t* A, int32_t lda, int32_t umax, const uint64_t* vec_expon, int32_t incv, complex_float4* B, int32_t ldb) {
+  dequantize_dispatcher<42>(stream, orderA, K, int64_t(N), A, int64_t(lda), umax, (const int64_t*)vec_expon, int64_t(incv), B, int64_t(ldb));
 }

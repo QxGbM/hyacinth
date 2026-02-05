@@ -206,28 +206,28 @@ extern "C" int32_t hyacinXcpqrk(cublasHandle_t handle, char mode, double epi, in
 
   switch (ComputeType) {
     case HYACIN_F64:
-      internal::int8::dequantize_f64(stream, orderC, M, N, (uint64_t*)acc, algnN, umax, (uint64_t*)v_exp, algnN, (double*)iA, algnN);
+      internal::int8::dequantize_i63_f64(stream, orderC, int64_t(M), N, (uint64_t*)acc, algnN, umax, (uint64_t*)v_exp, algnN, (double*)iA, algnN);
       K = internal::Cholesky::potrfp_f64(stream, handle, epi, K, p, N, (double*)iA, algnN, hpiv, pinned_work); break;
     case HYACIN_F32:
-      internal::int8::dequantize_f32(stream, orderC, M, N, (uint64_t*)acc, algnN, umax, (uint64_t*)v_exp, algnN, (float*)iA, algnN);
+      internal::int8::dequantize_i63_f32(stream, orderC, int64_t(M), N, (uint64_t*)acc, algnN, umax, (uint64_t*)v_exp, algnN, (float*)iA, algnN);
       K = internal::Cholesky::potrfp_f32(stream, handle, epi, K, p, N, (float*)iA, algnN, hpiv, pinned_work); break;
     case HYACIN_DD:
-      internal::int8::dequantize_f128_dd(stream, orderC, M, N, (uint64_t*)acc, algnN, umax, (uint64_t*)v_exp, algnN, (double2*)iA, algnN);
+      internal::int8::dequantize_i63_f128_dd(stream, orderC, int64_t(M), N, (uint64_t*)acc, algnN, umax, (uint64_t*)v_exp, algnN, (double2*)iA, algnN);
       K = internal::Cholesky::potrfp_f128_dd(stream, handle, epi, K, p, N, (double2*)iA, algnN, hpiv, pinned_work); break;
     case HYACIN_QF:
-      internal::int8::dequantize_f128_qf(stream, orderC, M, N, (uint64_t*)acc, algnN, umax, (uint64_t*)v_exp, algnN, (float4*)iA, algnN);
+      internal::int8::dequantize_i63_f128_qf(stream, orderC, int64_t(M), N, (uint64_t*)acc, algnN, umax, (uint64_t*)v_exp, algnN, (float4*)iA, algnN);
       K = internal::Cholesky::potrfp_f128_qf(stream, handle, epi, K, p, N, (float4*)iA, algnN, hpiv, pinned_work); break;
     case HYACIN_F64_COMPLEX:
-      internal::int8::dequantize_cf64(stream, orderC, M, N, (uint64_t*)acc, algnN, umax, (uint64_t*)v_exp, algnN, (std::complex<double>*)iA, algnN);
+      internal::int8::dequantize_i63_cf64(stream, orderC, int64_t(M), N, (uint64_t*)acc, algnN, umax, (uint64_t*)v_exp, algnN, (std::complex<double>*)iA, algnN);
       K = internal::Cholesky::potrfp_cf64(stream, handle, epi, K, p, N, (std::complex<double>*)iA, algnN, hpiv, pinned_work); break;
     case HYACIN_F32_COMPLEX:
-      internal::int8::dequantize_cf32(stream, orderC, M, N, (uint64_t*)acc, algnN, umax, (uint64_t*)v_exp, algnN, (std::complex<float>*)iA, algnN);
+      internal::int8::dequantize_i63_cf32(stream, orderC, int64_t(M), N, (uint64_t*)acc, algnN, umax, (uint64_t*)v_exp, algnN, (std::complex<float>*)iA, algnN);
       K = internal::Cholesky::potrfp_cf32(stream, handle, epi, K, p, N, (std::complex<float>*)iA, algnN, hpiv, pinned_work); break;
     case HYACIN_DD_COMPLEX:
-      internal::int8::dequantize_cf128_dd(stream, orderC, M, N, (uint64_t*)acc, algnN, umax, (uint64_t*)v_exp, algnN, (complex_double2*)iA, algnN);
+      internal::int8::dequantize_i63_cf128_dd(stream, orderC, int64_t(M), N, (uint64_t*)acc, algnN, umax, (uint64_t*)v_exp, algnN, (complex_double2*)iA, algnN);
       K = internal::Cholesky::potrfp_cf128_dd(stream, handle, epi, K, p, N, (complex_double2*)iA, algnN, hpiv, pinned_work); break;
     case HYACIN_QF_COMPLEX:
-      internal::int8::dequantize_cf128_qf(stream, orderC, M, N, (uint64_t*)acc, algnN, umax, (uint64_t*)v_exp, algnN, (complex_float4*)iA, algnN);
+      internal::int8::dequantize_i63_cf128_qf(stream, orderC, int64_t(M), N, (uint64_t*)acc, algnN, umax, (uint64_t*)v_exp, algnN, (complex_float4*)iA, algnN);
       K = internal::Cholesky::potrfp_cf128_qf(stream, handle, epi, K, p, N, (complex_float4*)iA, algnN, hpiv, pinned_work); break;
     default: break;
   }

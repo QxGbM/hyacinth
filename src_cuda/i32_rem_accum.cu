@@ -71,23 +71,20 @@ inline void crt_acc_dispatcher(cudaStream_t stream, int32_t option, int64_t N, c
 
   if constexpr(0 < orderM) {
     constexpr uint64_t MO = CRT::modular(iter), MINV = CRT::modular_inv(n_moduli, iter), R32 = CRT::inv_r32(n_moduli, iter);
+    constexpr int64_t P0 = CRT::domain_p(n_moduli, 0), P1 = CRT::domain_p(n_moduli, 1), P2 = CRT::domain_p(n_moduli, 2), z = int64_t(0);
+
     i32_array<pd_len> pd; std::copy_n(CRT::p_div(n_moduli, iter), pd_len, &pd.arr[0]);
     int32_t grid = int32_t((N + int64_t(block_threads - 1)) / int64_t(block_threads));
+    int32_t accum = int32_t(option & 1 == 1), last = int32_t(option & 2 == 2);
 
-    if (option & 2) {
-      constexpr int64_t P0 = CRT::domain_p(n_moduli, 0), P1 = CRT::domain_p(n_moduli, 1), P2 = CRT::domain_p(n_moduli, 2);
-      if (option & 1)
-        i32_crt_accum_kernel<orderA, orderPD, orderM, MO, MINV, R32, P0, P1, P2, 1> <<< grid, block_threads, 0, stream >>> (pd, N, X, A);
-      else
-        i32_crt_accum_kernel<orderA, orderPD, orderM, MO, MINV, R32, P0, P1, P2, 0> <<< grid, block_threads, 0, stream >>> (pd, N, X, A);
-    }
-    else {
-      constexpr int64_t z = int64_t(0);
-      if (option & 1)
-        i32_crt_accum_kernel<orderA, orderPD, orderM, MO, MINV, R32, z, z, z, 1> <<< grid, block_threads, 0, stream >>> (pd, N, X, A);
-      else
-        i32_crt_accum_kernel<orderA, orderPD, orderM, MO, MINV, R32, z, z, z, 0> <<< grid, block_threads, 0, stream >>> (pd, N, X, A);
-    }
+    if (accum && last)
+      i32_crt_accum_kernel<orderA, orderPD, orderM, MO, MINV, R32, P0, P1, P2, 1> <<< grid, block_threads, 0, stream >>> (pd, N, X, A);
+    else if (accum)
+      i32_crt_accum_kernel<orderA, orderPD, orderM, MO, MINV, R32, z, z, z, 1> <<< grid, block_threads, 0, stream >>> (pd, N, X, A);
+    else if (last)
+      i32_crt_accum_kernel<orderA, orderPD, orderM, MO, MINV, R32, P0, P1, P2, 0> <<< grid, block_threads, 0, stream >>> (pd, N, X, A);
+    else
+      i32_crt_accum_kernel<orderA, orderPD, orderM, MO, MINV, R32, z, z, z, 0> <<< grid, block_threads, 0, stream >>> (pd, N, X, A);
   }
 }
 

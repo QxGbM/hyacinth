@@ -26,7 +26,7 @@ template <class matrix_const_ptr, int32_t COMPLEX, int32_t BLOCK_THREADS>
 __global__ void vector_sum_kernel(int64_t M, matrix_const_ptr A, int64_t lda, uint64_t lo, uint32_t hi, int32_t umax, uint64_t* __restrict__ vec_expon, int64_t incv) {
   constexpr int64_t inci = int64_t(BLOCK_THREADS);
   int64_t iter = int64_t(blockIdx.x) * lda + int64_t(threadIdx.x), iter_end = iter + M;
-  int32_t expon = umax - int32_t(vec_expon[blockIdx.x]);
+  int32_t expon = umax - ((int32_t*)vec_expon)[blockIdx.x];
   u64x3 threadA; threadA.e[0] = threadA.e[1] = threadA.e[2] = uint64_t(0);
 
   for (int64_t i = iter; i < iter_end; i += inci)
