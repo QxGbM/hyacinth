@@ -17,29 +17,29 @@ __global__ void limbs_convert_kernel(int64_t N, uint64_t* __restrict__ A) {
   if (i < N) {
     int64_t N2 = N << 1, N4 = N << 2, N8 = N << 3;
 
-    if constexpr(mode == -2) {
+    if constexpr(mode == 2)
+      conv1_2(A[0], A[0], A[N]);
+    else if constexpr(mode == 3)
+      conv2_3(A[0], A[N], A[0], A[N], A[N2]);
+    else if constexpr(mode == 4) {
       conv1_2(A[N], A[N2], A[N + N2]);
       conv1_2(A[0], A[0], A[N]);
     }
-    else if constexpr(mode == 1)
-      conv1_2(A[0], A[0], A[N]);
-    else if constexpr(mode == 2)
-      conv2_3(A[0], A[N], A[0], A[N], A[N2]);
-    else if constexpr(mode == 3) {
+    else if constexpr(mode == 5) {
       conv1_2(A[N2], A[N + N2], A[N4]);
       conv2_3(A[0], A[N], A[0], A[N], A[N2]);
     }
-    else if constexpr(mode == 4) {
+    else if constexpr(mode == 6) {
       conv2_3(A[N2], A[N + N2], A[N + N2], A[N4], A[N + N4]);
       conv2_3(A[0], A[N], A[0], A[N], A[N2]);
     }
-    else if constexpr(mode == 6) {
+    else if constexpr(mode == 10) {
       conv1_2(A[N + N4], A[N8], A[N + N8]);
       conv2_3(A[N + N2], A[N4], A[N + N4], A[N2 + N4], A[N + N2 + N4]);
       conv1_2(A[N2], A[N + N2], A[N4]);
       conv2_3(A[0], A[N], A[0], A[N], A[N2]);
     }
-    else if constexpr(mode == 8) {
+    else if constexpr(mode == 12) {
       conv2_3(A[N2 + N4], A[N + N2 + N4], A[N + N8], A[N2 + N8], A[N + N2 + N8]);
       conv2_3(A[N4], A[N + N4], A[N2 + N4], A[N + N2 + N4], A[N8]);
       conv2_3(A[N2], A[N + N2], A[N + N2], A[N4], A[N + N4]);
@@ -55,17 +55,17 @@ inline void limbs_convert_dispatcher(cudaStream_t stream, int32_t orderA, int64_
   uint32_t grid = uint32_t((N + int64_t(block_threads - 1)) / int64_t(block_threads));
 
   if constexpr(Complex) switch (orderA) {
-    case 1: limbs_convert_kernel<-2> <<< grid, block_threads, 0, stream >>> (N, A); break;
-    case 2: limbs_convert_kernel<4> <<< grid, block_threads, 0, stream >>> (N, A); break;
-    case 3: limbs_convert_kernel<6> <<< grid, block_threads, 0, stream >>> (N, A); break;
-    case 4: limbs_convert_kernel<8> <<< grid, block_threads, 0, stream >>> (N, A); break;
+    case 1: limbs_convert_kernel<4> <<< grid, block_threads, 0, stream >>> (N, A); break;
+    case 2: limbs_convert_kernel<6> <<< grid, block_threads, 0, stream >>> (N, A); break;
+    case 3: limbs_convert_kernel<10> <<< grid, block_threads, 0, stream >>> (N, A); break;
+    case 4: limbs_convert_kernel<12> <<< grid, block_threads, 0, stream >>> (N, A); break;
     default: break;
   }
   else switch (orderA) {
-    case 1: limbs_convert_kernel<1> <<< grid, block_threads, 0, stream >>> (N, A); break;
-    case 2: limbs_convert_kernel<2> <<< grid, block_threads, 0, stream >>> (N, A); break;
-    case 3: limbs_convert_kernel<3> <<< grid, block_threads, 0, stream >>> (N, A); break;
-    case 4: limbs_convert_kernel<4> <<< grid, block_threads, 0, stream >>> (N, A); break;
+    case 1: limbs_convert_kernel<2> <<< grid, block_threads, 0, stream >>> (N, A); break;
+    case 2: limbs_convert_kernel<3> <<< grid, block_threads, 0, stream >>> (N, A); break;
+    case 3: limbs_convert_kernel<5> <<< grid, block_threads, 0, stream >>> (N, A); break;
+    case 4: limbs_convert_kernel<6> <<< grid, block_threads, 0, stream >>> (N, A); break;
     default: break;
   }
 }

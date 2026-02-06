@@ -6,7 +6,7 @@
 #include <thrust/iterator/counting_iterator.h>
 #include <thrust/execution_policy.h>
 
-const int32_t umax_exp_extra = 6; // extra bits for exponent difference;
+const int32_t umax_exp_extra = 7; // extra bits for exponent difference;
 
 enum class PostProcessPrecision { FP64, FP32, FP64_COMPLEX, FP32_COMPLEX };
 
@@ -198,7 +198,7 @@ int32_t device::interp_decomp_cf32(cublasHandle_t handle, double epi, int32_t ra
   cudaMallocHost(&pinned_work, pinned_work_bytes);
 
   int32_t p = 0;
-  rank = hyacinXcpqrk(handle, 'R', epi, M, N, N, p, umax, HYACIN_F64_COMPLEX, A, lda, (int32_t*)piv, HYACIN_F64_COMPLEX, R, N, precC, dev_work, pinned_work, alg);
+  rank = hyacinXcpqrk(handle, 'R', epi, M, N, N, p, umax, HYACIN_F32_COMPLEX, A, lda, (int32_t*)piv, HYACIN_F32_COMPLEX, R, N, precC, dev_work, pinned_work, alg);
   interp_pp_uni<PostProcessPrecision::FP32_COMPLEX>(stream, handle, rank, N, R, N, (int32_t*)piv, X, ldx);
 
   cudaStreamSynchronize(stream);
