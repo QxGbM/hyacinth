@@ -19,13 +19,12 @@ __global__ void imax_kernel(int32_t N, real_const_ptr X, int64_t incx, real_ptr 
   idx_t thread_x = idx_t();
 
   __shared__ typename cub::BlockReduce<idx_t, BLOCK_THREADS>::TempStorage temp_reduce;
-  cub::BlockReduce<idx_t, BLOCK_THREADS> block_reduce(temp_reduce);
   real_max cmp_max;
 
   for (int32_t i = block_offset + int32_t(threadIdx.x); i < N; i += elements)
     thread_x = cmp_max(thread_x, idx_t({ D[i] = X[int64_t(i) * incx], i + 1 }));
 
-  thread_x = block_reduce.Reduce(thread_x, cmp_max);
+  thread_x = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce).Reduce(thread_x, cmp_max);
   if (threadIdx.x == 0)
     idx[blockIdx.x] = thread_x;
 }

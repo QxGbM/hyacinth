@@ -2,7 +2,7 @@
 #include <internal.hpp>
 #include <int_fp_quantize.hpp>
 
-template<uint32_t orderX, uint32_t orderA, uint32_t sft_iter, int32_t beta>
+template<int32_t orderX, int32_t orderA, uint32_t sft_iter, int32_t beta>
 __global__ void i32_accum_kernel(uint32_t sft, int64_t N, const int32_t* __restrict__ X, int64_t incx, uint64_t* __restrict__ A, int64_t inca) {
   int64_t i = int64_t(blockIdx.x) * int64_t(blockDim.x) + int64_t(threadIdx.x);
   if (i < N) {
@@ -11,31 +11,31 @@ __global__ void i32_accum_kernel(uint32_t sft, int64_t N, const int32_t* __restr
 
     if constexpr(beta) {
       #pragma unroll
-      for (uint32_t r = 0; r < orderA; ++r)
+      for (int32_t r = 0; r < orderA; ++r)
       { acc[r] = A[iter]; iter += inca; } iter = i;
     }
     else {
       #pragma unroll
-      for (uint32_t r = 0; r < orderA; ++r)
+      for (int32_t r = 0; r < orderA; ++r)
       { acc[r] = uint64_t(0); }
     }
     
     #pragma unroll
-    for (uint32_t r = 0; r < orderX; ++r) {
+    for (int32_t r = 0; r < orderX; ++r) {
       device::int8::add_shifted(acc, int64_t(X[iter]), sft);
       sft += sft_iter; iter += incx;
     }
 
     iter = i;
     #pragma unroll
-    for (uint32_t r = 0; r < orderA; ++r)
+    for (int32_t r = 0; r < orderA; ++r)
     { A[iter] = acc[r]; iter += inca; }
   }
 }
 
 constexpr int32_t block_threads = 512;
 
-template <uint32_t orderA, int32_t option>
+template <int32_t orderA, int32_t option>
 inline void acc_dispatcher(cudaStream_t stream, int64_t N, uint32_t sft_lo, uint32_t orderX, const int32_t* X, int64_t incx, uint64_t* A, int64_t inca) {
   constexpr uint32_t sft_iter = uint32_t(option & 4 ? 16 : 8), alpha = uint32_t(option & 2) >> 1;
   constexpr int32_t beta = option & 1;

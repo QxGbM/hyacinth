@@ -124,72 +124,78 @@ extern "C" void hyacinXcpqrk_autoTune(double epi, int32_t M, int32_t u_extra, in
   *alg = use_limbs ? HYACIN_ALG_LIMBS : HYACIN_ALG_CRT;
 }
 
-inline std::tuple<int32_t, int32_t, int32_t, int32_t, int32_t, int64_t, int64_t, int64_t, int64_t, int64_t> i8gemm_ext_params(int32_t M, int32_t N, int32_t umax, hyacinPrecision_t ComputeType, hyacinAlgorithm_t alg) {
+inline std::tuple<int32_t, int32_t, int32_t, int32_t, int64_t, int64_t, int64_t, int64_t> i8gemm_ext_params(int32_t M, int32_t N, int32_t umax, hyacinPrecision_t ComputeType, hyacinAlgorithm_t alg) {
   hyacinPrecision_t ComputeTypeReal = real_precision(ComputeType);
   int32_t Complex = int32_t(ComputeType != ComputeTypeReal);
   int32_t algnM = (M + 255) & (~255);
   int32_t algnN = (N + 63) & (~63);
-  int32_t orderA = (alg == HYACIN_ALG_LIMBS) ? ((umax + 8) >> 3) : 8;
-  int64_t elem_bytes = ComputeTypeReal == HYACIN_F32 ? sizeof(float) : (ComputeTypeReal == HYACIN_F64 ? sizeof(double) : sizeof(double2));
-  int64_t C_bytes = (int64_t(algnN) * int64_t(N) * elem_bytes) << Complex;
-  int64_t i8_bytes = (int64_t(algnM) * int64_t(N) * int64_t(orderA)) << Complex;
-  int64_t scratch_bytes = int64_t(algnN) * int64_t(N) * int64_t(orderA) * sizeof(int32_t);
-  scratch_bytes = std::max(scratch_bytes, C_bytes - i8_bytes);
-
   int32_t bits = int32_t(std::ceil(std::log2(double(M)))) + (umax << 1) + 2 + Complex;
-  int32_t n_moduli = (bits + 8) >> 3;
-  int32_t orderC = (((alg == HYACIN_ALG_LIMBS) ? bits : (n_moduli << 3)) + 63) / 63;
+  int32_t use_limbs = int32_t(alg == HYACIN_ALG_LIMBS);
+
+  int32_t orderA = ((use_limbs ? umax : bits) + 8) >> 3;
+  int64_t elem_bytes = ComputeTypeReal == HYACIN_F32 ? sizeof(float) : (ComputeTypeReal == HYACIN_F64 ? sizeof(double) : sizeof(double2));
+  int64_t i8_bytes = int64_t(N) * int64_t(use_limbs ? orderA : 8) * ((int64_t(algnM) << Complex) + (int64_t(algnN) * sizeof(int32_t)));
+  int64_t C_bytes = (int64_t(algnN) * int64_t(N) * elem_bytes) << Complex;
+  i8_bytes = std::max(i8_bytes, C_bytes);
+
+  int32_t orderC = ((use_limbs ? bits : (orderA << 3)) + 63) / 63;
   int64_t acc_bytes = (int64_t(algnN) * int64_t(N + 1) * int64_t(orderC) * sizeof(uint64_t)) << Complex;
   int64_t vec_bytes = int64_t(algnN) * sizeof(int32_t);
   int64_t idx_bytes = elem_bytes << 9;
-  return std::tie(algnM, algnN, orderA, orderC, n_moduli, i8_bytes, scratch_bytes, acc_bytes, vec_bytes, idx_bytes);
+  return std::tie(algnM, algnN, orderA, orderC, i8_bytes, acc_bytes, vec_bytes, idx_bytes);
 }
 
 extern "C" void hyacinXcpqrk_bufferSize(int32_t M, int32_t N, int32_t umax, hyacinPrecision_t ComputeType, hyacinAlgorithm_t alg, uint64_t* dev_work_bytes, uint64_t* pinned_work_bytes) {
-  int32_t algnM, algnN, orderA, orderC, n_moduli; int64_t i8_bytes, scratch_bytes, acc_bytes, vec_bytes, idx_bytes;
-  std::tie(algnM, algnN, orderA, orderC, n_moduli, i8_bytes, scratch_bytes, acc_bytes, vec_bytes, idx_bytes) = i8gemm_ext_params(M, N, umax, ComputeType, alg);
-  *dev_work_bytes = uint64_t(i8_bytes + acc_bytes + scratch_bytes + vec_bytes);
+  int32_t algnM, algnN, orderA, orderC; int64_t i8_bytes, acc_bytes, vec_bytes, idx_bytes;
+  std::tie(algnM, algnN, orderA, orderC, i8_bytes, acc_bytes, vec_bytes, idx_bytes) = i8gemm_ext_params(M, N, umax, ComputeType, alg);
+  *dev_work_bytes = uint64_t(i8_bytes + acc_bytes + vec_bytes);
   *pinned_work_bytes = uint64_t(int64_t(algnN) * sizeof(int32_t) + idx_bytes);
 }
 
 extern "C" int32_t hyacinXcpqrk(cublasHandle_t handle, char mode, double epi, int32_t M, int32_t N, int32_t K, int32_t p, int32_t umax,
   hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t* jpiv, hyacinPrecision_t Rtype, void* R, int32_t ldr, hyacinPrecision_t ComputeType, void* dev_work, void* pinned_work, hyacinAlgorithm_t alg) {
 
-  int32_t algnM, algnN, orderA, orderC, n_moduli; int64_t i8_bytes, scratch_bytes, acc_bytes, vec_bytes, idx_bytes;
-  std::tie(algnM, algnN, orderA, orderC, n_moduli, i8_bytes, scratch_bytes, acc_bytes, vec_bytes, idx_bytes) = i8gemm_ext_params(M, N, umax, ComputeType, alg);
+  int32_t algnM, algnN, orderA, orderC; int64_t i8_bytes, acc_bytes, vec_bytes, idx_bytes;
+  std::tie(algnM, algnN, orderA, orderC, i8_bytes, acc_bytes, vec_bytes, idx_bytes) = i8gemm_ext_params(M, N, umax, ComputeType, alg);
 
   cudaStream_t stream; cublasGetStream(handle, &stream);
-  int8_t* iA = (int8_t*)(dev_work), *acc = &iA[i8_bytes + scratch_bytes], *v_exp = &acc[acc_bytes];
+  int8_t* iA = (int8_t*)(dev_work), *acc = &iA[i8_bytes], *v_exp = &acc[acc_bytes];
   int32_t* hpiv = (int32_t*)(&((int8_t*)pinned_work)[idx_bytes]);
   std::iota(hpiv, &hpiv[N], 1);
 
-  if (Atype == HYACIN_F64) {
-    internal::int8::vexp_f64(stream, M, N, (const double*)A, lda, (int32_t*)v_exp);
-    if (alg == HYACIN_ALG_LIMBS)
-      internal::int8::i63ATA_f64_limbs(stream, handle, M, N, (const double*)A, lda, umax, (int32_t*)v_exp, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA);
-    else
-      internal::int8::i63ATA_f64_crt(stream, handle, M, N, (const double*)A, lda, umax, (int32_t*)v_exp, algnM, n_moduli, orderC, (uint64_t*)acc, algnN, iA);
+  switch(Atype) {
+    case HYACIN_F64:
+      internal::int8::vexp_f64(stream, M, N, (const double*)A, lda, (int32_t*)v_exp); break;
+    case HYACIN_F32:
+      internal::int8::vexp_f32(stream, M, N, (const float*)A, lda, (int32_t*)v_exp); break;
+    case HYACIN_F64_COMPLEX:
+      internal::int8::vexp_cf64(stream, M, N, (const std::complex<double>*)A, lda, (int32_t*)v_exp); break;
+    case HYACIN_F32_COMPLEX:
+      internal::int8::vexp_cf32(stream, M, N, (const std::complex<float>*)A, lda, (int32_t*)v_exp); break;
+    default: break;
   }
-  else if (Atype == HYACIN_F32) {
-    internal::int8::vexp_f32(stream, M, N, (const float*)A, lda, (int32_t*)v_exp);
-    if (alg == HYACIN_ALG_LIMBS)
-      internal::int8::i63ATA_f32_limbs(stream, handle, M, N, (const float*)A, lda, umax, (int32_t*)v_exp, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA);
-    else
-      internal::int8::i63ATA_f32_crt(stream, handle, M, N, (const float*)A, lda, umax, (int32_t*)v_exp, algnM, n_moduli, orderC, (uint64_t*)acc, algnN, iA);
+
+  if (alg == HYACIN_ALG_LIMBS) switch(Atype) {
+    case HYACIN_F64:
+      internal::int8::i63ATA_f64_limbs(stream, handle, M, N, (const double*)A, lda, umax, (const int32_t*)v_exp, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA); break;
+    case HYACIN_F32:
+      internal::int8::i63ATA_f32_limbs(stream, handle, M, N, (const float*)A, lda, umax, (const int32_t*)v_exp, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA); break;
+    case HYACIN_F64_COMPLEX:
+      internal::int8::i63AHA_cf64_limbs(stream, handle, M, N, (const std::complex<double>*)A, lda, umax, (const int32_t*)v_exp, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA); break;
+    case HYACIN_F32_COMPLEX:
+      internal::int8::i63AHA_cf32_limbs(stream, handle, M, N, (const std::complex<float>*)A, lda, umax, (const int32_t*)v_exp, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA); break;
+    default: break;
   }
-  else if (Atype == HYACIN_F64_COMPLEX) {
-    internal::int8::vexp_cf64(stream, M, N, (const std::complex<double>*)A, lda, (int32_t*)v_exp);
-    if (alg == HYACIN_ALG_LIMBS)
-      internal::int8::i63AHA_cf64_limbs(stream, handle, M, N, (const std::complex<double>*)A, lda, umax, (int32_t*)v_exp, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA);
-    else
-      internal::int8::i63AHA_cf64_crt(stream, handle, M, N, (const std::complex<double>*)A, lda, umax, (int32_t*)v_exp, algnM, n_moduli, orderC, (uint64_t*)acc, algnN, iA);
-  }
-  else if (Atype == HYACIN_F32_COMPLEX) {
-    internal::int8::vexp_cf32(stream, M, N, (const std::complex<float>*)A, lda, (int32_t*)v_exp);
-    if (alg == HYACIN_ALG_LIMBS)
-      internal::int8::i63AHA_cf32_limbs(stream, handle, M, N, (const std::complex<float>*)A, lda, umax, (int32_t*)v_exp, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA);
-    else
-      internal::int8::i63AHA_cf32_crt(stream, handle, M, N, (const std::complex<float>*)A, lda, umax, (int32_t*)v_exp, algnM, n_moduli, orderC, (uint64_t*)acc, algnN, iA);
+  else if (alg == HYACIN_ALG_CRT) switch(Atype) {
+    case HYACIN_F64:
+      internal::int8::i63ATA_f64_crt(stream, handle, M, N, (const double*)A, lda, umax, (const int32_t*)v_exp, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA); break;
+    case HYACIN_F32:
+      internal::int8::i63ATA_f32_crt(stream, handle, M, N, (const float*)A, lda, umax, (const int32_t*)v_exp, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA); break;
+    case HYACIN_F64_COMPLEX:
+      internal::int8::i63AHA_cf64_crt(stream, handle, M, N, (const std::complex<double>*)A, lda, umax, (const int32_t*)v_exp, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA); break;
+    case HYACIN_F32_COMPLEX:
+      internal::int8::i63AHA_cf32_crt(stream, handle, M, N, (const std::complex<float>*)A, lda, umax, (const int32_t*)v_exp, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA); break;
+    default: break;
   }
 
   switch (ComputeType) {

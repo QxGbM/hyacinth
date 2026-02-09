@@ -65,7 +65,6 @@ __global__ void gemv_pp_kernel(int32_t j, int32_t M, int32_t N, matrix_t sq, rea
   { A_col_j[j] = A_col_j[0]; D[j] = D[0]; }
 
   __shared__ typename cub::BlockReduce<idx_t, BLOCK_THREADS>::TempStorage temp_reduce;
-  cub::BlockReduce<idx_t, BLOCK_THREADS> block_reduce(temp_reduce);
   gemv_pp_fused pp_func; real_max cmp_max;
   idx_t thread_x = idx_t();
 
@@ -81,7 +80,7 @@ __global__ void gemv_pp_kernel(int32_t j, int32_t M, int32_t N, matrix_t sq, rea
     D[i] = thread_c.real;
   }
 
-  thread_x = block_reduce.Reduce(thread_x, cmp_max);
+  thread_x = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce).Reduce(thread_x, cmp_max);
   if (threadIdx.x == 0) {
     if (blockIdx.x == 0) A[0] = sq;
     idx[blockIdx.x] = thread_x;

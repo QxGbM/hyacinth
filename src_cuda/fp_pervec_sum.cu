@@ -16,11 +16,6 @@ __device__ __forceinline__ void accumulate(double x, int32_t expon, uint64_t lo,
   hi += uint32_t(q >> (63 - expon)) + uint32_t(lo >> 63);
   acc_hi += hi; acc_mi += uint32_t(lo >> 32) & device::int8::i31; acc_lo += uint32_t(lo);
 }
-__device__ __forceinline__ void acc_normalize(uint64_t hi, uint64_t& mi, uint64_t& lo) {
-  uint64_t s[2]{ lo, hi };
-  device::int8::add_shifted(s, mi, uint32_t(32));
-  lo = s[0]; mi = s[1];
-}
 
 template <class matrix_const_ptr, int32_t ORDER, int32_t COMPLEX, int32_t BLOCK_THREADS>
 __global__ void vector_sum_kernel(int64_t M, matrix_const_ptr A, int64_t lda, uint64_t lo, uint32_t hi, int32_t umax, const int32_t* __restrict__ vec_expon, uint64_t* __restrict__ vec_sum, int64_t incv) {
@@ -35,12 +30,11 @@ __global__ void vector_sum_kernel(int64_t M, matrix_const_ptr A, int64_t lda, ui
 
   if constexpr(COMPLEX) {
     __shared__ typename cub::BlockReduce<u64x3, BLOCK_THREADS>::TempStorage temp_reduce[2];
-    cub::BlockReduce<u64x3, BLOCK_THREADS> block_reduce[2]{ temp_reduce[0], temp_reduce[1] };
     u64x3 threadB = threadA;
     if (int32_t(threadIdx.x) & 1) threadA.e[0] = threadA.e[1] = threadA.e[2] = uint64_t(0);
       else threadB.e[0] = threadB.e[1] = threadB.e[2] = uint64_t(0);
-    threadA = block_reduce[0].Reduce(threadA, u64_add());
-    threadB = block_reduce[1].Reduce(threadB, u64_add());
+    threadA = cub::BlockReduce<u64x3, BLOCK_THREADS>(temp_reduce[0]).Reduce(threadA, u64_add());
+    threadB = cub::BlockReduce<u64x3, BLOCK_THREADS>(temp_reduce[1]).Reduce(threadB, u64_add());
 
     if (threadIdx.x == 0) {
       uint64_t c[ORDER]; c[0] = threadA.e[0];
@@ -66,8 +60,7 @@ __global__ void vector_sum_kernel(int64_t M, matrix_const_ptr A, int64_t lda, ui
   }
   else {
     __shared__ typename cub::BlockReduce<u64x3, BLOCK_THREADS>::TempStorage temp_reduce;
-    cub::BlockReduce<u64x3, BLOCK_THREADS> block_reduce(temp_reduce);
-    threadA = block_reduce.Reduce(threadA, u64_add());
+    threadA = cub::BlockReduce<u64x3, BLOCK_THREADS>(temp_reduce).Reduce(threadA, u64_add());
 
     if (threadIdx.x == 0) {
       uint64_t c[ORDER]; c[0] = threadA.e[0];

@@ -14,7 +14,6 @@ template <class real_t, class real_const_ptr, int32_t BLOCK_THREADS>
 __global__ void vector_exponent_kernel(int64_t M, real_const_ptr A, int64_t lda, int32_t* __restrict__ vec_expon) {
   constexpr int64_t inci = int64_t(BLOCK_THREADS);
   __shared__ typename cub::BlockReduce<double, BLOCK_THREADS>::TempStorage temp_reduce;
-  cub::BlockReduce<double, BLOCK_THREADS> block_reduce(temp_reduce);
   f64max max_func;
 
   A = &A[int64_t(blockIdx.x) * lda];
@@ -23,7 +22,7 @@ __global__ void vector_exponent_kernel(int64_t M, real_const_ptr A, int64_t lda,
   for (int64_t i = threadIdx.x; i < M; i += inci)
     thread_data = max_func(conv_abs(A[i]), thread_data);
 
-  thread_data = block_reduce.Reduce(thread_data, max_func);
+  thread_data = cub::BlockReduce<double, BLOCK_THREADS>(temp_reduce).Reduce(thread_data, max_func);
   if (threadIdx.x == 0)
     frexp(thread_data, &vec_expon[blockIdx.x]);
 }

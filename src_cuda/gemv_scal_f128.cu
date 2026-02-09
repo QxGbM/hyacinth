@@ -39,7 +39,6 @@ template <class matrix_t, class matrix_ptr, int32_t WARP_THREADS, int32_t BLOCK_
 __global__ void gemv_kernel(int32_t M, int32_t N, matrix_ptr A, int64_t ldj, int64_t lda) {
   constexpr int32_t block_warps = BLOCK_THREADS / WARP_THREADS;
   __shared__ typename cub::BlockReduce<matrix_t, WARP_THREADS>::TempStorage temp_reduce[block_warps];
-  cub::BlockReduce<matrix_t, WARP_THREADS> block_reduce(temp_reduce[threadIdx.y]);
 
   int32_t i = block_warps * blockIdx.x + threadIdx.y;
   const matrix_ptr A_i = &A[int64_t(i) * lda], A_j = &A[ldj];
@@ -52,7 +51,7 @@ __global__ void gemv_kernel(int32_t M, int32_t N, matrix_ptr A, int64_t ldj, int
       threadB = fma_func(A_i[k], A_j[k], threadB);
 
     add_neg_f128 an_func;
-    threadB = block_reduce.Reduce(threadB, an_func);
+    threadB = cub::BlockReduce<matrix_t, WARP_THREADS>(temp_reduce[threadIdx.y]).Reduce(threadB, an_func);
     A = &A[ldj + int64_t(i + N)];
 
     if (threadIdx.x == 0)

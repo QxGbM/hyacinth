@@ -51,7 +51,6 @@ __global__ void gemv_pp_nopiv_kernel(int32_t N, matrix_t sq, real_t rsq, matrix_
   int32_t offset = int32_t(blockIdx.x) * BLOCK_THREADS + int32_t(threadIdx.x) + 1;
 
   __shared__ typename cub::BlockReduce<idx_t, BLOCK_THREADS>::TempStorage temp_reduce;
-  cub::BlockReduce<idx_t, BLOCK_THREADS> block_reduce(temp_reduce);
   gemv_pp_fused pp_func; real_max cmp_max;
   idx_t thread_x = idx_t();
 
@@ -62,7 +61,7 @@ __global__ void gemv_pp_nopiv_kernel(int32_t N, matrix_t sq, real_t rsq, matrix_
     D[i] = thread_c.real;
   }
 
-  thread_x = block_reduce.Reduce(thread_x, cmp_max);
+  thread_x = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce).Reduce(thread_x, cmp_max);
   if (threadIdx.x == 0) {
     if (blockIdx.x == 0) A[0] = sq;
     idx[blockIdx.x] = thread_x;
