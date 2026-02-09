@@ -50,30 +50,21 @@ __global__ void limbs_convert_kernel(int64_t N, uint64_t* __restrict__ A) {
 
 constexpr int32_t block_threads = 512;
 
-template <int32_t Complex>
 inline void limbs_convert_dispatcher(cudaStream_t stream, int32_t orderA, int64_t N, uint64_t* A) {
   uint32_t grid = uint32_t((N + int64_t(block_threads - 1)) / int64_t(block_threads));
 
-  if constexpr(Complex) switch (orderA) {
-    case 1: limbs_convert_kernel<4> <<< grid, block_threads, 0, stream >>> (N, A); break;
-    case 2: limbs_convert_kernel<6> <<< grid, block_threads, 0, stream >>> (N, A); break;
-    case 3: limbs_convert_kernel<10> <<< grid, block_threads, 0, stream >>> (N, A); break;
-    case 4: limbs_convert_kernel<12> <<< grid, block_threads, 0, stream >>> (N, A); break;
-    default: break;
-  }
-  else switch (orderA) {
-    case 1: limbs_convert_kernel<2> <<< grid, block_threads, 0, stream >>> (N, A); break;
-    case 2: limbs_convert_kernel<3> <<< grid, block_threads, 0, stream >>> (N, A); break;
-    case 3: limbs_convert_kernel<5> <<< grid, block_threads, 0, stream >>> (N, A); break;
-    case 4: limbs_convert_kernel<6> <<< grid, block_threads, 0, stream >>> (N, A); break;
+  switch (orderA) {
+    case 2: limbs_convert_kernel<2> <<< grid, block_threads, 0, stream >>> (N, A); break;
+    case 3: limbs_convert_kernel<3> <<< grid, block_threads, 0, stream >>> (N, A); break;
+    case 4: limbs_convert_kernel<4> <<< grid, block_threads, 0, stream >>> (N, A); break;
+    case 5: limbs_convert_kernel<5> <<< grid, block_threads, 0, stream >>> (N, A); break;
+    case 6: limbs_convert_kernel<6> <<< grid, block_threads, 0, stream >>> (N, A); break;
+    case 10: limbs_convert_kernel<10> <<< grid, block_threads, 0, stream >>> (N, A); break;
+    case 12: limbs_convert_kernel<12> <<< grid, block_threads, 0, stream >>> (N, A); break;
     default: break;
   }
 }
 
-void internal::int8::accumulate_conv_real_i63_i42(cudaStream_t stream, int32_t orderA, int64_t N, uint64_t* A) {
-  limbs_convert_dispatcher<0>(stream, orderA, N, A);
-}
-
-void internal::int8::accumulate_conv_complex_i63_i42(cudaStream_t stream, int32_t orderA, int64_t N, uint64_t* A) {
-  limbs_convert_dispatcher<1>(stream, orderA, N, A);
+void internal::int8::accumulate_conv_i63_i42(cudaStream_t stream, int32_t orderA, int64_t N, uint64_t* A) {
+  limbs_convert_dispatcher(stream, orderA, N, A);
 }

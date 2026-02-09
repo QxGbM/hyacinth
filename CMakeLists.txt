@@ -12,6 +12,7 @@ set(SM_TARGETS "80;86;89;90;100;120")
 find_package(CUDAToolkit REQUIRED)
 
 set(CPP_SOURCES
+  src_cpp/autotune.cpp
   src_cpp/gemv_cublas.cpp
   src_cpp/i63syrk.cpp
   src_cpp/imax_host.cpp
@@ -46,8 +47,9 @@ target_include_directories(hyacin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CU
 target_link_libraries(hyacin PRIVATE CUDA::cudart CUDA::cublas)
 
 if (USE_NCCL)
-  target_compile_definitions(hyacin PRIVATE "USE_NCCL")
   target_link_libraries(hyacin PRIVATE nccl)
+else()
+  target_compile_definitions(hyacin PRIVATE "NO_NCCL")
 endif()
 
 install(TARGETS hyacin LIBRARY DESTINATION .)

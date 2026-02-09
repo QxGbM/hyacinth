@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <cublas_v2.h>
 
-#ifdef USE_NCCL
+#ifndef NO_NCCL
 #include <nccl.h>
 #endif
 
@@ -30,7 +30,7 @@ extern "C" {
 
 void hyacinXcpqrk_autoTune(
   double epi,
-  int32_t M,
+  int64_t globalM,
   int32_t u_extra,
   int32_t* umax,
   hyacinPrecision_t Atype,
@@ -70,7 +70,7 @@ int32_t hyacinXcpqrk(
   hyacinAlgorithm_t alg
 );
 
-#ifdef USE_NCCL
+#ifndef NO_NCCL
 
 void hyacinXcpqrkD_bufferSize(
   int32_t localM,
