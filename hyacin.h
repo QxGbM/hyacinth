@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <cublas_v2.h>
+#include <cusolverDn.h>
 
 #ifndef NO_NCCL
 #include <nccl.h>
@@ -68,6 +69,40 @@ int32_t hyacinXcpqrk(
   void* dev_work,
   void* pinned_work,
   hyacinAlgorithm_t alg
+);
+
+void hyacinXutvk_bufferSize(
+  cusolverDnHandle_t handle,
+  cusolverDnParams_t params,
+  double epi,
+  int32_t N,
+  int32_t K,
+  int32_t ldr,
+  hyacinPrecision_t ComputeType,
+  uint64_t* dev_work_bytes,
+  uint64_t* pinned_work_bytes
+);
+
+int32_t hyacinXutvk(
+  cublasHandle_t handle,
+  cusolverDnHandle_t s_handle,
+  cusolverDnParams_t params,
+  double epi,
+  int32_t M,
+  int32_t N,
+  int32_t K,
+  int32_t p,
+  const void* A,
+  int32_t lda,
+  void* RV,
+  int32_t ldr,
+  void* UT,
+  int32_t ldu,
+  hyacinPrecision_t ComputeType,
+  uint64_t dev_work_bytes,
+  void* dev_work,
+  uint64_t pinned_work_bytes,
+  void* pinned_work
 );
 
 #ifndef NO_NCCL

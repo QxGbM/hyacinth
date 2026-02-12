@@ -42,7 +42,7 @@ foreach (test ${TEST_SOURCES})
   add_executable(${src}.app ${test})
   add_test(NAME ${src}.app COMMAND ${src}.app)
 
-  target_include_directories(${src}.app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  target_include_directories(${src}.app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/..)
   target_link_libraries(${src}.app PRIVATE hyacin example_common BLAS::BLAS LAPACK::LAPACK CUDA::cudart CUDA::cublas CUDA::cusolver)
 
   if(BLAS_LIBS MATCHES "mkl")

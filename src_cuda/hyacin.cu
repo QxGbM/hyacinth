@@ -24,61 +24,63 @@ __device__ __forceinline__ void conv(cuDoubleComplex a, cuComplex& b) { conv(a.x
 __device__ __forceinline__ void conv(complex_double2 a, cuComplex& b) { conv(a.real, b.x); conv(a.imag, b.y); }
 __device__ __forceinline__ void conv(complex_float4 a, cuComplex& b) { conv(a.real, b.x); conv(a.imag, b.y); }
 
-template <int32_t blockSft, int32_t conversion, class constAptr, class Bptr> 
-__global__ void cvcpy_kernel(int64_t M, constAptr A, int64_t lda, Bptr B, int64_t ldb) {
-  int64_t y = (int64_t(blockIdx.x) << blockSft) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
-  if (y < M && y <= x) {
-    if constexpr(conversion) conv(A[y + x * lda], B[y + x * ldb]);
-      else B[y + x * ldb] = A[y + x * lda];
+template <int32_t mode, class BType, class constAptr, class Bptr> 
+__global__ void cvcpy_kernel(int64_t M, const int32_t* __restrict__ jpiv, constAptr A, int64_t lda, Bptr B, int64_t ldb) {
+  int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
+  if (y < M) {
+    A = &A[y + x * lda]; if constexpr(mode & 1) B = &B[y + int64_t(jpiv[x] - 1) * ldb]; else B = &B[y + x * ldb];
+    if (y <= x) { if constexpr(mode & 2) conv(*A, *B); else *B = *A; }
+      else *B = BType();
   }
 };
 
-inline void conv_copy_dispatcher(cudaStream_t stream, int64_t M, int32_t N, const void* A, int64_t lda, hyacinPrecision_t precA, void* B, int64_t ldb, hyacinPrecision_t precB) {
-  constexpr int32_t block_threads = 512, blockSft = 9;
-  dim3 grid((M + block_threads - 1) >> blockSft, N, 1);
+template <int32_t mode>
+inline void conv_copy_dispatcher(cudaStream_t stream, int64_t M, int32_t N, const int32_t* jpiv, const void* A, int64_t lda, hyacinPrecision_t precA, void* B, int64_t ldb, hyacinPrecision_t precB) {
+  constexpr int32_t block_threads = 512, mode_c = mode | 2;
+  dim3 grid(uint32_t(M + block_threads - 1) >> 9, uint32_t(N), 1);
 
   if (precB == HYACIN_F64) switch (precA) {
     case HYACIN_F64:
-      cvcpy_kernel <blockSft, 0, const double* __restrict__, double* __restrict__> <<< grid, block_threads, 0, stream >>> (M, (const double*)A, lda, (double*)B, ldb); break;
+      cvcpy_kernel <mode, double, const double* __restrict__, double* __restrict__> <<< grid, block_threads, 0, stream >>> (M, jpiv, (const double*)A, lda, (double*)B, ldb); break;
     case HYACIN_F32:
-      cvcpy_kernel <blockSft, 1, const float* __restrict__, double* __restrict__> <<< grid, block_threads, 0, stream >>> (M, (const float*)A, lda, (double*)B, ldb); break;
+      cvcpy_kernel <mode_c, double, const float* __restrict__, double* __restrict__> <<< grid, block_threads, 0, stream >>> (M, jpiv, (const float*)A, lda, (double*)B, ldb); break;
     case HYACIN_DD:
-      cvcpy_kernel <blockSft, 1, const double2* __restrict__, double* __restrict__> <<< grid, block_threads, 0, stream >>> (M, (const double2*)A, lda, (double*)B, ldb); break;
+      cvcpy_kernel <mode_c, double, const double2* __restrict__, double* __restrict__> <<< grid, block_threads, 0, stream >>> (M, jpiv, (const double2*)A, lda, (double*)B, ldb); break;
     case HYACIN_QF:
-      cvcpy_kernel <blockSft, 1, const float4* __restrict__, double* __restrict__> <<< grid, block_threads, 0, stream >>> (M, (const float4*)A, lda, (double*)B, ldb); break;
+      cvcpy_kernel <mode_c, double, const float4* __restrict__, double* __restrict__> <<< grid, block_threads, 0, stream >>> (M, jpiv, (const float4*)A, lda, (double*)B, ldb); break;
     default: break;
   }
   else if (precB == HYACIN_F32) switch (precA) {
     case HYACIN_F64:
-      cvcpy_kernel <blockSft, 1, const double* __restrict__, float* __restrict__> <<< grid, block_threads, 0, stream >>> (M, (const double*)A, lda, (float*)B, ldb); break;
+      cvcpy_kernel <mode_c, float, const double* __restrict__, float* __restrict__> <<< grid, block_threads, 0, stream >>> (M, jpiv, (const double*)A, lda, (float*)B, ldb); break;
     case HYACIN_F32:
-      cvcpy_kernel <blockSft, 0, const float* __restrict__, float* __restrict__> <<< grid, block_threads, 0, stream >>> (M, (const float*)A, lda, (float*)B, ldb); break;
+      cvcpy_kernel <mode, float, const float* __restrict__, float* __restrict__> <<< grid, block_threads, 0, stream >>> (M, jpiv, (const float*)A, lda, (float*)B, ldb); break;
     case HYACIN_DD:
-      cvcpy_kernel <blockSft, 1, const double2* __restrict__, float* __restrict__> <<< grid, block_threads, 0, stream >>> (M, (const double2*)A, lda, (float*)B, ldb); break;
+      cvcpy_kernel <mode_c, float, const double2* __restrict__, float* __restrict__> <<< grid, block_threads, 0, stream >>> (M, jpiv, (const double2*)A, lda, (float*)B, ldb); break;
     case HYACIN_QF:
-      cvcpy_kernel <blockSft, 1, const float4* __restrict__, float* __restrict__> <<< grid, block_threads, 0, stream >>> (M, (const float4*)A, lda, (float*)B, ldb); break;
+      cvcpy_kernel <mode_c, float, const float4* __restrict__, float* __restrict__> <<< grid, block_threads, 0, stream >>> (M, jpiv, (const float4*)A, lda, (float*)B, ldb); break;
     default: break;
   }
   else if (precB == HYACIN_F64_COMPLEX) switch (precA) {
     case HYACIN_F64_COMPLEX:
-      cvcpy_kernel <blockSft, 0, const cuDoubleComplex* __restrict__, cuDoubleComplex* __restrict__> <<< grid, block_threads, 0, stream >>> (M, (const cuDoubleComplex*)A, lda, (cuDoubleComplex*)B, ldb); break;
+      cvcpy_kernel <mode, cuDoubleComplex, const cuDoubleComplex* __restrict__, cuDoubleComplex* __restrict__> <<< grid, block_threads, 0, stream >>> (M, jpiv, (const cuDoubleComplex*)A, lda, (cuDoubleComplex*)B, ldb); break;
     case HYACIN_F32_COMPLEX:
-      cvcpy_kernel <blockSft, 1, const cuComplex* __restrict__, cuDoubleComplex* __restrict__> <<< grid, block_threads, 0, stream >>> (M, (const cuComplex*)A, lda, (cuDoubleComplex*)B, ldb); break;
+      cvcpy_kernel <mode_c, cuDoubleComplex, const cuComplex* __restrict__, cuDoubleComplex* __restrict__> <<< grid, block_threads, 0, stream >>> (M, jpiv, (const cuComplex*)A, lda, (cuDoubleComplex*)B, ldb); break;
     case HYACIN_DD_COMPLEX:
-      cvcpy_kernel <blockSft, 1, const complex_double2* __restrict__, cuDoubleComplex* __restrict__> <<< grid, block_threads, 0, stream >>> (M, (const complex_double2*)A, lda, (cuDoubleComplex*)B, ldb); break;
+      cvcpy_kernel <mode_c, cuDoubleComplex, const complex_double2* __restrict__, cuDoubleComplex* __restrict__> <<< grid, block_threads, 0, stream >>> (M, jpiv, (const complex_double2*)A, lda, (cuDoubleComplex*)B, ldb); break;
     case HYACIN_QF_COMPLEX:
-      cvcpy_kernel <blockSft, 1, const complex_float4* __restrict__, cuDoubleComplex* __restrict__> <<< grid, block_threads, 0, stream >>> (M, (const complex_float4*)A, lda, (cuDoubleComplex*)B, ldb); break;
+      cvcpy_kernel <mode_c, cuDoubleComplex, const complex_float4* __restrict__, cuDoubleComplex* __restrict__> <<< grid, block_threads, 0, stream >>> (M, jpiv, (const complex_float4*)A, lda, (cuDoubleComplex*)B, ldb); break;
     default: break;
   }
   else if (precB == HYACIN_F32_COMPLEX) switch (precA) {
     case HYACIN_F64_COMPLEX:
-      cvcpy_kernel <blockSft, 1, const cuDoubleComplex* __restrict__, cuComplex* __restrict__> <<< grid, block_threads, 0, stream >>> (M, (const cuDoubleComplex*)A, lda, (cuComplex*)B, ldb); break;
+      cvcpy_kernel <mode_c, cuComplex, const cuDoubleComplex* __restrict__, cuComplex* __restrict__> <<< grid, block_threads, 0, stream >>> (M, jpiv, (const cuDoubleComplex*)A, lda, (cuComplex*)B, ldb); break;
     case HYACIN_F32_COMPLEX:
-      cvcpy_kernel <blockSft, 0, const cuComplex* __restrict__, cuComplex* __restrict__> <<< grid, block_threads, 0, stream >>> (M, (const cuComplex*)A, lda, (cuComplex*)B, ldb); break;
+      cvcpy_kernel <mode, cuComplex, const cuComplex* __restrict__, cuComplex* __restrict__> <<< grid, block_threads, 0, stream >>> (M, jpiv, (const cuComplex*)A, lda, (cuComplex*)B, ldb); break;
     case HYACIN_DD_COMPLEX:
-      cvcpy_kernel <blockSft, 1, const complex_double2* __restrict__, cuComplex* __restrict__> <<< grid, block_threads, 0, stream >>> (M, (const complex_double2*)A, lda, (cuComplex*)B, ldb); break;
+      cvcpy_kernel <mode_c, cuComplex, const complex_double2* __restrict__, cuComplex* __restrict__> <<< grid, block_threads, 0, stream >>> (M, jpiv, (const complex_double2*)A, lda, (cuComplex*)B, ldb); break;
     case HYACIN_QF_COMPLEX:
-      cvcpy_kernel <blockSft, 1, const complex_float4* __restrict__, cuComplex* __restrict__> <<< grid, block_threads, 0, stream >>> (M, (const complex_float4*)A, lda, (cuComplex*)B, ldb); break;
+      cvcpy_kernel <mode_c, cuComplex, const complex_float4* __restrict__, cuComplex* __restrict__> <<< grid, block_threads, 0, stream >>> (M, jpiv, (const complex_float4*)A, lda, (cuComplex*)B, ldb); break;
     default: break;
   }
 }
@@ -194,9 +196,16 @@ extern "C" int32_t hyacinXcpqrk(cublasHandle_t handle, char mode, double epi, in
     default: break;
   }
 
-  if ((mode == 'R' || mode == 'r') && (R != nullptr && K <= ldr))
-    conv_copy_dispatcher(stream, int64_t(K), N, iA, int64_t(algnN), ComputeType, R, int64_t(ldr), Rtype);
-  cudaMemcpyAsync(jpiv, hpiv, sizeof(int32_t) * N, cudaMemcpyDefault, stream);
+  if (R != nullptr && 0 < K && K <= ldr) {
+    if (mode == 'R' || mode == 'r')
+      conv_copy_dispatcher<0>(stream, int64_t(K), N, nullptr, iA, int64_t(algnN), ComputeType, R, int64_t(ldr), Rtype);
+    else if (mode == 'J' || mode == 'j') {
+      cudaMemcpyAsync(v_exp, hpiv, vec_bytes, cudaMemcpyHostToDevice, stream);
+      conv_copy_dispatcher<1>(stream, int64_t(K), N, (int32_t*)v_exp, iA, int64_t(algnN), ComputeType, R, int64_t(ldr), Rtype);
+    }
+  }
+
+  cudaMemcpyAsync(jpiv, hpiv, sizeof(int32_t) * int64_t(N), cudaMemcpyDefault, stream);
   return K;
 }
 
@@ -256,9 +265,16 @@ extern "C" int32_t hyacinXcpqrkD(cublasHandle_t handle, ncclComm_t comm, char mo
     default: break;
   }
 
-  if ((mode == 'R' || mode == 'r') && (R != nullptr && K <= ldr))
-    conv_copy_dispatcher(stream, int64_t(K), N, iA, int64_t(algnN), ComputeType, R, int64_t(ldr), Rtype);
-  cudaMemcpyAsync(jpiv, hpiv, sizeof(int32_t) * N, cudaMemcpyDefault, stream);
+  if (R != nullptr && 0 < K && K <= ldr) {
+    if (mode == 'R' || mode == 'r')
+      conv_copy_dispatcher<0>(stream, int64_t(K), N, nullptr, iA, int64_t(algnN), ComputeType, R, int64_t(ldr), Rtype);
+    else if (mode == 'J' || mode == 'j') {
+      cudaMemcpyAsync(v_exp, hpiv, vec_bytes, cudaMemcpyHostToDevice, stream);
+      conv_copy_dispatcher<1>(stream, int64_t(K), N, (int32_t*)v_exp, iA, int64_t(algnN), ComputeType, R, int64_t(ldr), Rtype);
+    }
+  }
+
+  cudaMemcpyAsync(jpiv, hpiv, sizeof(int32_t) * int64_t(N), cudaMemcpyDefault, stream);
   return K;
 }
 

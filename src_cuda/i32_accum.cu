@@ -4,7 +4,7 @@
 
 template<int32_t orderX, int32_t orderA, uint32_t sft_iter, int32_t beta>
 __global__ void i32_accum_kernel(uint32_t sft, int64_t N, const int32_t* __restrict__ X, int64_t incx, uint64_t* __restrict__ A, int64_t inca) {
-  int64_t i = int64_t(blockIdx.x) * int64_t(blockDim.x) + int64_t(threadIdx.x);
+  int64_t i = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x);
   if (i < N) {
     uint64_t acc[orderA];
     int64_t iter = i;
@@ -33,13 +33,11 @@ __global__ void i32_accum_kernel(uint32_t sft, int64_t N, const int32_t* __restr
   }
 }
 
-constexpr int32_t block_threads = 512;
-
 template <int32_t orderA, int32_t option>
 inline void acc_dispatcher(cudaStream_t stream, int64_t N, uint32_t sft_lo, uint32_t orderX, const int32_t* X, int64_t incx, uint64_t* A, int64_t inca) {
   constexpr uint32_t sft_iter = uint32_t(option & 4 ? 16 : 8), alpha = uint32_t(option & 2) >> 1;
-  constexpr int32_t beta = option & 1;
-  int32_t grid = int32_t((N + int64_t(block_threads - 1)) / int64_t(block_threads));
+  constexpr int32_t beta = option & 1, block_threads = 512;
+  int32_t grid = int32_t((N + int64_t(511)) >> 9);
   uint32_t sft = alpha + (sft_lo << 3);
 
   switch (orderX) {

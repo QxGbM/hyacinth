@@ -1,8 +1,9 @@
 
-#include <examples.hpp>
+#include <hyacin.h>
 #include <iostream>
 #include <algorithm>
 #include <vector>
+#include <complex>
 
 #ifdef USE_MKL
 #include <mkl.h>
@@ -26,22 +27,45 @@ void make_2D_oscillatory(double w, int32_t sep, int32_t M, int32_t N, double* A,
   }
 }
 
-double check_answer(int32_t M, int32_t N, int32_t rank, const double* A, int32_t lda, const int32_t* jpiv, const double* tau, const double* B, int32_t ldb) {
+double check_answer(int32_t M, int32_t N, int32_t rank, const double* U, int32_t ldu, const double* V, int32_t ldv, const double* B, int32_t ldb) {
   if (rank <= 0)
     return std::numeric_limits<double>::quiet_NaN();
   std::vector<double> matQ(M * N, 0.);
-  LAPACKE_dlacpy(LAPACK_COL_MAJOR, 'A', M, N, A, lda, &matQ[0], M);
-  LAPACKE_dorgqr(LAPACK_COL_MAJOR, M, rank, rank, &matQ[0], M, tau);
-  cblas_dtrmm(CblasColMajor, CblasRight, CblasUpper, CblasNoTrans, CblasNonUnit, M, N, 1., A, lda, &matQ[0], M);
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasConjTrans, M, N, rank, 1., U, ldu, V, ldv, 0., &matQ[0], M);
 
   double err = 0., nrm = 0.;
   for (int32_t j = 0; j < N; ++j)
     for (int32_t i = 0; i < M; ++i) {
-      int32_t j2 = jpiv[j] - 1;
-      err += std::norm(matQ[i + j * M] - B[i + j2 * ldb]);
-      nrm += std::norm(B[i + j2 * ldb]);
+      err += std::norm(matQ[i + j * M] - B[i + j * ldb]);
+      nrm += std::norm(B[i + j * ldb]);
   }
   return std::sqrt(err / nrm);
+}
+
+int32_t utv_factorize(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, double epi, int32_t M, int32_t N, const double* A, int32_t lda, double* UT, int32_t ldu, double* V, int32_t ldv) {
+  int32_t umax; hyacinPrecision_t precC; hyacinAlgorithm_t alg; uint64_t dev_work_bytes, pinned_work_bytes;
+  hyacinXcpqrk_autoTune(epi, M, 6, &umax, HYACIN_F64, &precC, &alg);
+  hyacinXcpqrk_bufferSize(M, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
+
+  void* jpiv = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
+  cudaMalloc(&jpiv, int64_t(N) * sizeof(int32_t));
+  cudaMalloc(&dev_work, dev_work_bytes);
+  cudaMallocHost(&pinned_work, pinned_work_bytes);
+
+  int32_t p = 0; 
+  int32_t rank = hyacinXcpqrk(cublasH, 'J', epi, M, N, N, p, umax, HYACIN_F64, A, lda, (int32_t*)jpiv, HYACIN_F64, V, ldv, precC, dev_work, pinned_work, alg);
+
+  cusolverDnParams_t params; cusolverDnCreateParams(&params);
+  uint64_t dev_work_bytes_new, pinned_work_bytes_new;
+  hyacinXutvk_bufferSize(cusolverH, params, epi, N, rank, N, HYACIN_F64, &dev_work_bytes_new, &pinned_work_bytes_new);
+
+  rank = hyacinXutvk(cublasH, cusolverH, params, epi, M, N, rank, p, A, lda, V, ldv, UT, ldu, HYACIN_F64, dev_work_bytes_new, dev_work, pinned_work_bytes_new, pinned_work);
+
+  cudaStreamSynchronize(stream);
+  cudaFree(jpiv);
+  cudaFree(dev_work);
+  cudaFreeHost(pinned_work);
+  return rank;
 }
 
 int32_t main(int32_t argc, char* argv[]) {
@@ -59,7 +83,6 @@ int32_t main(int32_t argc, char* argv[]) {
   int32_t sep = 5 < argc ? std::atoi(argv[5]) : 0;
 
   std::vector<double> matA(M * N);
-  std::vector<int32_t> ipiv(N);
   make_2D_oscillatory(omega, sep, M, N, matA.data(), M);
 
   cudaStream_t stream;
@@ -76,35 +99,35 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
 
-  double* d_A = nullptr, *d_tau = nullptr;
+  double* d_A = nullptr, *d_U = nullptr, *d_V = nullptr;
   cudaMalloc((void**)(&d_A), M * N * sizeof(double));
-  cudaMalloc((void**)(&d_tau), N * sizeof(double));
+  cudaMalloc((void**)(&d_U), M * N * sizeof(double));
+  cudaMalloc((void**)(&d_V), N * N * sizeof(double));
   cudaMemcpy(d_A, matA.data(), M * N * sizeof(double), cudaMemcpyHostToDevice);
 
-  device::dgeqp3(cublasH, cusolverH, 'Q', epi, M, N, d_A, M, ipiv.data(), d_tau);
-  std::fill(ipiv.begin(), ipiv.end(), 0);
-  cudaMemcpy(d_A, matA.data(), M * N * sizeof(double), cudaMemcpyHostToDevice);
+  utv_factorize(stream, cublasH, cusolverH, epi, M, N, d_A, M, d_U, M, d_V, N);
 
   cudaEventRecord(start, stream);
-  int32_t ret = device::dgeqp3(cublasH, cusolverH, 'Q', epi, M, N, d_A, M, ipiv.data(), d_tau);
+  int32_t ret = utv_factorize(stream, cublasH, cusolverH, epi, M, N, d_A, M, d_U, M, d_V, N);
   cudaEventRecord(stop, stream);
 
   cudaDeviceSynchronize();
 
-  std::vector<double> matB(M * N), tau(N);
-  cudaMemcpy(matB.data(), d_A, M * N * sizeof(double), cudaMemcpyDeviceToHost);
-  cudaMemcpy(tau.data(), d_tau, N * sizeof(double), cudaMemcpyDeviceToHost);
-  double err = check_answer(M, N, ret == 0 ? N : (ret - 1), &matB[0], M, &ipiv[0], &tau[0], &matA[0], M);
+  std::vector<double> matU(M * N), matV(N * N);
+  cudaMemcpy(matU.data(), d_U, M * N * sizeof(double), cudaMemcpyDeviceToHost);
+  cudaMemcpy(matV.data(), d_V, N * N * sizeof(double), cudaMemcpyDeviceToHost);
+  double err = check_answer(M, N, ret, &matU[0], M, &matV[0], N, &matA[0], M);
 
   float milliseconds = 0.0f;
   cudaEventElapsedTime(&milliseconds, start, stop);
   int64_t flops = (int64_t(N) * int64_t(N) * int64_t(N) * -2 / 3) + (int64_t(M) * int64_t(N) * int64_t(N) * 2);
   double gflops = double(flops) * 1.e-6 / milliseconds;
 
-  std::cout << "DGEQP3," << M << "," << N << "," << epi << "," << err << "," << ret << "," << milliseconds << "," << gflops << std::endl;
+  std::cout << "D-UTV-K," << M << "," << N << "," << epi << "," << err << "," << ret << "," << milliseconds << "," << gflops << std::endl;
 
   cudaFree(d_A);
-  cudaFree(d_tau);
+  cudaFree(d_U);
+  cudaFree(d_V);
   cudaEventDestroy(start);
   cudaEventDestroy(stop);
   cudaStreamDestroy(stream);

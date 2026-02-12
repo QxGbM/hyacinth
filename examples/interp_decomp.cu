@@ -6,7 +6,7 @@
 #include <thrust/iterator/counting_iterator.h>
 #include <thrust/execution_policy.h>
 
-const int32_t umax_exp_extra = 7; // extra bits for exponent difference;
+const int32_t umax_exp_extra = 6; // extra bits for exponent difference;
 
 enum class PostProcessPrecision { FP64, FP32, FP64_COMPLEX, FP32_COMPLEX };
 

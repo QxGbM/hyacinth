@@ -16,7 +16,7 @@ template<uint32_t ORDER> __device__ __forceinline__ void cscal(uint64_t (&rl)[OR
 
 template<uint32_t orderA, uint32_t lSize, class complex_t>
 __global__ void dequantize_complex_kernel(int64_t K, int64_t N, const uint64_t* __restrict__ A, int64_t lda, int64_t strideA, int32_t umax, const int32_t* __restrict__ vec_expon, complex_t* __restrict__ B, int64_t ldb) {
-  int64_t y = int64_t(blockIdx.x) * int64_t(blockDim.x) + int64_t(threadIdx.x);
+  int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x);
 
   if (y < N) {
     constexpr int32_t i63_limbs = int32_t(lSize == uint32_t(63));
@@ -94,12 +94,11 @@ __global__ void dequantize_complex_kernel(int64_t K, int64_t N, const uint64_t* 
   }
 }
 
-constexpr int32_t block_threads = 512;
-
 template<uint32_t lSize, class complex_t>
 inline void dequantize_dispatcher(cudaStream_t stream, int32_t orderA, int64_t K, int64_t N, const uint64_t* A, int64_t lda, int32_t umax, const int32_t* vec_expon, complex_t* B, int64_t ldb) {
+  constexpr int32_t block_threads = 512;
+  dim3 grid(uint32_t(N + 511) >> 9, uint32_t(N), uint32_t(1));
   int64_t strideA = N * lda + lda;
-  dim3 grid((uint32_t(N) + uint32_t(block_threads - 1)) / uint32_t(block_threads), uint32_t(N));
 
   switch (orderA) {
     case 1: dequantize_complex_kernel<1, lSize, complex_t> <<< grid, block_threads, 0, stream >>> (K, N, A, lda, strideA, umax, vec_expon, B, ldb); break;

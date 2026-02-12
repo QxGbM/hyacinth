@@ -17,6 +17,7 @@ set(CPP_SOURCES
   src_cpp/i63syrk.cpp
   src_cpp/imax_host.cpp
   src_cpp/potrfp_uniform.cpp
+  src_cpp/svd_pp.cpp
 )
 
 set(CU_SOURCES
@@ -44,7 +45,7 @@ add_library(hyacin SHARED ${CPP_SOURCES} ${CU_SOURCES})
 set_property(TARGET hyacin PROPERTY CUDA_ARCHITECTURES ${SM_TARGETS})
 
 target_include_directories(hyacin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_link_libraries(hyacin PRIVATE CUDA::cudart CUDA::cublas)
+target_link_libraries(hyacin PRIVATE CUDA::cudart CUDA::cublas CUDA::cusolver)
 
 if (USE_NCCL)
   target_link_libraries(hyacin PRIVATE nccl)

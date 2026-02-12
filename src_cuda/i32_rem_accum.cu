@@ -8,7 +8,7 @@ template<int32_t len> struct i32_array { int32_t arr[len]; };
 
 template<int32_t orderM, int32_t orderA, int32_t orderPD, uint64_t MO, uint64_t MINV, uint64_t R32, int64_t P0, int64_t P1, int64_t P2, int32_t beta, int32_t pd_len>
 __global__ void i32_crt_accum_kernel(i32_array<pd_len> pd, int64_t N, const int32_t* __restrict__ X, int64_t incx, uint64_t* __restrict__ A, int64_t inca) {
-  int64_t i = int64_t(blockIdx.x) * int64_t(blockDim.x) + int64_t(threadIdx.x);
+  int64_t i = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x);
   if (i < N) {
     constexpr int32_t m[8]{ uint8_t(MO) ? uint32_t(uint8_t(MO)) : uint32_t(256), 
       uint8_t(MO >> 8), uint8_t(MO >> 16), uint8_t(MO >> 24), uint8_t(MO >> 32), uint8_t(MO >> 40), uint8_t(MO >> 48), uint8_t(MO >> 56) };
@@ -63,18 +63,16 @@ __global__ void i32_crt_accum_kernel(i32_array<pd_len> pd, int64_t N, const int3
   }
 }
 
-constexpr int32_t block_threads = 512;
-
 template <int32_t orderX, int32_t orderA, int32_t orderPD, int32_t iter>
 inline void crt_acc_dispatcher(cudaStream_t stream, int32_t option, int64_t N, const int32_t* X, int64_t incx, uint64_t* A, int64_t inca) {
-  constexpr int32_t orderM = CRT::active_moduli(orderX, iter), pd_len = orderM * orderPD;
+  constexpr int32_t orderM = CRT::active_moduli(orderX, iter), pd_len = orderM * orderPD, block_threads = 512;
 
   if constexpr(0 < orderM) {
     constexpr uint64_t MO = CRT::modular(iter), MINV = CRT::modular_inv(orderX, iter), R32 = CRT::inv_r32(orderX, iter);
     constexpr int64_t P0 = CRT::domain_p(orderX, 0), P1 = CRT::domain_p(orderX, 1), P2 = CRT::domain_p(orderX, 2), z = int64_t(0);
 
     i32_array<pd_len> pd; std::copy_n(CRT::p_div(orderX, iter), pd_len, &pd.arr[0]);
-    int32_t grid = int32_t((N + int64_t(block_threads - 1)) / int64_t(block_threads));
+    int32_t grid = int32_t((N + int64_t(511)) >> 9);
     int32_t accum = int32_t(option & 1 == 1), last = int32_t(option & 2 == 2);
 
     if (accum && last)

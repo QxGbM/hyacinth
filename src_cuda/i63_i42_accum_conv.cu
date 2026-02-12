@@ -13,7 +13,7 @@ __device__ __forceinline__ void conv2_3(uint64_t i_lo, uint64_t i_hi, uint64_t& 
 
 template <int32_t mode>
 __global__ void limbs_convert_kernel(int64_t N, uint64_t* __restrict__ A) {
-  int64_t i = int64_t(blockIdx.x) * int64_t(blockDim.x) + int64_t(threadIdx.x); A = &A[i];
+  int64_t i = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x); A = &A[i];
   if (i < N) {
     int64_t N2 = N << 1, N4 = N << 2, N8 = N << 3;
 
@@ -48,10 +48,9 @@ __global__ void limbs_convert_kernel(int64_t N, uint64_t* __restrict__ A) {
   }
 }
 
-constexpr int32_t block_threads = 512;
-
 inline void limbs_convert_dispatcher(cudaStream_t stream, int32_t orderA, int64_t N, uint64_t* A) {
-  uint32_t grid = uint32_t((N + int64_t(block_threads - 1)) / int64_t(block_threads));
+  constexpr int32_t block_threads = 512;
+  int32_t grid = int32_t((N + int64_t(511)) >> 9);
 
   switch (orderA) {
     case 2: limbs_convert_kernel<2> <<< grid, block_threads, 0, stream >>> (N, A); break;
