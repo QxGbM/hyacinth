@@ -58,6 +58,8 @@ int32_t utv_factorize(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHan
   cusolverDnParams_t params; cusolverDnCreateParams(&params);
   uint64_t dev_work_bytes_new, pinned_work_bytes_new;
   hyacinXutvk_bufferSize(cusolverH, params, epi, N, rank, N, HYACIN_F64, &dev_work_bytes_new, &pinned_work_bytes_new);
+  if (dev_work_bytes < dev_work_bytes_new) { cudaDeviceSynchronize(); cudaFree(dev_work); cudaMalloc(&dev_work, dev_work_bytes_new); }
+  if (pinned_work_bytes < pinned_work_bytes_new) { cudaDeviceSynchronize(); cudaFreeHost(pinned_work); cudaMallocHost(&pinned_work, dev_work_bytes_new); }
 
   rank = hyacinXutvk(cublasH, cusolverH, params, epi, M, N, rank, p, A, lda, V, ldv, UT, ldu, HYACIN_F64, dev_work_bytes_new, dev_work, pinned_work_bytes_new, pinned_work);
 
@@ -104,11 +106,10 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaMalloc((void**)(&d_U), M * N * sizeof(double));
   cudaMalloc((void**)(&d_V), N * N * sizeof(double));
   cudaMemcpy(d_A, matA.data(), M * N * sizeof(double), cudaMemcpyHostToDevice);
-
   utv_factorize(stream, cublasH, cusolverH, epi, M, N, d_A, M, d_U, M, d_V, N);
 
   cudaEventRecord(start, stream);
-  int32_t ret = utv_factorize(stream, cublasH, cusolverH, epi, M, N, d_A, M, d_U, M, d_V, N);
+  int32_t rank = utv_factorize(stream, cublasH, cusolverH, epi, M, N, d_A, M, d_U, M, d_V, N);
   cudaEventRecord(stop, stream);
 
   cudaDeviceSynchronize();
@@ -116,14 +117,14 @@ int32_t main(int32_t argc, char* argv[]) {
   std::vector<double> matU(M * N), matV(N * N);
   cudaMemcpy(matU.data(), d_U, M * N * sizeof(double), cudaMemcpyDeviceToHost);
   cudaMemcpy(matV.data(), d_V, N * N * sizeof(double), cudaMemcpyDeviceToHost);
-  double err = check_answer(M, N, ret, &matU[0], M, &matV[0], N, &matA[0], M);
+  double err = check_answer(M, N, rank, &matU[0], M, &matV[0], N, &matA[0], M);
 
   float milliseconds = 0.0f;
   cudaEventElapsedTime(&milliseconds, start, stop);
-  int64_t flops = (int64_t(N) * int64_t(N) * int64_t(N) * -2 / 3) + (int64_t(M) * int64_t(N) * int64_t(N) * 2);
+  int64_t flops = ((int64_t(M) + int64_t(N)) * int64_t(rank) * int64_t(2)) + (int64_t(M) * int64_t(N) * int64_t(rank) * int64_t(4));
   double gflops = double(flops) * 1.e-6 / milliseconds;
 
-  std::cout << "D-UTV-K," << M << "," << N << "," << epi << "," << err << "," << ret << "," << milliseconds << "," << gflops << std::endl;
+  std::cout << "D-UTVK," << M << "," << N << "," << epi << "," << err << "," << rank << "," << milliseconds << "," << gflops << std::endl;
 
   cudaFree(d_A);
   cudaFree(d_U);

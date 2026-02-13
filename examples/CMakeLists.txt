@@ -13,7 +13,6 @@ find_package(LAPACK REQUIRED)
 enable_testing()
 
 set(APP_SOURCES
-  geqp3.cu
   interp_decomp.cu
 )
 
@@ -23,10 +22,10 @@ target_include_directories(example_common PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${
 target_link_libraries(example_common PRIVATE hyacin CUDA::cudart CUDA::cublas CUDA::cusolver)
 
 set(TEST_SOURCES
-  cgeqp3_example.cpp clra_example.cpp
-  dgeqp3_example.cpp dlra_example.cpp
-  sgeqp3_example.cpp slra_example.cpp
-  zgeqp3_example.cpp zlra_example.cpp
+  clra_example.cpp cutv_example.cpp
+  dlra_example.cpp dutv_example.cpp
+  slra_example.cpp sutv_example.cpp
+  zlra_example.cpp zutv_example.cpp
 )
 
 string(JOIN " " BLAS_LIBS ${BLAS_LIBRARIES})
