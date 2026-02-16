@@ -107,51 +107,104 @@ inline std::tuple<int32_t, int32_t, int32_t, int32_t, int32_t, int64_t, int64_t,
   return std::tie(algnM, algnN, orderA, orderC, orderD, i8_bytes, acc_bytes, vec_bytes, idx_bytes);
 }
 
-inline void vexp_dispatcher(cudaStream_t stream, int32_t M, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t* vec_expon) {
+inline void vexp_dispatcher(cudaStream_t stream, int32_t M, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t* jpiv) {
   switch(Atype) {
     case HYACIN_F64:
-      internal::int8::vexp_f64(stream, M, N, (const double*)A, lda, vec_expon); break;
+      internal::int8::vexp_f64(stream, M, N, (const double*)A, lda, jpiv); break;
     case HYACIN_F32:
-      internal::int8::vexp_f32(stream, M, N, (const float*)A, lda, vec_expon); break;
+      internal::int8::vexp_f32(stream, M, N, (const float*)A, lda, jpiv); break;
     case HYACIN_F64_COMPLEX:
-      internal::int8::vexp_cf64(stream, M, N, (const std::complex<double>*)A, lda, vec_expon); break;
+      internal::int8::vexp_cf64(stream, M, N, (const std::complex<double>*)A, lda, jpiv); break;
     case HYACIN_F32_COMPLEX:
-      internal::int8::vexp_cf32(stream, M, N, (const std::complex<float>*)A, lda, vec_expon); break;
+      internal::int8::vexp_cf32(stream, M, N, (const std::complex<float>*)A, lda, jpiv); break;
     default: break;
   }
 }
 
 inline void igemm_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, 
-  int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t orderA, int32_t orderC, uint64_t* acc, int32_t algnN, int8_t* iA, hyacinAlgorithm_t alg) {
+  int32_t umax, const int32_t* jpiv, int32_t algnM, int32_t orderA, int32_t orderC, uint64_t* acc, int32_t algnN, int8_t* iA, hyacinAlgorithm_t alg) {
   if (alg == HYACIN_ALG_LIMBS) switch(Atype) {
     case HYACIN_F64:
-      internal::int8::i63ATA_f64_limbs(stream, handle, M, N, (const double*)A, lda, umax, vec_expon, algnM, orderA, orderC, acc, algnN, iA); break;
+      internal::int8::i63ATA_f64_limbs(stream, handle, M, N, (const double*)A, lda, umax, jpiv, algnM, orderA, orderC, acc, algnN, iA); break;
     case HYACIN_F32:
-      internal::int8::i63ATA_f32_limbs(stream, handle, M, N, (const float*)A, lda, umax, vec_expon, algnM, orderA, orderC, acc, algnN, iA); break;
+      internal::int8::i63ATA_f32_limbs(stream, handle, M, N, (const float*)A, lda, umax, jpiv, algnM, orderA, orderC, acc, algnN, iA); break;
     case HYACIN_F64_COMPLEX:
-      internal::int8::i63AHA_cf64_limbs(stream, handle, M, N, (const std::complex<double>*)A, lda, umax, vec_expon, algnM, orderA, orderC, acc, algnN, iA); break;
+      internal::int8::i63AHA_cf64_limbs(stream, handle, M, N, (const std::complex<double>*)A, lda, umax, jpiv, algnM, orderA, orderC, acc, algnN, iA); break;
     case HYACIN_F32_COMPLEX:
-      internal::int8::i63AHA_cf32_limbs(stream, handle, M, N, (const std::complex<float>*)A, lda, umax, vec_expon, algnM, orderA, orderC, acc, algnN, iA); break;
+      internal::int8::i63AHA_cf32_limbs(stream, handle, M, N, (const std::complex<float>*)A, lda, umax, jpiv, algnM, orderA, orderC, acc, algnN, iA); break;
     default: break;
   }
   else if (alg == HYACIN_ALG_CRT) switch(Atype) {
     case HYACIN_F64:
-      internal::int8::i63ATA_f64_crt(stream, handle, M, N, (const double*)A, lda, umax, vec_expon, algnM, orderA, orderC, acc, algnN, iA); break;
+      internal::int8::i63ATA_f64_crt(stream, handle, M, N, (const double*)A, lda, umax, jpiv, algnM, orderA, orderC, acc, algnN, iA); break;
     case HYACIN_F32:
-      internal::int8::i63ATA_f32_crt(stream, handle, M, N, (const float*)A, lda, umax, vec_expon, algnM, orderA, orderC, acc, algnN, iA); break;
+      internal::int8::i63ATA_f32_crt(stream, handle, M, N, (const float*)A, lda, umax, jpiv, algnM, orderA, orderC, acc, algnN, iA); break;
     case HYACIN_F64_COMPLEX:
-      internal::int8::i63AHA_cf64_crt(stream, handle, M, N, (const std::complex<double>*)A, lda, umax, vec_expon, algnM, orderA, orderC, acc, algnN, iA); break;
+      internal::int8::i63AHA_cf64_crt(stream, handle, M, N, (const std::complex<double>*)A, lda, umax, jpiv, algnM, orderA, orderC, acc, algnN, iA); break;
     case HYACIN_F32_COMPLEX:
-      internal::int8::i63AHA_cf32_crt(stream, handle, M, N, (const std::complex<float>*)A, lda, umax, vec_expon, algnM, orderA, orderC, acc, algnN, iA); break;
+      internal::int8::i63AHA_cf32_crt(stream, handle, M, N, (const std::complex<float>*)A, lda, umax, jpiv, algnM, orderA, orderC, acc, algnN, iA); break;
     default: break;
   }
+}
+
+inline int32_t rrf_dispatcher(cudaStream_t stream, cublasHandle_t handle, char mode, double epi, int64_t M, int32_t N, int32_t algnN, int32_t K, int32_t p, int32_t umax, 
+  const uint64_t* acc, int32_t bits, int32_t order, void* A, int32_t* jpiv, int32_t* hpiv, hyacinPrecision_t Rtype, void* R, int32_t ldr, hyacinPrecision_t ComputeType, void* pinned_work) {
+
+  std::iota(hpiv, &hpiv[N], 1);
+  switch (ComputeType) {
+    case HYACIN_F64:
+      internal::int8::dequantize_i63_f64(stream, bits, order, M, N, acc, algnN, umax, jpiv, (double*)A, algnN);
+      K = internal::Cholesky::potrfp_f64(stream, handle, epi, K, p, N, (double*)A, algnN, hpiv, pinned_work); break;
+    case HYACIN_F32:
+      internal::int8::dequantize_i63_f32(stream, bits, order, M, N, acc, algnN, umax, jpiv, (float*)A, algnN);
+      K = internal::Cholesky::potrfp_f32(stream, handle, epi, K, p, N, (float*)A, algnN, hpiv, pinned_work); break;
+    case HYACIN_DD:
+      internal::int8::dequantize_i63_f128_dd(stream, bits, order, M, N, acc, algnN, umax, jpiv, (double2*)A, algnN);
+      K = internal::Cholesky::potrfp_f128_dd(stream, handle, epi, K, p, N, (double2*)A, algnN, hpiv, pinned_work); break;
+    case HYACIN_QF:
+      internal::int8::dequantize_i63_f128_qf(stream, bits, order, M, N, acc, algnN, umax, jpiv, (float4*)A, algnN);
+      K = internal::Cholesky::potrfp_f128_qf(stream, handle, epi, K, p, N, (float4*)A, algnN, hpiv, pinned_work); break;
+    case HYACIN_F64_COMPLEX:
+      internal::int8::dequantize_i63_cf64(stream, bits, order, M, N, acc, algnN, umax, jpiv, (std::complex<double>*)A, algnN);
+      K = internal::Cholesky::potrfp_cf64(stream, handle, epi, K, p, N, (std::complex<double>*)A, algnN, hpiv, pinned_work); break;
+    case HYACIN_F32_COMPLEX:
+      internal::int8::dequantize_i63_cf32(stream, bits, order, M, N, acc, algnN, umax, jpiv, (std::complex<float>*)A, algnN);
+      K = internal::Cholesky::potrfp_cf32(stream, handle, epi, K, p, N, (std::complex<float>*)A, algnN, hpiv, pinned_work); break;
+    case HYACIN_DD_COMPLEX:
+      internal::int8::dequantize_i63_cf128_dd(stream, bits, order, M, N, acc, algnN, umax, jpiv, (complex_double2*)A, algnN);
+      K = internal::Cholesky::potrfp_cf128_dd(stream, handle, epi, K, p, N, (complex_double2*)A, algnN, hpiv, pinned_work); break;
+    case HYACIN_QF_COMPLEX:
+      internal::int8::dequantize_i63_cf128_qf(stream, bits, order, M, N, acc, algnN, umax, jpiv, (complex_float4*)A, algnN);
+      K = internal::Cholesky::potrfp_cf128_qf(stream, handle, epi, K, p, N, (complex_float4*)A, algnN, hpiv, pinned_work); break;
+    default: break;
+  }
+
+  cudaMemcpyAsync(jpiv, hpiv, int64_t(N) * sizeof(int32_t), cudaMemcpyHostToDevice, stream);
+  if (R != nullptr && 0 < K && K <= ldr) {
+    if (mode == 'R' || mode == 'r')
+      conv_copy_dispatcher<0>(stream, int64_t(K), N, nullptr, A, int64_t(algnN), ComputeType, R, int64_t(ldr), Rtype);
+    else if (mode == 'J' || mode == 'j')
+      conv_copy_dispatcher<1>(stream, int64_t(K), N, jpiv, A, int64_t(algnN), ComputeType, R, int64_t(ldr), Rtype);
+  }
+  return K;
 }
 
 extern "C" void hyacinXcpqrk_bufferSize(int32_t M, int32_t N, int32_t umax, hyacinPrecision_t ComputeType, hyacinAlgorithm_t alg, uint64_t* dev_work_bytes, uint64_t* pinned_work_bytes) {
   int32_t algnM, algnN, orderA, orderC, orderD; int64_t i8_bytes, acc_bytes, vec_bytes, idx_bytes;
   std::tie(algnM, algnN, orderA, orderC, orderD, i8_bytes, acc_bytes, vec_bytes, idx_bytes) = ext_params(M, int64_t(M), N, umax, 63, ComputeType, alg);
-  *dev_work_bytes = uint64_t(i8_bytes + acc_bytes + vec_bytes);
-  *pinned_work_bytes = uint64_t(int64_t(algnN) * sizeof(int32_t) + idx_bytes);
+  *dev_work_bytes = uint64_t(i8_bytes + acc_bytes);
+  *pinned_work_bytes = uint64_t(vec_bytes + idx_bytes);
+}
+
+extern "C" void hyacinXcpqrk1Dcol_bufferSize(int32_t localM, int64_t globalM, int32_t N, int32_t umax, hyacinPrecision_t ComputeType, hyacinAlgorithm_t alg, uint64_t* dev_work_bytes, uint64_t* pinned_work_bytes) {
+  int32_t algnM, algnN, orderA, orderC, orderD; int64_t i8_bytes, acc_bytes, vec_bytes, idx_bytes;
+  std::tie(algnM, algnN, orderA, orderC, orderD, i8_bytes, acc_bytes, vec_bytes, idx_bytes) = ext_params(localM, globalM, N, umax, 42, ComputeType, alg);
+  *dev_work_bytes = uint64_t(i8_bytes + acc_bytes);
+#ifdef MPI_IS_CUDA_AWARE
+  *pinned_work_bytes = uint64_t(vec_bytes + idx_bytes);
+#else
+  *pinned_work_bytes = std::max(uint64_t(vec_bytes + idx_bytes), uint64_t(acc_bytes));
+#endif
 }
 
 extern "C" int32_t hyacinXcpqrk(cublasHandle_t handle, char mode, double epi, int32_t M, int32_t N, int32_t K, int32_t p, int32_t umax,
@@ -161,121 +214,55 @@ extern "C" int32_t hyacinXcpqrk(cublasHandle_t handle, char mode, double epi, in
   std::tie(algnM, algnN, orderA, orderC, orderD, i8_bytes, acc_bytes, vec_bytes, idx_bytes) = ext_params(M, int64_t(M), N, umax, 63, ComputeType, alg);
 
   cudaStream_t stream; cublasGetStream(handle, &stream);
-  int8_t* iA = (int8_t*)(dev_work), *acc = &iA[i8_bytes], *v_exp = &acc[acc_bytes];
+  int8_t* iA = (int8_t*)(dev_work), *acc = &iA[i8_bytes];
   int32_t* hpiv = (int32_t*)(&((int8_t*)pinned_work)[idx_bytes]);
-  std::iota(hpiv, &hpiv[N], 1);
 
-  vexp_dispatcher(stream, M, N, Atype, A, lda, (int32_t*)v_exp);
-  igemm_dispatcher(stream, handle, M, N, Atype, A, lda, umax, (const int32_t*)v_exp, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA, alg);
+  vexp_dispatcher(stream, M, N, Atype, A, lda, jpiv);
+  igemm_dispatcher(stream, handle, M, N, Atype, A, lda, umax, jpiv, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA, alg);
 
-  switch (ComputeType) {
-    case HYACIN_F64:
-      internal::int8::dequantize_i63_f64(stream, orderC, int64_t(M), N, (uint64_t*)acc, algnN, umax, (int32_t*)v_exp, (double*)iA, algnN);
-      K = internal::Cholesky::potrfp_f64(stream, handle, epi, K, p, N, (double*)iA, algnN, hpiv, pinned_work); break;
-    case HYACIN_F32:
-      internal::int8::dequantize_i63_f32(stream, orderC, int64_t(M), N, (uint64_t*)acc, algnN, umax, (int32_t*)v_exp, (float*)iA, algnN);
-      K = internal::Cholesky::potrfp_f32(stream, handle, epi, K, p, N, (float*)iA, algnN, hpiv, pinned_work); break;
-    case HYACIN_DD:
-      internal::int8::dequantize_i63_f128_dd(stream, orderC, int64_t(M), N, (uint64_t*)acc, algnN, umax, (int32_t*)v_exp, (double2*)iA, algnN);
-      K = internal::Cholesky::potrfp_f128_dd(stream, handle, epi, K, p, N, (double2*)iA, algnN, hpiv, pinned_work); break;
-    case HYACIN_QF:
-      internal::int8::dequantize_i63_f128_qf(stream, orderC, int64_t(M), N, (uint64_t*)acc, algnN, umax, (int32_t*)v_exp, (float4*)iA, algnN);
-      K = internal::Cholesky::potrfp_f128_qf(stream, handle, epi, K, p, N, (float4*)iA, algnN, hpiv, pinned_work); break;
-    case HYACIN_F64_COMPLEX:
-      internal::int8::dequantize_i63_cf64(stream, orderC, int64_t(M), N, (uint64_t*)acc, algnN, umax, (int32_t*)v_exp, (std::complex<double>*)iA, algnN);
-      K = internal::Cholesky::potrfp_cf64(stream, handle, epi, K, p, N, (std::complex<double>*)iA, algnN, hpiv, pinned_work); break;
-    case HYACIN_F32_COMPLEX:
-      internal::int8::dequantize_i63_cf32(stream, orderC, int64_t(M), N, (uint64_t*)acc, algnN, umax, (int32_t*)v_exp, (std::complex<float>*)iA, algnN);
-      K = internal::Cholesky::potrfp_cf32(stream, handle, epi, K, p, N, (std::complex<float>*)iA, algnN, hpiv, pinned_work); break;
-    case HYACIN_DD_COMPLEX:
-      internal::int8::dequantize_i63_cf128_dd(stream, orderC, int64_t(M), N, (uint64_t*)acc, algnN, umax, (int32_t*)v_exp, (complex_double2*)iA, algnN);
-      K = internal::Cholesky::potrfp_cf128_dd(stream, handle, epi, K, p, N, (complex_double2*)iA, algnN, hpiv, pinned_work); break;
-    case HYACIN_QF_COMPLEX:
-      internal::int8::dequantize_i63_cf128_qf(stream, orderC, int64_t(M), N, (uint64_t*)acc, algnN, umax, (int32_t*)v_exp, (complex_float4*)iA, algnN);
-      K = internal::Cholesky::potrfp_cf128_qf(stream, handle, epi, K, p, N, (complex_float4*)iA, algnN, hpiv, pinned_work); break;
-    default: break;
-  }
-
-  if (R != nullptr && 0 < K && K <= ldr) {
-    if (mode == 'R' || mode == 'r')
-      conv_copy_dispatcher<0>(stream, int64_t(K), N, nullptr, iA, int64_t(algnN), ComputeType, R, int64_t(ldr), Rtype);
-    else if (mode == 'J' || mode == 'j') {
-      cudaMemcpyAsync(v_exp, hpiv, vec_bytes, cudaMemcpyHostToDevice, stream);
-      conv_copy_dispatcher<1>(stream, int64_t(K), N, (int32_t*)v_exp, iA, int64_t(algnN), ComputeType, R, int64_t(ldr), Rtype);
-    }
-  }
-
-  cudaMemcpyAsync(jpiv, hpiv, sizeof(int32_t) * int64_t(N), cudaMemcpyDefault, stream);
-  return K;
+  return rrf_dispatcher(stream, handle, mode, epi, int64_t(M), N, algnN, K, p, umax, (uint64_t*)acc, 63, orderC, iA, jpiv, hpiv, Rtype, R, ldr, ComputeType, pinned_work);
 }
 
-#ifndef NO_NCCL
+#ifndef NO_MPI
 
-extern "C" void hyacinXcpqrkD_bufferSize(int32_t localM, int64_t globalM, int32_t N, int32_t umax, hyacinPrecision_t ComputeType, hyacinAlgorithm_t alg, uint64_t* dev_work_bytes, uint64_t* pinned_work_bytes) {
-  int32_t algnM, algnN, orderA, orderC, orderD; int64_t i8_bytes, acc_bytes, vec_bytes, idx_bytes;
-  std::tie(algnM, algnN, orderA, orderC, orderD, i8_bytes, acc_bytes, vec_bytes, idx_bytes) = ext_params(localM, globalM, N, umax, 42, ComputeType, alg);
-  *dev_work_bytes = uint64_t(i8_bytes + acc_bytes + vec_bytes);
-  *pinned_work_bytes = uint64_t(int64_t(algnN) * sizeof(int32_t) + idx_bytes);
-}
-
-extern "C" int32_t hyacinXcpqrkD(cublasHandle_t handle, ncclComm_t comm, char mode, double epi, int32_t localM, int64_t globalM, int32_t N, int32_t K, int32_t p, int32_t umax,
-  hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t* jpiv, hyacinPrecision_t Rtype, void* R, int32_t ldr, hyacinPrecision_t ComputeType, void* dev_work, void* pinned_work, hyacinAlgorithm_t alg) {
+extern "C" int32_t hyacinXcpqrk1Dcol(cublasHandle_t handle, char mode, double epi, int32_t localM, int64_t globalM, int32_t N, int32_t K, int32_t p, int32_t umax,
+  hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t* jpiv, hyacinPrecision_t Rtype, void* R, int32_t ldr, hyacinPrecision_t ComputeType, void* dev_work, void* pinned_work, hyacinAlgorithm_t alg, MPI_Comm col_comm) {
 
   int32_t algnM, algnN, orderA, orderC, orderD; int64_t i8_bytes, acc_bytes, vec_bytes, idx_bytes;
   std::tie(algnM, algnN, orderA, orderC, orderD, i8_bytes, acc_bytes, vec_bytes, idx_bytes) = ext_params(localM, globalM, N, umax, 42, ComputeType, alg);
 
   cudaStream_t stream; cublasGetStream(handle, &stream);
-  int8_t* iA = (int8_t*)(dev_work), *acc = &iA[i8_bytes], *v_exp = &acc[acc_bytes];
+  int8_t* iA = (int8_t*)(dev_work), *acc = &iA[i8_bytes];
   int32_t* hpiv = (int32_t*)(&((int8_t*)pinned_work)[idx_bytes]);
-  std::iota(hpiv, &hpiv[N], 1);
 
-  vexp_dispatcher(stream, localM, N, Atype, A, lda, (int32_t*)v_exp);
-  ncclAllReduce(v_exp, v_exp, N, ncclInt32, ncclMax, comm, stream);
-  igemm_dispatcher(stream, handle, localM, N, Atype, A, lda, umax, (const int32_t*)v_exp, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA, alg);
+  vexp_dispatcher(stream, localM, N, Atype, A, lda, (int32_t*)jpiv);
 
-  int64_t stride = int64_t(algnN) * int64_t(N) + int64_t(algnN);
+#ifdef MPI_IS_CUDA_AWARE
+  cudaStreamSynchronize(stream);
+  MPI_Allreduce(MPI_IN_PLACE, jpiv, int64_t(N), MPI_INT32_T, MPI_MAX, col_comm);
+#else
+  int64_t len = int64_t(N) * sizeof(int32_t);
+  cudaMemcpyAsync(hpiv, jpiv, len, cudaMemcpyDeviceToHost, stream);
+  cudaStreamSynchronize(stream);
+  MPI_Allreduce(MPI_IN_PLACE, hpiv, int64_t(N), MPI_INT32_T, MPI_MAX, col_comm);
+  cudaMemcpyAsync(jpiv, hpiv, len, cudaMemcpyHostToDevice, stream);
+#endif
+
+  igemm_dispatcher(stream, handle, localM, N, Atype, A, lda, umax, (const int32_t*)jpiv, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA, alg);
+  int64_t stride = int64_t(algnN) * int64_t(N) + int64_t(algnN), acc_len = stride * int64_t(orderD);
   internal::int8::accumulate_conv_i63_i42(stream, orderD, stride, (uint64_t*)acc);
-  ncclAllReduce(acc, acc, stride * int64_t(orderD), ncclUint64, ncclSum, comm, stream);
 
-  switch (ComputeType) {
-    case HYACIN_F64:
-      internal::int8::dequantize_i42_f64(stream, orderC, globalM, N, (uint64_t*)acc, algnN, umax, (int32_t*)v_exp, (double*)iA, algnN);
-      K = internal::Cholesky::potrfp_f64(stream, handle, epi, K, p, N, (double*)iA, algnN, hpiv, pinned_work); break;
-    case HYACIN_F32:
-      internal::int8::dequantize_i42_f32(stream, orderC, globalM, N, (uint64_t*)acc, algnN, umax, (int32_t*)v_exp, (float*)iA, algnN);
-      K = internal::Cholesky::potrfp_f32(stream, handle, epi, K, p, N, (float*)iA, algnN, hpiv, pinned_work); break;
-    case HYACIN_DD:
-      internal::int8::dequantize_i42_f128_dd(stream, orderC, globalM, N, (uint64_t*)acc, algnN, umax, (int32_t*)v_exp, (double2*)iA, algnN);
-      K = internal::Cholesky::potrfp_f128_dd(stream, handle, epi, K, p, N, (double2*)iA, algnN, hpiv, pinned_work); break;
-    case HYACIN_QF:
-      internal::int8::dequantize_i42_f128_qf(stream, orderC, globalM, N, (uint64_t*)acc, algnN, umax, (int32_t*)v_exp, (float4*)iA, algnN);
-      K = internal::Cholesky::potrfp_f128_qf(stream, handle, epi, K, p, N, (float4*)iA, algnN, hpiv, pinned_work); break;
-    case HYACIN_F64_COMPLEX:
-      internal::int8::dequantize_i42_cf64(stream, orderC, globalM, N, (uint64_t*)acc, algnN, umax, (int32_t*)v_exp, (std::complex<double>*)iA, algnN);
-      K = internal::Cholesky::potrfp_cf64(stream, handle, epi, K, p, N, (std::complex<double>*)iA, algnN, hpiv, pinned_work); break;
-    case HYACIN_F32_COMPLEX:
-      internal::int8::dequantize_i42_cf32(stream, orderC, globalM, N, (uint64_t*)acc, algnN, umax, (int32_t*)v_exp, (std::complex<float>*)iA, algnN);
-      K = internal::Cholesky::potrfp_cf32(stream, handle, epi, K, p, N, (std::complex<float>*)iA, algnN, hpiv, pinned_work); break;
-    case HYACIN_DD_COMPLEX:
-      internal::int8::dequantize_i42_cf128_dd(stream, orderC, globalM, N, (uint64_t*)acc, algnN, umax, (int32_t*)v_exp, (complex_double2*)iA, algnN);
-      K = internal::Cholesky::potrfp_cf128_dd(stream, handle, epi, K, p, N, (complex_double2*)iA, algnN, hpiv, pinned_work); break;
-    case HYACIN_QF_COMPLEX:
-      internal::int8::dequantize_i42_cf128_qf(stream, orderC, globalM, N, (uint64_t*)acc, algnN, umax, (int32_t*)v_exp, (complex_float4*)iA, algnN);
-      K = internal::Cholesky::potrfp_cf128_qf(stream, handle, epi, K, p, N, (complex_float4*)iA, algnN, hpiv, pinned_work); break;
-    default: break;
-  }
+#ifdef MPI_IS_CUDA_AWARE
+  cudaStreamSynchronize(stream);
+  MPI_Allreduce(MPI_IN_PLACE, acc, acc_len, MPI_UINT64_T, MPI_SUM, col_comm);
+#else
+  cudaMemcpyAsync(pinned_work, acc, acc_bytes, cudaMemcpyDeviceToHost, stream);
+  cudaStreamSynchronize(stream);
+  MPI_Allreduce(MPI_IN_PLACE, pinned_work, acc_len, MPI_UINT64_T, MPI_SUM, col_comm);
+  cudaMemcpyAsync(acc, pinned_work, acc_bytes, cudaMemcpyHostToDevice, stream);
+#endif
 
-  if (R != nullptr && 0 < K && K <= ldr) {
-    if (mode == 'R' || mode == 'r')
-      conv_copy_dispatcher<0>(stream, int64_t(K), N, nullptr, iA, int64_t(algnN), ComputeType, R, int64_t(ldr), Rtype);
-    else if (mode == 'J' || mode == 'j') {
-      cudaMemcpyAsync(v_exp, hpiv, vec_bytes, cudaMemcpyHostToDevice, stream);
-      conv_copy_dispatcher<1>(stream, int64_t(K), N, (int32_t*)v_exp, iA, int64_t(algnN), ComputeType, R, int64_t(ldr), Rtype);
-    }
-  }
-
-  cudaMemcpyAsync(jpiv, hpiv, sizeof(int32_t) * int64_t(N), cudaMemcpyDefault, stream);
-  return K;
+  return rrf_dispatcher(stream, handle, mode, epi, globalM, N, algnN, K, p, umax, (uint64_t*)acc, 42, orderC, iA, jpiv, hpiv, Rtype, R, ldr, ComputeType, pinned_work);
 }
 
 #endif
