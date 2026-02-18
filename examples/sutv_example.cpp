@@ -12,17 +12,16 @@
 #include <lapacke.h>
 #endif
 
-void make_2D_oscillatory(double w, int32_t sep, int32_t M, int32_t N, float* A, int32_t lda) {
-  constexpr int32_t height = 128;
+void make_2D_oscillatory(double w, int32_t om, int32_t M, int32_t N, float* A, int32_t lda) {
+  constexpr int64_t height = 128;
   auto translate_2d = [](int64_t i) { int64_t x = i / height, y = i - height * x; return std::complex<double>(x, y); };
-  sep = height * sep + ((M + height - 1) & (~(height - 1)));
 
-  for (int32_t j = 0; j < N; ++j) {
-    auto vj = translate_2d(j + sep);
-    for (int32_t i = 0; i < M; ++i) {
-      auto vi = translate_2d(i);
+  for (int64_t j = 0; j < N; ++j) {
+    auto vj = translate_2d(-(j + height));
+    for (int64_t i = 0; i < M; ++i) {
+      auto vi = translate_2d(i + om);
       double d = std::abs(vi - vj);
-      A[uint64_t(i) + uint64_t(j) * uint64_t(lda)] = float(std::cos(w * d) / d);
+      A[i + j * lda] = float(std::cos(w * d) / d);
     }
   }
 }
@@ -82,11 +81,10 @@ int32_t main(int32_t argc, char* argv[]) {
 
   double epi = 3 < argc ? std::atof(argv[3]) : 1.e-6;
   double omega = 4 < argc ? std::atof(argv[4]) : 1.;
-  int32_t sep = 5 < argc ? std::atoi(argv[5]) : 0;
 
   std::vector<float> matA(M * N);
   std::vector<int32_t> ipiv(N);
-  make_2D_oscillatory(omega, sep, M, N, matA.data(), M);
+  make_2D_oscillatory(omega, 0, M, N, &matA[0], M);
 
   cudaStream_t stream;
   cublasHandle_t cublasH;

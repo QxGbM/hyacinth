@@ -12,7 +12,7 @@ enable_testing()
 
 set(TEST_SOURCES
   clra_example.cpp cutv_example.cpp
-  dlra_example.cpp dutv_example.cpp
+  dlra_example.cpp dutv_example.cpp dutv_1d_example.cpp
   slra_example.cpp sutv_example.cpp
   zlra_example.cpp zutv_example.cpp
 )

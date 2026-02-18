@@ -203,7 +203,7 @@ extern "C" void hyacinXcpqrk1Dcol_bufferSize(int32_t localM, int64_t globalM, in
 #ifdef MPI_IS_CUDA_AWARE
   *pinned_work_bytes = uint64_t(vec_bytes + idx_bytes);
 #else
-  *pinned_work_bytes = std::max(uint64_t(vec_bytes + idx_bytes), uint64_t(acc_bytes));
+  *pinned_work_bytes = uint64_t(vec_bytes + std::max(idx_bytes, acc_bytes));
 #endif
 }
 
@@ -233,8 +233,6 @@ extern "C" int32_t hyacinXcpqrk1Dcol(cublasHandle_t handle, char mode, double ep
 
   cudaStream_t stream; cublasGetStream(handle, &stream);
   int8_t* iA = (int8_t*)(dev_work), *acc = &iA[i8_bytes];
-  int32_t* hpiv = (int32_t*)(&((int8_t*)pinned_work)[idx_bytes]);
-
   vexp_dispatcher(stream, localM, N, Atype, A, lda, (int32_t*)jpiv);
 
 #ifdef MPI_IS_CUDA_AWARE
@@ -242,10 +240,10 @@ extern "C" int32_t hyacinXcpqrk1Dcol(cublasHandle_t handle, char mode, double ep
   MPI_Allreduce(MPI_IN_PLACE, jpiv, int64_t(N), MPI_INT32_T, MPI_MAX, col_comm);
 #else
   int64_t len = int64_t(N) * sizeof(int32_t);
-  cudaMemcpyAsync(hpiv, jpiv, len, cudaMemcpyDeviceToHost, stream);
+  cudaMemcpyAsync(pinned_work, jpiv, len, cudaMemcpyDeviceToHost, stream);
   cudaStreamSynchronize(stream);
-  MPI_Allreduce(MPI_IN_PLACE, hpiv, int64_t(N), MPI_INT32_T, MPI_MAX, col_comm);
-  cudaMemcpyAsync(jpiv, hpiv, len, cudaMemcpyHostToDevice, stream);
+  MPI_Allreduce(MPI_IN_PLACE, pinned_work, int64_t(N), MPI_INT32_T, MPI_MAX, col_comm);
+  cudaMemcpyAsync(jpiv, pinned_work, len, cudaMemcpyHostToDevice, stream);
 #endif
 
   igemm_dispatcher(stream, handle, localM, N, Atype, A, lda, umax, (const int32_t*)jpiv, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA, alg);
@@ -255,11 +253,13 @@ extern "C" int32_t hyacinXcpqrk1Dcol(cublasHandle_t handle, char mode, double ep
 #ifdef MPI_IS_CUDA_AWARE
   cudaStreamSynchronize(stream);
   MPI_Allreduce(MPI_IN_PLACE, acc, acc_len, MPI_UINT64_T, MPI_SUM, col_comm);
+  int32_t* hpiv = (int32_t*)(&((int8_t*)pinned_work)[idx_bytes]);
 #else
   cudaMemcpyAsync(pinned_work, acc, acc_bytes, cudaMemcpyDeviceToHost, stream);
   cudaStreamSynchronize(stream);
   MPI_Allreduce(MPI_IN_PLACE, pinned_work, acc_len, MPI_UINT64_T, MPI_SUM, col_comm);
   cudaMemcpyAsync(acc, pinned_work, acc_bytes, cudaMemcpyHostToDevice, stream);
+  int32_t* hpiv = (int32_t*)(&((int8_t*)pinned_work)[std::max(idx_bytes, acc_bytes)]);
 #endif
 
   return rrf_dispatcher(stream, handle, mode, epi, globalM, N, algnN, K, p, umax, (uint64_t*)acc, 42, orderC, iA, jpiv, hpiv, Rtype, R, ldr, ComputeType, pinned_work);
