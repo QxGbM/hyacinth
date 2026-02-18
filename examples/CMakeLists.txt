@@ -4,24 +4,11 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_BUILD_TYPE Release)
 
-project ("examples" LANGUAGES CXX CUDA)
+project ("examples" LANGUAGES CXX)
 
 find_package(BLAS REQUIRED)
 find_package(LAPACK REQUIRED)
 enable_testing()
-
-set(APP_SOURCES
-  interp_decomp.cu
-)
-
-add_library(example_common OBJECT ${APP_SOURCES})
-set_property(TARGET example_common PROPERTY CUDA_ARCHITECTURES ${SM_TARGETS})
-target_include_directories(example_common PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/..)
-target_link_libraries(example_common PRIVATE hyacin MPI::MPI_CXX CUDA::cudart CUDA::cublas CUDA::cusolver)
-
-if(USE_MPI)
-  target_link_libraries(example_common PRIVATE hyacin MPI::MPI_CXX)
-endif()
 
 set(TEST_SOURCES
   clra_example.cpp cutv_example.cpp
@@ -44,14 +31,14 @@ foreach (test ${TEST_SOURCES})
   add_test(NAME ${src}.app COMMAND ${src}.app)
 
   target_include_directories(${src}.app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/..)
-  target_link_libraries(${src}.app PRIVATE hyacin example_common BLAS::BLAS LAPACK::LAPACK CUDA::cudart CUDA::cublas CUDA::cusolver)
+  target_link_libraries(${src}.app PRIVATE hyacin BLAS::BLAS LAPACK::LAPACK CUDA::cudart CUDA::cublas CUDA::cusolver)
 
   if(USE_MPI)
-    target_link_libraries(example_common PRIVATE hyacin MPI::MPI_CXX)
+    target_link_libraries(${src}.app PRIVATE MPI::MPI_CXX)
   endif()
 
   if(BLAS_LIBS MATCHES "mkl")
-    target_compile_options(${src}.app PRIVATE "-DUSE_MKL")
+    target_compile_options(${src}.app PRIVATE "-DUSE_MKL" "-DMKL_Complex8=std::complex<float>" "-DMKL_Complex16=std::complex<double>")
   else()
     target_link_libraries(${src}.app PRIVATE lapacke)
   endif()

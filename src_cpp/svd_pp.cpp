@@ -25,13 +25,13 @@ extern "C" void hyacinXutvk_bufferSize(cusolverDnHandle_t handle, cusolverDnPara
 
   if (epi < std::get<2>(type)) {
     cusolverDnXgesvd_bufferSize(handle, params, 'S', 'N', N, K,
-      type_c, nullptr, algnN, type_r, nullptr, type_c, nullptr, ldr, type_c, nullptr, K, type_c, &workspaceInBytesOnDevice, &workspaceInBytesOnHost);
+      type_c, nullptr, algnN, type_r, nullptr, type_c, nullptr, ldr, type_c, nullptr, algnK, type_c, &workspaceInBytesOnDevice, &workspaceInBytesOnHost);
     basis_bytes = uint64_t(std::get<3>(type)) * uint64_t(algnN) * uint64_t(K);
   }
   else {
-    cusolverDnXgesvdp_bufferSize(handle, params, CUSOLVER_EIG_MODE_VECTOR, 1, K, N,
-      type_c, nullptr, algnK, type_r, nullptr, type_c, nullptr, algnK, type_c, nullptr, ldr, type_c, &workspaceInBytesOnDevice, &workspaceInBytesOnHost);
-    basis_bytes = uint64_t(std::get<3>(type)) * uint64_t(algnK) * (uint64_t(K) + uint64_t(N));
+    cusolverDnXgesvdp_bufferSize(handle, params, CUSOLVER_EIG_MODE_VECTOR, 1, N, K,
+      type_c, nullptr, algnN, type_r, nullptr, type_c, nullptr, ldr, type_c, nullptr, algnK, type_c, &workspaceInBytesOnDevice, &workspaceInBytesOnHost);
+    basis_bytes = uint64_t(std::get<3>(type)) * (uint64_t(algnN) + uint64_t(algnK)) * uint64_t(K);
   }
 
   uint64_t s_bytes = uint64_t(std::get<4>(type)) * uint64_t(algnK);
@@ -45,34 +45,32 @@ inline int32_t hyacinDutvk(cublasHandle_t handle, cusolverDnHandle_t s_handle, c
   cudaStream_t stream; cublasGetStream(handle, &stream);
   int32_t algnK = (K + 63) & (~63), algnN = (N + 63) & (~63);
   int64_t s_bytes = sizeof(double) * int64_t(algnK);
+  size_t workspaceInBytesOnHost = size_t(pinned_work_bytes - uint64_t(s_bytes));
   int8_t* Sh = (int8_t*)pinned_work, *bufferOnHost = &Sh[s_bytes];
   double one = 1., zero = 0.;
 
-  if (epi < f64_polar_svd_cutoff_epi) {
-    int64_t r_bytes = sizeof(double) * int64_t(algnN) * int64_t(K);
-    size_t workspaceInBytesOnDevice = size_t(dev_work_bytes - uint64_t(r_bytes + s_bytes + int64_t(sizeof(int32_t))));
-    size_t workspaceInBytesOnHost = size_t(pinned_work_bytes - uint64_t(s_bytes));
+  int64_t r_bytes = sizeof(double) * int64_t(algnN) * int64_t(K);
+  int8_t* R = (int8_t*)dev_work, *S = &R[r_bytes], *bufferOnDevice = &S[s_bytes];
+  cublasDgeam(handle, CUBLAS_OP_T, CUBLAS_OP_N, N, K, &one, RV, ldr, &zero, (double*)R, algnN, (double*)R, algnN);
 
-    int8_t* R = (int8_t*)dev_work, *S = &R[r_bytes], *bufferOnDevice = &S[s_bytes], *d_info = &bufferOnDevice[workspaceInBytesOnDevice];
-    cublasDgeam(handle, CUBLAS_OP_T, CUBLAS_OP_N, N, K, &one, RV, ldr, &zero, (double*)R, algnN, (double*)R, algnN);
+  if (epi < f64_polar_svd_cutoff_epi) {
+    size_t workspaceInBytesOnDevice = size_t(dev_work_bytes - uint64_t(r_bytes + s_bytes + int64_t(sizeof(int32_t))));
+    int8_t* d_info = &bufferOnDevice[workspaceInBytesOnDevice];
+
     cusolverDnXgesvd(s_handle, params, 'S', 'N', N, K,
-      CUDA_R_64F, R, algnN, CUDA_R_64F, S, CUDA_R_64F, RV, ldr, CUDA_R_64F, nullptr, K, CUDA_R_64F, bufferOnDevice, workspaceInBytesOnDevice, bufferOnHost, workspaceInBytesOnHost, (int32_t*)d_info);
-    cudaMemcpyAsync(Sh, S, s_bytes, cudaMemcpyDeviceToHost, stream);
+      CUDA_R_64F, R, algnN, CUDA_R_64F, S, CUDA_R_64F, RV, ldr, CUDA_R_64F, nullptr, algnK, CUDA_R_64F, bufferOnDevice, workspaceInBytesOnDevice, bufferOnHost, workspaceInBytesOnHost, (int32_t*)d_info);
   }
   else {
-    int64_t r_bytes = sizeof(double) * int64_t(algnK) * int64_t(N);
     int64_t u_bytes = sizeof(double) * int64_t(algnK) * int64_t(K);
     size_t workspaceInBytesOnDevice = size_t(dev_work_bytes - uint64_t(r_bytes + u_bytes + s_bytes + int64_t(sizeof(int32_t))));
-    size_t workspaceInBytesOnHost = size_t(pinned_work_bytes - uint64_t(s_bytes));
-    
-    int8_t* R = (int8_t*)dev_work, *U = &R[r_bytes], *S = &U[u_bytes], *bufferOnDevice = &S[s_bytes], *d_info = &bufferOnDevice[workspaceInBytesOnDevice];
+    int8_t* U = &bufferOnDevice[workspaceInBytesOnDevice], *d_info = &U[u_bytes];
+
     double h_err_sigma = 0.;
-    cublasDgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, K, N, &one, RV, ldr, &zero, (double*)R, algnK, (double*)R, algnK);
-    cusolverDnXgesvdp(s_handle, params, CUSOLVER_EIG_MODE_VECTOR, 1, K, N,
-      CUDA_R_64F, R, algnK, CUDA_R_64F, S, CUDA_R_64F, U, algnK, CUDA_R_64F, RV, ldr, CUDA_R_64F, bufferOnDevice, workspaceInBytesOnDevice, bufferOnHost, workspaceInBytesOnHost, (int32_t*)d_info, &h_err_sigma);
-    cudaMemcpyAsync(Sh, S, s_bytes, cudaMemcpyDeviceToHost, stream);
+    cusolverDnXgesvdp(s_handle, params, CUSOLVER_EIG_MODE_VECTOR, 1, N, K,
+      CUDA_R_64F, R, algnN, CUDA_R_64F, S, CUDA_R_64F, RV, ldr, CUDA_R_64F, U, algnK, CUDA_R_64F, bufferOnDevice, workspaceInBytesOnDevice, bufferOnHost, workspaceInBytesOnHost, (int32_t*)d_info, &h_err_sigma);
   }
   
+  cudaMemcpyAsync(Sh, S, s_bytes, cudaMemcpyDeviceToHost, stream);
   cudaStreamSynchronize(stream);
   double *Svec = (double*)Sh, s0 = epi * Svec[0];
   K = std::min(K, p + int32_t(std::distance(Svec, std::find_if(Svec, &Svec[K], [=](double s) { return s < s0; }))));
@@ -87,34 +85,32 @@ inline int32_t hyacinSutvk(cublasHandle_t handle, cusolverDnHandle_t s_handle, c
   cudaStream_t stream; cublasGetStream(handle, &stream);
   int32_t algnK = (K + 63) & (~63), algnN = (N + 63) & (~63);
   int64_t s_bytes = sizeof(float) * int64_t(algnK);
+  size_t workspaceInBytesOnHost = size_t(pinned_work_bytes - uint64_t(s_bytes));
   int8_t* Sh = (int8_t*)pinned_work, *bufferOnHost = &Sh[s_bytes];
   float one = 1., zero = 0.;
 
-  if (epi < f32_polar_svd_cutoff_epi) {
-    int64_t r_bytes = sizeof(float) * int64_t(algnN) * int64_t(K);
-    size_t workspaceInBytesOnDevice = size_t(dev_work_bytes - uint64_t(r_bytes + s_bytes + int64_t(sizeof(int32_t))));
-    size_t workspaceInBytesOnHost = size_t(pinned_work_bytes - uint64_t(s_bytes));
+  int64_t r_bytes = sizeof(float) * int64_t(algnN) * int64_t(K);
+  int8_t* R = (int8_t*)dev_work, *S = &R[r_bytes], *bufferOnDevice = &S[s_bytes];
+  cublasSgeam(handle, CUBLAS_OP_T, CUBLAS_OP_N, N, K, &one, RV, ldr, &zero, (float*)R, algnN, (float*)R, algnN);
 
-    int8_t* R = (int8_t*)dev_work, *S = &R[r_bytes], *bufferOnDevice = &S[s_bytes], *d_info = &bufferOnDevice[workspaceInBytesOnDevice];
-    cublasSgeam(handle, CUBLAS_OP_T, CUBLAS_OP_N, N, K, &one, RV, ldr, &zero, (float*)R, algnN, (float*)R, algnN);
+  if (epi < f64_polar_svd_cutoff_epi) {
+    size_t workspaceInBytesOnDevice = size_t(dev_work_bytes - uint64_t(r_bytes + s_bytes + int64_t(sizeof(int32_t))));
+    int8_t* d_info = &bufferOnDevice[workspaceInBytesOnDevice];
+
     cusolverDnXgesvd(s_handle, params, 'S', 'N', N, K,
-      CUDA_R_32F, R, algnN, CUDA_R_32F, S, CUDA_R_32F, RV, ldr, CUDA_R_32F, nullptr, K, CUDA_R_32F, bufferOnDevice, workspaceInBytesOnDevice, bufferOnHost, workspaceInBytesOnHost, (int32_t*)d_info);
-    cudaMemcpyAsync(Sh, S, s_bytes, cudaMemcpyDeviceToHost, stream);
+      CUDA_R_32F, R, algnN, CUDA_R_32F, S, CUDA_R_32F, RV, ldr, CUDA_R_32F, nullptr, algnK, CUDA_R_32F, bufferOnDevice, workspaceInBytesOnDevice, bufferOnHost, workspaceInBytesOnHost, (int32_t*)d_info);
   }
   else {
-    int64_t r_bytes = sizeof(float) * int64_t(algnK) * int64_t(N);
     int64_t u_bytes = sizeof(float) * int64_t(algnK) * int64_t(K);
     size_t workspaceInBytesOnDevice = size_t(dev_work_bytes - uint64_t(r_bytes + u_bytes + s_bytes + int64_t(sizeof(int32_t))));
-    size_t workspaceInBytesOnHost = size_t(pinned_work_bytes - uint64_t(s_bytes));
-    
-    int8_t* R = (int8_t*)dev_work, *U = &R[r_bytes], *S = &U[u_bytes], *bufferOnDevice = &S[s_bytes], *d_info = &bufferOnDevice[workspaceInBytesOnDevice];
+    int8_t* U = &bufferOnDevice[workspaceInBytesOnDevice], *d_info = &U[u_bytes];
+
     double h_err_sigma = 0.;
-    cublasSgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, K, N, &one, RV, ldr, &zero, (float*)R, algnK, (float*)R, algnK);
-    cusolverDnXgesvdp(s_handle, params, CUSOLVER_EIG_MODE_VECTOR, 1, K, N,
-      CUDA_R_32F, R, algnK, CUDA_R_32F, S, CUDA_R_32F, U, algnK, CUDA_R_32F, RV, ldr, CUDA_R_32F, bufferOnDevice, workspaceInBytesOnDevice, bufferOnHost, workspaceInBytesOnHost, (int32_t*)d_info, &h_err_sigma);
-    cudaMemcpyAsync(Sh, S, s_bytes, cudaMemcpyDeviceToHost, stream);
+    cusolverDnXgesvdp(s_handle, params, CUSOLVER_EIG_MODE_VECTOR, 1, N, K,
+      CUDA_R_32F, R, algnN, CUDA_R_32F, S, CUDA_R_32F, RV, ldr, CUDA_R_32F, U, algnK, CUDA_R_32F, bufferOnDevice, workspaceInBytesOnDevice, bufferOnHost, workspaceInBytesOnHost, (int32_t*)d_info, &h_err_sigma);
   }
   
+  cudaMemcpyAsync(Sh, S, s_bytes, cudaMemcpyDeviceToHost, stream);
   cudaStreamSynchronize(stream);
   float *Svec = (float*)Sh, s0 = epi * Svec[0];
   K = std::min(K, p + int32_t(std::distance(Svec, std::find_if(Svec, &Svec[K], [=](float s) { return s < s0; }))));
@@ -129,34 +125,32 @@ inline int32_t hyacinZutvk(cublasHandle_t handle, cusolverDnHandle_t s_handle, c
   cudaStream_t stream; cublasGetStream(handle, &stream);
   int32_t algnK = (K + 63) & (~63), algnN = (N + 63) & (~63);
   int64_t s_bytes = sizeof(double) * int64_t(algnK);
+  size_t workspaceInBytesOnHost = size_t(pinned_work_bytes - uint64_t(s_bytes));
   int8_t* Sh = (int8_t*)pinned_work, *bufferOnHost = &Sh[s_bytes];
   cuDoubleComplex one = make_cuDoubleComplex(1., 0.), zero = make_cuDoubleComplex(0., 0.);
 
-  if (epi < f64_polar_svd_cutoff_epi) {
-    int64_t r_bytes = sizeof(cuDoubleComplex) * int64_t(algnN) * int64_t(K);
-    size_t workspaceInBytesOnDevice = size_t(dev_work_bytes - uint64_t(r_bytes + s_bytes + int64_t(sizeof(int32_t))));
-    size_t workspaceInBytesOnHost = size_t(pinned_work_bytes - uint64_t(s_bytes));
+  int64_t r_bytes = sizeof(cuDoubleComplex) * int64_t(algnN) * int64_t(K);
+  int8_t* R = (int8_t*)dev_work, *S = &R[r_bytes], *bufferOnDevice = &S[s_bytes];
+  cublasZgeam(handle, CUBLAS_OP_C, CUBLAS_OP_N, N, K, &one, RV, ldr, &zero, (cuDoubleComplex*)R, algnN, (cuDoubleComplex*)R, algnN);
 
-    int8_t* R = (int8_t*)dev_work, *S = &R[r_bytes], *bufferOnDevice = &S[s_bytes], *d_info = &bufferOnDevice[workspaceInBytesOnDevice];
-    cublasZgeam(handle, CUBLAS_OP_C, CUBLAS_OP_N, N, K, &one, RV, ldr, &zero, (cuDoubleComplex*)R, algnN, (cuDoubleComplex*)R, algnN);
+  if (epi < f64_polar_svd_cutoff_epi) {
+    size_t workspaceInBytesOnDevice = size_t(dev_work_bytes - uint64_t(r_bytes + s_bytes + int64_t(sizeof(int32_t))));
+    int8_t* d_info = &bufferOnDevice[workspaceInBytesOnDevice];
+
     cusolverDnXgesvd(s_handle, params, 'S', 'N', N, K,
-      CUDA_C_64F, R, algnN, CUDA_R_64F, S, CUDA_C_64F, RV, ldr, CUDA_C_64F, nullptr, K, CUDA_C_64F, bufferOnDevice, workspaceInBytesOnDevice, bufferOnHost, workspaceInBytesOnHost, (int32_t*)d_info);
-    cudaMemcpyAsync(Sh, S, s_bytes, cudaMemcpyDeviceToHost, stream);
+      CUDA_C_64F, R, algnN, CUDA_R_64F, S, CUDA_C_64F, RV, ldr, CUDA_C_64F, nullptr, algnK, CUDA_C_64F, bufferOnDevice, workspaceInBytesOnDevice, bufferOnHost, workspaceInBytesOnHost, (int32_t*)d_info);
   }
   else {
-    int64_t r_bytes = sizeof(cuDoubleComplex) * int64_t(algnK) * int64_t(N);
     int64_t u_bytes = sizeof(cuDoubleComplex) * int64_t(algnK) * int64_t(K);
     size_t workspaceInBytesOnDevice = size_t(dev_work_bytes - uint64_t(r_bytes + u_bytes + s_bytes + int64_t(sizeof(int32_t))));
-    size_t workspaceInBytesOnHost = size_t(pinned_work_bytes - uint64_t(s_bytes));
-    
-    int8_t* R = (int8_t*)dev_work, *U = &R[r_bytes], *S = &U[u_bytes], *bufferOnDevice = &S[s_bytes], *d_info = &bufferOnDevice[workspaceInBytesOnDevice];
+    int8_t* U = &bufferOnDevice[workspaceInBytesOnDevice], *d_info = &U[u_bytes];
+
     double h_err_sigma = 0.;
-    cublasZgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, K, N, &one, RV, ldr, &zero, (cuDoubleComplex*)R, algnK, (cuDoubleComplex*)R, algnK);
-    cusolverDnXgesvdp(s_handle, params, CUSOLVER_EIG_MODE_VECTOR, 1, K, N,
-      CUDA_C_64F, R, algnK, CUDA_R_64F, S, CUDA_C_64F, U, algnK, CUDA_C_64F, RV, ldr, CUDA_C_64F, bufferOnDevice, workspaceInBytesOnDevice, bufferOnHost, workspaceInBytesOnHost, (int32_t*)d_info, &h_err_sigma);
-    cudaMemcpyAsync(Sh, S, s_bytes, cudaMemcpyDeviceToHost, stream);
+    cusolverDnXgesvdp(s_handle, params, CUSOLVER_EIG_MODE_VECTOR, 1, N, K,
+      CUDA_C_64F, R, algnN, CUDA_R_64F, S, CUDA_C_64F, RV, ldr, CUDA_C_64F, U, algnK, CUDA_C_64F, bufferOnDevice, workspaceInBytesOnDevice, bufferOnHost, workspaceInBytesOnHost, (int32_t*)d_info, &h_err_sigma);
   }
   
+  cudaMemcpyAsync(Sh, S, s_bytes, cudaMemcpyDeviceToHost, stream);
   cudaStreamSynchronize(stream);
   double *Svec = (double*)Sh, s0 = epi * Svec[0];
   K = std::min(K, p + int32_t(std::distance(Svec, std::find_if(Svec, &Svec[K], [=](double s) { return s < s0; }))));
@@ -171,34 +165,32 @@ inline int32_t hyacinCutvk(cublasHandle_t handle, cusolverDnHandle_t s_handle, c
   cudaStream_t stream; cublasGetStream(handle, &stream);
   int32_t algnK = (K + 63) & (~63), algnN = (N + 63) & (~63);
   int64_t s_bytes = sizeof(double) * int64_t(algnK);
+  size_t workspaceInBytesOnHost = size_t(pinned_work_bytes - uint64_t(s_bytes));
   int8_t* Sh = (int8_t*)pinned_work, *bufferOnHost = &Sh[s_bytes];
   cuComplex one = make_cuComplex(1.f, 0.f), zero = make_cuComplex(0.f, 0.f);
 
-  if (epi < f32_polar_svd_cutoff_epi) {
-    int64_t r_bytes = sizeof(cuComplex) * int64_t(algnN) * int64_t(K);
-    size_t workspaceInBytesOnDevice = size_t(dev_work_bytes - uint64_t(r_bytes + s_bytes + int64_t(sizeof(int32_t))));
-    size_t workspaceInBytesOnHost = size_t(pinned_work_bytes - uint64_t(s_bytes));
+  int64_t r_bytes = sizeof(cuComplex) * int64_t(algnN) * int64_t(K);
+  int8_t* R = (int8_t*)dev_work, *S = &R[r_bytes], *bufferOnDevice = &S[s_bytes];
+  cublasCgeam(handle, CUBLAS_OP_C, CUBLAS_OP_N, N, K, &one, RV, ldr, &zero, (cuComplex*)R, algnN, (cuComplex*)R, algnN);
 
-    int8_t* R = (int8_t*)dev_work, *S = &R[r_bytes], *bufferOnDevice = &S[s_bytes], *d_info = &bufferOnDevice[workspaceInBytesOnDevice];
-    cublasCgeam(handle, CUBLAS_OP_C, CUBLAS_OP_N, N, K, &one, RV, ldr, &zero, (cuComplex*)R, algnN, (cuComplex*)R, algnN);
+  if (epi < f64_polar_svd_cutoff_epi) {
+    size_t workspaceInBytesOnDevice = size_t(dev_work_bytes - uint64_t(r_bytes + s_bytes + int64_t(sizeof(int32_t))));
+    int8_t* d_info = &bufferOnDevice[workspaceInBytesOnDevice];
+
     cusolverDnXgesvd(s_handle, params, 'S', 'N', N, K,
-      CUDA_C_32F, R, algnN, CUDA_R_32F, S, CUDA_C_32F, RV, ldr, CUDA_C_32F, nullptr, K, CUDA_C_32F, bufferOnDevice, workspaceInBytesOnDevice, bufferOnHost, workspaceInBytesOnHost, (int32_t*)d_info);
-    cudaMemcpyAsync(Sh, S, s_bytes, cudaMemcpyDeviceToHost, stream);
+      CUDA_C_32F, R, algnN, CUDA_R_32F, S, CUDA_C_32F, RV, ldr, CUDA_C_32F, nullptr, algnK, CUDA_C_32F, bufferOnDevice, workspaceInBytesOnDevice, bufferOnHost, workspaceInBytesOnHost, (int32_t*)d_info);
   }
   else {
-    int64_t r_bytes = sizeof(cuComplex) * int64_t(algnK) * int64_t(N);
     int64_t u_bytes = sizeof(cuComplex) * int64_t(algnK) * int64_t(K);
     size_t workspaceInBytesOnDevice = size_t(dev_work_bytes - uint64_t(r_bytes + u_bytes + s_bytes + int64_t(sizeof(int32_t))));
-    size_t workspaceInBytesOnHost = size_t(pinned_work_bytes - uint64_t(s_bytes));
-    
-    int8_t* R = (int8_t*)dev_work, *U = &R[r_bytes], *S = &U[u_bytes], *bufferOnDevice = &S[s_bytes], *d_info = &bufferOnDevice[workspaceInBytesOnDevice];
+    int8_t* U = &bufferOnDevice[workspaceInBytesOnDevice], *d_info = &U[u_bytes];
+
     double h_err_sigma = 0.;
-    cublasCgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, K, N, &one, RV, ldr, &zero, (cuComplex*)R, algnK, (cuComplex*)R, algnK);
-    cusolverDnXgesvdp(s_handle, params, CUSOLVER_EIG_MODE_VECTOR, 1, K, N,
-      CUDA_C_32F, R, algnK, CUDA_R_32F, S, CUDA_C_32F, U, algnK, CUDA_C_32F, RV, ldr, CUDA_C_32F, bufferOnDevice, workspaceInBytesOnDevice, bufferOnHost, workspaceInBytesOnHost, (int32_t*)d_info, &h_err_sigma);
-    cudaMemcpyAsync(Sh, S, s_bytes, cudaMemcpyDeviceToHost, stream);
+    cusolverDnXgesvdp(s_handle, params, CUSOLVER_EIG_MODE_VECTOR, 1, N, K,
+      CUDA_C_32F, R, algnN, CUDA_R_32F, S, CUDA_C_32F, RV, ldr, CUDA_C_32F, U, algnK, CUDA_C_32F, bufferOnDevice, workspaceInBytesOnDevice, bufferOnHost, workspaceInBytesOnHost, (int32_t*)d_info, &h_err_sigma);
   }
   
+  cudaMemcpyAsync(Sh, S, s_bytes, cudaMemcpyDeviceToHost, stream);
   cudaStreamSynchronize(stream);
   float *Svec = (float*)Sh, s0 = epi * Svec[0];
   K = std::min(K, p + int32_t(std::distance(Svec, std::find_if(Svec, &Svec[K], [=](float s) { return s < s0; }))));
