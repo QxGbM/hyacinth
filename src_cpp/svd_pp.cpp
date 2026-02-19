@@ -56,11 +56,15 @@ inline void tranpose_copy(cublasHandle_t handle, char trans, int32_t Mb, int32_t
 }
 
 template <hyacinPrecision_t prec, class complex_t>
-inline void constants(cudaDataType_t& type_c, cudaDataType_t& type_r, complex_t& one, complex_t& zero) {
-  if constexpr(prec == HYACIN_F64) { type_c = type_r = CUDA_R_64F; one = 1.; zero = 0.; }
-  else if constexpr(prec == HYACIN_F32) { type_c = type_r = CUDA_R_32F; one = 1.f; zero = 0.f; }
-  else if constexpr(prec == HYACIN_F64_COMPLEX) { type_c = CUDA_C_64F; type_r = CUDA_R_64F; one = make_cuDoubleComplex(1., 0.); zero = make_cuDoubleComplex(0., 0.); }
-  else if constexpr(prec == HYACIN_F32_COMPLEX) { type_c = CUDA_C_32F; type_r = CUDA_R_32F; one = make_cuComplex(1.f, 0.f); zero = make_cuComplex(0.f, 0.f); }
+inline void constants(cudaDataType_t& type_c, cudaDataType_t& type_r, complex_t& one, complex_t& zero, double& epi) {
+  if constexpr(prec == HYACIN_F64)
+  { type_c = type_r = CUDA_R_64F; one = 1.; zero = 0.; epi = f64_polar_svd_cutoff_epi; }
+  else if constexpr(prec == HYACIN_F32)
+  { type_c = type_r = CUDA_R_32F; one = 1.f; zero = 0.f; epi = f32_polar_svd_cutoff_epi; }
+  else if constexpr(prec == HYACIN_F64_COMPLEX)
+  { type_c = CUDA_C_64F; type_r = CUDA_R_64F; one = make_cuDoubleComplex(1., 0.); zero = make_cuDoubleComplex(0., 0.); epi = f64_polar_svd_cutoff_epi; }
+  else if constexpr(prec == HYACIN_F32_COMPLEX)
+  { type_c = CUDA_C_32F; type_r = CUDA_R_32F; one = make_cuComplex(1.f, 0.f); zero = make_cuComplex(0.f, 0.f); epi = f32_polar_svd_cutoff_epi; }
 }
 
 template <hyacinPrecision_t prec, class real_t, class complex_t>
@@ -69,17 +73,15 @@ inline int32_t utv_k_dispatcher(cublasHandle_t handle, cusolverDnHandle_t s_hand
   
   cudaStream_t stream; cublasGetStream(handle, &stream);
   int32_t algnK = (K + 63) & (~63), algnN = (N + 63) & (~63);
-  int64_t s_bytes = sizeof(real_t) * int64_t(algnK);
+  int64_t s_bytes = sizeof(real_t) * int64_t(algnK), r_bytes = sizeof(complex_t) * int64_t(algnN) * int64_t(K);
   size_t workspaceInBytesOnHost = size_t(pinned_work_bytes - uint64_t(s_bytes));
+  int8_t* R = (int8_t*)dev_work, *S = &R[r_bytes], *bufferOnDevice = &S[s_bytes];
   int8_t* Sh = (int8_t*)pinned_work, *bufferOnHost = &Sh[s_bytes];
 
-  int64_t r_bytes = sizeof(complex_t) * int64_t(algnN) * int64_t(K);
-  int8_t* R = (int8_t*)dev_work, *S = &R[r_bytes], *bufferOnDevice = &S[s_bytes];
+  cudaDataType_t type_c, type_r; complex_t one, zero; double cutoff_epi;
+  constants<prec, complex_t>(type_c, type_r, one, zero, cutoff_epi);
 
-  cudaDataType_t type_c, type_r; complex_t one, zero;
-  constants<prec, complex_t>(type_c, type_r, one, zero);
-
-  if (epi < f64_polar_svd_cutoff_epi) {
+  if (epi < cutoff_epi) {
     size_t workspaceInBytesOnDevice = size_t(dev_work_bytes - uint64_t(r_bytes + s_bytes + int64_t(sizeof(int32_t))));
     int8_t* d_info = &bufferOnDevice[workspaceInBytesOnDevice];
 
