@@ -31,7 +31,7 @@ std::pair<double, double> check_answer(int32_t M, int32_t N, int32_t rank, const
   if (rank <= 0)
     return std::make_pair(0., 0.);
   std::vector<double> matQ(M * N, 0.);
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasConjTrans, M, N, rank, 1., U, ldu, V, ldv, 0., &matQ[0], M);
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, rank, 1., U, ldu, V, ldv, 0., &matQ[0], M);
 
   double err = 0., nrm = 0.;
   for (int32_t j = 0; j < N; ++j)
@@ -42,7 +42,7 @@ std::pair<double, double> check_answer(int32_t M, int32_t N, int32_t rank, const
   return std::make_pair(err, nrm);
 }
 
-int32_t utv_factorize(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, double epi, int32_t M, int64_t gM, int32_t N, const double* A, int32_t lda, double* UT, int32_t ldu, double* V, int32_t ldv, ncclComm_t comm) {
+int32_t utv_factorize(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, double epi, int32_t M, int64_t gM, int32_t N, double* A, int32_t lda, double* V, int32_t ldv, ncclComm_t comm) {
   int32_t umax; hyacinPrecision_t precC; hyacinAlgorithm_t alg; uint64_t dev_work_bytes, pinned_work_bytes;
   hyacinXcpqrk_autoTune(epi, gM, 6, &umax, HYACIN_F64, &precC, &alg);
   hyacinXcpqrk1Dcol_bufferSize(M, gM, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
@@ -57,11 +57,11 @@ int32_t utv_factorize(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHan
 
   cusolverDnParams_t params; cusolverDnCreateParams(&params);
   uint64_t dev_work_bytes_new, pinned_work_bytes_new;
-  hyacinXutvk_bufferSize(cusolverH, params, epi, N, rank, N, HYACIN_F64, &dev_work_bytes_new, &pinned_work_bytes_new);
+  hyacinXutvk_bufferSize(cusolverH, params, epi, N, rank, HYACIN_F64, &dev_work_bytes_new, &pinned_work_bytes_new);
   if (dev_work_bytes < dev_work_bytes_new) { cudaDeviceSynchronize(); cudaFree(dev_work); cudaMalloc(&dev_work, dev_work_bytes_new); }
   if (pinned_work_bytes < pinned_work_bytes_new) { cudaDeviceSynchronize(); cudaFreeHost(pinned_work); cudaMallocHost(&pinned_work, dev_work_bytes_new); }
 
-  rank = hyacinXutvk(cublasH, cusolverH, params, epi, M, N, rank, p, A, lda, V, ldv, UT, ldu, HYACIN_F64, dev_work_bytes_new, dev_work, pinned_work_bytes_new, pinned_work);
+  rank = hyacinXutvk(cublasH, cusolverH, params, epi, M, N, rank, p, A, lda, V, ldv, HYACIN_F64, dev_work_bytes_new, dev_work, pinned_work_bytes_new, pinned_work);
 
   cudaStreamSynchronize(stream);
   cudaFree(jpiv);
@@ -114,22 +114,22 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
 
-  double* d_A = nullptr, *d_U = nullptr, *d_V = nullptr;
+  double* d_A = nullptr, *d_V = nullptr;
   cudaMalloc((void**)(&d_A), lM * N * sizeof(double));
-  cudaMalloc((void**)(&d_U), lM * N * sizeof(double));
   cudaMalloc((void**)(&d_V), N * N * sizeof(double));
   cudaMemcpy(d_A, matA.data(), lM * N * sizeof(double), cudaMemcpyHostToDevice);
-  utv_factorize(stream, cublasH, cusolverH, epi, lM, gM, N, d_A, lM, d_U, lM, d_V, N, comm);
-  cudaDeviceSynchronize();
+
+  utv_factorize(stream, cublasH, cusolverH, epi, lM, gM, N, d_A, lM, d_V, N, comm);
+  cudaMemcpy(d_A, matA.data(), lM * N * sizeof(double), cudaMemcpyHostToDevice);
 
   cudaEventRecord(start, stream);
-  int32_t rank = utv_factorize(stream, cublasH, cusolverH, epi, lM, gM, N, d_A, lM, d_U, lM, d_V, N, comm);
+  int32_t rank = utv_factorize(stream, cublasH, cusolverH, epi, lM, gM, N, d_A, lM, d_V, N, comm);
   cudaEventRecord(stop, stream);
 
   cudaDeviceSynchronize();
 
   std::vector<double> matU(lM * N), matV(N * N);
-  cudaMemcpy(matU.data(), d_U, lM * N * sizeof(double), cudaMemcpyDeviceToHost);
+  cudaMemcpy(matU.data(), d_A, lM * N * sizeof(double), cudaMemcpyDeviceToHost);
   cudaMemcpy(matV.data(), d_V, N * N * sizeof(double), cudaMemcpyDeviceToHost);
 
   std::pair<double, double> ret = check_answer(lM, N, rank, &matU[0], lM, &matV[0], N, &matA[0], lM);
@@ -144,7 +144,6 @@ int32_t main(int32_t argc, char* argv[]) {
   std::cout << "D-UTVK," << gM << "," << N << "," << epi << "," << err << "," << rank << "," << milliseconds << "," << gflops << std::endl;
 
   cudaFree(d_A);
-  cudaFree(d_U);
   cudaFree(d_V);
   cudaEventDestroy(start);
   cudaEventDestroy(stop);
