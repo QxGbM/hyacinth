@@ -5,8 +5,8 @@
 #include <cublas_v2.h>
 #include <cusolverDn.h>
 
-#ifndef NO_MPI
-#include <mpi.h>
+#ifndef NO_NCCL
+#include <nccl.h>
 #endif
 
 typedef enum { 
@@ -116,7 +116,7 @@ void hyacinXcpqrk1Dcol_bufferSize(
   uint64_t* pinned_work_bytes
 );
 
-#ifndef NO_MPI
+#ifndef NO_NCCL
 
 int32_t hyacinXcpqrk1Dcol(
   cublasHandle_t handle,
@@ -139,7 +139,7 @@ int32_t hyacinXcpqrk1Dcol(
   void* dev_work,
   void* pinned_work,
   hyacinAlgorithm_t alg,
-  MPI_Comm col_comm
+  ncclComm_t col_comm
 );
 
 #endif

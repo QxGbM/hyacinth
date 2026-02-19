@@ -8,6 +8,7 @@ project ("examples" LANGUAGES CXX)
 
 find_package(BLAS REQUIRED)
 find_package(LAPACK REQUIRED)
+find_package(MPI REQUIRED)
 enable_testing()
 
 set(TEST_SOURCES
@@ -31,10 +32,11 @@ foreach (test ${TEST_SOURCES})
   add_test(NAME ${src}.app COMMAND ${src}.app)
 
   target_include_directories(${src}.app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/..)
-  target_link_libraries(${src}.app PRIVATE hyacin BLAS::BLAS LAPACK::LAPACK CUDA::cudart CUDA::cublas CUDA::cusolver)
+  target_link_libraries(${src}.app PRIVATE hyacin MPI::MPI_CXX BLAS::BLAS LAPACK::LAPACK CUDA::cudart CUDA::cublas CUDA::cusolver)
 
-  if(USE_MPI)
-    target_link_libraries(${src}.app PRIVATE MPI::MPI_CXX)
+  if(USE_NCCL)
+    target_include_directories(${src}.app PRIVATE ${NCCL_INCLUDE_DIRS})
+    target_link_libraries(${src}.app PRIVATE ${NCCL_LIBRARIES})
   endif()
 
   if(BLAS_LIBS MATCHES "mkl")

@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <vector>
 #include <complex>
+#include <mpi.h>
 
 #ifdef USE_MKL
 #include <mkl.h>
@@ -41,7 +42,7 @@ std::pair<double, double> check_answer(int32_t M, int32_t N, int32_t rank, const
   return std::make_pair(err, nrm);
 }
 
-int32_t utv_factorize(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, double epi, int32_t M, int64_t gM, int32_t N, const double* A, int32_t lda, double* UT, int32_t ldu, double* V, int32_t ldv, MPI_Comm comm) {
+int32_t utv_factorize(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, double epi, int32_t M, int64_t gM, int32_t N, const double* A, int32_t lda, double* UT, int32_t ldu, double* V, int32_t ldv, ncclComm_t comm) {
   int32_t umax; hyacinPrecision_t precC; hyacinAlgorithm_t alg; uint64_t dev_work_bytes, pinned_work_bytes;
   hyacinXcpqrk_autoTune(epi, gM, 6, &umax, HYACIN_F64, &precC, &alg);
   hyacinXcpqrk1Dcol_bufferSize(M, gM, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
@@ -81,6 +82,11 @@ int32_t main(int32_t argc, char* argv[]) {
   if (cu_err != cudaSuccess)
   { std::cerr << cudaGetErrorString(cu_err) << std::endl; return -1; }
 
+  ncclUniqueId id; ncclComm_t comm;
+  if (mpi_rank == 0) ncclGetUniqueId(&id);
+  MPI_Bcast((void *)&id, sizeof(id), MPI_BYTE, 0, MPI_COMM_WORLD);
+  ncclCommInitRank(&comm, mpi_size, id, mpi_rank);
+
   int64_t gM = 1 < argc ? std::atoi(argv[1]) : 2048;
   int64_t N = 2 < argc ? std::atoi(argv[2]) : 2048;
   N = std::min(gM, N);
@@ -113,10 +119,11 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaMalloc((void**)(&d_U), lM * N * sizeof(double));
   cudaMalloc((void**)(&d_V), N * N * sizeof(double));
   cudaMemcpy(d_A, matA.data(), lM * N * sizeof(double), cudaMemcpyHostToDevice);
-  utv_factorize(stream, cublasH, cusolverH, epi, lM, gM, N, d_A, lM, d_U, lM, d_V, N, MPI_COMM_WORLD);
+  utv_factorize(stream, cublasH, cusolverH, epi, lM, gM, N, d_A, lM, d_U, lM, d_V, N, comm);
+  cudaDeviceSynchronize();
 
   cudaEventRecord(start, stream);
-  int32_t rank = utv_factorize(stream, cublasH, cusolverH, epi, lM, gM, N, d_A, lM, d_U, lM, d_V, N, MPI_COMM_WORLD);
+  int32_t rank = utv_factorize(stream, cublasH, cusolverH, epi, lM, gM, N, d_A, lM, d_U, lM, d_V, N, comm);
   cudaEventRecord(stop, stream);
 
   cudaDeviceSynchronize();

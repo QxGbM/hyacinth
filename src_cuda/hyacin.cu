@@ -200,11 +200,7 @@ extern "C" void hyacinXcpqrk1Dcol_bufferSize(int32_t localM, int64_t globalM, in
   int32_t algnM, algnN, orderA, orderC, orderD; int64_t i8_bytes, acc_bytes, vec_bytes, idx_bytes;
   std::tie(algnM, algnN, orderA, orderC, orderD, i8_bytes, acc_bytes, vec_bytes, idx_bytes) = ext_params(localM, globalM, N, umax, 42, ComputeType, alg);
   *dev_work_bytes = uint64_t(i8_bytes + acc_bytes);
-#ifdef MPI_IS_CUDA_AWARE
   *pinned_work_bytes = uint64_t(vec_bytes + idx_bytes);
-#else
-  *pinned_work_bytes = uint64_t(vec_bytes + std::max(idx_bytes, acc_bytes));
-#endif
 }
 
 extern "C" int32_t hyacinXcpqrk(cublasHandle_t handle, char mode, double epi, int32_t M, int32_t N, int32_t K, int32_t p, int32_t umax,
@@ -223,10 +219,10 @@ extern "C" int32_t hyacinXcpqrk(cublasHandle_t handle, char mode, double epi, in
   return rrf_dispatcher(stream, handle, mode, epi, int64_t(M), N, algnN, K, p, umax, (uint64_t*)acc, 63, orderC, iA, jpiv, hpiv, Rtype, R, ldr, ComputeType, pinned_work);
 }
 
-#ifndef NO_MPI
+#ifndef NO_NCCL
 
 extern "C" int32_t hyacinXcpqrk1Dcol(cublasHandle_t handle, char mode, double epi, int32_t localM, int64_t globalM, int32_t N, int32_t K, int32_t p, int32_t umax,
-  hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t* jpiv, hyacinPrecision_t Rtype, void* R, int32_t ldr, hyacinPrecision_t ComputeType, void* dev_work, void* pinned_work, hyacinAlgorithm_t alg, MPI_Comm col_comm) {
+  hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t* jpiv, hyacinPrecision_t Rtype, void* R, int32_t ldr, hyacinPrecision_t ComputeType, void* dev_work, void* pinned_work, hyacinAlgorithm_t alg, ncclComm_t col_comm) {
 
   int32_t algnM, algnN, orderA, orderC, orderD; int64_t i8_bytes, acc_bytes, vec_bytes, idx_bytes;
   std::tie(algnM, algnN, orderA, orderC, orderD, i8_bytes, acc_bytes, vec_bytes, idx_bytes) = ext_params(localM, globalM, N, umax, 42, ComputeType, alg);
@@ -234,34 +230,14 @@ extern "C" int32_t hyacinXcpqrk1Dcol(cublasHandle_t handle, char mode, double ep
   cudaStream_t stream; cublasGetStream(handle, &stream);
   int8_t* iA = (int8_t*)(dev_work), *acc = &iA[i8_bytes];
   vexp_dispatcher(stream, localM, N, Atype, A, lda, (int32_t*)jpiv);
-
-#ifdef MPI_IS_CUDA_AWARE
-  cudaStreamSynchronize(stream);
-  MPI_Allreduce(MPI_IN_PLACE, jpiv, int64_t(N), MPI_INT32_T, MPI_MAX, col_comm);
-#else
-  int64_t len = int64_t(N) * sizeof(int32_t);
-  cudaMemcpyAsync(pinned_work, jpiv, len, cudaMemcpyDeviceToHost, stream);
-  cudaStreamSynchronize(stream);
-  MPI_Allreduce(MPI_IN_PLACE, pinned_work, int64_t(N), MPI_INT32_T, MPI_MAX, col_comm);
-  cudaMemcpyAsync(jpiv, pinned_work, len, cudaMemcpyHostToDevice, stream);
-#endif
+  ncclAllReduce(jpiv, jpiv, int64_t(N), ncclInt32, ncclMax, col_comm, stream);
 
   igemm_dispatcher(stream, handle, localM, N, Atype, A, lda, umax, (const int32_t*)jpiv, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA, alg);
   int64_t stride = int64_t(algnN) * int64_t(N) + int64_t(algnN), acc_len = stride * int64_t(orderD);
   internal::int8::accumulate_conv_i63_i42(stream, orderD, stride, (uint64_t*)acc);
+  ncclAllReduce(acc, acc, acc_len, ncclUint64, ncclSum, col_comm, stream);
 
-#ifdef MPI_IS_CUDA_AWARE
-  cudaStreamSynchronize(stream);
-  MPI_Allreduce(MPI_IN_PLACE, acc, acc_len, MPI_UINT64_T, MPI_SUM, col_comm);
   int32_t* hpiv = (int32_t*)(&((int8_t*)pinned_work)[idx_bytes]);
-#else
-  cudaMemcpyAsync(pinned_work, acc, acc_bytes, cudaMemcpyDeviceToHost, stream);
-  cudaStreamSynchronize(stream);
-  MPI_Allreduce(MPI_IN_PLACE, pinned_work, acc_len, MPI_UINT64_T, MPI_SUM, col_comm);
-  cudaMemcpyAsync(acc, pinned_work, acc_bytes, cudaMemcpyHostToDevice, stream);
-  int32_t* hpiv = (int32_t*)(&((int8_t*)pinned_work)[std::max(idx_bytes, acc_bytes)]);
-#endif
-
   return rrf_dispatcher(stream, handle, mode, epi, globalM, N, algnN, K, p, umax, (uint64_t*)acc, 42, orderC, iA, jpiv, hpiv, Rtype, R, ldr, ComputeType, pinned_work);
 }
 
