@@ -31,7 +31,7 @@ extern "C" {
 
 void hyacinXcpqrk_autoTune(
   double epi,
-  int64_t globalM,
+  int32_t globalM,
   int32_t u_extra,
   int32_t* umax,
   hyacinPrecision_t Atype,
@@ -104,7 +104,7 @@ int32_t hyacinXutvk(
 
 void hyacinXcpqrk1Dcol_bufferSize(
   int32_t localM,
-  int64_t globalM,
+  int32_t globalM,
   int32_t N,
   int32_t umax,
   hyacinPrecision_t ComputeType,
@@ -120,7 +120,7 @@ int32_t hyacinXcpqrk1Dcol(
   char mode,
   double epi,
   int32_t localM,
-  int64_t globalM,
+  int32_t globalM,
   int32_t N,
   int32_t K,
   int32_t p,

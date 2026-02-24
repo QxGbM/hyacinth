@@ -40,7 +40,6 @@ __global__ void vector_sum_kernel(int64_t M, matrix_const_ptr A, int64_t lda, ui
       uint64_t c[ORDER]; c[0] = threadA.e[0];
       if constexpr(1 < ORDER) c[1] = threadA.e[2];
       if constexpr(2 < ORDER) c[2] = uint64_t(0);
-      if constexpr(3 < ORDER) c[3] = uint64_t(0);
       device::int8::add_shifted(c, threadA.e[1], uint32_t(32));
 
       #pragma unroll
@@ -50,7 +49,6 @@ __global__ void vector_sum_kernel(int64_t M, matrix_const_ptr A, int64_t lda, ui
       c[0] = threadB.e[0];
       if constexpr(1 < ORDER) c[1] = threadB.e[2];
       if constexpr(2 < ORDER) c[2] = uint64_t(0);
-      if constexpr(3 < ORDER) c[3] = uint64_t(0);
       device::int8::add_shifted(c, threadB.e[1], uint32_t(32));
 
       #pragma unroll
@@ -66,7 +64,6 @@ __global__ void vector_sum_kernel(int64_t M, matrix_const_ptr A, int64_t lda, ui
       uint64_t c[ORDER]; c[0] = threadA.e[0];
       if constexpr(1 < ORDER) c[1] = threadA.e[2];
       if constexpr(2 < ORDER) c[2] = uint64_t(0);
-      if constexpr(3 < ORDER) c[3] = uint64_t(0);
       device::int8::add_shifted(c, threadA.e[1], uint32_t(32));
 
       #pragma unroll
@@ -76,17 +73,15 @@ __global__ void vector_sum_kernel(int64_t M, matrix_const_ptr A, int64_t lda, ui
   }
 }
 
-constexpr int32_t block_threads = 512;
-
 template <class matrix_const_ptr, int32_t COMPLEX>
 inline void vsum_dispatcher(cudaStream_t stream, int64_t M, int32_t N, matrix_const_ptr A, int64_t lda, int32_t umax, const int32_t* vec_expon, int32_t order, uint64_t* vec_sum, int64_t incv) {
+  constexpr int32_t block_threads = 512;
   uint64_t lo = umax < 63 ? (uint64_t(1) << umax) : uint64_t(0);
   uint32_t hi = 63 <= umax ? (uint32_t(1) << (umax - 63)) : uint32_t(0);
   switch(order) {
     case 1: vector_sum_kernel<matrix_const_ptr, 1, COMPLEX, block_threads> <<< N, block_threads, 0, stream >>> (M, A, lda, lo, hi, umax, vec_expon, vec_sum, incv); break;
     case 2: vector_sum_kernel<matrix_const_ptr, 2, COMPLEX, block_threads> <<< N, block_threads, 0, stream >>> (M, A, lda, lo, hi, umax, vec_expon, vec_sum, incv); break;
     case 3: vector_sum_kernel<matrix_const_ptr, 3, COMPLEX, block_threads> <<< N, block_threads, 0, stream >>> (M, A, lda, lo, hi, umax, vec_expon, vec_sum, incv); break;
-    case 4: vector_sum_kernel<matrix_const_ptr, 4, COMPLEX, block_threads> <<< N, block_threads, 0, stream >>> (M, A, lda, lo, hi, umax, vec_expon, vec_sum, incv); break;
     default: break;
   }
 }

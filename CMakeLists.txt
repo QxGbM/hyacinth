@@ -33,7 +33,7 @@ set(CU_SOURCES
   src_cuda/hyacin.cu
   src_cuda/i32_accum.cu
   src_cuda/i32_rem_accum.cu
-  src_cuda/i63_i42_accum_conv.cu
+  src_cuda/i63_u47_accum_conv.cu
   src_cuda/imax_diag.cu
 )
 

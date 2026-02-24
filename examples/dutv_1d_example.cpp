@@ -150,6 +150,7 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaStreamDestroy(stream);
   cublasDestroy(cublasH);
   cusolverDnDestroy(cusolverH);
+  ncclCommDestroy(comm);
 
   cu_err = cudaGetLastError();
   if (cu_err != cudaSuccess)

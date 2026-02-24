@@ -13,7 +13,7 @@ inline hyacinPrecision_t complex_precision(hyacinPrecision_t prec) { return hyac
 inline int32_t pad_u_limbs(int32_t umax) { return ((umax + 10) & (~7)) - 3; }
 inline int32_t pad_u_crt(int32_t umax, int32_t extra) { int32_t b = ((umax * 2) + extra) | 7; return (b - extra) / 2; }
 
-extern "C" void hyacinXcpqrk_autoTune(double epi, int64_t globalM, int32_t u_extra, int32_t* umax, hyacinPrecision_t Atype, hyacinPrecision_t* ComputeType, hyacinAlgorithm_t* alg) {
+extern "C" void hyacinXcpqrk_autoTune(double epi, int32_t globalM, int32_t u_extra, int32_t* umax, hyacinPrecision_t Atype, hyacinPrecision_t* ComputeType, hyacinAlgorithm_t* alg) {
   int32_t device, major, minor;
   cudaGetDevice(&device);
   cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, device);

@@ -85,7 +85,7 @@ inline void conv_copy_dispatcher(cudaStream_t stream, int64_t M, int32_t N, cons
   }
 }
 
-inline std::tuple<int32_t, int32_t, int32_t, int32_t, int32_t, int64_t, int64_t, int64_t, int64_t> ext_params(int32_t localM, int64_t globalM, int32_t N, int32_t umax, int32_t acc_bits, hyacinPrecision_t ComputeType, hyacinAlgorithm_t alg) {
+inline std::tuple<int32_t, int32_t, int32_t, int32_t, int32_t, int64_t, int64_t, int64_t, int64_t> ext_params(int32_t localM, int32_t globalM, int32_t N, int32_t umax, int32_t acc_bits, hyacinPrecision_t ComputeType, hyacinAlgorithm_t alg) {
   hyacinPrecision_t ComputeTypeReal = hyacinPrecision_t(int32_t(ComputeType) & 7);
   int32_t Complex = int32_t(ComputeType != ComputeTypeReal);
   int32_t algnM = (localM + 255) & (~255);
@@ -100,11 +100,11 @@ inline std::tuple<int32_t, int32_t, int32_t, int32_t, int32_t, int64_t, int64_t,
   i8_bytes = std::max(i8_bytes, C_bytes);
 
   int32_t orderC = ((use_limbs ? bits : (orderA << 3)) + 63) / 63;
-  int32_t orderD = (orderC + (acc_bits < 63 ? ((orderC + 1) >> 1) : 0)) << Complex;
+  int32_t orderD = (orderC + int32_t(acc_bits < 63)) << Complex;
   int64_t acc_bytes = int64_t(algnN) * int64_t(N + 1) * int64_t(orderD) * sizeof(uint64_t);
   int64_t vec_bytes = int64_t(algnN) * sizeof(int32_t);
   int64_t idx_bytes = elem_bytes << 9;
-  return std::tie(algnM, algnN, orderA, orderC, orderD, i8_bytes, acc_bytes, vec_bytes, idx_bytes);
+  return std::tie(Complex, algnM, algnN, orderA, orderC, i8_bytes, acc_bytes, vec_bytes, idx_bytes);
 }
 
 inline void vexp_dispatcher(cudaStream_t stream, int32_t M, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t* jpiv) {
@@ -147,7 +147,7 @@ inline void igemm_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t
   }
 }
 
-inline int32_t rrf_dispatcher(cudaStream_t stream, cublasHandle_t handle, char mode, double epi, int64_t M, int32_t N, int32_t algnN, int32_t K, int32_t p, int32_t umax, 
+inline int32_t rrf_dispatcher(cudaStream_t stream, cublasHandle_t handle, char mode, double epi, int32_t M, int32_t N, int32_t algnN, int32_t K, int32_t p, int32_t umax, 
   const uint64_t* acc, int32_t bits, int32_t order, void* A, int32_t* jpiv, int32_t* hpiv, hyacinPrecision_t Rtype, void* R, int32_t ldr, hyacinPrecision_t ComputeType, void* pinned_work) {
 
   std::iota(hpiv, &hpiv[N], 1);
@@ -190,15 +190,15 @@ inline int32_t rrf_dispatcher(cudaStream_t stream, cublasHandle_t handle, char m
 }
 
 extern "C" void hyacinXcpqrk_bufferSize(int32_t M, int32_t N, int32_t umax, hyacinPrecision_t ComputeType, hyacinAlgorithm_t alg, uint64_t* dev_work_bytes, uint64_t* pinned_work_bytes) {
-  int32_t algnM, algnN, orderA, orderC, orderD; int64_t i8_bytes, acc_bytes, vec_bytes, idx_bytes;
-  std::tie(algnM, algnN, orderA, orderC, orderD, i8_bytes, acc_bytes, vec_bytes, idx_bytes) = ext_params(M, int64_t(M), N, umax, 63, ComputeType, alg);
+  int32_t Complex, algnM, algnN, orderA, orderC; int64_t i8_bytes, acc_bytes, vec_bytes, idx_bytes;
+  std::tie(Complex, algnM, algnN, orderA, orderC, i8_bytes, acc_bytes, vec_bytes, idx_bytes) = ext_params(M, int64_t(M), N, umax, 63, ComputeType, alg);
   *dev_work_bytes = uint64_t(i8_bytes + acc_bytes);
   *pinned_work_bytes = uint64_t(vec_bytes + idx_bytes);
 }
 
-extern "C" void hyacinXcpqrk1Dcol_bufferSize(int32_t localM, int64_t globalM, int32_t N, int32_t umax, hyacinPrecision_t ComputeType, hyacinAlgorithm_t alg, uint64_t* dev_work_bytes, uint64_t* pinned_work_bytes) {
-  int32_t algnM, algnN, orderA, orderC, orderD; int64_t i8_bytes, acc_bytes, vec_bytes, idx_bytes;
-  std::tie(algnM, algnN, orderA, orderC, orderD, i8_bytes, acc_bytes, vec_bytes, idx_bytes) = ext_params(localM, globalM, N, umax, 42, ComputeType, alg);
+extern "C" void hyacinXcpqrk1Dcol_bufferSize(int32_t localM, int32_t globalM, int32_t N, int32_t umax, hyacinPrecision_t ComputeType, hyacinAlgorithm_t alg, uint64_t* dev_work_bytes, uint64_t* pinned_work_bytes) {
+  int32_t Complex, algnM, algnN, orderA, orderC; int64_t i8_bytes, acc_bytes, vec_bytes, idx_bytes;
+  std::tie(Complex, algnM, algnN, orderA, orderC, i8_bytes, acc_bytes, vec_bytes, idx_bytes) = ext_params(localM, globalM, N, umax, 47, ComputeType, alg);
   *dev_work_bytes = uint64_t(i8_bytes + acc_bytes);
   *pinned_work_bytes = uint64_t(vec_bytes + idx_bytes);
 }
@@ -206,8 +206,8 @@ extern "C" void hyacinXcpqrk1Dcol_bufferSize(int32_t localM, int64_t globalM, in
 extern "C" int32_t hyacinXcpqrk(cublasHandle_t handle, char mode, double epi, int32_t M, int32_t N, int32_t K, int32_t p, int32_t umax,
   hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t* jpiv, hyacinPrecision_t Rtype, void* R, int32_t ldr, hyacinPrecision_t ComputeType, void* dev_work, void* pinned_work, hyacinAlgorithm_t alg) {
 
-  int32_t algnM, algnN, orderA, orderC, orderD; int64_t i8_bytes, acc_bytes, vec_bytes, idx_bytes;
-  std::tie(algnM, algnN, orderA, orderC, orderD, i8_bytes, acc_bytes, vec_bytes, idx_bytes) = ext_params(M, int64_t(M), N, umax, 63, ComputeType, alg);
+  int32_t Complex, algnM, algnN, orderA, orderC; int64_t i8_bytes, acc_bytes, vec_bytes, idx_bytes;
+  std::tie(Complex, algnM, algnN, orderA, orderC, i8_bytes, acc_bytes, vec_bytes, idx_bytes) = ext_params(M, M, N, umax, 63, ComputeType, alg);
 
   cudaStream_t stream; cublasGetStream(handle, &stream);
   int8_t* iA = (int8_t*)(dev_work), *acc = &iA[i8_bytes];
@@ -216,16 +216,16 @@ extern "C" int32_t hyacinXcpqrk(cublasHandle_t handle, char mode, double epi, in
   vexp_dispatcher(stream, M, N, Atype, A, lda, jpiv);
   igemm_dispatcher(stream, handle, M, N, Atype, A, lda, umax, jpiv, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA, alg);
 
-  return rrf_dispatcher(stream, handle, mode, epi, int64_t(M), N, algnN, K, p, umax, (uint64_t*)acc, 63, orderC, iA, jpiv, hpiv, Rtype, R, ldr, ComputeType, pinned_work);
+  return rrf_dispatcher(stream, handle, mode, epi, M, N, algnN, K, p, umax, (uint64_t*)acc, 63, orderC, iA, jpiv, hpiv, Rtype, R, ldr, ComputeType, pinned_work);
 }
 
 #ifndef NO_NCCL
 
-extern "C" int32_t hyacinXcpqrk1Dcol(cublasHandle_t handle, char mode, double epi, int32_t localM, int64_t globalM, int32_t N, int32_t K, int32_t p, int32_t umax,
+extern "C" int32_t hyacinXcpqrk1Dcol(cublasHandle_t handle, char mode, double epi, int32_t localM, int32_t globalM, int32_t N, int32_t K, int32_t p, int32_t umax,
   hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t* jpiv, hyacinPrecision_t Rtype, void* R, int32_t ldr, hyacinPrecision_t ComputeType, void* dev_work, void* pinned_work, hyacinAlgorithm_t alg, ncclComm_t col_comm) {
 
-  int32_t algnM, algnN, orderA, orderC, orderD; int64_t i8_bytes, acc_bytes, vec_bytes, idx_bytes;
-  std::tie(algnM, algnN, orderA, orderC, orderD, i8_bytes, acc_bytes, vec_bytes, idx_bytes) = ext_params(localM, globalM, N, umax, 42, ComputeType, alg);
+  int32_t Complex, algnM, algnN, orderA, orderC; int64_t i8_bytes, acc_bytes, vec_bytes, idx_bytes;
+  std::tie(Complex, algnM, algnN, orderA, orderC, i8_bytes, acc_bytes, vec_bytes, idx_bytes) = ext_params(localM, globalM, N, umax, 47, ComputeType, alg);
 
   cudaStream_t stream; cublasGetStream(handle, &stream);
   int8_t* iA = (int8_t*)(dev_work), *acc = &iA[i8_bytes];
@@ -233,12 +233,12 @@ extern "C" int32_t hyacinXcpqrk1Dcol(cublasHandle_t handle, char mode, double ep
   ncclAllReduce(jpiv, jpiv, int64_t(N), ncclInt32, ncclMax, col_comm, stream);
 
   igemm_dispatcher(stream, handle, localM, N, Atype, A, lda, umax, (const int32_t*)jpiv, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA, alg);
-  int64_t stride = int64_t(algnN) * int64_t(N) + int64_t(algnN), acc_len = stride * int64_t(orderD);
-  internal::int8::accumulate_conv_i63_i42(stream, orderD, stride, (uint64_t*)acc);
+  int64_t stride = int64_t(algnN) * int64_t(N) + int64_t(algnN), acc_len = stride * (int64_t(orderC + 1) << Complex);
+  internal::int8::accumulate_conv_i63_u47(stream, orderC, Complex, stride, (uint64_t*)acc);
   ncclAllReduce(acc, acc, acc_len, ncclUint64, ncclSum, col_comm, stream);
 
   int32_t* hpiv = (int32_t*)(&((int8_t*)pinned_work)[idx_bytes]);
-  return rrf_dispatcher(stream, handle, mode, epi, globalM, N, algnN, K, p, umax, (uint64_t*)acc, 42, orderC, iA, jpiv, hpiv, Rtype, R, ldr, ComputeType, pinned_work);
+  return rrf_dispatcher(stream, handle, mode, epi, globalM, N, algnN, K, p, umax, (uint64_t*)acc, 47, orderC, iA, jpiv, hpiv, Rtype, R, ldr, ComputeType, pinned_work);
 }
 
 #endif

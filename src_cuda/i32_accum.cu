@@ -75,7 +75,6 @@ void internal::int8::accumulate_i32tensor(cudaStream_t stream, int32_t option, i
     case 1: acc_dispatcher<1>(stream, option, N, uint32_t(sft_lo), uint32_t(orderX), X, incx, A, inca); break;
     case 2: acc_dispatcher<2>(stream, option, N, uint32_t(sft_lo), uint32_t(orderX), X, incx, A, inca); break;
     case 3: acc_dispatcher<3>(stream, option, N, uint32_t(sft_lo), uint32_t(orderX), X, incx, A, inca); break;
-    case 4: acc_dispatcher<4>(stream, option, N, uint32_t(sft_lo), uint32_t(orderX), X, incx, A, inca); break;
     default: break;
   }
 }
