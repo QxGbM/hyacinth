@@ -13,15 +13,15 @@
 #include <lapacke.h>
 #endif
 
-void make_2D_oscillatory(double w, int32_t om, int32_t M, int32_t N, double* A, int32_t lda) {
+void make_2D_oscillatory(double w, int32_t iA, int32_t jA, int32_t M, int32_t N, double* A, int32_t lda) {
   constexpr int64_t height = 128;
   auto translate_2d = [](int64_t i) { int64_t x = i / height, y = i - height * x; return std::complex<double>(x, y); };
 
   for (int64_t j = 0; j < N; ++j) {
-    auto vj = translate_2d(-(j + height));
+    auto vj = translate_2d(j + jA + height);
     for (int64_t i = 0; i < M; ++i) {
-      auto vi = translate_2d(i + om);
-      double d = std::abs(vi - vj);
+      auto vi = translate_2d(i + iA);
+      double d = std::abs(vi + std::conj(vj));
       A[i + j * lda] = std::cos(w * d) / d;
     }
   }
@@ -85,7 +85,7 @@ int32_t main(int32_t argc, char* argv[]) {
 
   std::vector<double> matA(M * N);
   std::vector<int32_t> ipiv(N);
-  make_2D_oscillatory(omega, 0, M, N, &matA[0], M);
+  make_2D_oscillatory(omega, 0, 0, M, N, &matA[0], M);
 
   cudaStream_t stream;
   cublasHandle_t handle;

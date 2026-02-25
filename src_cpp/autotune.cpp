@@ -6,6 +6,7 @@
 #include <limits>
 
 const int32_t umax_threshold = 30; // umax < 30 : Limbs, 30 <= umax : CRT
+const int32_t umax_practical_limit = 80; // umax <= 80 to satisfy implementation assumptions
 const std::vector<int32_t> dd_sm_list({ 800, 900, 1000 }); // sm80,sm90,sm100
 
 inline hyacinPrecision_t real_precision(hyacinPrecision_t prec) { return hyacinPrecision_t(int32_t(prec) & 7); }
@@ -38,7 +39,7 @@ extern "C" void hyacinXcpqrk_autoTune(double epi, int32_t globalM, int32_t u_ext
   int32_t Complex = int32_t(Atype != ATypeReal), use_limbs = int32_t(u < umax_threshold);
   int32_t b_extra = int32_t(std::ceil(std::log2(double(globalM)))) + 2 + Complex;
 
-  *umax = use_limbs ? pad_u_limbs(u) : pad_u_crt(u, b_extra);
+  *umax = std::min(umax_practical_limit, use_limbs ? pad_u_limbs(u) : pad_u_crt(u, b_extra));
   *ComputeType = Complex ? complex_precision(auto_prec) : auto_prec;
   *alg = use_limbs ? HYACIN_ALG_LIMBS : HYACIN_ALG_CRT;
 }

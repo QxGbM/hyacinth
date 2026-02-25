@@ -13,15 +13,15 @@
 #include <lapacke.h>
 #endif
 
-void make_2D_oscillatory(double w, int32_t om, int32_t M, int32_t N, double* A, int32_t lda) {
+void make_2D_oscillatory(double w, int32_t iA, int32_t jA, int32_t M, int32_t N, double* A, int32_t lda) {
   constexpr int64_t height = 128;
   auto translate_2d = [](int64_t i) { int64_t x = i / height, y = i - height * x; return std::complex<double>(x, y); };
 
   for (int64_t j = 0; j < N; ++j) {
-    auto vj = translate_2d(-(j + height));
+    auto vj = translate_2d(j + jA + height);
     for (int64_t i = 0; i < M; ++i) {
-      auto vi = translate_2d(i + om);
-      double d = std::abs(vi - vj);
+      auto vi = translate_2d(i + iA);
+      double d = std::abs(vi + std::conj(vj));
       A[i + j * lda] = std::cos(w * d) / d;
     }
   }
@@ -42,7 +42,7 @@ std::pair<double, double> check_answer(int32_t M, int32_t N, int32_t rank, const
   return std::make_pair(err, nrm);
 }
 
-int32_t utv_factorize(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, double epi, int32_t M, int64_t gM, int32_t N, double* A, int32_t lda, double* V, int32_t ldv, ncclComm_t comm) {
+int32_t utv_factorize(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, double epi, int32_t M, int32_t gM, int32_t N, double* A, int32_t lda, double* V, int32_t ldv, ncclComm_t comm) {
   int32_t umax; hyacinPrecision_t precC; hyacinAlgorithm_t alg; uint64_t dev_work_bytes, pinned_work_bytes;
   hyacinXcpqrk_autoTune(epi, gM, 6, &umax, HYACIN_F64, &precC, &alg);
   hyacinXcpqrk1Dcol_bufferSize(M, gM, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
@@ -98,7 +98,7 @@ int32_t main(int32_t argc, char* argv[]) {
   int64_t lS = lM * mpi_rank; lM = std::min(lM, gM - lS);
 
   std::vector<double> matA(lM * N);
-  make_2D_oscillatory(omega, lS, lM, N, &matA[0], lM);
+  make_2D_oscillatory(omega, lS, 0, lM, N, &matA[0], lM);
 
   cudaStream_t stream;
   cublasHandle_t cublasH;

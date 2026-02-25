@@ -110,9 +110,9 @@ inline int32_t utv_k_dispatcher(cublasHandle_t handle, cusolverDnHandle_t s_hand
     tranpose_copy<prec>(handle, 'C', K, N, R, algnN, RJ, ldr);
 
     for (int32_t i = 0; i < M; i += rows) {
-      int32_t m = std::min(M - i, rows);
-      cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_N, m, K, N, &one, &UA[i], type_c, ldu, R, type_c, algnN, &zero, S, type_c, rows, type_c, CUBLAS_GEMM_DEFAULT);
-      tranpose_copy<prec>(handle, 'N', m, K, S, rows, &UA[i], ldu);
+      int32_t m = std::min(M - i, rows), lds = std::min((m + 63) & (~63), rows);
+      cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_N, m, K, N, &one, &UA[i], type_c, ldu, R, type_c, algnN, &zero, S, type_c, lds, type_c, CUBLAS_GEMM_DEFAULT);
+      tranpose_copy<prec>(handle, 'N', m, K, S, lds, &UA[i], ldu);
     }
   }
   return K;
