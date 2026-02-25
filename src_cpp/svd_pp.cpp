@@ -35,7 +35,7 @@ extern "C" void hyacinXutvk_bufferSize(cusolverDnHandle_t handle, cusolverDnPara
   }
 
   uint64_t s_bytes = uint64_t(std::get<4>(type)) * uint64_t(algnK);
-  *dev_work_bytes = uint64_t(workspaceInBytesOnDevice) + basis_bytes + s_bytes + uint64_t(sizeof(int32_t));
+  *dev_work_bytes = uint64_t(workspaceInBytesOnDevice) + basis_bytes + s_bytes;
   *pinned_work_bytes = uint64_t(workspaceInBytesOnHost) + s_bytes;
 }
 
@@ -82,22 +82,21 @@ inline int32_t utv_k_dispatcher(cublasHandle_t handle, cusolverDnHandle_t s_hand
   constants<prec, complex_t>(type_c, type_r, one, zero, cutoff_epi);
 
   if (epi < cutoff_epi) {
-    size_t workspaceInBytesOnDevice = size_t(dev_work_bytes - uint64_t(r_bytes + s_bytes + int64_t(sizeof(int32_t))));
-    int8_t* d_info = &bufferOnDevice[workspaceInBytesOnDevice];
+    size_t workspaceInBytesOnDevice = size_t(dev_work_bytes - uint64_t(r_bytes + s_bytes));
 
     tranpose_copy<prec>(handle, 'C', N, K, RJ, ldr, R, algnN);
     cusolverDnXgesvd(s_handle, params, 'O', 'N', N, K,
-      type_c, R, algnN, type_r, S, type_c, nullptr, algnN, type_c, nullptr, algnK, type_c, bufferOnDevice, workspaceInBytesOnDevice, bufferOnHost, workspaceInBytesOnHost, (int32_t*)d_info);
+      type_c, R, algnN, type_r, S, type_c, nullptr, algnN, type_c, nullptr, algnK, type_c, bufferOnDevice, workspaceInBytesOnDevice, bufferOnHost, workspaceInBytesOnHost, nullptr);
   }
   else {
     int64_t v_bytes = sizeof(complex_t) * int64_t(algnK) * int64_t(K);
-    size_t workspaceInBytesOnDevice = size_t(dev_work_bytes - uint64_t(r_bytes + r_bytes + v_bytes + s_bytes + int64_t(sizeof(int32_t))));
-    int8_t* U = &bufferOnDevice[workspaceInBytesOnDevice], *V = &U[r_bytes], *d_info = &V[v_bytes];
+    size_t workspaceInBytesOnDevice = size_t(dev_work_bytes - uint64_t(r_bytes + r_bytes + v_bytes + s_bytes));
+    int8_t* U = &bufferOnDevice[workspaceInBytesOnDevice], *V = &U[r_bytes];
 
     double h_err_sigma = 0.;
     tranpose_copy<prec>(handle, 'C', N, K, RJ, ldr, U, algnN);
     cusolverDnXgesvdp(s_handle, params, CUSOLVER_EIG_MODE_VECTOR, 1, N, K,
-      type_c, U, algnN, type_r, S, type_c, R, algnN, type_c, V, algnK, type_c, bufferOnDevice, workspaceInBytesOnDevice, bufferOnHost, workspaceInBytesOnHost, (int32_t*)d_info, &h_err_sigma);
+      type_c, U, algnN, type_r, S, type_c, R, algnN, type_c, V, algnK, type_c, bufferOnDevice, workspaceInBytesOnDevice, bufferOnHost, workspaceInBytesOnHost, nullptr, &h_err_sigma);
   }
   
   cudaMemcpyAsync(Sh, S, s_bytes, cudaMemcpyDeviceToHost, stream);

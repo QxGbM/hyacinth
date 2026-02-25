@@ -55,7 +55,7 @@ template <int32_t prec, class real_t, class matrix_t>
 inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t k, int32_t p, int32_t N, matrix_t* A, int32_t lda, int32_t* jpiv, real_t* scale) {
   real_t* diag = (real_t*)(&A[int64_t(N) * int64_t(lda)]);
   imax_dispatcher<prec>(stream, N, A, lda + 1, diag, scale);
-  int32_t* pivot_i = (int32_t*)&scale[2], iters = std::min(N, p + (k ?: N));
+  int32_t* pivot_i = (int32_t*)&scale[2], iters = std::min(N, std::max(0, p + k)) ?: N;
   epi = conv_f64<prec>(scale[0]) * std::min(1., std::max(0., std::abs(epi)));
 
   for (int32_t i = 0, s = 0; i < iters; ++i) {

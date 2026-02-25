@@ -13,7 +13,7 @@ enable_testing()
 
 set(TEST_SOURCES
   clra_example.cpp cutv_example.cpp
-  dlra_example.cpp dutv_example.cpp dutv_1drow_example.cpp
+  dlra_example.cpp dutv_example.cpp dutv_1dcol_example.cpp dutv_1drow_example.cpp
   slra_example.cpp sutv_example.cpp
   zlra_example.cpp zutv_example.cpp
 )
@@ -29,7 +29,7 @@ set_source_files_properties(${TEST_SOURCES} PROPERTIES COMPILE_OPTIONS
 foreach (test ${TEST_SOURCES})
   get_filename_component (src ${test} NAME_WE)
   add_executable(${src}.app ${test})
-  add_test(NAME ${src}.app COMMAND ${src}.app)
+  add_test(NAME ${src}.app COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 1 ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${src}.app> ${MPIEXEC_POSTFLAGS})
 
   target_include_directories(${src}.app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/..)
   target_link_libraries(${src}.app PRIVATE hyacin MPI::MPI_CXX BLAS::BLAS LAPACK::LAPACK CUDA::cudart CUDA::cublas CUDA::cusolver)

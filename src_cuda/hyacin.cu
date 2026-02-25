@@ -196,7 +196,7 @@ extern "C" void hyacinXcpqrk_bufferSize(int32_t M, int32_t N, int32_t umax, hyac
   *pinned_work_bytes = uint64_t(vec_bytes + idx_bytes);
 }
 
-extern "C" void hyacinXcpqrk1Dcol_bufferSize(int32_t localM, int32_t globalM, int32_t N, int32_t umax, hyacinPrecision_t ComputeType, hyacinAlgorithm_t alg, uint64_t* dev_work_bytes, uint64_t* pinned_work_bytes) {
+extern "C" void hyacinXcpqrk1Drow_bufferSize(int32_t localM, int32_t globalM, int32_t N, int32_t umax, hyacinPrecision_t ComputeType, hyacinAlgorithm_t alg, uint64_t* dev_work_bytes, uint64_t* pinned_work_bytes) {
   int32_t Complex, algnM, algnN, orderA, orderC; int64_t i8_bytes, acc_bytes, vec_bytes, idx_bytes;
   std::tie(Complex, algnM, algnN, orderA, orderC, i8_bytes, acc_bytes, vec_bytes, idx_bytes) = ext_params(localM, globalM, N, umax, 47, ComputeType, alg);
   *dev_work_bytes = uint64_t(i8_bytes + acc_bytes);
@@ -221,7 +221,7 @@ extern "C" int32_t hyacinXcpqrk(cublasHandle_t handle, char mode, double epi, in
 
 #ifndef NO_NCCL
 
-extern "C" int32_t hyacinXcpqrk1Dcol(cublasHandle_t handle, char mode, double epi, int32_t localM, int32_t globalM, int32_t N, int32_t K, int32_t p, int32_t umax,
+extern "C" int32_t hyacinXcpqrk1Drow(cublasHandle_t handle, char mode, double epi, int32_t localM, int32_t globalM, int32_t N, int32_t K, int32_t p, int32_t umax,
   hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t* jpiv, hyacinPrecision_t Rtype, void* R, int32_t ldr, hyacinPrecision_t ComputeType, void* dev_work, void* pinned_work, hyacinAlgorithm_t alg, ncclComm_t col_comm) {
 
   int32_t Complex, algnM, algnN, orderA, orderC; int64_t i8_bytes, acc_bytes, vec_bytes, idx_bytes;

@@ -13,6 +13,7 @@ set(SM_TARGETS "80;86;89;90;100;120")
 find_package(CUDAToolkit REQUIRED)
 
 set(CPP_SOURCES
+  src_cpp/allgatherv_1dcol.cpp
   src_cpp/autotune.cpp
   src_cpp/gemv_cublas.cpp
   src_cpp/i63syrk.cpp
@@ -63,7 +64,7 @@ if(USE_NCCL)
   endif()
 else()
   message(STATUS "NO NCCL")
-  set_source_files_properties(src_cuda/hyacin.cu PROPERTIES COMPILE_DEFINITIONS "NO_NCCL")
+  set_source_files_properties(src_cuda/hyacin.cu src_cpp/allgatherv_1dcol.cpp PROPERTIES COMPILE_DEFINITIONS "NO_NCCL")
 endif()
 
 install(TARGETS hyacin LIBRARY DESTINATION .)

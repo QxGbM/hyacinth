@@ -102,7 +102,7 @@ int32_t hyacinXutvk(
   void* pinned_work
 );
 
-void hyacinXcpqrk1Dcol_bufferSize(
+void hyacinXcpqrk1Drow_bufferSize(
   int32_t localM,
   int32_t globalM,
   int32_t N,
@@ -113,9 +113,17 @@ void hyacinXcpqrk1Dcol_bufferSize(
   uint64_t* pinned_work_bytes
 );
 
+void hyacinXAllGatherV1Dcol_bufferSize(
+  int32_t M,
+  int32_t maxK,
+  int32_t lenK,
+  hyacinPrecision_t Atype,
+  uint64_t* dev_work_bytes
+);
+
 #ifndef NO_NCCL
 
-int32_t hyacinXcpqrk1Dcol(
+int32_t hyacinXcpqrk1Drow(
   cublasHandle_t handle,
   char mode,
   double epi,
@@ -137,6 +145,20 @@ int32_t hyacinXcpqrk1Dcol(
   void* pinned_work,
   hyacinAlgorithm_t alg,
   ncclComm_t col_comm
+);
+
+void hyacinXAllGatherV1Dcol(
+  cublasHandle_t handle,
+  int32_t M,
+  int32_t maxK,
+  int32_t iK,
+  int32_t lenK,
+  const int32_t* allK,
+  hyacinPrecision_t Atype,
+  void* A,
+  int32_t lda,
+  void* dev_work,
+  ncclComm_t row_comm
 );
 
 #endif

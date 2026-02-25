@@ -58,10 +58,10 @@ int32_t utv_factorize(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHan
   cusolverDnParams_t params; cusolverDnCreateParams(&params);
   uint64_t dev_work_bytes_new, pinned_work_bytes_new;
   hyacinXutvk_bufferSize(cusolverH, params, epi, N, rank, HYACIN_F64_COMPLEX, &dev_work_bytes_new, &pinned_work_bytes_new);
-  if (dev_work_bytes < dev_work_bytes_new) { cudaDeviceSynchronize(); cudaFree(dev_work); cudaMalloc(&dev_work, dev_work_bytes_new); }
-  if (pinned_work_bytes < pinned_work_bytes_new) { cudaDeviceSynchronize(); cudaFreeHost(pinned_work); cudaMallocHost(&pinned_work, dev_work_bytes_new); }
+  if (dev_work_bytes < dev_work_bytes_new) { cudaDeviceSynchronize(); cudaFree(dev_work); cudaMalloc(&dev_work, dev_work_bytes = dev_work_bytes_new); }
+  if (pinned_work_bytes < pinned_work_bytes_new) { cudaDeviceSynchronize(); cudaFreeHost(pinned_work); cudaMallocHost(&pinned_work, pinned_work_bytes = dev_work_bytes_new); }
 
-  rank = hyacinXutvk(cublasH, cusolverH, params, epi, M, N, rank, p, A, lda, V, ldv, HYACIN_F64_COMPLEX, dev_work_bytes_new, dev_work, pinned_work_bytes_new, pinned_work);
+  rank = hyacinXutvk(cublasH, cusolverH, params, epi, M, N, rank, p, A, lda, V, ldv, HYACIN_F64_COMPLEX, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
 
   cudaStreamSynchronize(stream);
   cudaFree(jpiv);
