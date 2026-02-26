@@ -1,6 +1,7 @@
 
 #include <hyacin.h>
 #include <cuComplex.h>
+#include <numeric>
 
 inline int32_t shifts(hyacinPrecision_t prec) {
   switch(prec) 
@@ -31,8 +32,9 @@ inline void matrix_copy(cublasHandle_t handle, int32_t M, int32_t N, const void*
 }
 
 template <class T, hyacinPrecision_t prec>
-inline void allgatherv_1dcol(cublasHandle_t handle, int32_t M, int32_t maxK, int32_t iK, int32_t lenK, const int32_t* allK, T* A, int32_t lda, T* dev_work, ncclComm_t row_comm) {
+inline void allgatherv_1dcol(cublasHandle_t handle, int32_t M, int32_t iK, int32_t lenK, const int32_t* allK, T* A, int32_t lda, T* dev_work, ncclComm_t row_comm) {
   cudaStream_t stream; cublasGetStream(handle, &stream);
+  int32_t maxK = std::reduce(allK, &allK[lenK], 0, [](int32_t i, int32_t j) { return std::max(i, j); });
   uint64_t stride = (uint64_t(M) * uint64_t(maxK) + uint64_t(63)) & (~uint64_t(63));
   matrix_copy<prec>(handle, M, allK[iK], A, lda, &dev_work[int64_t(iK) * stride], M);
   ncclAllGather(&dev_work[int64_t(iK) * stride], dev_work, stride << shifts(prec), ncclInt32, row_comm, stream);
@@ -43,12 +45,12 @@ inline void allgatherv_1dcol(cublasHandle_t handle, int32_t M, int32_t maxK, int
   }
 }
 
-extern "C" void hyacinXAllGatherV1Dcol(cublasHandle_t handle, int32_t M, int32_t maxK, int32_t iK, int32_t lenK, const int32_t* allK, hyacinPrecision_t Atype, void* A, int32_t lda, void* dev_work, ncclComm_t row_comm) {
+extern "C" void hyacinXAllGatherV1Dcol(cublasHandle_t handle, int32_t M, int32_t iK, int32_t lenK, const int32_t* allK, hyacinPrecision_t Atype, void* A, int32_t lda, void* dev_work, ncclComm_t row_comm) {
   switch(Atype) {
-    case HYACIN_F64: allgatherv_1dcol<double, HYACIN_F64>(handle, M, maxK, iK, lenK, allK, (double*)A, lda, (double*)dev_work, row_comm); break;
-    case HYACIN_F32: allgatherv_1dcol<float, HYACIN_F32>(handle, M, maxK, iK, lenK, allK, (float*)A, lda, (float*)dev_work, row_comm); break;
-    case HYACIN_F64_COMPLEX: allgatherv_1dcol<cuDoubleComplex, HYACIN_F64_COMPLEX>(handle, M, maxK, iK, lenK, allK, (cuDoubleComplex*)A, lda, (cuDoubleComplex*)dev_work, row_comm); break;
-    case HYACIN_F32_COMPLEX: allgatherv_1dcol<cuComplex, HYACIN_F32_COMPLEX>(handle, M, maxK, iK, lenK, allK, (cuComplex*)A, lda, (cuComplex*)dev_work, row_comm); break;
+    case HYACIN_F64: allgatherv_1dcol<double, HYACIN_F64>(handle, M, iK, lenK, allK, (double*)A, lda, (double*)dev_work, row_comm); break;
+    case HYACIN_F32: allgatherv_1dcol<float, HYACIN_F32>(handle, M, iK, lenK, allK, (float*)A, lda, (float*)dev_work, row_comm); break;
+    case HYACIN_F64_COMPLEX: allgatherv_1dcol<cuDoubleComplex, HYACIN_F64_COMPLEX>(handle, M, iK, lenK, allK, (cuDoubleComplex*)A, lda, (cuDoubleComplex*)dev_work, row_comm); break;
+    case HYACIN_F32_COMPLEX: allgatherv_1dcol<cuComplex, HYACIN_F32_COMPLEX>(handle, M, iK, lenK, allK, (cuComplex*)A, lda, (cuComplex*)dev_work, row_comm); break;
     default: break;
   }
 }

@@ -62,19 +62,19 @@ int32_t utv_factorize(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHan
   cusolverDnParams_t params; cusolverDnCreateParams(&params);
   hyacinXutvk_bufferSize(cusolverH, params, epi, N, rank, HYACIN_F64, &dev_work_bytes_new, &pinned_work_bytes_new);
   if (dev_work_bytes < dev_work_bytes_new) { cudaDeviceSynchronize(); cudaFree(dev_work); cudaMalloc(&dev_work, dev_work_bytes = dev_work_bytes_new); }
-  if (pinned_work_bytes < pinned_work_bytes_new) { cudaDeviceSynchronize(); cudaFreeHost(pinned_work); cudaMallocHost(&pinned_work, pinned_work_bytes = dev_work_bytes_new); }
+  if (pinned_work_bytes < pinned_work_bytes_new) { cudaDeviceSynchronize(); cudaFreeHost(pinned_work); cudaMallocHost(&pinned_work, pinned_work_bytes = pinned_work_bytes_new); }
 
   rank = hyacinXutvk(cublasH, cusolverH, params, epi, M, N, rank, p, A, lda, V, ldv, HYACIN_F64, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
 
   std::vector<int32_t> ranks_arr(mpi_size);
   MPI_Allgather(&rank, 1, MPI_INT32_T, ranks_arr.data(), 1, MPI_INT32_T, mpi_comm);
-  hyacinXAllGatherV1Dcol(cublasH, M, K, mpi_rank, mpi_size, ranks_arr.data(), HYACIN_F64, A, lda, dev_work, comm);
+  hyacinXAllGatherV1Dcol(cublasH, M, mpi_rank, mpi_size, ranks_arr.data(), HYACIN_F64, A, lda, dev_work, comm);
   int32_t rank_sum = std::reduce(ranks_arr.begin(), ranks_arr.end(), 0, std::plus<int32_t>());
 
   cudaDeviceSynchronize();
   hyacinXcpqrk_bufferSize(M, rank_sum, umax, precC, alg, &dev_work_bytes_new, &pinned_work_bytes_new);
   if (dev_work_bytes < dev_work_bytes_new) { cudaFree(dev_work); cudaMalloc(&dev_work, dev_work_bytes = dev_work_bytes_new); }
-  if (pinned_work_bytes < pinned_work_bytes_new) { cudaFreeHost(pinned_work); cudaMallocHost(&pinned_work, pinned_work_bytes = dev_work_bytes_new); }
+  if (pinned_work_bytes < pinned_work_bytes_new) { cudaFreeHost(pinned_work); cudaMallocHost(&pinned_work, pinned_work_bytes = pinned_work_bytes_new); }
 
   // TODO
 

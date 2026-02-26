@@ -150,7 +150,6 @@ int32_t hyacinXcpqrk1Drow(
 void hyacinXAllGatherV1Dcol(
   cublasHandle_t handle,
   int32_t M,
-  int32_t maxK,
   int32_t iK,
   int32_t lenK,
   const int32_t* allK,
