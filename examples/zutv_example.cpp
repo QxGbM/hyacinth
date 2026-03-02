@@ -42,7 +42,7 @@ double check_answer(int32_t M, int32_t N, int32_t rank, const std::complex<doubl
   return std::sqrt(err / nrm);
 }
 
-int32_t utv_factorize(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, double epi, int32_t M, int32_t N, std::complex<double>* A, int32_t lda, std::complex<double>* V, int32_t ldv) {
+int32_t utv_factorize(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t N, int32_t K, std::complex<double>* A, int32_t lda, std::complex<double>* V, int32_t ldv) {
   int32_t umax; hyacinPrecision_t precC; hyacinAlgorithm_t alg; uint64_t dev_work_bytes, pinned_work_bytes;
   hyacinXcpqrk_autoTune(epi, M, 6, &umax, HYACIN_F64_COMPLEX, &precC, &alg);
   hyacinXcpqrk_bufferSize(M, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
@@ -53,13 +53,12 @@ int32_t utv_factorize(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHan
   cudaMallocHost(&pinned_work, pinned_work_bytes);
 
   int32_t p = 0; 
-  int32_t rank = hyacinXcpqrk(cublasH, 'J', epi, M, N, N, p, umax, HYACIN_F64_COMPLEX, A, lda, (int32_t*)jpiv, HYACIN_F64_COMPLEX, V, ldv, precC, dev_work, pinned_work, alg);
+  int32_t rank = hyacinXcpqrk(cublasH, 'J', epi, M, N, K, p, umax, HYACIN_F64_COMPLEX, A, lda, (int32_t*)jpiv, HYACIN_F64_COMPLEX, V, ldv, precC, dev_work, pinned_work, alg);
 
-  cusolverDnParams_t params; cusolverDnCreateParams(&params);
   uint64_t dev_work_bytes_new, pinned_work_bytes_new;
   hyacinXutvk_bufferSize(cusolverH, params, epi, N, rank, HYACIN_F64_COMPLEX, &dev_work_bytes_new, &pinned_work_bytes_new);
-  if (dev_work_bytes < dev_work_bytes_new) { cudaDeviceSynchronize(); cudaFree(dev_work); cudaMalloc(&dev_work, dev_work_bytes = dev_work_bytes_new); }
-  if (pinned_work_bytes < pinned_work_bytes_new) { cudaDeviceSynchronize(); cudaFreeHost(pinned_work); cudaMallocHost(&pinned_work, pinned_work_bytes = pinned_work_bytes_new); }
+  if (dev_work_bytes < dev_work_bytes_new) { cudaStreamSynchronize(stream); cudaFree(dev_work); cudaMalloc(&dev_work, dev_work_bytes = dev_work_bytes_new); }
+  if (pinned_work_bytes < pinned_work_bytes_new) { cudaStreamSynchronize(stream); cudaFreeHost(pinned_work); cudaMallocHost(&pinned_work, pinned_work_bytes = pinned_work_bytes_new); }
 
   rank = hyacinXutvk(cublasH, cusolverH, params, epi, M, N, rank, p, A, lda, V, ldv, HYACIN_F64_COMPLEX, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
 
@@ -80,8 +79,10 @@ int32_t main(int32_t argc, char* argv[]) {
   int64_t N = 2 < argc ? std::atoi(argv[2]) : 2048;
   N = std::min(M, N);
 
-  double epi = 3 < argc ? std::atof(argv[3]) : 1.e-12;
-  double omega = 4 < argc ? std::atof(argv[4]) : 1.;
+  int64_t K = 3 < argc ? std::atoi(argv[3]) : N;
+  double epi = 4 < argc ? std::atof(argv[4]) : 1.e-12;
+  double omega = 5 < argc ? std::atof(argv[5]) : 1.;
+  K = std::min(K, N);
 
   std::vector<std::complex<double>> matA(M * N);
   make_2D_oscillatory(omega, 0, 0, M, N, &matA[0], M);
@@ -89,12 +90,14 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaStream_t stream;
   cublasHandle_t cublasH;
   cusolverDnHandle_t cusolverH;
+  cusolverDnParams_t params;
 
   cudaStreamCreate(&stream);
   cublasCreate(&cublasH);
   cublasSetStream(cublasH, stream);
   cusolverDnCreate(&cusolverH);
   cusolverDnSetStream(cusolverH, stream);
+  cusolverDnCreateParams(&params);
 
   cudaEvent_t start, stop;
   cudaEventCreate(&start);
@@ -102,22 +105,22 @@ int32_t main(int32_t argc, char* argv[]) {
 
   std::complex<double>* d_A = nullptr, *d_V = nullptr;
   cudaMalloc((void**)(&d_A), M * N * sizeof(std::complex<double>));
-  cudaMalloc((void**)(&d_V), N * N * sizeof(std::complex<double>));
+  cudaMalloc((void**)(&d_V), K * N * sizeof(std::complex<double>));
   cudaMemcpy(d_A, &matA[0], M * N * sizeof(std::complex<double>), cudaMemcpyHostToDevice);
 
-  utv_factorize(stream, cublasH, cusolverH, epi, M, N, d_A, M, d_V, N);
+  utv_factorize(stream, cublasH, cusolverH, params, epi, M, N, K, d_A, M, d_V, K);
   cudaMemcpy(d_A, &matA[0], M * N * sizeof(std::complex<double>), cudaMemcpyHostToDevice);
 
   cudaEventRecord(start, stream);
-  int32_t rank = utv_factorize(stream, cublasH, cusolverH, epi, M, N, d_A, M, d_V, N);
+  int32_t rank = utv_factorize(stream, cublasH, cusolverH, params, epi, M, N, K, d_A, M, d_V, K);
   cudaEventRecord(stop, stream);
 
   cudaDeviceSynchronize();
 
-  std::vector<std::complex<double>> matU(M * N), matV(N * N);
-  cudaMemcpy(matU.data(), d_A, M * N * sizeof(std::complex<double>), cudaMemcpyDeviceToHost);
-  cudaMemcpy(matV.data(), d_V, N * N * sizeof(std::complex<double>), cudaMemcpyDeviceToHost);
-  double err = check_answer(M, N, rank, &matU[0], M, &matV[0], N, &matA[0], M);
+  std::vector<std::complex<double>> matU(M * K), matV(K * N);
+  cudaMemcpy(matU.data(), d_A, M * K * sizeof(std::complex<double>), cudaMemcpyDeviceToHost);
+  cudaMemcpy(matV.data(), d_V, K * N * sizeof(std::complex<double>), cudaMemcpyDeviceToHost);
+  double err = check_answer(M, N, rank, &matU[0], M, &matV[0], K, &matA[0], M);
 
   float milliseconds = 0.0f;
   cudaEventElapsedTime(&milliseconds, start, stop);
@@ -133,6 +136,7 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaStreamDestroy(stream);
   cublasDestroy(cublasH);
   cusolverDnDestroy(cusolverH);
+  cusolverDnDestroyParams(params);
 
   cu_err = cudaGetLastError();
   if (cu_err != cudaSuccess)

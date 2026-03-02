@@ -61,7 +61,7 @@ int32_t geqp3_ronly(cublasHandle_t handle, double epi, int32_t rank, int32_t M, 
   cudaMallocHost(&pinned_work, pinned_work_bytes);
 
   int32_t p = 0;
-  rank = hyacinXcpqrk(handle, 'R', epi, M, N, N, p, umax, HYACIN_F32_COMPLEX, A, lda, (int32_t*)piv, HYACIN_F32_COMPLEX, R, ldr, precC, dev_work, pinned_work, alg);
+  rank = hyacinXcpqrk(handle, 'R', epi, M, N, rank, p, umax, HYACIN_F32_COMPLEX, A, lda, (int32_t*)piv, HYACIN_F32_COMPLEX, R, ldr, precC, dev_work, pinned_work, alg);
 
   cudaStreamSynchronize(stream);
   cudaMemcpy(jpiv, piv, sizeof(int32_t) * N, cudaMemcpyDefault);
