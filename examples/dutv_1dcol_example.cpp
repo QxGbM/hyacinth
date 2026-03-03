@@ -73,9 +73,9 @@ std::pair<int32_t, int32_t> utv_factorize_phase2(cudaStream_t stream, cublasHand
   int32_t mpi_rank, mpi_size; MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank); MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
   std::vector<int32_t> ranks_arr(mpi_size);
   MPI_Allgather(&N, 1, MPI_INT32_T, ranks_arr.data(), 1, MPI_INT32_T, mpi_comm);
-  N = std::reduce(ranks_arr.begin(), ranks_arr.end(), 0, std::plus<int32_t>());
   int32_t rank_max = std::reduce(ranks_arr.begin(), ranks_arr.end(), 0, [](int32_t i, int32_t j) { return std::max(i, j); });
   int32_t v_offset = std::reduce(ranks_arr.begin(), ranks_arr.begin() + mpi_rank, 0, std::plus<int32_t>());
+  N = std::reduce(ranks_arr.begin() + mpi_rank, ranks_arr.end(), v_offset, std::plus<int32_t>());
 
   int32_t umax; hyacinPrecision_t precC; hyacinAlgorithm_t alg; uint64_t dev_work_bytes, pinned_work_bytes, dev_work_bytes_new, pinned_work_bytes_new;
   hyacinXcpqrk_autoTune(epi, M, 6, &umax, HYACIN_F64, &precC, &alg);
@@ -157,15 +157,16 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaMalloc((void**)(&d_V2), K * gK * sizeof(double));
   cudaMemcpy(d_A, matA.data(), M * lN * sizeof(double), cudaMemcpyHostToDevice);
 
-  int32_t r1 = utv_factorize_phase1(stream, cublasH, cusolverH, params, epi, M, lN, K, d_A, M, d_V1, K);
-  int32_t r2 = r1, offset = 0;
+  int32_t r1, r2, offset;
+  r1 = utv_factorize_phase1(stream, cublasH, cusolverH, params, epi, M, lN, K, d_A, M, d_V1, K);
   std::tie(r2, offset) = utv_factorize_phase2(stream, cublasH, cusolverH, params, epi, M, r1, K, d_A, M, d_V2, K, comm, MPI_COMM_WORLD);
-  //cudaMemcpy(d_A, matA.data(), M * lN * sizeof(double), cudaMemcpyHostToDevice);
+  cudaMemcpy(d_A, matA.data(), M * lN * sizeof(double), cudaMemcpyHostToDevice);
 
   MPI_Barrier(MPI_COMM_WORLD);
   double start = MPI_Wtime();
 
-  //int32_t rank = utv_factorize_phase1(stream, cublasH, cusolverH, params, epi, M, lN, K, d_A, M, d_V1, lN);
+  r1 = utv_factorize_phase1(stream, cublasH, cusolverH, params, epi, M, lN, K, d_A, M, d_V1, K);
+  std::tie(r2, offset) = utv_factorize_phase2(stream, cublasH, cusolverH, params, epi, M, r1, K, d_A, M, d_V2, K, comm, MPI_COMM_WORLD);
   cudaDeviceSynchronize();
 
   MPI_Barrier(MPI_COMM_WORLD);
@@ -181,7 +182,7 @@ int32_t main(int32_t argc, char* argv[]) {
   MPI_Allreduce(MPI_IN_PLACE, &ret, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
   double err = std::sqrt(ret.first / ret.second);
 
-  double milliseconds = 1.e-3 * (end - start);
+  double milliseconds = 1.e3 * (end - start);
   int64_t flops = ((int64_t(M) + int64_t(gN)) * int64_t(r2) * int64_t(2)) + (int64_t(M) * int64_t(gN) * int64_t(r2) * int64_t(4));
   double gflops = double(flops) * 1.e-6 / milliseconds;
 
