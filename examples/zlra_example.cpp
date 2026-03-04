@@ -1,17 +1,6 @@
 
-#include <hyacin.h>
+#include <common.hpp>
 #include <iostream>
-#include <algorithm>
-#include <numeric>
-#include <vector>
-#include <complex>
-
-#ifdef USE_MKL
-#include <mkl.h>
-#else
-#include <cblas.h>
-#include <lapacke.h>
-#endif
 
 void make_2D_oscillatory(double w, int32_t iA, int32_t jA, int32_t M, int32_t N, std::complex<double>* A, int32_t lda) {
   constexpr int64_t height = 128;
@@ -25,28 +14,6 @@ void make_2D_oscillatory(double w, int32_t iA, int32_t jA, int32_t M, int32_t N,
       A[i + j * lda] = std::complex<double>(std::cos(w * d) / d, std::sin(w * d) / d);
     }
   }
-}
-
-double check_answer(int32_t rank, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, const int32_t* jpiv, std::complex<double>* R, int32_t ldr) {
-  if (rank <= 0)
-    return std::numeric_limits<double>::quiet_NaN();
-
-  std::complex<double> one(1., 0.), minus_one(-1., 0.), zero(0., 0.);
-  cblas_ztrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, rank, N - rank, &one, R, ldr, &R[int64_t(rank) * int64_t(ldr)], ldr);
-  LAPACKE_zlaset(LAPACK_COL_MAJOR, 'A', rank, rank, zero, one, R, ldr);
-
-  std::vector<std::complex<double>> matB(int64_t(M) * int64_t(N)), matC(int64_t(M) * int64_t(rank)), matR(int64_t(N) * int64_t(rank));
-  LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'A', M, N, A, lda, &matB[0], M);
-  for (int32_t i = 0; i < N; ++i) {
-    if (i < rank)
-      cblas_zcopy(M, &matB[int64_t(jpiv[i] - 1) * int64_t(M)], 1, &matC[int64_t(i) * int64_t(M)], 1);
-    cblas_zcopy(rank, &R[int64_t(i) * int64_t(ldr)], 1, &matR[int64_t(jpiv[i] - 1) * int64_t(rank)], 1);
-  }
-
-  double nrm = cblas_dznrm2(matB.size(), &matB[0], 1);
-  cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, rank, &minus_one, &matC[0], M, &matR[0], rank, &one, &matB[0], M);
-  double err = cblas_dznrm2(matB.size(), &matB[0], 1);
-  return err / nrm;
 }
 
 int32_t geqp3_ronly(cublasHandle_t handle, double epi, int32_t rank, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int32_t* jpiv, std::complex<double>* R, int32_t ldr) {
@@ -113,7 +80,7 @@ int32_t main(int32_t argc, char* argv[]) {
 
   std::vector<std::complex<double>> matX(N * N);
   cudaMemcpy(matX.data(), d_X, N * N * sizeof(std::complex<double>), cudaMemcpyDeviceToHost);
-  double rel_err = check_answer(rank, M, N, matA.data(), M, ipiv.data(), matX.data(), N);
+  double rel_err = check_answer_zlra(rank, M, N, matA.data(), M, ipiv.data(), matX.data(), N);
 
   float milliseconds = 0.0f;
   cudaEventElapsedTime(&milliseconds, start, stop);

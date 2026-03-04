@@ -1,17 +1,6 @@
 
-#include <hyacin.h>
+#include <common.hpp>
 #include <iostream>
-#include <algorithm>
-#include <numeric>
-#include <vector>
-#include <complex>
-
-#ifdef USE_MKL
-#include <mkl.h>
-#else
-#include <cblas.h>
-#include <lapacke.h>
-#endif
 
 void make_2D_oscillatory(double w, int32_t iA, int32_t jA, int32_t M, int32_t N, float* A, int32_t lda) {
   constexpr int64_t height = 128;
@@ -25,27 +14,6 @@ void make_2D_oscillatory(double w, int32_t iA, int32_t jA, int32_t M, int32_t N,
       A[i + j * lda] = float(std::cos(w * d) / d);
     }
   }
-}
-
-double check_answer(int32_t rank, int32_t M, int32_t N, const float* A, int32_t lda, const int32_t* jpiv, float* R, int32_t ldr) {
-  if (rank <= 0)
-    return std::numeric_limits<double>::quiet_NaN();
-
-  cblas_strsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, rank, N - rank, 1., R, ldr, &R[int64_t(rank) * int64_t(ldr)], ldr);
-  LAPACKE_slaset(LAPACK_COL_MAJOR, 'A', rank, rank, 0.f, 1.f, R, ldr);
-
-  std::vector<float> matB(int64_t(M) * int64_t(N)), matC(int64_t(M) * int64_t(rank)), matR(int64_t(N) * int64_t(rank));
-  LAPACKE_slacpy(LAPACK_COL_MAJOR, 'A', M, N, A, lda, &matB[0], M);
-  for (int32_t i = 0; i < N; ++i) {
-    if (i < rank)
-      cblas_scopy(M, &matB[int64_t(jpiv[i] - 1) * int64_t(M)], 1, &matC[int64_t(i) * int64_t(M)], 1);
-    cblas_scopy(rank, &R[int64_t(i) * int64_t(ldr)], 1, &matR[int64_t(jpiv[i] - 1) * int64_t(rank)], 1);
-  }
-
-  double nrm = cblas_snrm2(matB.size(), &matB[0], 1);
-  cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, rank, -1., &matC[0], M, &matR[0], rank, 1., &matB[0], M);
-  double err = cblas_snrm2(matB.size(), &matB[0], 1);
-  return err / nrm;
 }
 
 int32_t geqp3_ronly(cublasHandle_t handle, double epi, int32_t rank, int32_t M, int32_t N, const float* A, int32_t lda, int32_t* jpiv, float* R, int32_t ldr) {
@@ -112,7 +80,7 @@ int32_t main(int32_t argc, char* argv[]) {
 
   std::vector<float> matX(N * N);
   cudaMemcpy(matX.data(), d_X, N * N * sizeof(float), cudaMemcpyDeviceToHost);
-  double rel_err = check_answer(rank, M, N, matA.data(), M, ipiv.data(), matX.data(), N);
+  double rel_err = check_answer_slra(rank, M, N, matA.data(), M, ipiv.data(), matX.data(), N);
 
   float milliseconds = 0.0f;
   cudaEventElapsedTime(&milliseconds, start, stop);

@@ -40,7 +40,7 @@ foreach (test ${TEST_SOURCES})
   endif()
 
   if(BLAS_LIBS MATCHES "mkl")
-    target_compile_options(${src}.app PRIVATE "-DUSE_MKL" "-DMKL_Complex8=std::complex<float>" "-DMKL_Complex16=std::complex<double>")
+    target_compile_options(${src}.app PRIVATE "-DUSE_MKL")
   else()
     target_link_libraries(${src}.app PRIVATE lapacke)
   endif()

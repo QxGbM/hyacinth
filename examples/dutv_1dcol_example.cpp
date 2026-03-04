@@ -1,18 +1,6 @@
 
-#include <hyacin.h>
+#include <common.hpp>
 #include <iostream>
-#include <algorithm>
-#include <numeric>
-#include <vector>
-#include <complex>
-#include <mpi.h>
-
-#ifdef USE_MKL
-#include <mkl.h>
-#else
-#include <cblas.h>
-#include <lapacke.h>
-#endif
 
 void make_2D_oscillatory(double w, int32_t iA, int32_t jA, int32_t M, int32_t N, double* A, int32_t lda) {
   constexpr int64_t height = 128;
@@ -26,21 +14,6 @@ void make_2D_oscillatory(double w, int32_t iA, int32_t jA, int32_t M, int32_t N,
       A[i + j * lda] = std::cos(w * d) / d;
     }
   }
-}
-
-std::pair<double, double> check_answer(int32_t M, int32_t N, int32_t rank, const double* U, int32_t ldu, const double* V, int32_t ldv, const double* B, int32_t ldb) {
-  if (rank <= 0)
-    return std::make_pair(0., 0.);
-  std::vector<double> matQ(M * N, 0.);
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, rank, 1., U, ldu, V, ldv, 0., &matQ[0], M);
-
-  double err = 0., nrm = 0.;
-  for (int32_t j = 0; j < N; ++j)
-    for (int32_t i = 0; i < M; ++i) {
-      err += std::norm(matQ[i + j * M] - B[i + j * ldb]);
-      nrm += std::norm(B[i + j * ldb]);
-  }
-  return std::make_pair(err, nrm);
 }
 
 int32_t utv_factorize_phase1(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t N, int32_t K, double* A, int32_t lda, double* V, int32_t ldv) {
@@ -109,11 +82,15 @@ std::pair<int32_t, int32_t> utv_factorize_phase2(cudaStream_t stream, cublasHand
 int32_t main(int32_t argc, char* argv[]) {
   MPI_Init(&argc, &argv);
 
-  int32_t mpi_rank = 0, mpi_size = 1;
+  int32_t mpi_rank = 0, local_rank = 0, mpi_size = 1;
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 
-  auto cu_err = cudaSetDevice(mpi_rank);
+  MPI_Comm shmcomm; MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL, &shmcomm);
+  MPI_Comm_rank(shmcomm, &local_rank);
+
+  int32_t device_count = 0; cudaGetDeviceCount(&device_count);
+  auto cu_err = cudaSetDevice(1 < device_count ? local_rank : 0);
   cudaDeviceReset();
   if (cu_err != cudaSuccess)
   { std::cerr << cudaGetErrorString(cu_err) << std::endl; return -1; }
@@ -178,7 +155,7 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaMemcpy(matV2.data(), d_V2, K * gK * sizeof(double), cudaMemcpyDeviceToHost);
 
   cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, r2, lN, r1, 1., &matV2[int64_t(offset) * int64_t(K)], K, &matV1[0], K, 0., &matV[0], K);
-  std::pair<double, double> ret = check_answer(M, lN, r2, &matU[0], M, &matV[0], K, &matA[0], M);
+  std::pair<double, double> ret = check_answer_dsvd(M, lN, r2, &matU[0], M, &matV[0], K, &matA[0], M);
   MPI_Allreduce(MPI_IN_PLACE, &ret, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
   double err = std::sqrt(ret.first / ret.second);
 

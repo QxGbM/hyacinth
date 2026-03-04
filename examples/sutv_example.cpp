@@ -1,16 +1,6 @@
 
-#include <hyacin.h>
+#include <common.hpp>
 #include <iostream>
-#include <algorithm>
-#include <vector>
-#include <complex>
-
-#ifdef USE_MKL
-#include <mkl.h>
-#else
-#include <cblas.h>
-#include <lapacke.h>
-#endif
 
 void make_2D_oscillatory(double w, int32_t iA, int32_t jA, int32_t M, int32_t N, float* A, int32_t lda) {
   constexpr int64_t height = 128;
@@ -24,21 +14,6 @@ void make_2D_oscillatory(double w, int32_t iA, int32_t jA, int32_t M, int32_t N,
       A[i + j * lda] = float(std::cos(w * d) / d);
     }
   }
-}
-
-double check_answer(int32_t M, int32_t N, int32_t rank, const float* U, int32_t ldu, const float* V, int32_t ldv, const float* B, int32_t ldb) {
-  if (rank <= 0)
-    return std::numeric_limits<double>::quiet_NaN();
-  std::vector<float> matQ(M * N, 0.);
-  cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, rank, 1.f, U, ldu, V, ldv, 0.f, &matQ[0], M);
-
-  double err = 0., nrm = 0.;
-  for (int32_t j = 0; j < N; ++j)
-    for (int32_t i = 0; i < M; ++i) {
-      err += std::norm(matQ[i + j * M] - B[i + j * ldb]);
-      nrm += std::norm(B[i + j * ldb]);
-  }
-  return std::sqrt(err / nrm);
 }
 
 int32_t utv_factorize(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t N, int32_t K, float* A, int32_t lda, float* V, int32_t ldv) {
@@ -79,7 +54,7 @@ int32_t main(int32_t argc, char* argv[]) {
   N = std::min(M, N);
 
   int64_t K = 3 < argc ? std::atoi(argv[3]) : N;
-  double epi = 4 < argc ? std::atof(argv[4]) : 1.e-12;
+  double epi = 4 < argc ? std::atof(argv[4]) : 1.e-6;
   double omega = 5 < argc ? std::atof(argv[5]) : 1.;
   K = std::min(K, N);
 
@@ -120,7 +95,9 @@ int32_t main(int32_t argc, char* argv[]) {
   std::vector<float> matU(M * K), matV(K * N);
   cudaMemcpy(matU.data(), d_A, M * K * sizeof(float), cudaMemcpyDeviceToHost);
   cudaMemcpy(matV.data(), d_V, K * N * sizeof(float), cudaMemcpyDeviceToHost);
-  double err = check_answer(M, N, rank, &matU[0], M, &matV[0], K, &matA[0], M);
+
+  std::pair<double, double> ret = check_answer_ssvd(M, N, rank, &matU[0], M, &matV[0], K, &matA[0], M);
+  double err = std::sqrt(ret.first / ret.second);
 
   float milliseconds = 0.0f;
   cudaEventElapsedTime(&milliseconds, start, stop);
