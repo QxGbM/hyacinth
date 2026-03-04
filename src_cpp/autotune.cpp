@@ -9,8 +9,26 @@ const int32_t umax_threshold = 30; // umax < 30 : Limbs, 30 <= umax : CRT
 const int32_t umax_practical_limit = 80; // umax <= 80 to satisfy implementation assumptions
 const std::vector<int32_t> dd_sm_list({ 800, 900, 1000 }); // sm80,sm90,sm100
 
-inline hyacinPrecision_t real_precision(hyacinPrecision_t prec) { return hyacinPrecision_t(int32_t(prec) & 7); }
-inline hyacinPrecision_t complex_precision(hyacinPrecision_t prec) { return hyacinPrecision_t(int32_t(prec) | 8); }
+inline hyacinPrecision_t real_precision(hyacinPrecision_t prec) {
+  switch(prec) {
+    case HYACIN_F64: return HYACIN_F64; case HYACIN_F32: return HYACIN_F32;
+    case HYACIN_DD: return HYACIN_DD; case HYACIN_QF: return HYACIN_QF;
+    case HYACIN_F64_COMPLEX: return HYACIN_F32; case HYACIN_F32_COMPLEX: return HYACIN_F64;
+    case HYACIN_DD_COMPLEX: return HYACIN_DD; case HYACIN_QF_COMPLEX: return HYACIN_QF;
+    default: return hyacinPrecision_t(0);
+  }
+}
+
+inline hyacinPrecision_t complex_precision(hyacinPrecision_t prec) {
+  switch(prec) {
+    case HYACIN_F64: return HYACIN_F64_COMPLEX; case HYACIN_F32: return HYACIN_F32_COMPLEX;
+    case HYACIN_DD: return HYACIN_DD_COMPLEX; case HYACIN_QF: return HYACIN_QF_COMPLEX;
+    case HYACIN_F64_COMPLEX: return HYACIN_F32_COMPLEX; case HYACIN_F32_COMPLEX: return HYACIN_F64_COMPLEX;
+    case HYACIN_DD_COMPLEX: return HYACIN_DD_COMPLEX; case HYACIN_QF_COMPLEX: return HYACIN_QF_COMPLEX;
+    default: return hyacinPrecision_t(0);
+  }
+}
+
 inline int32_t pad_u_limbs(int32_t umax) { return ((umax + 10) & (~7)) - 3; }
 inline int32_t pad_u_crt(int32_t umax, int32_t extra) { int32_t b = ((umax * 2) + extra) | 7; return (b - extra) / 2; }
 

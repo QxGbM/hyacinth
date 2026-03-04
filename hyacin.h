@@ -10,19 +10,19 @@
 #endif
 
 typedef enum { 
-  HYACIN_F64 = 0,
-  HYACIN_F32 = 1,
-  HYACIN_DD = 2,
-  HYACIN_QF = 3,
-  HYACIN_F64_COMPLEX = 8,
-  HYACIN_F32_COMPLEX = 9,
-  HYACIN_DD_COMPLEX = 10,
-  HYACIN_QF_COMPLEX = 11
+  HYACIN_F64,
+  HYACIN_F32,
+  HYACIN_DD,
+  HYACIN_QF,
+  HYACIN_F64_COMPLEX,
+  HYACIN_F32_COMPLEX,
+  HYACIN_DD_COMPLEX,
+  HYACIN_QF_COMPLEX
 } hyacinPrecision_t;
 
 typedef enum {
-  HYACIN_ALG_LIMBS = 0,
-  HYACIN_ALG_CRT = 1
+  HYACIN_ALG_LIMBS,
+  HYACIN_ALG_CRT
 } hyacinAlgorithm_t;
 
 #ifdef __cplusplus

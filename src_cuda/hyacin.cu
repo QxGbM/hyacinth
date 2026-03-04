@@ -85,8 +85,19 @@ inline void conv_copy_dispatcher(cudaStream_t stream, int64_t M, int32_t N, cons
   }
 }
 
+inline std::pair<hyacinPrecision_t, int64_t> real_precision(hyacinPrecision_t prec) {
+  switch(prec) {
+    case HYACIN_F64: case HYACIN_F64_COMPLEX: return std::make_pair(HYACIN_F64, sizeof(double));
+    case HYACIN_F32: case HYACIN_F32_COMPLEX: return std::make_pair(HYACIN_F64, sizeof(float));
+    case HYACIN_DD: case HYACIN_DD_COMPLEX: return std::make_pair(HYACIN_DD, sizeof(double2));
+    case HYACIN_QF: case HYACIN_QF_COMPLEX: return std::make_pair(HYACIN_QF, sizeof(float4));
+    default: return std::make_pair(hyacinPrecision_t(0), int64_t(0));
+  }
+}
+
 inline std::tuple<int32_t, int32_t, int32_t, int32_t, int32_t, int64_t, int64_t, int64_t, int64_t> ext_params(int32_t localM, int32_t globalM, int32_t N, int32_t umax, int32_t acc_bits, hyacinPrecision_t ComputeType, hyacinAlgorithm_t alg) {
-  hyacinPrecision_t ComputeTypeReal = hyacinPrecision_t(int32_t(ComputeType) & 7);
+  hyacinPrecision_t ComputeTypeReal; int64_t em_bytes;
+  std::tie(ComputeTypeReal, em_bytes) = real_precision(ComputeType);
   int32_t Complex = int32_t(ComputeType != ComputeTypeReal);
   int32_t algnM = (localM + 255) & (~255);
   int32_t algnN = (N + 63) & (~63);
@@ -94,16 +105,15 @@ inline std::tuple<int32_t, int32_t, int32_t, int32_t, int32_t, int64_t, int64_t,
   int32_t use_limbs = int32_t(alg == HYACIN_ALG_LIMBS);
 
   int32_t orderA = ((use_limbs ? umax : bits) + 8) >> 3;
-  int64_t elem_bytes = ComputeTypeReal == HYACIN_F32 ? sizeof(float) : (ComputeTypeReal == HYACIN_F64 ? sizeof(double) : sizeof(double2));
   int64_t i8_bytes = int64_t(N) * int64_t(use_limbs ? orderA : 8) * ((int64_t(algnM) << Complex) + (int64_t(algnN) * sizeof(int32_t)));
-  int64_t C_bytes = (int64_t(algnN) * int64_t(N) * elem_bytes) << Complex;
+  int64_t C_bytes = (int64_t(algnN) * int64_t(N) * em_bytes) << Complex;
   i8_bytes = std::max(i8_bytes, C_bytes);
 
   int32_t orderC = ((use_limbs ? bits : (orderA << 3)) + 63) / 63;
   int32_t orderD = (orderC + int32_t(acc_bits < 63)) << Complex;
   int64_t acc_bytes = int64_t(algnN) * int64_t(N + 1) * int64_t(orderD) * sizeof(uint64_t);
   int64_t vec_bytes = int64_t(algnN) * sizeof(int32_t);
-  int64_t idx_bytes = elem_bytes << 9;
+  int64_t idx_bytes = em_bytes << 9;
   return std::tie(Complex, algnM, algnN, orderA, orderC, i8_bytes, acc_bytes, vec_bytes, idx_bytes);
 }
 

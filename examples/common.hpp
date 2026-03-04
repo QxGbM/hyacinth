@@ -13,11 +13,50 @@
 #include <lapacke.h>
 #endif
 
-double check_answer_dlra(int32_t rank, int32_t M, int32_t N, const double* A, int32_t lda, const int32_t* jpiv, const double* R, int32_t ldr) {
+inline void __f(double& a, double d, double w) { a = std::cos(w * d) / d; }
+inline void __f(float& a, double d, double w) { a = float(std::cos(w * d) / d); }
+inline void __f(std::complex<double>& a, double d, double w) { a = std::complex<double>(std::cos(w * d) / d, std::sin(w * d) / d); }
+inline void __f(std::complex<float>& a, double d, double w) { a = std::complex<float>(float(std::cos(w * d) / d), float(std::sin(w * d) / d)); }
+
+template <class T>
+void make_2D_oscillatory(double w, int32_t iA, int32_t jA, int32_t M, int32_t N, T* A, int32_t lda) {
+  constexpr int64_t height = 128;
+  auto translate_2d = [](int64_t i) { int64_t x = i / height, y = i - height * x; return std::complex<double>(x, y); };
+
+  for (int64_t j = 0; j < N; ++j) {
+    auto vj = translate_2d(j + jA + height);
+    for (int64_t i = 0; i < M; ++i) {
+      auto vi = translate_2d(i + iA);
+      double d = std::abs(vi + std::conj(vj));
+      __f(A[i + j * lda], d, w);
+    }
+  }
+}
+
+inline void __lrtrsm(int32_t M, int32_t N, const double* A, int32_t lda, double* B, int32_t ldb)
+{ cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, M, N, 1., A, lda, B, ldb); }
+inline void __lrtrsm(int32_t M, int32_t N, const float* A, int32_t lda, float* B, int32_t ldb)
+{ cblas_strsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, M, N, 1.f, A, lda, B, ldb); }
+inline void __lrtrsm(int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, std::complex<double>* B, int32_t ldb)
+{ std::complex<double> one(1., 0.); cblas_ztrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, M, N, &one, A, lda, B, ldb); }
+inline void __lrtrsm(int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, std::complex<float>* B, int32_t ldb)
+{ std::complex<float> one(1.f, 0.f); cblas_ctrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, M, N, &one, A, lda, B, ldb); }
+
+inline void __nngemm(int32_t M, int32_t N, int32_t K, const double* A, int32_t lda, const double* B, int32_t ldb, double* C, int32_t ldc)
+{ cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, K, -1., A, lda, B, ldb, 1., C, ldc); }
+inline void __nngemm(int32_t M, int32_t N, int32_t K, const float* A, int32_t lda, const float* B, int32_t ldb, float* C, int32_t ldc)
+{ cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, K, -1.f, A, lda, B, ldb, 1.f, C, ldc); }
+inline void __nngemm(int32_t M, int32_t N, int32_t K, const std::complex<double>* A, int32_t lda, const std::complex<double>* B, int32_t ldb, std::complex<double>* C, int32_t ldc)
+{ std::complex<double> one(1., 0.), minus_one(-1., 0.); cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, K, &minus_one, A, lda, B, ldb, &one, C, ldc); }
+inline void __nngemm(int32_t M, int32_t N, int32_t K, const std::complex<float>* A, int32_t lda, const std::complex<float>* B, int32_t ldb, std::complex<float>* C, int32_t ldc)
+{ std::complex<float> one(1.f, 0.f), minus_one(-1.f, 0.f); cblas_cgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, K, &minus_one, A, lda, B, ldb, &one, C, ldc); }
+
+template <class T>
+double check_answer_lra(int32_t rank, int32_t M, int32_t N, const T* A, int32_t lda, const int32_t* jpiv, const T* R, int32_t ldr) {
   if (rank <= 0)
     return std::numeric_limits<double>::quiet_NaN();
 
-  std::vector<double> matB(int64_t(M) * int64_t(N)), matC(int64_t(M) * int64_t(rank)), matR(int64_t(N) * int64_t(rank));
+  std::vector<T> matB(int64_t(M) * int64_t(N)), matC(int64_t(M) * int64_t(rank)), matR(int64_t(N) * int64_t(rank));
   for (int32_t i = 0; i < N; ++i) {
     std::copy_n(&A[int64_t(i) * int64_t(lda)], M, &matB[int64_t(i) * int64_t(M)]);
     std::copy_n(&R[int64_t(i) * int64_t(ldr)], rank, &matR[int64_t(jpiv[i] - 1) * int64_t(rank)]);
@@ -25,126 +64,148 @@ double check_answer_dlra(int32_t rank, int32_t M, int32_t N, const double* A, in
       std::copy_n(&A[int64_t(jpiv[i] - 1) * int64_t(lda)], M, &matC[int64_t(i) * int64_t(M)]);
   }
 
-  double one = 1., minus_one = -1.;
-  cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, rank, N, one, R, ldr, &matR[0], rank);
+  __lrtrsm(rank, N, R, ldr, &matR[0], rank);
   double nrm = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, rank, minus_one, &matC[0], M, &matR[0], rank, one, &matB[0], M);
+  __nngemm(M, N, rank, &matC[0], M, &matR[0], rank, &matB[0], M);
   double err = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
   return std::sqrt(err / nrm);
 }
 
-double check_answer_slra(int32_t rank, int32_t M, int32_t N, const float* A, int32_t lda, const int32_t* jpiv, const float* R, int32_t ldr) {
-  if (rank <= 0)
-    return std::numeric_limits<double>::quiet_NaN();
-
-  std::vector<float> matB(int64_t(M) * int64_t(N)), matC(int64_t(M) * int64_t(rank)), matR(int64_t(N) * int64_t(rank));
-  for (int32_t i = 0; i < N; ++i) {
-    std::copy_n(&A[int64_t(i) * int64_t(lda)], M, &matB[int64_t(i) * int64_t(M)]);
-    std::copy_n(&R[int64_t(i) * int64_t(ldr)], rank, &matR[int64_t(jpiv[i] - 1) * int64_t(rank)]);
-    if (i < rank)
-      std::copy_n(&A[int64_t(jpiv[i] - 1) * int64_t(lda)], M, &matC[int64_t(i) * int64_t(M)]);
-  }
-
-  float one = 1.f, minus_one = -1.f;
-  cblas_strsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, rank, N, one, R, ldr, &matR[0], rank);
-  double nrm = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
-  cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, rank, minus_one, &matC[0], M, &matR[0], rank, one, &matB[0], M);
-  double err = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
-  return std::sqrt(err / nrm);
-}
-
-double check_answer_zlra(int32_t rank, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, const int32_t* jpiv, const std::complex<double>* R, int32_t ldr) {
-  if (rank <= 0)
-    return std::numeric_limits<double>::quiet_NaN();
-
-  std::vector<std::complex<double>> matB(int64_t(M) * int64_t(N)), matC(int64_t(M) * int64_t(rank)), matR(int64_t(N) * int64_t(rank));
-  for (int32_t i = 0; i < N; ++i) {
-    std::copy_n(&A[int64_t(i) * int64_t(lda)], M, &matB[int64_t(i) * int64_t(M)]);
-    std::copy_n(&R[int64_t(i) * int64_t(ldr)], rank, &matR[int64_t(jpiv[i] - 1) * int64_t(rank)]);
-    if (i < rank)
-      std::copy_n(&A[int64_t(jpiv[i] - 1) * int64_t(lda)], M, &matC[int64_t(i) * int64_t(M)]);
-  }
-
-  std::complex<double> one(1., 0.), minus_one(-1., 0.);
-  cblas_ztrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, rank, N, &one, R, ldr, &matR[0], rank);
-  double nrm = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
-  cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, rank, &minus_one, &matC[0], M, &matR[0], rank, &one, &matB[0], M);
-  double err = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
-  return std::sqrt(err / nrm);
-}
-
-double check_answer_clra(int32_t rank, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, const int32_t* jpiv, const std::complex<float>* R, int32_t ldr) {
-  if (rank <= 0)
-    return std::numeric_limits<double>::quiet_NaN();
-
-  std::vector<std::complex<float>> matB(int64_t(M) * int64_t(N)), matC(int64_t(M) * int64_t(rank)), matR(int64_t(N) * int64_t(rank));
-  for (int32_t i = 0; i < N; ++i) {
-    std::copy_n(&A[int64_t(i) * int64_t(lda)], M, &matB[int64_t(i) * int64_t(M)]);
-    std::copy_n(&R[int64_t(i) * int64_t(ldr)], rank, &matR[int64_t(jpiv[i] - 1) * int64_t(rank)]);
-    if (i < rank)
-      std::copy_n(&A[int64_t(jpiv[i] - 1) * int64_t(lda)], M, &matC[int64_t(i) * int64_t(M)]);
-  }
-
-  std::complex<float> one(1.f, 0.f), minus_one(-1.f, 0.f);
-  cblas_ctrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, rank, N, &one, R, ldr, &matR[0], rank);
-  double nrm = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
-  cblas_cgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, rank, &minus_one, &matC[0], M, &matR[0], rank, &one, &matB[0], M);
-  double err = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
-  return std::sqrt(err / nrm);
-}
-
-std::pair<double, double> check_answer_dsvd(int32_t M, int32_t N, int32_t rank, const double* U, int32_t ldu, const double* V, int32_t ldv, const double* B, int32_t ldb) {
+template <class T>
+std::pair<double, double> check_answer_svd(int32_t M, int32_t N, int32_t rank, const T* U, int32_t ldu, const T* V, int32_t ldv, const T* B, int32_t ldb) {
   if (rank <= 0)
     return std::make_pair(0., 0.);
-  std::vector<double> matB(M * N);
+  std::vector<T> matB(M * N);
   for (int32_t i = 0; i < N; ++i)
     std::copy_n(&B[int64_t(i) * int64_t(ldb)], M, &matB[int64_t(i) * int64_t(M)]);
 
-  double one = 1., minus_one = -1.;
   double nrm = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, rank, minus_one, U, ldu, V, ldv, one, &matB[0], M);
+  __nngemm(M, N, rank, U, ldu, V, ldv, &matB[0], M);
   double err = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
   return std::make_pair(err, nrm);
 }
 
-std::pair<double, double> check_answer_ssvd(int32_t M, int32_t N, int32_t rank, const float* U, int32_t ldu, const float* V, int32_t ldv, const float* B, int32_t ldb) {
-  if (rank <= 0)
-    return std::make_pair(0., 0.);
-  std::vector<float> matB(M * N);
-  for (int32_t i = 0; i < N; ++i)
-    std::copy_n(&B[int64_t(i) * int64_t(ldb)], M, &matB[int64_t(i) * int64_t(M)]);
+template <class T> struct __precA;
+template <> struct __precA<double> { static constexpr hyacinPrecision_t value = HYACIN_F64; };
+template <> struct __precA<float> { static constexpr hyacinPrecision_t value = HYACIN_F32; };
+template <> struct __precA<std::complex<double>> { static constexpr hyacinPrecision_t value = HYACIN_F64_COMPLEX; };
+template <> struct __precA<std::complex<float>> { static constexpr hyacinPrecision_t value = HYACIN_F32_COMPLEX; };
 
-  float one = 1.f, minus_one = -1.f;
-  double nrm = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
-  cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, rank, minus_one, U, ldu, V, ldv, one, &matB[0], M);
-  double err = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
-  return std::make_pair(err, nrm);
+template <class T>
+int32_t geqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, int32_t* jpiv, T* R, int32_t ldr) {
+  cudaStream_t stream; cublasGetStream(handle, &stream);
+  int32_t umax; hyacinPrecision_t precA = __precA<T>::value, precC; hyacinAlgorithm_t alg; uint64_t dev_work_bytes, pinned_work_bytes;
+  hyacinXcpqrk_autoTune(epi, M, 6, &umax, precA, &precC, &alg);
+  hyacinXcpqrk_bufferSize(M, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
+
+  void* dev_work = nullptr, *piv = nullptr, *pinned_work = nullptr;
+  cudaMalloc(&dev_work, dev_work_bytes);
+  cudaMalloc(&piv, int64_t(N) * sizeof(int32_t));
+  cudaMallocHost(&pinned_work, pinned_work_bytes);
+
+  int32_t p = 0;
+  int32_t rank = hyacinXcpqrk(handle, 'R', epi, M, N, K, p, umax, precA, A, lda, (int32_t*)piv, precA, R, ldr, precC, dev_work, pinned_work, alg);
+
+  cudaStreamSynchronize(stream);
+  cudaMemcpy(jpiv, piv, sizeof(int32_t) * N, cudaMemcpyDefault);
+  cudaFree(dev_work);
+  cudaFree(piv);
+  cudaFreeHost(pinned_work);
+  return rank;
 }
 
-std::pair<double, double> check_answer_zsvd(int32_t M, int32_t N, int32_t rank, const std::complex<double>* U, int32_t ldu, const std::complex<double>* V, int32_t ldv, const std::complex<double>* B, int32_t ldb) {
-  if (rank <= 0)
-    return std::make_pair(0., 0.);
-  std::vector<std::complex<double>> matB(M * N);
-  for (int32_t i = 0; i < N; ++i)
-    std::copy_n(&B[int64_t(i) * int64_t(ldb)], M, &matB[int64_t(i) * int64_t(M)]);
+template <class T>
+int32_t utv_factorize_phase1(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv) {
+  int32_t umax; hyacinPrecision_t precA = __precA<T>::value, precC; hyacinAlgorithm_t alg;
+  uint64_t dev_work_bytes, pinned_work_bytes, dev_work_bytes_new, pinned_work_bytes_new;
+  hyacinXcpqrk_autoTune(epi, M, 6, &umax, precA, &precC, &alg);
+  hyacinXcpqrk_bufferSize(M, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
 
-  std::complex<double> one(1., 0.), minus_one(-1., 0.);
-  double nrm = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
-  cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, rank, &minus_one, U, ldu, V, ldv, &one, &matB[0], M);
-  double err = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
-  return std::make_pair(err, nrm);
+  void* jpiv = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
+  cudaMalloc(&jpiv, int64_t(N) * sizeof(int32_t));
+  cudaMalloc(&dev_work, dev_work_bytes);
+  cudaMallocHost(&pinned_work, pinned_work_bytes);
+
+  int32_t p = 0; 
+  int32_t rank = hyacinXcpqrk(cublasH, 'J', epi, M, N, K, p, umax, precA, A, lda, (int32_t*)jpiv, precA, V, ldv, precC, dev_work, pinned_work, alg);
+
+  hyacinXutvk_bufferSize(cusolverH, params, epi, N, rank, precA, &dev_work_bytes_new, &pinned_work_bytes_new);
+  if (dev_work_bytes < dev_work_bytes_new) { cudaStreamSynchronize(stream); cudaFree(dev_work); cudaMalloc(&dev_work, dev_work_bytes = dev_work_bytes_new); }
+  if (pinned_work_bytes < pinned_work_bytes_new) { cudaStreamSynchronize(stream); cudaFreeHost(pinned_work); cudaMallocHost(&pinned_work, pinned_work_bytes = pinned_work_bytes_new); }
+
+  rank = hyacinXutvk(cublasH, cusolverH, params, epi, M, N, rank, p, A, lda, V, ldv, precA, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
+
+  cudaStreamSynchronize(stream);
+  cudaFree(jpiv);
+  cudaFree(dev_work);
+  cudaFreeHost(pinned_work);
+  return rank;
 }
 
-std::pair<double, double> check_answer_csvd(int32_t M, int32_t N, int32_t rank, const std::complex<float>* U, int32_t ldu, const std::complex<float>* V, int32_t ldv, const std::complex<float>* B, int32_t ldb) {
-  if (rank <= 0)
-    return std::make_pair(0., 0.);
-  std::vector<std::complex<float>> matB(M * N);
-  for (int32_t i = 0; i < N; ++i)
-    std::copy_n(&B[int64_t(i) * int64_t(ldb)], M, &matB[int64_t(i) * int64_t(M)]);
+template <class T>
+int32_t utv_factorize_phase1_d(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t gM, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv, ncclComm_t comm) {
+  int32_t umax; hyacinPrecision_t precA = __precA<T>::value, precC; hyacinAlgorithm_t alg;
+  uint64_t dev_work_bytes, pinned_work_bytes;
+  hyacinXcpqrk_autoTune(epi, gM, 6, &umax, precA, &precC, &alg);
+  hyacinXcpqrk1Drow_bufferSize(M, gM, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
 
-  std::complex<float> one(1.f, 0.f), minus_one(-1.f, 0.f);
-  double nrm = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
-  cblas_cgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, rank, &minus_one, U, ldu, V, ldv, &one, &matB[0], M);
-  double err = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
-  return std::make_pair(err, nrm);
+  void* jpiv = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
+  cudaMalloc(&jpiv, int64_t(N) * sizeof(int32_t));
+  cudaMalloc(&dev_work, dev_work_bytes);
+  cudaMallocHost(&pinned_work, pinned_work_bytes);
+
+  int32_t p = 0; 
+  int32_t rank = hyacinXcpqrk1Drow(cublasH, 'J', epi, M, gM, N, K, p, umax, precA, A, lda, (int32_t*)jpiv, precA, V, ldv, precC, dev_work, pinned_work, alg, comm);
+
+  uint64_t dev_work_bytes_new, pinned_work_bytes_new;
+  hyacinXutvk_bufferSize(cusolverH, params, epi, N, rank, precA, &dev_work_bytes_new, &pinned_work_bytes_new);
+  if (dev_work_bytes < dev_work_bytes_new) { cudaStreamSynchronize(stream); cudaFree(dev_work); cudaMalloc(&dev_work, dev_work_bytes = dev_work_bytes_new); }
+  if (pinned_work_bytes < pinned_work_bytes_new) { cudaStreamSynchronize(stream); cudaFreeHost(pinned_work); cudaMallocHost(&pinned_work, pinned_work_bytes = pinned_work_bytes_new); }
+
+  rank = hyacinXutvk(cublasH, cusolverH, params, epi, M, N, rank, p, A, lda, V, ldv, precA, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
+
+  cudaStreamSynchronize(stream);
+  cudaFree(jpiv);
+  cudaFree(dev_work);
+  cudaFreeHost(pinned_work);
+  return rank;
+}
+
+template <class T>
+std::pair<int32_t, int32_t> utv_factorize_phase2(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv, ncclComm_t comm, MPI_Comm mpi_comm) {
+  int32_t mpi_rank, mpi_size; MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank); MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+  std::vector<int32_t> ranks_arr(mpi_size);
+  MPI_Allgather(&N, 1, MPI_INT32_T, ranks_arr.data(), 1, MPI_INT32_T, mpi_comm);
+  int32_t rank_max = std::reduce(ranks_arr.begin(), ranks_arr.end(), 0, [](int32_t i, int32_t j) { return std::max(i, j); });
+  int32_t v_offset = std::reduce(ranks_arr.begin(), ranks_arr.begin() + mpi_rank, 0, std::plus<int32_t>());
+  N = std::reduce(ranks_arr.begin() + mpi_rank, ranks_arr.end(), v_offset, std::plus<int32_t>());
+
+  int32_t umax; hyacinPrecision_t precA = __precA<T>::value, precC; hyacinAlgorithm_t alg;
+  uint64_t dev_work_bytes, pinned_work_bytes, dev_work_bytes_new, pinned_work_bytes_new;
+  hyacinXcpqrk_autoTune(epi, M, 6, &umax, precA, &precC, &alg);
+  hyacinXcpqrk_bufferSize(M, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
+  hyacinXAllGatherV1Dcol_bufferSize(M, rank_max, mpi_size, precA, &dev_work_bytes_new);
+  dev_work_bytes = std::max(dev_work_bytes, dev_work_bytes_new);
+
+  void* jpiv = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
+  cudaMalloc(&jpiv, int64_t(N) * sizeof(int32_t));
+  cudaMalloc(&dev_work, dev_work_bytes);
+  cudaMallocHost(&pinned_work, pinned_work_bytes);
+
+  hyacinXAllGatherV1Dcol(cublasH, M, mpi_rank, mpi_size, ranks_arr.data(), precA, A, lda, dev_work, comm);
+
+  int32_t p = 0; 
+  int32_t rank = hyacinXcpqrk(cublasH, 'J', epi, M, N, K, p, umax, precA, A, lda, (int32_t*)jpiv, precA, V, ldv, precC, dev_work, pinned_work, alg);
+
+  hyacinXutvk_bufferSize(cusolverH, params, epi, N, rank, precA, &dev_work_bytes_new, &pinned_work_bytes_new);
+  if (dev_work_bytes < dev_work_bytes_new) { cudaStreamSynchronize(stream); cudaFree(dev_work); cudaMalloc(&dev_work, dev_work_bytes = dev_work_bytes_new); }
+  if (pinned_work_bytes < pinned_work_bytes_new) { cudaStreamSynchronize(stream); cudaFreeHost(pinned_work); cudaMallocHost(&pinned_work, pinned_work_bytes = pinned_work_bytes_new); }
+
+  rank = hyacinXutvk(cublasH, cusolverH, params, epi, M, N, rank, p, A, lda, V, ldv, precA, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
+
+  cudaStreamSynchronize(stream);
+  cudaFree(jpiv);
+  cudaFree(dev_work);
+  cudaFreeHost(pinned_work);
+  return std::make_pair(rank, v_offset);
 }

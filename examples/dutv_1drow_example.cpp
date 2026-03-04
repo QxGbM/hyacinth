@@ -2,47 +2,6 @@
 #include <common.hpp>
 #include <iostream>
 
-void make_2D_oscillatory(double w, int32_t iA, int32_t jA, int32_t M, int32_t N, double* A, int32_t lda) {
-  constexpr int64_t height = 128;
-  auto translate_2d = [](int64_t i) { int64_t x = i / height, y = i - height * x; return std::complex<double>(x, y); };
-
-  for (int64_t j = 0; j < N; ++j) {
-    auto vj = translate_2d(j + jA + height);
-    for (int64_t i = 0; i < M; ++i) {
-      auto vi = translate_2d(i + iA);
-      double d = std::abs(vi + std::conj(vj));
-      A[i + j * lda] = std::cos(w * d) / d;
-    }
-  }
-}
-
-int32_t utv_factorize(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t gM, int32_t N, int32_t K, double* A, int32_t lda, double* V, int32_t ldv, ncclComm_t comm) {
-  int32_t umax; hyacinPrecision_t precC; hyacinAlgorithm_t alg; uint64_t dev_work_bytes, pinned_work_bytes;
-  hyacinXcpqrk_autoTune(epi, gM, 6, &umax, HYACIN_F64, &precC, &alg);
-  hyacinXcpqrk1Drow_bufferSize(M, gM, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
-
-  void* jpiv = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
-  cudaMalloc(&jpiv, int64_t(N) * sizeof(int32_t));
-  cudaMalloc(&dev_work, dev_work_bytes);
-  cudaMallocHost(&pinned_work, pinned_work_bytes);
-
-  int32_t p = 0; 
-  int32_t rank = hyacinXcpqrk1Drow(cublasH, 'J', epi, M, gM, N, K, p, umax, HYACIN_F64, A, lda, (int32_t*)jpiv, HYACIN_F64, V, ldv, precC, dev_work, pinned_work, alg, comm);
-
-  uint64_t dev_work_bytes_new, pinned_work_bytes_new;
-  hyacinXutvk_bufferSize(cusolverH, params, epi, N, rank, HYACIN_F64, &dev_work_bytes_new, &pinned_work_bytes_new);
-  if (dev_work_bytes < dev_work_bytes_new) { cudaStreamSynchronize(stream); cudaFree(dev_work); cudaMalloc(&dev_work, dev_work_bytes = dev_work_bytes_new); }
-  if (pinned_work_bytes < pinned_work_bytes_new) { cudaStreamSynchronize(stream); cudaFreeHost(pinned_work); cudaMallocHost(&pinned_work, pinned_work_bytes = pinned_work_bytes_new); }
-
-  rank = hyacinXutvk(cublasH, cusolverH, params, epi, M, N, rank, p, A, lda, V, ldv, HYACIN_F64, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
-
-  cudaStreamSynchronize(stream);
-  cudaFree(jpiv);
-  cudaFree(dev_work);
-  cudaFreeHost(pinned_work);
-  return rank;
-}
-
 int32_t main(int32_t argc, char* argv[]) {
   MPI_Init(&argc, &argv);
 
@@ -96,13 +55,13 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaMalloc((void**)(&d_V), K * N * sizeof(double));
   cudaMemcpy(d_A, matA.data(), lM * N * sizeof(double), cudaMemcpyHostToDevice);
 
-  utv_factorize(stream, cublasH, cusolverH, params, epi, lM, gM, N, K, d_A, lM, d_V, K, comm);
+  utv_factorize_phase1_d(stream, cublasH, cusolverH, params, epi, lM, gM, N, K, d_A, lM, d_V, K, comm);
   cudaMemcpy(d_A, matA.data(), lM * N * sizeof(double), cudaMemcpyHostToDevice);
 
   MPI_Barrier(MPI_COMM_WORLD);
   double start = MPI_Wtime();
 
-  int32_t rank = utv_factorize(stream, cublasH, cusolverH, params, epi, lM, gM, N, K, d_A, lM, d_V, K, comm);
+  int32_t rank = utv_factorize_phase1_d(stream, cublasH, cusolverH, params, epi, lM, gM, N, K, d_A, lM, d_V, K, comm);
   cudaDeviceSynchronize();
 
   MPI_Barrier(MPI_COMM_WORLD);
@@ -112,7 +71,7 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaMemcpy(matU.data(), d_A, lM * K * sizeof(double), cudaMemcpyDeviceToHost);
   cudaMemcpy(matV.data(), d_V, K * N * sizeof(double), cudaMemcpyDeviceToHost);
 
-  std::pair<double, double> ret = check_answer_dsvd(lM, N, rank, &matU[0], lM, &matV[0], K, &matA[0], lM);
+  std::pair<double, double> ret = check_answer_svd(lM, N, rank, &matU[0], lM, &matV[0], K, &matA[0], lM);
   MPI_Allreduce(MPI_IN_PLACE, &ret, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
   double err = std::sqrt(ret.first / ret.second);
 

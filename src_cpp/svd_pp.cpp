@@ -13,7 +13,7 @@ inline std::tuple<cudaDataType_t, cudaDataType_t, double, size_t, size_t> conver
     case HYACIN_F32: return std::make_tuple(CUDA_R_32F, CUDA_R_32F, f32_polar_svd_cutoff_epi, sizeof(float), sizeof(float));
     case HYACIN_F64_COMPLEX: return std::make_tuple(CUDA_C_64F, CUDA_R_64F, f64_polar_svd_cutoff_epi, sizeof(cuDoubleComplex), sizeof(double));
     case HYACIN_F32_COMPLEX: return std::make_tuple(CUDA_C_32F, CUDA_R_32F, f32_polar_svd_cutoff_epi, sizeof(cuComplex), sizeof(float));
-    default: return std::make_tuple(cudaDataType_t(-1), cudaDataType_t(-1), 0., size_t(0), size_t(0));
+    default: return std::make_tuple(cudaDataType_t(0), cudaDataType_t(0), 0., size_t(0), size_t(0));
   }
 }
 
@@ -39,35 +39,25 @@ extern "C" void hyacinXutvk_bufferSize(cusolverDnHandle_t handle, cusolverDnPara
   *pinned_work_bytes = uint64_t(workspaceInBytesOnHost) + s_bytes;
 }
 
-template <hyacinPrecision_t prec>
-inline void tranpose_copy(cublasHandle_t handle, char trans, int32_t Mb, int32_t Nb, const void* A, int32_t lda, void* B, int32_t ldb) {
-  if constexpr(prec == HYACIN_F64)
-  { double one = 1., zero = 0.; cublasDgeam(handle, trans == 'C' ? CUBLAS_OP_T : CUBLAS_OP_N, CUBLAS_OP_N, Mb, Nb, &one, (const double*)A, lda, &zero, (double*)B, ldb, (double*)B, ldb); }
-  else if constexpr(prec == HYACIN_F32)
-  { float one = 1.f, zero = 0.f; cublasSgeam(handle, trans == 'C' ? CUBLAS_OP_T : CUBLAS_OP_N, CUBLAS_OP_N, Mb, Nb, &one, (const float*)A, lda, &zero, (float*)B, ldb, (float*)B, ldb); }
-  else if constexpr(prec == HYACIN_F64_COMPLEX) {
-    cuDoubleComplex one = make_cuDoubleComplex(1., 0.), zero = make_cuDoubleComplex(0., 0.);
-    cublasZgeam(handle, trans == 'C' ? CUBLAS_OP_C : CUBLAS_OP_N, CUBLAS_OP_N, Mb, Nb, &one, (const cuDoubleComplex*)A, lda, &zero, (cuDoubleComplex*)B, ldb, (cuDoubleComplex*)B, ldb);
-  }
-  else if constexpr(prec == HYACIN_F32_COMPLEX) {
-    cuComplex one = make_cuComplex(1.f, 0.f), zero = make_cuComplex(0.f, 0.f);
-    cublasCgeam(handle, trans == 'C' ? CUBLAS_OP_C : CUBLAS_OP_N, CUBLAS_OP_N, Mb, Nb, &one, (const cuComplex*)A, lda, &zero, (cuComplex*)B, ldb, (cuComplex*)B, ldb);
-  }
-}
+inline void constants(cudaDataType_t& type_c, cudaDataType_t& type_r, double& one, double& zero, double& epi)
+{ type_c = type_r = CUDA_R_64F; one = 1.; zero = 0.; epi = f64_polar_svd_cutoff_epi; }
+inline void constants(cudaDataType_t& type_c, cudaDataType_t& type_r, float& one, float& zero, double& epi)
+{ type_c = type_r = CUDA_R_32F; one = 1.f; zero = 0.f; epi = f32_polar_svd_cutoff_epi; }
+inline void constants(cudaDataType_t& type_c, cudaDataType_t& type_r, cuDoubleComplex& one, cuDoubleComplex& zero, double& epi)
+{ type_c = CUDA_C_64F; type_r = CUDA_R_64F; one = make_cuDoubleComplex(1., 0.); zero = make_cuDoubleComplex(0., 0.); epi = f64_polar_svd_cutoff_epi; }
+inline void constants(cudaDataType_t& type_c, cudaDataType_t& type_r, cuComplex& one, cuComplex& zero, double& epi)
+{ type_c = CUDA_C_32F; type_r = CUDA_R_32F; one = make_cuComplex(1.f, 0.f); zero = make_cuComplex(0.f, 0.f); epi = f32_polar_svd_cutoff_epi; }
 
-template <hyacinPrecision_t prec, class complex_t>
-inline void constants(cudaDataType_t& type_c, cudaDataType_t& type_r, complex_t& one, complex_t& zero, double& epi) {
-  if constexpr(prec == HYACIN_F64)
-  { type_c = type_r = CUDA_R_64F; one = 1.; zero = 0.; epi = f64_polar_svd_cutoff_epi; }
-  else if constexpr(prec == HYACIN_F32)
-  { type_c = type_r = CUDA_R_32F; one = 1.f; zero = 0.f; epi = f32_polar_svd_cutoff_epi; }
-  else if constexpr(prec == HYACIN_F64_COMPLEX)
-  { type_c = CUDA_C_64F; type_r = CUDA_R_64F; one = make_cuDoubleComplex(1., 0.); zero = make_cuDoubleComplex(0., 0.); epi = f64_polar_svd_cutoff_epi; }
-  else if constexpr(prec == HYACIN_F32_COMPLEX)
-  { type_c = CUDA_C_32F; type_r = CUDA_R_32F; one = make_cuComplex(1.f, 0.f); zero = make_cuComplex(0.f, 0.f); epi = f32_polar_svd_cutoff_epi; }
-}
+inline void tranpose_copy(cublasHandle_t handle, char trans, int32_t Mb, int32_t Nb, const double* A, int32_t lda, double* B, int32_t ldb)
+{ double one = 1., zero = 0.; cublasDgeam(handle, trans == 'C' ? CUBLAS_OP_T : CUBLAS_OP_N, CUBLAS_OP_N, Mb, Nb, &one, A, lda, &zero, B, ldb, B, ldb); }
+inline void tranpose_copy(cublasHandle_t handle, char trans, int32_t Mb, int32_t Nb, const float* A, int32_t lda, float* B, int32_t ldb)
+{ float one = 1.f, zero = 0.f; cublasSgeam(handle, trans == 'C' ? CUBLAS_OP_T : CUBLAS_OP_N, CUBLAS_OP_N, Mb, Nb, &one, A, lda, &zero, B, ldb, B, ldb); }
+inline void tranpose_copy(cublasHandle_t handle, char trans, int32_t Mb, int32_t Nb, const cuDoubleComplex* A, int32_t lda, cuDoubleComplex* B, int32_t ldb)
+{ cuDoubleComplex one = make_cuDoubleComplex(1., 0.), zero = make_cuDoubleComplex(0., 0.); cublasZgeam(handle, trans == 'C' ? CUBLAS_OP_C : CUBLAS_OP_N, CUBLAS_OP_N, Mb, Nb, &one, A, lda, &zero, B, ldb, B, ldb); }
+inline void tranpose_copy(cublasHandle_t handle, char trans, int32_t Mb, int32_t Nb, const cuComplex* A, int32_t lda, cuComplex* B, int32_t ldb)
+{ cuComplex one = make_cuComplex(1.f, 0.f), zero = make_cuComplex(0.f, 0.f); cublasCgeam(handle, trans == 'C' ? CUBLAS_OP_C : CUBLAS_OP_N, CUBLAS_OP_N, Mb, Nb, &one, A, lda, &zero, B, ldb, B, ldb); }
 
-template <hyacinPrecision_t prec, class real_t, class complex_t>
+template <class real_t, class complex_t>
 inline int32_t utv_k_dispatcher(cublasHandle_t handle, cusolverDnHandle_t s_handle, cusolverDnParams_t params, double epi, int32_t M, int32_t N, int32_t K, int32_t p,
   complex_t* UA, int32_t ldu, complex_t* RJ, int32_t ldr, uint64_t dev_work_bytes, void* dev_work, uint64_t pinned_work_bytes, void* pinned_work) {
   
@@ -79,12 +69,12 @@ inline int32_t utv_k_dispatcher(cublasHandle_t handle, cusolverDnHandle_t s_hand
   int8_t* Sh = (int8_t*)pinned_work, *bufferOnHost = &Sh[s_bytes];
 
   cudaDataType_t type_c, type_r; complex_t one, zero; double cutoff_epi;
-  constants<prec, complex_t>(type_c, type_r, one, zero, cutoff_epi);
+  constants(type_c, type_r, one, zero, cutoff_epi);
 
   if (epi < cutoff_epi) {
     size_t workspaceInBytesOnDevice = size_t(dev_work_bytes - uint64_t(r_bytes + s_bytes));
 
-    tranpose_copy<prec>(handle, 'C', N, K, RJ, ldr, R, algnN);
+    tranpose_copy(handle, 'C', N, K, RJ, ldr, (complex_t*)R, algnN);
     cusolverDnXgesvd(s_handle, params, 'O', 'N', N, K,
       type_c, R, algnN, type_r, S, type_c, nullptr, algnN, type_c, nullptr, algnK, type_c, bufferOnDevice, workspaceInBytesOnDevice, bufferOnHost, workspaceInBytesOnHost, nullptr);
   }
@@ -94,7 +84,7 @@ inline int32_t utv_k_dispatcher(cublasHandle_t handle, cusolverDnHandle_t s_hand
     int8_t* U = &bufferOnDevice[workspaceInBytesOnDevice], *V = &U[r_bytes];
 
     double h_err_sigma = 0.;
-    tranpose_copy<prec>(handle, 'C', N, K, RJ, ldr, U, algnN);
+    tranpose_copy(handle, 'C', N, K, RJ, ldr, (complex_t*)U, algnN);
     cusolverDnXgesvdp(s_handle, params, CUSOLVER_EIG_MODE_VECTOR, 1, N, K,
       type_c, U, algnN, type_r, S, type_c, R, algnN, type_c, V, algnK, type_c, bufferOnDevice, workspaceInBytesOnDevice, bufferOnHost, workspaceInBytesOnHost, nullptr, &h_err_sigma);
   }
@@ -106,12 +96,12 @@ inline int32_t utv_k_dispatcher(cublasHandle_t handle, cusolverDnHandle_t s_hand
 
   if (0 < K) {
     int32_t rows = ((dev_work_bytes - r_bytes) / uint64_t(K)) & (~63);
-    tranpose_copy<prec>(handle, 'C', K, N, R, algnN, RJ, ldr);
+    tranpose_copy(handle, 'C', K, N, (complex_t*)R, algnN, RJ, ldr);
 
     for (int32_t i = 0; i < M; i += rows) {
       int32_t m = std::min(M - i, rows), lds = std::min((m + 63) & (~63), rows);
       cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_N, m, K, N, &one, &UA[i], type_c, ldu, R, type_c, algnN, &zero, S, type_c, lds, type_c, CUBLAS_GEMM_DEFAULT);
-      tranpose_copy<prec>(handle, 'N', m, K, S, lds, &UA[i], ldu);
+      tranpose_copy(handle, 'N', m, K, (complex_t*)S, lds, &UA[i], ldu);
     }
   }
   return K;
@@ -122,13 +112,13 @@ extern "C" int32_t hyacinXutvk(cublasHandle_t handle, cusolverDnHandle_t s_handl
 
   switch(ComputeType) {
     case HYACIN_F64:
-      return utv_k_dispatcher<HYACIN_F64, double, double>(handle, s_handle, params, epi, M, N, K, p, (double*)UA, ldu, (double*)RJ, ldr, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
+      return utv_k_dispatcher<double, double>(handle, s_handle, params, epi, M, N, K, p, (double*)UA, ldu, (double*)RJ, ldr, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
     case HYACIN_F32:
-      return utv_k_dispatcher<HYACIN_F32, float, float>(handle, s_handle, params, epi, M, N, K, p, (float*)UA, ldu, (float*)RJ, ldr, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
+      return utv_k_dispatcher<float, float>(handle, s_handle, params, epi, M, N, K, p, (float*)UA, ldu, (float*)RJ, ldr, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
     case HYACIN_F64_COMPLEX:
-      return utv_k_dispatcher<HYACIN_F64_COMPLEX, double, cuDoubleComplex>(handle, s_handle, params, epi, M, N, K, p, (cuDoubleComplex*)UA, ldu, (cuDoubleComplex*)RJ, ldr, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
+      return utv_k_dispatcher<double, cuDoubleComplex>(handle, s_handle, params, epi, M, N, K, p, (cuDoubleComplex*)UA, ldu, (cuDoubleComplex*)RJ, ldr, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
     case HYACIN_F32_COMPLEX:
-      return utv_k_dispatcher<HYACIN_F32_COMPLEX, float, cuComplex>(handle, s_handle, params, epi, M, N, K, p, (cuComplex*)UA, ldu, (cuComplex*)RJ, ldr, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
+      return utv_k_dispatcher<float, cuComplex>(handle, s_handle, params, epi, M, N, K, p, (cuComplex*)UA, ldu, (cuComplex*)RJ, ldr, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
     default: return 0;
   }
 }

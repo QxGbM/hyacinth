@@ -7,43 +7,41 @@
 #include <cuComplex.h>
 #include <cub/cub.cuh>
 
-struct gemv_pp_fused {
-  __device__ __forceinline__ void operator()(double rsq, double c, double& c_conj, double& d) {
-    c_conj = c = rsq * c; d = fma(-c, c, d);
-  }
-  __device__ __forceinline__ void operator()(float rsq, float c, float& c_conj, float& d) {
-    c_conj = c = rsq * c; d = fmaf(-c, c, d);
-  }
-  __device__ __forceinline__ void operator()(double2 rsq, double2 c, double2& c_conj, double2& d) {
-    c_conj = c = device::dd::mul(rsq, c); d = device::dd::add(d, device::dd::negate(device::dd::square(c)));
-  }
-  __device__ __forceinline__ void operator()(float4 rsq, float4 c, float4& c_conj, float4& d) {
-    c_conj = c = device::qf::mul(rsq, c); d = device::qf::add(d, device::qf::negate(device::qf::square(c)));
-  }
-  __device__ __forceinline__ void operator()(double rsq, cuDoubleComplex c, cuDoubleComplex& c_conj, double& d) {
-    c_conj = c = make_cuDoubleComplex(rsq * c.x, -rsq * c.y); d = fma(-c.x, c.x, fma(-c.y, c.y, d)); 
-  }
-  __device__ __forceinline__ void operator()(float rsq, cuComplex c, cuComplex& c_conj, float& d) {
-    c_conj = c = make_cuComplex(rsq * c.x, -rsq * c.y); d = fmaf(-c.x, c.x, fmaf(-c.y, c.y, d));
-  }
-  __device__ __forceinline__ void operator()(double2 rsq, complex_double2 c, complex_double2& c_conj, double2& d) {
-    using device::dd::add, device::dd::mul, device::dd::square, device::dd::negate;
-    c_conj = c = device::dd::make_complex_double2(mul(rsq, c.real), negate(mul(rsq, c.imag)));
-    d = add(d, negate(add(square(c.real), square(c.imag))));
-  }
-  __device__ __forceinline__ void operator()(float4 rsq, complex_float4 c, complex_float4& c_conj, float4& d) {
-    using device::qf::add, device::qf::mul, device::qf::square, device::qf::negate;
-    c_conj = c = device::qf::make_complex_float4(mul(rsq, c.real), negate(mul(rsq, c.imag)));
-    d = add(d, negate(add(square(c.real), square(c.imag))));
-  }
-};
-
 struct real_max {
   __host__ __device__ __forceinline__ double_idx operator()(double_idx a, double_idx b) { return device::cmp::double_max(a, b); }
   __host__ __device__ __forceinline__ float_idx operator()(float_idx a, float_idx b) { return device::cmp::float_max(a, b); }
   __host__ __device__ __forceinline__ double2_idx operator()(double2_idx a, double2_idx b) { return device::cmp::double2_max(a, b); }
   __host__ __device__ __forceinline__ float4_idx operator()(float4_idx a, float4_idx b) { return device::cmp::float4_max(a, b); }
 };
+
+__device__ __forceinline__ void pp_func(double rsq, double c, double& c_conj, double& d) {
+  c_conj = c = rsq * c; d = fma(-c, c, d);
+}
+__device__ __forceinline__ void pp_func(float rsq, float c, float& c_conj, float& d) {
+  c_conj = c = rsq * c; d = fmaf(-c, c, d);
+}
+__device__ __forceinline__ void pp_func(double2 rsq, double2 c, double2& c_conj, double2& d) {
+  c_conj = c = device::dd::mul(rsq, c); d = device::dd::add(d, device::dd::negate(device::dd::square(c)));
+}
+__device__ __forceinline__ void pp_func(float4 rsq, float4 c, float4& c_conj, float4& d) {
+  c_conj = c = device::qf::mul(rsq, c); d = device::qf::add(d, device::qf::negate(device::qf::square(c)));
+}
+__device__ __forceinline__ void pp_func(double rsq, cuDoubleComplex c, cuDoubleComplex& c_conj, double& d) {
+  c_conj = c = make_cuDoubleComplex(rsq * c.x, -rsq * c.y); d = fma(-c.x, c.x, fma(-c.y, c.y, d)); 
+}
+__device__ __forceinline__ void pp_func(float rsq, cuComplex c, cuComplex& c_conj, float& d) {
+  c_conj = c = make_cuComplex(rsq * c.x, -rsq * c.y); d = fmaf(-c.x, c.x, fmaf(-c.y, c.y, d));
+}
+__device__ __forceinline__ void pp_func(double2 rsq, complex_double2 c, complex_double2& c_conj, double2& d) {
+  using device::dd::add, device::dd::mul, device::dd::square, device::dd::negate;
+  c_conj = c = device::dd::make_complex_double2(mul(rsq, c.real), negate(mul(rsq, c.imag)));
+  d = add(d, negate(add(square(c.real), square(c.imag))));
+}
+__device__ __forceinline__ void pp_func(float4 rsq, complex_float4 c, complex_float4& c_conj, float4& d) {
+  using device::qf::add, device::qf::mul, device::qf::square, device::qf::negate;
+  c_conj = c = device::qf::make_complex_float4(mul(rsq, c.real), negate(mul(rsq, c.imag)));
+  d = add(d, negate(add(square(c.real), square(c.imag))));
+}
 
 __device__ __forceinline__ cuDoubleComplex conj(cuDoubleComplex a) { return make_cuDoubleComplex(a.x, -a.y); }
 __device__ __forceinline__ cuComplex conj(cuComplex a) { return make_cuComplex(a.x, -a.y); }
@@ -65,7 +63,7 @@ __global__ void gemv_pp_kernel(int32_t j, int32_t M, int32_t N, matrix_t sq, rea
   { A_col_j[j] = A_col_j[0]; D[j] = D[0]; }
 
   __shared__ typename cub::BlockReduce<idx_t, BLOCK_THREADS>::TempStorage temp_reduce;
-  gemv_pp_fused pp_func; real_max cmp_max;
+  real_max cmp_max;
   idx_t thread_x = idx_t();
 
   for (int32_t i = offset; i < N; i += elements) {
