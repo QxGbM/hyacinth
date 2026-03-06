@@ -11,16 +11,17 @@ int32_t main(int32_t argc, char* argv[]) {
 
   MPI_Comm shmcomm; MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL, &shmcomm);
   MPI_Comm_rank(shmcomm, &local_rank);
+  MPI_Comm_free(&shmcomm);
 
   int32_t device_count = 0; cudaGetDeviceCount(&device_count);
   auto cu_err = cudaSetDevice(1 < device_count ? local_rank : 0);
   cudaDeviceReset();
   if (cu_err != cudaSuccess)
-  { std::cerr << cudaGetErrorString(cu_err) << std::endl; return -1; }
+  { std::cerr << cudaGetErrorString(cu_err) << std::endl; MPI_Finalize(); return -1; }
 
   ncclUniqueId id; ncclComm_t comm;
   if (mpi_rank == 0) ncclGetUniqueId(&id);
-  MPI_Bcast((void *)&id, sizeof(id), MPI_BYTE, 0, MPI_COMM_WORLD);
+  MPI_Bcast((void *)&id, sizeof(ncclUniqueId), MPI_BYTE, 0, MPI_COMM_WORLD);
   ncclCommInitRank(&comm, mpi_size, id, mpi_rank);
 
   int64_t gM = 1 < argc ? std::atoi(argv[1]) : 2048;
@@ -59,13 +60,13 @@ int32_t main(int32_t argc, char* argv[]) {
   cudaMalloc((void**)(&d_V), K * N * sizeof(double));
   cudaMemcpy(d_A, matA.data(), lM * N * sizeof(double), cudaMemcpyHostToDevice);
 
-  utv_factorize_phase1_d(stream, cublasH, cusolverH, params, epi, lM, gM, N, K, d_A, lM, d_V, K, comm);
+  utv_factorize_phase1_1dr(stream, cublasH, cusolverH, params, epi, lM, gM, N, K, d_A, lM, d_V, K, comm);
   cudaMemcpy(d_A, matA.data(), lM * N * sizeof(double), cudaMemcpyHostToDevice);
 
   MPI_Barrier(MPI_COMM_WORLD);
   double start = MPI_Wtime();
 
-  int32_t rank = utv_factorize_phase1_d(stream, cublasH, cusolverH, params, epi, lM, gM, N, K, d_A, lM, d_V, K, comm);
+  int32_t rank = utv_factorize_phase1_1dr(stream, cublasH, cusolverH, params, epi, lM, gM, N, K, d_A, lM, d_V, K, comm);
   cudaDeviceSynchronize();
 
   MPI_Barrier(MPI_COMM_WORLD);
