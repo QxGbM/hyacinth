@@ -31,13 +31,17 @@ int32_t main(int32_t argc, char* argv[]) {
   double epi = 4 < argc ? std::atof(argv[4]) : 1.e-12;
   double omega = 5 < argc ? std::atof(argv[5]) : 1.;
   K = std::min(gN, K);
-
-  int64_t lN = (gN + mpi_size - 1) / mpi_size;
-  int64_t lS = lN * mpi_rank; lN = std::min(lN, gN - lS);
   int64_t gK = K * mpi_size;
 
+  int64_t nb = 6 < argc ? std::atoi(argv[6]) : 512;
+  int64_t lN = nb * (gN / (nb * mpi_size));
+  lN += std::max(int64_t(0), std::min(nb, gN - lN * mpi_size - nb * mpi_rank));
+
   std::vector<double> matA(M * lN);
-  make_2D_oscillatory(omega, 0, lS, M, lN, &matA[0], M);
+  for (int64_t j = mpi_rank * nb, x = 0; j < gN; j += mpi_size * nb) {
+    make_2D_oscillatory(omega, 0, j, M, std::min(gN - j, nb), &matA[x * M], M);
+    x += nb;
+  }
 
   cudaStream_t stream;
   cublasHandle_t cublasH;

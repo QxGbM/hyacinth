@@ -32,11 +32,15 @@ int32_t main(int32_t argc, char* argv[]) {
   double omega = 5 < argc ? std::atof(argv[5]) : 1.;
   K = std::min(N, K);
 
-  int64_t lM = (gM + mpi_size - 1) / mpi_size;
-  int64_t lS = lM * mpi_rank; lM = std::min(lM, gM - lS);
+  int64_t mb = 6 < argc ? std::atoi(argv[6]) : 512;
+  int64_t lM = mb * (gM / (mb * mpi_size));
+  lM += std::max(int64_t(0), std::min(mb, gM - lM * mpi_size - mb * mpi_rank));
 
   std::vector<double> matA(lM * N);
-  make_2D_oscillatory(omega, lS, 0, lM, N, &matA[0], lM);
+  for (int64_t i = mpi_rank * mb, y = 0; i < gM; i += mpi_size * mb) {
+    make_2D_oscillatory(omega, i, 0, std::min(gM - i, mb), N, &matA[y], lM);
+    y += mb;
+  }
 
   cudaStream_t stream;
   cublasHandle_t cublasH;
