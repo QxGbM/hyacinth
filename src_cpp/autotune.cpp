@@ -13,7 +13,7 @@ inline hyacinPrecision_t real_precision(hyacinPrecision_t prec) {
   switch(prec) {
     case HYACIN_F64: return HYACIN_F64; case HYACIN_F32: return HYACIN_F32;
     case HYACIN_DD: return HYACIN_DD; case HYACIN_QF: return HYACIN_QF;
-    case HYACIN_F64_COMPLEX: return HYACIN_F32; case HYACIN_F32_COMPLEX: return HYACIN_F64;
+    case HYACIN_F64_COMPLEX: return HYACIN_F64; case HYACIN_F32_COMPLEX: return HYACIN_F32;
     case HYACIN_DD_COMPLEX: return HYACIN_DD; case HYACIN_QF_COMPLEX: return HYACIN_QF;
     default: return hyacinPrecision_t(0);
   }
@@ -23,7 +23,7 @@ inline hyacinPrecision_t complex_precision(hyacinPrecision_t prec) {
   switch(prec) {
     case HYACIN_F64: return HYACIN_F64_COMPLEX; case HYACIN_F32: return HYACIN_F32_COMPLEX;
     case HYACIN_DD: return HYACIN_DD_COMPLEX; case HYACIN_QF: return HYACIN_QF_COMPLEX;
-    case HYACIN_F64_COMPLEX: return HYACIN_F32_COMPLEX; case HYACIN_F32_COMPLEX: return HYACIN_F64_COMPLEX;
+    case HYACIN_F64_COMPLEX: return HYACIN_F64_COMPLEX; case HYACIN_F32_COMPLEX: return HYACIN_F32_COMPLEX;
     case HYACIN_DD_COMPLEX: return HYACIN_DD_COMPLEX; case HYACIN_QF_COMPLEX: return HYACIN_QF_COMPLEX;
     default: return hyacinPrecision_t(0);
   }

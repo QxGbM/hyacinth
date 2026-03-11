@@ -12,7 +12,7 @@ find_package(MPI REQUIRED)
 enable_testing()
 
 set(TEST_SOURCES
-  xlra_example.cpp xutv_example.cpp dutv_1dcol_example.cpp dutv_1drow_example.cpp dutv_2d_example.cpp
+  xlra_example.cpp xutv_example.cpp xutv_1dcol_example.cpp xutv_1drow_example.cpp xutv_2d_example.cpp
 )
 
 string(JOIN " " BLAS_LIBS ${BLAS_LIBRARIES})
