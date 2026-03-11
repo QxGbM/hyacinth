@@ -43,13 +43,13 @@ inline void __lrtrsm(int32_t M, int32_t N, const std::complex<float>* A, int32_t
 { std::complex<float> one(1.f, 0.f); cblas_ctrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, M, N, &one, A, lda, B, ldb); }
 
 inline void __nngemm(int32_t M, int32_t N, int32_t K, const double* A, int32_t lda, const double* B, int32_t ldb, double* C, int32_t ldc)
-{ cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, K, -1., A, lda, B, ldb, 1., C, ldc); }
+{ cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, K, 1., A, lda, B, ldb, -1., C, ldc); }
 inline void __nngemm(int32_t M, int32_t N, int32_t K, const float* A, int32_t lda, const float* B, int32_t ldb, float* C, int32_t ldc)
-{ cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, K, -1.f, A, lda, B, ldb, 1.f, C, ldc); }
+{ cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, K, 1.f, A, lda, B, ldb, -1.f, C, ldc); }
 inline void __nngemm(int32_t M, int32_t N, int32_t K, const std::complex<double>* A, int32_t lda, const std::complex<double>* B, int32_t ldb, std::complex<double>* C, int32_t ldc)
-{ std::complex<double> one(1., 0.), minus_one(-1., 0.); cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, K, &minus_one, A, lda, B, ldb, &one, C, ldc); }
+{ std::complex<double> one(1., 0.), minus_one(-1., 0.); cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, K, &one, A, lda, B, ldb, &minus_one, C, ldc); }
 inline void __nngemm(int32_t M, int32_t N, int32_t K, const std::complex<float>* A, int32_t lda, const std::complex<float>* B, int32_t ldb, std::complex<float>* C, int32_t ldc)
-{ std::complex<float> one(1.f, 0.f), minus_one(-1.f, 0.f); cblas_cgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, K, &minus_one, A, lda, B, ldb, &one, C, ldc); }
+{ std::complex<float> one(1.f, 0.f), minus_one(-1.f, 0.f); cblas_cgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, K, &one, A, lda, B, ldb, &minus_one, C, ldc); }
 
 template <class T>
 double check_answer_lra(int32_t rank, int32_t M, int32_t N, const T* A, int32_t lda, const int32_t* jpiv, const T* R, int32_t ldr) {
@@ -83,6 +83,15 @@ std::pair<double, double> check_answer_svd(int32_t M, int32_t N, int32_t rank, c
   __nngemm(M, N, rank, U, ldu, V, ldv, &matB[0], M);
   double err = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
   return std::make_pair(err, nrm);
+}
+
+template <class T>
+std::pair<double, double> check_answer_svd(int32_t M, int32_t N, int32_t r1, int32_t r2, const T* U, int32_t ldu, const T* V1, int32_t ldv1, const T* V2, int32_t ldv2, const T* B, int32_t ldb) {
+  if (r2 <= 0)
+    return std::make_pair(0., 0.);
+  std::vector<T> matV(r1 * N, T());
+  __nngemm(r1, N, r2, V1, ldv1, V2, ldv2, &matV[0], r1);
+  return check_answer_svd(M, N, r1, U, ldu, &matV[0], r1, B, ldb);
 }
 
 template <class T> struct __precA;

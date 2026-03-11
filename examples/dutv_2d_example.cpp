@@ -97,13 +97,12 @@ int32_t main(int32_t argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double end = MPI_Wtime();
 
-  std::vector<double> matU(lM * K), matV1(K * lN), matV2(K * gK), matV(K * lN);
+  std::vector<double> matU(lM * K), matV1(K * lN), matV2(K * gK);
   cudaMemcpy(matU.data(), d_A, lM * K * sizeof(double), cudaMemcpyDeviceToHost);
   cudaMemcpy(matV1.data(), d_V1, K * lN * sizeof(double), cudaMemcpyDeviceToHost);
   cudaMemcpy(matV2.data(), d_V2, K * gK * sizeof(double), cudaMemcpyDeviceToHost);
 
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, r2, lN, r1, 1., &matV2[int64_t(offset) * int64_t(K)], K, &matV1[0], K, 0., &matV[0], K);
-  std::pair<double, double> ret = check_answer_svd(lM, lN, r2, &matU[0], lM, &matV[0], K, &matA[0], lM);
+  std::pair<double, double> ret = check_answer_svd(lM, lN, r2, r1, &matU[0], lM, &matV2[int64_t(offset) * int64_t(K)], K, &matV1[0], K, &matA[0], lM);
   MPI_Allreduce(MPI_IN_PLACE, &ret, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
   double err = std::sqrt(ret.first / ret.second);
 
