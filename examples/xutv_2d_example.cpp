@@ -12,8 +12,8 @@ template <class T> inline void run(char prec, int32_t tile_m, int32_t tile_n, in
   ncclUniqueId id_row, id_col; ncclComm_t comm_row, comm_col;
   if (grid_col == 0) ncclGetUniqueId(&id_row);
   if (grid_row == 0) ncclGetUniqueId(&id_col);
-  MPI_Bcast((void *)&id_row, sizeof(ncclUniqueId), MPI_BYTE, 0, mpi_comm_row);
-  MPI_Bcast((void *)&id_col, sizeof(ncclUniqueId), MPI_BYTE, 0, mpi_comm_col);
+  MPI_Bcast((void*)&id_row, sizeof(ncclUniqueId), MPI_BYTE, 0, mpi_comm_row);
+  MPI_Bcast((void*)&id_col, sizeof(ncclUniqueId), MPI_BYTE, 0, mpi_comm_col);
   ncclCommInitRank(&comm_row, tile_n, id_row, grid_col);
   ncclCommInitRank(&comm_col, tile_m, id_col, grid_row);
 
@@ -24,13 +24,10 @@ template <class T> inline void run(char prec, int32_t tile_m, int32_t tile_n, in
   lN += std::max(int64_t(0), std::min(nb, gN - lN * tile_n - nb * grid_col));
   
   std::vector<T> matA(lM * lN);
-  for (int64_t i = grid_row * mb, y = 0; i < gM; i += tile_m * mb) {
+  for (int64_t i = grid_row * mb, y = 0; i < gM; i = grid_row * mb + tile_m * (y += mb)) {
     int64_t rows = std::min(gM - i, mb);
-    for (int64_t j = grid_col * nb, x = 0; j < gN; j += tile_n * nb) {
+    for (int64_t j = grid_col * nb, x = 0; j < gN; j = grid_col * nb + tile_n * (x += nb))
       make_2D_oscillatory(omega, i, j, rows, std::min(gN - j, nb), &matA[y + (x * lM)], lM);
-      x += nb;
-    }
-    y += mb;
   }
 
   cudaStream_t stream;

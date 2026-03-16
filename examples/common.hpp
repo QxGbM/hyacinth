@@ -4,6 +4,8 @@
 #include <complex>
 #include <algorithm>
 #include <numeric>
+#include <fstream>
+#include <string>
 #include <mpi.h>
 
 #ifdef USE_MKL
@@ -12,6 +14,78 @@
 #include <cblas.h>
 #include <lapacke.h>
 #endif
+
+std::string replace_suffix(const std::string& str, const std::string& suffix) {
+  std::string result = str;
+  std::size_t pos = result.rfind('.');
+  if (pos == std::string::npos) { result += '.' + suffix; }
+  else { result.replace(pos + 1, std::string::npos, suffix); }
+  return result;
+}
+
+template <class T>
+inline void copy2d(int32_t M, int32_t N, const T* A, int32_t lda, T* B, int32_t ldb)
+{ for (int32_t j = 0; j < N; ++j) { std::copy_n(&A[int64_t(j) * int64_t(lda)], M, &B[int64_t(j) * int64_t(ldb)]); } }
+
+inline int32_t parse_char(double& a, const char* s)
+{ const char* e = nullptr; a = std::strtod(s, (char**)&e); return std::distance(s, e); }
+inline int32_t parse_char(float& a, const char* s)
+{ const char* e = nullptr; a = std::strtof(s, (char**)&e); return std::distance(s, e); }
+inline int32_t parse_char(std::complex<double>& a, const char* s)
+{ double r, i; int32_t rd = parse_char(r, s), ri = parse_char(i, &s[rd]); a = std::complex<double>(r, i); return rd + ri; }
+inline int32_t parse_char(std::complex<float>& a, const char* s)
+{ float r, i; int32_t rd = parse_char(r, s), ri = parse_char(i, &s[rd]); a = std::complex<float>(r, i); return rd + ri; }
+
+template <class T>
+void matrix_from_row_major_csv(int32_t M, int32_t N, int32_t mb, int32_t nb, T* A, int32_t lda, const std::string& file, MPI_Comm comm_row, MPI_Comm comm_col) {
+  int32_t grid_row = 0, grid_col = 0, tile_m = 1, tile_n = 1;
+  MPI_Comm_rank(comm_row, &grid_col); MPI_Comm_size(comm_row, &tile_n);
+  MPI_Comm_rank(comm_col, &grid_row); MPI_Comm_size(comm_col, &tile_m);
+  std::ifstream csv; std::vector<int64_t> row_bytes;
+  if (grid_col == 0) {
+    csv.open(replace_suffix(file, "csv"));
+    if (grid_row == 0) {
+      std::ifstream idx(replace_suffix(file, "cache"));
+      if (idx.is_open()) { while (!idx.eof()) { int64_t i; idx >> i; row_bytes.push_back(i); } idx.close(); }
+      else {
+        int64_t len = 0; std::string line; row_bytes.push_back(int64_t(0));
+        while(std::getline(csv, line)) row_bytes.push_back(len += 1 + line.length());
+        std::ofstream idx_cache(replace_suffix(file, "cache"));
+        for (int64_t i : row_bytes) idx_cache << i << std::endl;
+        idx_cache.close(); csv.clear();
+      }
+    }
+    
+    if (1 < tile_m)
+    { row_bytes.resize(M + 1); MPI_Bcast(&row_bytes[0], M + 1, MPI_INT64_T, 0, comm_col); }
+  }
+
+  for (int32_t i = grid_row * mb, y = 0; i < M; i = grid_row * mb + tile_m * (y += mb)) {
+    int32_t ib = std::min(M - i, mb);
+    std::vector<T> mat(int64_t(ib) * int64_t(N));
+
+    if (grid_col == 0 && csv.is_open()) {
+      int64_t start_byte = row_bytes[i], n_bytes = row_bytes[i + ib] - start_byte;
+      std::vector<char> buf(n_bytes); char* str = &buf[0];
+      csv.seekg(start_byte, std::ios::beg); csv.read(str, n_bytes);
+
+      for (int32_t y = 0; y < ib; ++y)
+        for (int32_t x = 0; x < N; ++x) {
+          str += parse_char(mat[int64_t(y) + int64_t(x) * int64_t(ib)], str);
+          while(*str == ',' || *str == '\n') ++str;
+        }
+    }
+
+    if (1 < tile_n)
+      MPI_Bcast(&mat[0], mat.size() * sizeof(T), MPI_BYTE, 0, comm_row);
+
+    for (int32_t j = grid_col * nb, x = 0; j < N; j = grid_col * nb + tile_n * (x += nb))
+      copy2d(ib, std::min(N - j, nb), &mat[int64_t(j) * int64_t(ib)], ib, &A[int64_t(y) + int64_t(x) * int64_t(lda)], lda);
+  }
+
+  if (grid_col == 0 && csv.is_open())
+    csv.close();
+}
 
 inline void __f(double& a, double d, double w) { a = std::cos(w * d) / d; }
 inline void __f(float& a, double d, double w) { a = float(std::cos(w * d) / d); }
@@ -76,8 +150,7 @@ std::pair<double, double> check_answer_svd(int32_t M, int32_t N, int32_t rank, c
   if (rank <= 0)
     return std::make_pair(0., 0.);
   std::vector<T> matB(M * N);
-  for (int32_t i = 0; i < N; ++i)
-    std::copy_n(&B[int64_t(i) * int64_t(ldb)], M, &matB[int64_t(i) * int64_t(M)]);
+  copy2d(M, N, B, ldb, &matB[0], M);
 
   double nrm = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
   __nngemm(M, N, rank, U, ldu, V, ldv, &matB[0], M);

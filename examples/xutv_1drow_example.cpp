@@ -9,7 +9,7 @@ template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, 
 
   ncclUniqueId id; ncclComm_t comm;
   if (mpi_rank == 0) ncclGetUniqueId(&id);
-  MPI_Bcast((void *)&id, sizeof(ncclUniqueId), MPI_BYTE, 0, MPI_COMM_WORLD);
+  MPI_Bcast((void*)&id, sizeof(ncclUniqueId), MPI_BYTE, 0, MPI_COMM_WORLD);
   ncclCommInitRank(&comm, mpi_size, id, mpi_rank);
 
   int64_t lM = mb * (gM / (mb * mpi_size));
