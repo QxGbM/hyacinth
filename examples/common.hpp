@@ -1,3 +1,4 @@
+#pragma once
 
 #include <hyacin.h>
 #include <vector>
@@ -6,14 +7,9 @@
 #include <numeric>
 #include <fstream>
 #include <string>
+#include <tuple>
 #include <mpi.h>
-
-#ifdef USE_MKL
-#include <mkl.h>
-#else
-#include <cblas.h>
-#include <lapacke.h>
-#endif
+using blas_int = int; // LP64
 
 std::string replace_suffix(const std::string& str, const std::string& suffix) {
   std::string result = str;
@@ -94,10 +90,10 @@ void matrix_from_row_major_csv(int32_t M, int32_t N, int32_t mb, int32_t nb, T* 
     csv.close();
 }
 
-inline void __f(double& a, double d, double w) { a = std::cos(w * d) / d; }
-inline void __f(float& a, double d, double w) { a = float(std::cos(w * d) / d); }
-inline void __f(std::complex<double>& a, double d, double w) { a = std::complex<double>(std::cos(w * d) / d, std::sin(w * d) / d); }
-inline void __f(std::complex<float>& a, double d, double w) { a = std::complex<float>(float(std::cos(w * d) / d), float(std::sin(w * d) / d)); }
+inline void matrix_eval(double& a, double d, double w) { a = std::cos(w * d) / d; }
+inline void matrix_eval(float& a, double d, double w) { a = float(std::cos(w * d) / d); }
+inline void matrix_eval(std::complex<double>& a, double d, double w) { a = std::complex<double>(std::cos(w * d) / d, std::sin(w * d) / d); }
+inline void matrix_eval(std::complex<float>& a, double d, double w) { a = std::complex<float>(float(std::cos(w * d) / d), float(std::sin(w * d) / d)); }
 
 template <class T>
 void make_2D_oscillatory(double w, int32_t iA, int32_t jA, int32_t M, int32_t N, T* A, int32_t lda) {
@@ -109,28 +105,38 @@ void make_2D_oscillatory(double w, int32_t iA, int32_t jA, int32_t M, int32_t N,
     for (int64_t i = 0; i < M; ++i) {
       auto vi = translate_2d(i + iA);
       double d = std::abs(vi + std::conj(vj));
-      __f(A[i + j * lda], d, w);
+      matrix_eval(A[i + j * lda], d, w);
     }
   }
 }
 
-inline void __lrtrsm(int32_t M, int32_t N, const double* A, int32_t lda, double* B, int32_t ldb)
-{ cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, M, N, 1., A, lda, B, ldb); }
-inline void __lrtrsm(int32_t M, int32_t N, const float* A, int32_t lda, float* B, int32_t ldb)
-{ cblas_strsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, M, N, 1.f, A, lda, B, ldb); }
-inline void __lrtrsm(int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, std::complex<double>* B, int32_t ldb)
-{ std::complex<double> one(1., 0.); cblas_ztrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, M, N, &one, A, lda, B, ldb); }
-inline void __lrtrsm(int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, std::complex<float>* B, int32_t ldb)
-{ std::complex<float> one(1.f, 0.f); cblas_ctrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, M, N, &one, A, lda, B, ldb); }
+extern "C" void sgemm_(const char*, const char*, const blas_int*, const blas_int*, const blas_int*, const float*, const float*, const blas_int*, const float*, const blas_int*, const float*, float*, const blas_int*);
+extern "C" void dgemm_(const char*, const char*, const blas_int*, const blas_int*, const blas_int*, const double*, const double*, const blas_int*, const double*, const blas_int*, const double*, double*, const blas_int*);
+extern "C" void cgemm_(const char*, const char*, const blas_int*, const blas_int*, const blas_int*, const void*, const void*, const blas_int*, const void*, const blas_int*, const void*, void*, const blas_int*);
+extern "C" void zgemm_(const char*, const char*, const blas_int*, const blas_int*, const blas_int*, const void*, const void*, const blas_int*, const void*, const blas_int*, const void*, void*, const blas_int*);
 
-inline void __nngemm(int32_t M, int32_t N, int32_t K, const double* A, int32_t lda, const double* B, int32_t ldb, double* C, int32_t ldc)
-{ cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, K, 1., A, lda, B, ldb, -1., C, ldc); }
-inline void __nngemm(int32_t M, int32_t N, int32_t K, const float* A, int32_t lda, const float* B, int32_t ldb, float* C, int32_t ldc)
-{ cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, K, 1.f, A, lda, B, ldb, -1.f, C, ldc); }
-inline void __nngemm(int32_t M, int32_t N, int32_t K, const std::complex<double>* A, int32_t lda, const std::complex<double>* B, int32_t ldb, std::complex<double>* C, int32_t ldc)
-{ std::complex<double> one(1., 0.), minus_one(-1., 0.); cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, K, &one, A, lda, B, ldb, &minus_one, C, ldc); }
-inline void __nngemm(int32_t M, int32_t N, int32_t K, const std::complex<float>* A, int32_t lda, const std::complex<float>* B, int32_t ldb, std::complex<float>* C, int32_t ldc)
-{ std::complex<float> one(1.f, 0.f), minus_one(-1.f, 0.f); cblas_cgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, K, &one, A, lda, B, ldb, &minus_one, C, ldc); }
+extern "C" void strsm_(const char*, const char*, const char*, const char*, const blas_int*, const blas_int*, const float*, const float*, const blas_int*, float*, const blas_int*);
+extern "C" void dtrsm_(const char*, const char*, const char*, const char*, const blas_int*, const blas_int*, const double*, const double*, const blas_int*, double*, const blas_int*);
+extern "C" void ctrsm_(const char*, const char*, const char*, const char*, const blas_int*, const blas_int*, const void*, const void*, const blas_int*, void*, const blas_int*);
+extern "C" void ztrsm_(const char*, const char*, const char*, const char*, const blas_int*, const blas_int*, const void*, const void*, const blas_int*, void*, const blas_int*);
+
+inline void lrtrsm(blas_int M, blas_int N, const double* A, blas_int lda, double* B, blas_int ldb)
+{ char side = 'L', uplo = 'U', transa = 'N', diag = 'N'; double one = 1.; dtrsm_(&side, &uplo, &transa, &diag, &M, &N, &one, A, &lda, B, &ldb); }
+inline void lrtrsm(blas_int M, blas_int N, const float* A, blas_int lda, float* B, blas_int ldb)
+{ char side = 'L', uplo = 'U', transa = 'N', diag = 'N'; float one = 1.f; strsm_(&side, &uplo, &transa, &diag, &M, &N, &one, A, &lda, B, &ldb); }
+inline void lrtrsm(blas_int M, blas_int N, const std::complex<double>* A, blas_int lda, std::complex<double>* B, blas_int ldb)
+{ char side = 'L', uplo = 'U', transa = 'N', diag = 'N'; std::complex<double> one(1., 0.); ztrsm_(&side, &uplo, &transa, &diag, &M, &N, &one, A, &lda, B, &ldb); }
+inline void lrtrsm(blas_int M, blas_int N, const std::complex<float>* A, blas_int lda, std::complex<float>* B, blas_int ldb)
+{ char side = 'L', uplo = 'U', transa = 'N', diag = 'N'; std::complex<float> one(1.f, 0.f); ctrsm_(&side, &uplo, &transa, &diag, &M, &N, &one, A, &lda, B, &ldb); }
+
+inline void nngemm(blas_int M, blas_int N, blas_int K, const double* A, blas_int lda, const double* B, blas_int ldb, double* C, blas_int ldc)
+{ char transa = 'N', transb = 'N'; double one = 1., minus_one = -1.; dgemm_(&transa, &transb, &M, &N, &K, &one, A, &lda, B, &ldb, &minus_one, C, &ldc); }
+inline void nngemm(blas_int M, blas_int N, blas_int K, const float* A, blas_int lda, const float* B, blas_int ldb, float* C, blas_int ldc)
+{ char transa = 'N', transb = 'N'; float one = 1.f, minus_one = -1.f; sgemm_(&transa, &transb, &M, &N, &K, &one, A, &lda, B, &ldb, &minus_one, C, &ldc); }
+inline void nngemm(blas_int M, blas_int N, blas_int K, const std::complex<double>* A, blas_int lda, const std::complex<double>* B, blas_int ldb, std::complex<double>* C, blas_int ldc)
+{ char transa = 'N', transb = 'N'; std::complex<double> one(1., 0.), minus_one(-1., 0.); zgemm_(&transa, &transb, &M, &N, &K, &one, A, &lda, B, &ldb, &minus_one, C, &ldc); }
+inline void nngemm(blas_int M, blas_int N, blas_int K, const std::complex<float>* A, blas_int lda, const std::complex<float>* B, blas_int ldb, std::complex<float>* C, blas_int ldc)
+{ char transa = 'N', transb = 'N'; std::complex<float> one(1.f, 0.f), minus_one(-1.f, 0.f); cgemm_(&transa, &transb, &M, &N, &K, &one, A, &lda, B, &ldb, &minus_one, C, &ldc); }
 
 template <class T>
 double check_answer_lra(int32_t rank, int32_t M, int32_t N, const T* A, int32_t lda, const int32_t* jpiv, const T* R, int32_t ldr) {
@@ -145,9 +151,9 @@ double check_answer_lra(int32_t rank, int32_t M, int32_t N, const T* A, int32_t 
       std::copy_n(&A[int64_t(jpiv[i] - 1) * int64_t(lda)], M, &matC[int64_t(i) * int64_t(M)]);
   }
 
-  __lrtrsm(rank, N, R, ldr, &matR[0], rank);
+  lrtrsm(rank, N, R, ldr, &matR[0], rank);
   double nrm = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
-  __nngemm(M, N, rank, &matC[0], M, &matR[0], rank, &matB[0], M);
+  nngemm(M, N, rank, &matC[0], M, &matR[0], rank, &matB[0], M);
   double err = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
   return std::sqrt(err / nrm);
 }
@@ -160,7 +166,7 @@ std::pair<double, double> check_answer_svd(int32_t M, int32_t N, int32_t rank, c
   copy2d(M, N, B, ldb, &matB[0], M);
 
   double nrm = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
-  __nngemm(M, N, rank, U, ldu, V, ldv, &matB[0], M);
+  nngemm(M, N, rank, U, ldu, V, ldv, &matB[0], M);
   double err = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
   return std::make_pair(err, nrm);
 }
@@ -170,7 +176,7 @@ std::pair<double, double> check_answer_svd(int32_t M, int32_t N, int32_t r1, int
   if (r2 <= 0)
     return std::make_pair(0., 0.);
   std::vector<T> matV(r1 * N, T());
-  __nngemm(r1, N, r2, V1, ldv1, V2, ldv2, &matV[0], r1);
+  nngemm(r1, N, r2, V1, ldv1, V2, ldv2, &matV[0], r1);
   return check_answer_svd(M, N, r1, U, ldu, &matV[0], r1, B, ldb);
 }
 
