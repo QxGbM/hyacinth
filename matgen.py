@@ -3,10 +3,10 @@ import argparse
 import numpy as np
 
 parser = argparse.ArgumentParser(description=("Generate an MxN test matrix"))
+parser.add_argument("data", type=str, nargs='?', default="D", help="Output CSV format (default: D)")
 parser.add_argument("M", type=int, nargs='?', default=2048, help="Number of rows (default: 2048)")
 parser.add_argument("N", type=int, nargs='?', default=2048, help="Number of columns (default: 2048)")
 parser.add_argument("file", type=str, nargs='?', default="matrix.csv", help="Output CSV file name (default: matrix.csv)")
-parser.add_argument("data", type=str, nargs='?', default="D", help="Output CSV format (default: D)")
 parser.add_argument("omega", type=float, nargs='?', default=1., help="Kernel omega (default: 1.0)")
 args = parser.parse_args()
 

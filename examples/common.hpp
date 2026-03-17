@@ -27,14 +27,12 @@ template <class T>
 inline void copy2d(int32_t M, int32_t N, const T* A, int32_t lda, T* B, int32_t ldb)
 { for (int32_t j = 0; j < N; ++j) { std::copy_n(&A[int64_t(j) * int64_t(lda)], M, &B[int64_t(j) * int64_t(ldb)]); } }
 
-inline int32_t parse_char(double& a, const char* s)
-{ const char* e = nullptr; a = std::strtod(s, (char**)&e); return std::distance(s, e); }
-inline int32_t parse_char(float& a, const char* s)
-{ const char* e = nullptr; a = std::strtof(s, (char**)&e); return std::distance(s, e); }
-inline int32_t parse_char(std::complex<double>& a, const char* s)
-{ double r, i; int32_t rd = parse_char(r, s), ri = parse_char(i, &s[rd]); a = std::complex<double>(r, i); return rd + ri; }
-inline int32_t parse_char(std::complex<float>& a, const char* s)
-{ float r, i; int32_t rd = parse_char(r, s), ri = parse_char(i, &s[rd]); a = std::complex<float>(r, i); return rd + ri; }
+inline void parse_char(double& a, const std::string& s) { a = std::stod(s); }
+inline void parse_char(float& a, const std::string& s) { a = std::stof(s); }
+inline void parse_char(std::complex<double>& a, const std::string& s)
+{ std::string::size_type l; double rl = std::stod(s, &l); double im = std::stod(s.substr(l)); a = std::complex<double>(rl, im); }
+inline void parse_char(std::complex<float>& a, const std::string& s)
+{ std::string::size_type l; float rl = std::stof(s, &l); float im = std::stof(s.substr(l)); a = std::complex<float>(rl, im); }
 
 template <class T>
 void matrix_from_row_major_csv(int32_t M, int32_t N, int32_t mb, int32_t nb, T* A, int32_t lda, const std::string& file, MPI_Comm comm_row, MPI_Comm comm_col) {
@@ -66,13 +64,16 @@ void matrix_from_row_major_csv(int32_t M, int32_t N, int32_t mb, int32_t nb, T* 
 
     if (grid_col == 0 && csv.is_open()) {
       int64_t start_byte = row_bytes[i], n_bytes = row_bytes[i + ib] - start_byte;
-      std::vector<char> buf(n_bytes); char* str = &buf[0];
+      std::vector<char> buf(n_bytes); char* str = &buf[0], *end = &buf[n_bytes];
       csv.seekg(start_byte, std::ios::beg); csv.read(str, n_bytes);
+      auto cmp = [](char c){ return c == ' ' || c == ',' || c == '\n' || c == '(' || c == ')'; };
+      while(cmp(*str)) ++str;
 
       for (int32_t y = 0; y < ib; ++y)
         for (int32_t x = 0; x < N; ++x) {
-          str += parse_char(mat[int64_t(y) + int64_t(x) * int64_t(ib)], str);
-          while(*str == ',' || *str == '\n') ++str;
+          std::string Ayx(str, std::distance(str, std::find_if(str, end, cmp)));
+          parse_char(mat[int64_t(y) + int64_t(x) * int64_t(ib)], Ayx);
+          str += Ayx.length(); while(cmp(*str)) ++str;
         }
     }
 
@@ -127,7 +128,7 @@ inline void __nngemm(int32_t M, int32_t N, int32_t K, const std::complex<float>*
 
 template <class T>
 double check_answer_lra(int32_t rank, int32_t M, int32_t N, const T* A, int32_t lda, const int32_t* jpiv, const T* R, int32_t ldr) {
-  if (rank <= 0)
+  if (rank <= 0 || M <= 0 || N <= 0)
     return std::numeric_limits<double>::quiet_NaN();
 
   std::vector<T> matB(int64_t(M) * int64_t(N)), matC(int64_t(M) * int64_t(rank)), matR(int64_t(N) * int64_t(rank));
@@ -147,7 +148,7 @@ double check_answer_lra(int32_t rank, int32_t M, int32_t N, const T* A, int32_t 
 
 template <class T>
 std::pair<double, double> check_answer_svd(int32_t M, int32_t N, int32_t rank, const T* U, int32_t ldu, const T* V, int32_t ldv, const T* B, int32_t ldb) {
-  if (rank <= 0)
+  if (rank <= 0 || M <= 0 || N <= 0)
     return std::make_pair(0., 0.);
   std::vector<T> matB(M * N);
   copy2d(M, N, B, ldb, &matB[0], M);

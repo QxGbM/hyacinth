@@ -18,6 +18,8 @@ inline std::tuple<cudaDataType_t, cudaDataType_t, double, size_t, size_t> conver
 }
 
 extern "C" void hyacinXutvk_bufferSize(cusolverDnHandle_t handle, cusolverDnParams_t params, double epi, int32_t N, int32_t K, hyacinPrecision_t ComputeType, uint64_t* dev_work_bytes, uint64_t* pinned_work_bytes) {
+  if (N <= 0) { *dev_work_bytes = *pinned_work_bytes = uint64_t(0); return; }
+
   std::tuple<cudaDataType_t, cudaDataType_t, size_t, size_t, double> type = convert(ComputeType);
   cudaDataType_t type_c = std::get<0>(type), type_r = std::get<1>(type);
   int32_t algnK = (K + 63) & (~63), algnN = (N + 63) & (~63);
@@ -60,7 +62,7 @@ inline void tranpose_copy(cublasHandle_t handle, char trans, int32_t Mb, int32_t
 template <class real_t, class complex_t>
 inline int32_t utv_k_dispatcher(cublasHandle_t handle, cusolverDnHandle_t s_handle, cusolverDnParams_t params, double epi, int32_t M, int32_t N, int32_t K, int32_t p,
   complex_t* UA, int32_t ldu, complex_t* RJ, int32_t ldr, uint64_t dev_work_bytes, void* dev_work, uint64_t pinned_work_bytes, void* pinned_work) {
-  
+
   cudaStream_t stream; cublasGetStream(handle, &stream);
   int32_t algnK = (K + 63) & (~63), algnN = (N + 63) & (~63);
   int64_t s_bytes = sizeof(real_t) * int64_t(algnK), r_bytes = sizeof(complex_t) * int64_t(algnN) * int64_t(K);
@@ -110,7 +112,7 @@ inline int32_t utv_k_dispatcher(cublasHandle_t handle, cusolverDnHandle_t s_hand
 extern "C" int32_t hyacinXutvk(cublasHandle_t handle, cusolverDnHandle_t s_handle, cusolverDnParams_t params, double epi, int32_t M, int32_t N, int32_t K, int32_t p,
   void* UA, int32_t ldu, void* RJ, int32_t ldr, hyacinPrecision_t ComputeType, uint64_t dev_work_bytes, void* dev_work, uint64_t pinned_work_bytes, void* pinned_work) {
 
-  switch(ComputeType) {
+  if (0 < N) switch(ComputeType) {
     case HYACIN_F64:
       return utv_k_dispatcher<double, double>(handle, s_handle, params, epi, M, N, K, p, (double*)UA, ldu, (double*)RJ, ldr, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
     case HYACIN_F32:
@@ -121,4 +123,5 @@ extern "C" int32_t hyacinXutvk(cublasHandle_t handle, cusolverDnHandle_t s_handl
       return utv_k_dispatcher<float, cuComplex>(handle, s_handle, params, epi, M, N, K, p, (cuComplex*)UA, ldu, (cuComplex*)RJ, ldr, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
     default: return 0;
   }
+  return 0;
 }

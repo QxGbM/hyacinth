@@ -23,8 +23,10 @@ __global__ void vector_exponent_kernel(int64_t M, real_const_ptr A, int64_t lda,
     thread_data = max_func(conv_abs(A[i]), thread_data);
 
   thread_data = cub::BlockReduce<double, BLOCK_THREADS>(temp_reduce).Reduce(thread_data, max_func);
-  if (threadIdx.x == 0)
-    frexp(thread_data, &vec_expon[blockIdx.x]);
+  if (threadIdx.x == 0) { 
+    if (thread_data == 0.) vec_expon[blockIdx.x] = int32_t(device::int8::u31);
+      else frexp(thread_data, &vec_expon[blockIdx.x]);
+  }
 }
 
 constexpr int32_t block_threads = 512;

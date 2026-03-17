@@ -89,8 +89,9 @@ __global__ void dequantize_complex_kernel(int64_t K, int64_t N, const uint64_t* 
     }
 
     device::int8::add_shifted(acc_rl, K, uint32_t((umax <<= 1) + 2));
-    int32_t expon = vec_expon[x] + vec_expon[y] - umax;
-    cscal(acc_rl, acc_im, expon, B[y + x * ldb]);
+    int32_t ex = vec_expon[x], ey = vec_expon[y]; iter = y + x * ldb;
+    if (ex == int32_t(device::int8::u31) || ey == int32_t(device::int8::u31)) B[iter] = complex_t();
+      else cscal(acc_rl, acc_im, ex + ey - umax, B[iter]);
   }
 }
 

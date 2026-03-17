@@ -46,8 +46,9 @@ __global__ void dequantize_kernel(int64_t K, int64_t N, const uint64_t* __restri
     { device::int8::add_shifted(acc, -int64_t(A[iter]), uint32_t(umax) + shifts[limb]); iter += strideA; }
 
     device::int8::add_shifted(acc, K, uint32_t(umax = (umax << 1) - 1));
-    int32_t expon = vec_expon[x] + vec_expon[y] - umax;
-    fscal(acc, expon, B[y + x * ldb]);
+    int32_t ex = vec_expon[x], ey = vec_expon[y]; iter = y + x * ldb;
+    if (ex == int32_t(device::int8::u31) || ey == int32_t(device::int8::u31)) B[iter] = real_t();
+      else fscal(acc, ex + ey - umax, B[iter]);
   }
 }
 

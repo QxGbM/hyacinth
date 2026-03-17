@@ -2,7 +2,7 @@
 #include <common.hpp>
 #include <iostream>
 
-template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, int64_t mb, double epi, double omega) {
+template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, int64_t mb, double epi, const std::string& file) {
   int32_t mpi_rank = 0, mpi_size = 1;
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
@@ -16,10 +16,10 @@ template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, 
   lM += std::max(int64_t(0), std::min(mb, gM - lM * mpi_size - mb * mpi_rank));
 
   std::vector<T> matA(lM * N);
-  for (int64_t i = mpi_rank * mb, y = 0; i < gM; i += mpi_size * mb) {
-    make_2D_oscillatory(omega, i, 0, std::min(gM - i, mb), N, &matA[y], lM);
-    y += mb;
-  }
+  if (!file.empty())
+    matrix_from_row_major_csv(gM, N, mb, N, matA.data(), lM, file, MPI_COMM_SELF, MPI_COMM_WORLD);
+  else for (int64_t i = mpi_rank * mb, y = 0; i < gM; i = mpi_rank * mb + mpi_size * (y += mb))
+    make_2D_oscillatory(1., i, 0, std::min(gM - i, mb), N, &matA[y], lM);
 
   cudaStream_t stream;
   cublasHandle_t cublasH;
@@ -87,23 +87,27 @@ int32_t main(int32_t argc, char* argv[]) {
   if (cu_err != cudaSuccess)
   { std::cerr << cudaGetErrorString(cu_err) << std::endl; MPI_Finalize(); return -1; }
 
-  char prec = 1 < argc ? *argv[1] : 'D';
-  int64_t gM = 2 < argc ? std::atoi(argv[2]) : 2048;
-  int64_t N = 3 < argc ? std::atoi(argv[3]) : 2048;
-  N = std::min(gM, N);
+  char prec = 'D'; std::string file;
+  int64_t gM = 2048, N = 2048, K = 2048, mb = 512;
+  double epi = 1.e-12;
 
-  int64_t K = 4 < argc ? std::atoi(argv[4]) : N;
-  double epi = 5 < argc ? std::atof(argv[5]) : 1.e-12;
-  K = std::min(N, K);
-
-  int64_t mb = 6 < argc ? std::atoi(argv[6]) : 512;
-  double omega = 7 < argc ? std::atof(argv[7]) : 1.;
+  for (int32_t i = 1; i < argc; ++i) {
+    if (std::strncmp(argv[i], "M=", 2) == 0) { std::sscanf(argv[i], "M=%ld", &gM); }
+    else if (std::strncmp(argv[i], "N=", 2) == 0) { std::sscanf(argv[i], "N=%ld", &N); }
+    else if (std::strncmp(argv[i], "K=", 2) == 0) { std::sscanf(argv[i], "K=%ld", &K); }
+    else if (std::strncmp(argv[i], "data=", 5) == 0) { std::sscanf(argv[i], "data=%c", &prec); }
+    else if (std::strncmp(argv[i], "epi=", 4) == 0) { std::sscanf(argv[i], "epi=%lf", &epi); }
+    else if (std::strncmp(argv[i], "mb=", 3) == 0) { std::sscanf(argv[i], "mb=%ld", &mb); }
+    else if (std::strncmp(argv[i], "file=", 5) == 0) { file.resize(std::strlen(argv[i])); std::sscanf(argv[i], "file=%s", file.data()); }
+    else { std::cerr << "Ignored parameter: " << argv[i] << std::endl; }
+  }
+  N = std::min(gM, N); K = std::min(N, K);
 
   switch(prec) {
-    case 'D': run<double>(prec, gM, N, K, mb, epi, omega); break;
-    case 'S': run<float>(prec, gM, N, K, mb, epi, omega); break;
-    case 'Z': run<std::complex<double>>(prec, gM, N, K, mb, epi, omega); break;
-    case 'C': run<std::complex<float>>(prec, gM, N, K, mb, epi, omega); break;
+    case 'D': run<double>(prec, gM, N, K, mb, epi, file); break;
+    case 'S': run<float>(prec, gM, N, K, mb, epi, file); break;
+    case 'Z': run<std::complex<double>>(prec, gM, N, K, mb, epi, file); break;
+    case 'C': run<std::complex<float>>(prec, gM, N, K, mb, epi, file); break;
     default: break;
   }
   MPI_Finalize();
