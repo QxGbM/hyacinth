@@ -76,17 +76,6 @@ template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, 
 int32_t main(int32_t argc, char* argv[]) {
   MPI_Init(&argc, &argv);
 
-  int32_t local_rank = 0;
-  MPI_Comm shmcomm; MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL, &shmcomm);
-  MPI_Comm_rank(shmcomm, &local_rank);
-  MPI_Comm_free(&shmcomm);
-
-  int32_t device_count = 0; cudaGetDeviceCount(&device_count);
-  auto cu_err = cudaSetDevice(1 < device_count ? local_rank : 0);
-  cudaDeviceReset();
-  if (cu_err != cudaSuccess)
-  { std::cerr << cudaGetErrorString(cu_err) << std::endl; MPI_Finalize(); return -1; }
-
   char prec = 'D'; std::string file;
   int64_t gM = 2048, N = 2048, K = 2048, mb = 512;
   double epi = 1.e-12;
@@ -102,6 +91,17 @@ int32_t main(int32_t argc, char* argv[]) {
     else { std::cerr << "Ignored parameter: " << argv[i] << std::endl; }
   }
   N = std::min(gM, N); K = std::min(N, K);
+
+  int32_t local_rank = 0;
+  MPI_Comm shmcomm; MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL, &shmcomm);
+  MPI_Comm_rank(shmcomm, &local_rank);
+  MPI_Comm_free(&shmcomm);
+
+  int32_t device_count = 0; cudaGetDeviceCount(&device_count);
+  auto cu_err = cudaSetDevice(1 < device_count ? local_rank : 0);
+  cudaDeviceReset();
+  if (cu_err != cudaSuccess)
+  { std::cerr << cudaGetErrorString(cu_err) << std::endl; MPI_Finalize(); return -1; }
 
   switch(prec) {
     case 'D': run<double>(prec, gM, N, K, mb, epi, file); break;

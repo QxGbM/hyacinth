@@ -29,10 +29,16 @@ inline void copy2d(int32_t M, int32_t N, const T* A, int32_t lda, T* B, int32_t 
 
 inline void parse_char(double& a, const std::string& s) { a = std::stod(s); }
 inline void parse_char(float& a, const std::string& s) { a = std::stof(s); }
-inline void parse_char(std::complex<double>& a, const std::string& s)
-{ std::string::size_type l; double rl = std::stod(s, &l); double im = std::stod(s.substr(l)); a = std::complex<double>(rl, im); }
-inline void parse_char(std::complex<float>& a, const std::string& s)
-{ std::string::size_type l; float rl = std::stof(s, &l); float im = std::stof(s.substr(l)); a = std::complex<float>(rl, im); }
+inline void parse_char(std::complex<double>& a, const std::string& s) {
+  std::string::size_type l; double rl = std::stod(s, &l);
+  try { double im = std::stod(s.substr(l)); a = std::complex<double>(rl, im); }
+  catch (const std::invalid_argument&) { a = std::complex<double>(rl, 0.); }
+}
+inline void parse_char(std::complex<float>& a, const std::string& s) {
+  std::string::size_type l; float rl = std::stod(s, &l);
+  try { float im = std::stof(s.substr(l)); a = std::complex<float>(rl, im); }
+  catch (const std::invalid_argument&) { a = std::complex<float>(rl, 0.f); }
+}
 
 template <class T>
 void matrix_from_row_major_csv(int32_t M, int32_t N, int32_t mb, int32_t nb, T* A, int32_t lda, const std::string& file, MPI_Comm comm_row, MPI_Comm comm_col) {
