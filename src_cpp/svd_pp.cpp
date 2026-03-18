@@ -10,9 +10,9 @@ template <> inline double cutoff_epi<float>() { return 1.e-2; }
 
 template <class T> inline cudaDataType_t cuda_type();
 template <> inline cudaDataType_t cuda_type<double>() { return CUDA_R_64F; }
-template <> inline cudaDataType_t cuda_type<float>() { return CUDA_R_64F; }
-template <> inline cudaDataType_t cuda_type<cuDoubleComplex>() { return CUDA_R_64F; }
-template <> inline cudaDataType_t cuda_type<cuComplex>() { return CUDA_R_64F; }
+template <> inline cudaDataType_t cuda_type<float>() { return CUDA_R_32F; }
+template <> inline cudaDataType_t cuda_type<cuDoubleComplex>() { return CUDA_C_64F; }
+template <> inline cudaDataType_t cuda_type<cuComplex>() { return CUDA_C_32F; }
 
 extern "C" void hyacinXsvdk_bufferSize(cusolverDnHandle_t handle, cusolverDnParams_t params, double epi, int32_t N, int32_t K, hyacinPrecision_t ComputeType, uint64_t* dev_work_bytes, uint64_t* pinned_work_bytes) {
   if (N <= 0 || K <= 0) { *dev_work_bytes = *pinned_work_bytes = uint64_t(0); return; }

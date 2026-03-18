@@ -117,10 +117,10 @@ void hyacinXcpqrk1Drow_bufferSize(
 
 void hyacinXAllGatherV1Dcol_bufferSize(
   int32_t M,
-  int32_t maxK,
-  int32_t lenK,
+  int32_t comm_size,
   hyacinPrecision_t Atype,
-  uint64_t* dev_work_bytes
+  uint64_t* dev_work_bytes,
+  uint64_t* pinned_work_bytes
 );
 
 #ifndef NO_NCCL
@@ -149,16 +149,16 @@ int32_t hyacinXcpqrk1Drow(
   ncclComm_t col_comm
 );
 
-void hyacinXAllGatherV1Dcol(
-  cublasHandle_t handle,
+int32_t hyacinXAllGatherV1Dcol(
+  cudaStream_t stream,
   int32_t M,
-  int32_t iK,
-  int32_t lenK,
-  const int32_t* allK,
+  int32_t* K,
   hyacinPrecision_t Atype,
   void* A,
   int32_t lda,
+  uint64_t dev_work_bytes,
   void* dev_work,
+  void* pinned_work,
   ncclComm_t row_comm
 );
 

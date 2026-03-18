@@ -273,24 +273,23 @@ std::pair<int32_t, int32_t> utv_factorize_phase2_1dc(cudaStream_t stream, cublas
   int32_t mpi_rank, mpi_size; MPI_Comm_rank(mpi_comm, &mpi_rank); MPI_Comm_size(mpi_comm, &mpi_size);
   std::vector<int32_t> ranks_arr(mpi_size);
   MPI_Allgather(&N, 1, MPI_INT32_T, ranks_arr.data(), 1, MPI_INT32_T, mpi_comm);
-  int32_t rank_max = std::reduce(ranks_arr.begin(), ranks_arr.end(), 0, [](int32_t i, int32_t j) { return std::max(i, j); });
-  int32_t v_offset = std::reduce(ranks_arr.begin(), ranks_arr.begin() + mpi_rank, 0, std::plus<int32_t>());
-  N = std::reduce(ranks_arr.begin() + mpi_rank, ranks_arr.end(), v_offset, std::plus<int32_t>());
+  int32_t r1 = N;
+  N = std::reduce(ranks_arr.begin(), ranks_arr.end(), 0, std::plus<int32_t>());
 
   int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg;
   uint64_t dev_work_bytes, pinned_work_bytes, dev_work_bytes_new, pinned_work_bytes_new;
   hyacinXcpqrk_autoTune(epi, M, u_extra, &umax, precA, &precC, &alg);
   hyacinXcpqrk_bufferSize(M, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
-  hyacinXAllGatherV1Dcol_bufferSize(M, rank_max, mpi_size, precA, &dev_work_bytes_new);
+  hyacinXAllGatherV1Dcol_bufferSize(M, mpi_size, precA, &dev_work_bytes_new, &pinned_work_bytes_new);
   dev_work_bytes = std::max(dev_work_bytes, dev_work_bytes_new);
+  pinned_work_bytes = std::max(pinned_work_bytes, pinned_work_bytes_new);
 
   void* jpiv = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
   cudaMalloc(&jpiv, int64_t(N) * sizeof(int32_t));
   cudaMalloc(&dev_work, dev_work_bytes);
   cudaMallocHost(&pinned_work, pinned_work_bytes);
 
-  hyacinXAllGatherV1Dcol(cublasH, M, mpi_rank, mpi_size, ranks_arr.data(), precA, A, lda, dev_work, comm);
-
+  int32_t v_offset = hyacinXAllGatherV1Dcol(stream, M, &r1, precA, A, lda, dev_work_bytes, dev_work, pinned_work, comm);
   int32_t rank = hyacinXcpqrk(cublasH, 'J', epi, M, N, K, oversampling, umax, precA, A, lda, (int32_t*)jpiv, precA, V, ldv, precC, dev_work, pinned_work, alg);
 
   hyacinXsvdk_bufferSize(cusolverH, params, epi, N, rank, precA, &dev_work_bytes_new, &pinned_work_bytes_new);
@@ -311,24 +310,23 @@ std::pair<int32_t, int32_t> utv_factorize_phase2_2d(cudaStream_t stream, cublasH
   int32_t mpi_rank, mpi_size; MPI_Comm_rank(mpi_comm_row, &mpi_rank); MPI_Comm_size(mpi_comm_row, &mpi_size);
   std::vector<int32_t> ranks_arr(mpi_size);
   MPI_Allgather(&N, 1, MPI_INT32_T, ranks_arr.data(), 1, MPI_INT32_T, mpi_comm_row);
-  int32_t rank_max = std::reduce(ranks_arr.begin(), ranks_arr.end(), 0, [](int32_t i, int32_t j) { return std::max(i, j); });
-  int32_t v_offset = std::reduce(ranks_arr.begin(), ranks_arr.begin() + mpi_rank, 0, std::plus<int32_t>());
-  N = std::reduce(ranks_arr.begin() + mpi_rank, ranks_arr.end(), v_offset, std::plus<int32_t>());
+  int32_t r1 = N;
+  N = std::reduce(ranks_arr.begin(), ranks_arr.end(), 0, std::plus<int32_t>());
 
   int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg;
   uint64_t dev_work_bytes, pinned_work_bytes, dev_work_bytes_new, pinned_work_bytes_new;
   hyacinXcpqrk_autoTune(epi, gM, u_extra, &umax, precA, &precC, &alg);
   hyacinXcpqrk1Drow_bufferSize(M, gM, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
-  hyacinXAllGatherV1Dcol_bufferSize(M, rank_max, mpi_size, precA, &dev_work_bytes_new);
+  hyacinXAllGatherV1Dcol_bufferSize(M, mpi_size, precA, &dev_work_bytes_new, &pinned_work_bytes_new);
   dev_work_bytes = std::max(dev_work_bytes, dev_work_bytes_new);
+  pinned_work_bytes = std::max(pinned_work_bytes, pinned_work_bytes_new);
 
   void* jpiv = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
   cudaMalloc(&jpiv, int64_t(N) * sizeof(int32_t));
   cudaMalloc(&dev_work, dev_work_bytes);
   cudaMallocHost(&pinned_work, pinned_work_bytes);
 
-  hyacinXAllGatherV1Dcol(cublasH, M, mpi_rank, mpi_size, ranks_arr.data(), precA, A, lda, dev_work, comm_row);
-
+  int32_t v_offset = hyacinXAllGatherV1Dcol(stream, M, &r1, precA, A, lda, dev_work_bytes, dev_work, pinned_work, comm_row);
   int32_t rank = hyacinXcpqrk1Drow(cublasH, 'J', epi, M, gM, N, K, oversampling, umax, precA, A, lda, (int32_t*)jpiv, precA, V, ldv, precC, dev_work, pinned_work, alg, comm_col);
 
   hyacinXsvdk_bufferSize(cusolverH, params, epi, N, rank, precA, &dev_work_bytes_new, &pinned_work_bytes_new);

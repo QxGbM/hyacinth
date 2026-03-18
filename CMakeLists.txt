@@ -13,7 +13,6 @@ set(SM_TARGETS "80;86;89;90;100;120")
 find_package(CUDAToolkit REQUIRED)
 
 set(CPP_SOURCES
-  src_cpp/allgatherv_1dcol.cpp
   src_cpp/autotune.cpp
   src_cpp/gemv_cublas.cpp
   src_cpp/i63syrk.cpp
@@ -25,6 +24,7 @@ set(CPP_SOURCES
 set(CU_SOURCES
   src_cuda/acc_dequant_complex.cu
   src_cuda/acc_dequant_real.cu
+  src_cuda/allgatherv_1dcol.cu
   src_cuda/fp_exponent.cu
   src_cuda/fp_i8_quantize.cu
   src_cuda/fp_pervec_sum.cu
@@ -78,7 +78,7 @@ if(USE_NCCL)
   endif()
 else()
   message(STATUS "NO NCCL")
-  set_source_files_properties(src_cuda/hyacin.cu src_cpp/allgatherv_1dcol.cpp PROPERTIES COMPILE_DEFINITIONS "NO_NCCL")
+  set_source_files_properties(src_cuda/hyacin.cu src_cuda/allgatherv_1dcol.cu PROPERTIES COMPILE_DEFINITIONS "NO_NCCL")
 endif()
 
 install(TARGETS hyacin LIBRARY DESTINATION .)
