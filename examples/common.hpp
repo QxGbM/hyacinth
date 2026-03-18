@@ -228,7 +228,7 @@ int32_t utv_factorize_phase1(cudaStream_t stream, cublasHandle_t cublasH, cusolv
   if (dev_work_bytes < dev_work_bytes_new) { cudaStreamSynchronize(stream); cudaFree(dev_work); cudaMalloc(&dev_work, dev_work_bytes = dev_work_bytes_new); }
   if (pinned_work_bytes < pinned_work_bytes_new) { cudaStreamSynchronize(stream); cudaFreeHost(pinned_work); cudaMallocHost(&pinned_work, pinned_work_bytes = pinned_work_bytes_new); }
 
-  rank = hyacinXutvk(cublasH, cusolverH, params, epi, M, N, rank, p, A, lda, V, ldv, precA, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
+  rank = hyacinXutvk(cublasH, cusolverH, params, 'Y', epi, M, N, rank, p, nullptr, A, lda, V, ldv, precA, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
 
   cudaStreamSynchronize(stream);
   cudaFree(jpiv);
@@ -257,7 +257,7 @@ int32_t utv_factorize_phase1_1dr(cudaStream_t stream, cublasHandle_t cublasH, cu
   if (dev_work_bytes < dev_work_bytes_new) { cudaStreamSynchronize(stream); cudaFree(dev_work); cudaMalloc(&dev_work, dev_work_bytes = dev_work_bytes_new); }
   if (pinned_work_bytes < pinned_work_bytes_new) { cudaStreamSynchronize(stream); cudaFreeHost(pinned_work); cudaMallocHost(&pinned_work, pinned_work_bytes = pinned_work_bytes_new); }
 
-  rank = hyacinXutvk(cublasH, cusolverH, params, epi, M, N, rank, p, A, lda, V, ldv, precA, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
+  rank = hyacinXutvk(cublasH, cusolverH, params, 'Y', epi, M, N, rank, p, nullptr, A, lda, V, ldv, precA, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
 
   cudaStreamSynchronize(stream);
   cudaFree(jpiv);
@@ -296,7 +296,7 @@ std::pair<int32_t, int32_t> utv_factorize_phase2_1dc(cudaStream_t stream, cublas
   if (dev_work_bytes < dev_work_bytes_new) { cudaStreamSynchronize(stream); cudaFree(dev_work); cudaMalloc(&dev_work, dev_work_bytes = dev_work_bytes_new); }
   if (pinned_work_bytes < pinned_work_bytes_new) { cudaStreamSynchronize(stream); cudaFreeHost(pinned_work); cudaMallocHost(&pinned_work, pinned_work_bytes = pinned_work_bytes_new); }
 
-  rank = hyacinXutvk(cublasH, cusolverH, params, epi, M, N, rank, p, A, lda, V, ldv, precA, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
+  rank = hyacinXutvk(cublasH, cusolverH, params, 'Y', epi, M, N, rank, p, nullptr, A, lda, V, ldv, precA, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
 
   cudaStreamSynchronize(stream);
   cudaFree(jpiv);
@@ -335,7 +335,7 @@ std::pair<int32_t, int32_t> utv_factorize_phase2_2d(cudaStream_t stream, cublasH
   if (dev_work_bytes < dev_work_bytes_new) { cudaStreamSynchronize(stream); cudaFree(dev_work); cudaMalloc(&dev_work, dev_work_bytes = dev_work_bytes_new); }
   if (pinned_work_bytes < pinned_work_bytes_new) { cudaStreamSynchronize(stream); cudaFreeHost(pinned_work); cudaMallocHost(&pinned_work, pinned_work_bytes = pinned_work_bytes_new); }
 
-  rank = hyacinXutvk(cublasH, cusolverH, params, epi, M, N, rank, p, A, lda, V, ldv, precA, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
+  rank = hyacinXutvk(cublasH, cusolverH, params, 'Y', epi, M, N, rank, p, nullptr, A, lda, V, ldv, precA, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
 
   cudaStreamSynchronize(stream);
   cudaFree(jpiv);

@@ -43,10 +43,10 @@ inline void allgatherv_1dcol(cublasHandle_t handle, int32_t M, int32_t iK, int32
 
 extern "C" void hyacinXAllGatherV1Dcol(cublasHandle_t handle, int32_t M, int32_t iK, int32_t lenK, const int32_t* allK, hyacinPrecision_t Atype, void* A, int32_t lda, void* dev_work, ncclComm_t row_comm) {
   switch(Atype) {
-    case HYACIN_F64: allgatherv_1dcol<double>(handle, M, iK, lenK, allK, (double*)A, lda, (double*)dev_work, row_comm); break;
-    case HYACIN_F32: allgatherv_1dcol<float>(handle, M, iK, lenK, allK, (float*)A, lda, (float*)dev_work, row_comm); break;
-    case HYACIN_F64_COMPLEX: allgatherv_1dcol<cuDoubleComplex>(handle, M, iK, lenK, allK, (cuDoubleComplex*)A, lda, (cuDoubleComplex*)dev_work, row_comm); break;
-    case HYACIN_F32_COMPLEX: allgatherv_1dcol<cuComplex>(handle, M, iK, lenK, allK, (cuComplex*)A, lda, (cuComplex*)dev_work, row_comm); break;
+    case HYACIN_F64: allgatherv_1dcol(handle, M, iK, lenK, allK, (double*)A, lda, (double*)dev_work, row_comm); break;
+    case HYACIN_F32: allgatherv_1dcol(handle, M, iK, lenK, allK, (float*)A, lda, (float*)dev_work, row_comm); break;
+    case HYACIN_F64_COMPLEX: allgatherv_1dcol(handle, M, iK, lenK, allK, (cuDoubleComplex*)A, lda, (cuDoubleComplex*)dev_work, row_comm); break;
+    case HYACIN_F32_COMPLEX: allgatherv_1dcol(handle, M, iK, lenK, allK, (cuComplex*)A, lda, (cuComplex*)dev_work, row_comm); break;
     default: break;
   }
 }

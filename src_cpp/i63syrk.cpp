@@ -88,7 +88,7 @@ inline void i8GemmT(cudaStream_t stream, cublasHandle_t handle, int32_t N, int32
 void internal::int8::i63ATA_f64_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const double* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t orderA, int32_t orderC, uint64_t* C, int32_t ldc, int8_t* workspace) {
   int64_t strideA = int64_t(algnM) * int64_t(N) * int64_t(orderA), strideC = int64_t(ldc) * int64_t(N + 1);
   int32_t* scratch = (int32_t*)&workspace[strideA];
-  quantize_f64(stream, M, N, A, lda, umax, vec_expon, orderA, workspace, algnM);
+  quantize_f64(stream, M, N, A, lda, umax, vec_expon, orderA, N, algnM, workspace);
   i8GemmT(stream, handle, N, ldc, algnM, workspace, orderA, 0, C, orderC, scratch);
   vsum_f64(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideC - int64_t(ldc)], strideC);
 }
@@ -96,7 +96,7 @@ void internal::int8::i63ATA_f64_limbs(cudaStream_t stream, cublasHandle_t handle
 void internal::int8::i63ATA_f32_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const float* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t orderA, int32_t orderC, uint64_t* C, int32_t ldc, int8_t* workspace) {
   int64_t strideA = int64_t(algnM) * int64_t(N) * int64_t(orderA), strideC = int64_t(ldc) * int64_t(N + 1);
   int32_t* scratch = (int32_t*)&workspace[strideA];
-  quantize_f32(stream, M, N, A, lda, umax, vec_expon, orderA, workspace, algnM);
+  quantize_f32(stream, M, N, A, lda, umax, vec_expon, orderA, N, algnM, workspace);
   i8GemmT(stream, handle, N, ldc, algnM, workspace, orderA, 0, C, orderC, scratch);
   vsum_f32(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideC - int64_t(ldc)], strideC);
 }
@@ -104,7 +104,7 @@ void internal::int8::i63ATA_f32_limbs(cudaStream_t stream, cublasHandle_t handle
 void internal::int8::i63AHA_cf64_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t orderA, int32_t orderC, uint64_t* C, int32_t ldc, int8_t* workspace) {
   int64_t strideA = int64_t(algnM) * int64_t(N) * int64_t(orderA), strideC = int64_t(ldc) * int64_t(N + 1), strideIm = strideC * int64_t(orderC);
   int32_t* scratch = (int32_t*)&workspace[strideA << 1];
-  quantize_cf64(stream, M, N, A, lda, umax, vec_expon, orderA, workspace, algnM);
+  quantize_cf64(stream, M, N, A, lda, umax, vec_expon, orderA, N, algnM, workspace);
   i8GemmT(stream, handle, N, ldc, algnM, workspace, orderA, 0, C, orderC, scratch);
   i8GemmT(stream, handle, N, ldc, algnM, &workspace[strideA], orderA, 1, C, orderC, scratch);
   i8GemmF(stream, handle, N, ldc, algnM, workspace, &workspace[strideA], orderA, 0, &C[strideIm], orderC, scratch);
@@ -114,7 +114,7 @@ void internal::int8::i63AHA_cf64_limbs(cudaStream_t stream, cublasHandle_t handl
 void internal::int8::i63AHA_cf32_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const std::complex<float>* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t orderA, int32_t orderC, uint64_t* C, int32_t ldc, int8_t* workspace) {
   int64_t strideA = int64_t(algnM) * int64_t(N) * int64_t(orderA), strideC = int64_t(ldc) * int64_t(N + 1), strideIm = strideC * int64_t(orderC);
   int32_t* scratch = (int32_t*)&workspace[strideA << 1];
-  quantize_cf32(stream, M, N, A, lda, umax, vec_expon, orderA, workspace, algnM);
+  quantize_cf32(stream, M, N, A, lda, umax, vec_expon, orderA, N, algnM, workspace);
   i8GemmT(stream, handle, N, ldc, algnM, workspace, orderA, 0, C, orderC, scratch);
   i8GemmT(stream, handle, N, ldc, algnM, &workspace[strideA], orderA, 1, C, orderC, scratch);
   i8GemmF(stream, handle, N, ldc, algnM, workspace, &workspace[strideA], orderA, 0, &C[strideIm], orderC, scratch);
@@ -169,7 +169,7 @@ void internal::int8::i63ATA_f64_crt(cudaStream_t stream, cublasHandle_t handle, 
   for (int32_t i = 0; (i << 3) < orderA; ++i) {
     int32_t moduli = CRT::active_moduli(orderA, i);
     int32_t accum = int32_t(0 < i), last = int32_t(orderA <= ((i + 1) << 3));
-    quantize_f64_modular(stream, M, N, i, A, lda, umax, vec_expon, moduli, workspace, algnM);
+    quantize_f64_modular(stream, M, N, i, A, lda, umax, vec_expon, moduli, N, algnM, workspace);
     gemm_accumulate_crt(stream, handle, ldc, N, algnM, moduli, workspace, workspace, orderA, i, accum, last, C, scratch);
   }
   vsum_f64(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideC - int64_t(ldc)], strideC);
@@ -182,7 +182,7 @@ void internal::int8::i63ATA_f32_crt(cudaStream_t stream, cublasHandle_t handle, 
   for (int32_t i = 0; (i << 3) < orderA; ++i) {
     int32_t moduli = CRT::active_moduli(orderA, i);
     int32_t accum = int32_t(0 < i), last = int32_t(orderA <= ((i + 1) << 3));
-    quantize_f32_modular(stream, M, N, i, A, lda, umax, vec_expon, moduli, workspace, algnM);
+    quantize_f32_modular(stream, M, N, i, A, lda, umax, vec_expon, moduli, N, algnM, workspace);
     gemm_accumulate_crt(stream, handle, ldc, N, algnM, moduli, workspace, workspace, orderA, i, accum, last, C, scratch);
   }
   vsum_f32(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideC - int64_t(ldc)], strideC);
@@ -195,7 +195,7 @@ void internal::int8::i63AHA_cf64_crt(cudaStream_t stream, cublasHandle_t handle,
   for (int32_t i = 0; (i << 3) < orderA; ++i) {
     int32_t moduli = CRT::active_moduli(orderA, i);
     int32_t accum = int32_t(0 < i), last = int32_t(orderA <= ((i + 1) << 3));
-    quantize_cf64_modular(stream, M, N, i, A, lda, umax, vec_expon, moduli, workspace, algnM);
+    quantize_cf64_modular(stream, M, N, i, A, lda, umax, vec_expon, moduli, N, algnM, workspace);
 
     int64_t stride = int64_t(moduli) * strideA;
     gemm_accumulate_crt(stream, handle, ldc, N, algnM, moduli, workspace, workspace, orderA, i, accum, 0, C, scratch);
@@ -212,7 +212,7 @@ void internal::int8::i63AHA_cf32_crt(cudaStream_t stream, cublasHandle_t handle,
   for (int32_t i = 0; (i << 3) < orderA; ++i) {
     int32_t moduli = CRT::active_moduli(orderA, i);
     int32_t accum = int32_t(0 < i), last = int32_t(orderA <= ((i + 1) << 3));
-    quantize_cf32_modular(stream, M, N, i, A, lda, umax, vec_expon, moduli, workspace, algnM);
+    quantize_cf32_modular(stream, M, N, i, A, lda, umax, vec_expon, moduli, N, algnM, workspace);
 
     int64_t stride = int64_t(moduli) * strideA;
     gemm_accumulate_crt(stream, handle, ldc, N, algnM, moduli, workspace, workspace, orderA, i, accum, 0, C, scratch);
