@@ -71,7 +71,7 @@ int32_t hyacinXcpqrk(
   hyacinAlgorithm_t alg
 );
 
-void hyacinXutvk_bufferSize(
+void hyacinXsvdk_bufferSize(
   cusolverDnHandle_t handle,
   cusolverDnParams_t params,
   double epi,
@@ -82,7 +82,7 @@ void hyacinXutvk_bufferSize(
   uint64_t* pinned_work_bytes
 );
 
-int32_t hyacinXutvk(
+int32_t hyacinXsvdk(
   cublasHandle_t handle,
   cusolverDnHandle_t s_handle,
   cusolverDnParams_t params,

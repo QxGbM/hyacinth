@@ -31,7 +31,8 @@ template <class T>
 inline void allgatherv_1dcol(cublasHandle_t handle, int32_t M, int32_t iK, int32_t lenK, const int32_t* allK, T* A, int32_t lda, T* dev_work, ncclComm_t row_comm) {
   cudaStream_t stream; cublasGetStream(handle, &stream);
   int32_t maxK = std::reduce(allK, &allK[lenK], 0, [](int32_t i, int32_t j) { return std::max(i, j); });
-  uint64_t stride = (uint64_t(M) * uint64_t(maxK) + uint64_t(63)) & (~uint64_t(63)), shifts = sizeof(T) / sizeof(int32_t);
+  uint64_t stride = (uint64_t(M) * uint64_t(maxK) + uint64_t(63)) & (~uint64_t(63));
+  constexpr uint64_t shifts = sizeof(T) / sizeof(int32_t);
   matrix_copy(handle, M, allK[iK], A, lda, &dev_work[int64_t(iK) * stride], M);
   ncclAllGather(&dev_work[int64_t(iK) * stride], dev_work, stride * shifts, ncclInt32, row_comm, stream);
 

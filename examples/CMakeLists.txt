@@ -11,7 +11,7 @@ find_package(MPI REQUIRED)
 enable_testing()
 
 set(TEST_SOURCES
-  xlra_example.cpp xutv_example.cpp xutv_1dcol_example.cpp xutv_1drow_example.cpp xutv_2d_example.cpp
+  xlra_example.cpp xsvd_example.cpp xsvd_1dcol_example.cpp xsvd_1drow_example.cpp xsvd_2d_example.cpp
 )
 
 set_source_files_properties(${TEST_SOURCES} PROPERTIES COMPILE_OPTIONS 

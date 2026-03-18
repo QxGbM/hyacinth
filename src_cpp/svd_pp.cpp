@@ -4,53 +4,51 @@
 #include <tuple>
 #include <algorithm>
 
-const double f32_polar_svd_cutoff_epi = 1.e-2;
-const double f64_polar_svd_cutoff_epi = 1.e-12; // for epi < cutoff, use gesvd over gesvdp
+template <class T> inline double cutoff_epi();
+template <> inline double cutoff_epi<double>() { return 1.e-12; } // for epi < cutoff, use gesvd over gesvdp
+template <> inline double cutoff_epi<float>() { return 1.e-2; }
 
-inline std::tuple<cudaDataType_t, cudaDataType_t, double, size_t, size_t> convert(hyacinPrecision_t type) {
-  switch(type) {
-    case HYACIN_F64: return std::make_tuple(CUDA_R_64F, CUDA_R_64F, f64_polar_svd_cutoff_epi, sizeof(double), sizeof(double));
-    case HYACIN_F32: return std::make_tuple(CUDA_R_32F, CUDA_R_32F, f32_polar_svd_cutoff_epi, sizeof(float), sizeof(float));
-    case HYACIN_F64_COMPLEX: return std::make_tuple(CUDA_C_64F, CUDA_R_64F, f64_polar_svd_cutoff_epi, sizeof(cuDoubleComplex), sizeof(double));
-    case HYACIN_F32_COMPLEX: return std::make_tuple(CUDA_C_32F, CUDA_R_32F, f32_polar_svd_cutoff_epi, sizeof(cuComplex), sizeof(float));
-    default: return std::make_tuple(cudaDataType_t(0), cudaDataType_t(0), 0., size_t(0), size_t(0));
-  }
-}
+template <class T> inline cudaDataType_t cuda_type();
+template <> inline cudaDataType_t cuda_type<double>() { return CUDA_R_64F; }
+template <> inline cudaDataType_t cuda_type<float>() { return CUDA_R_64F; }
+template <> inline cudaDataType_t cuda_type<cuDoubleComplex>() { return CUDA_R_64F; }
+template <> inline cudaDataType_t cuda_type<cuComplex>() { return CUDA_R_64F; }
 
-extern "C" void hyacinXutvk_bufferSize(cusolverDnHandle_t handle, cusolverDnParams_t params, double epi, int32_t N, int32_t K, hyacinPrecision_t ComputeType, uint64_t* dev_work_bytes, uint64_t* pinned_work_bytes) {
+extern "C" void hyacinXsvdk_bufferSize(cusolverDnHandle_t handle, cusolverDnParams_t params, double epi, int32_t N, int32_t K, hyacinPrecision_t ComputeType, uint64_t* dev_work_bytes, uint64_t* pinned_work_bytes) {
   if (N <= 0 || K <= 0) { *dev_work_bytes = *pinned_work_bytes = uint64_t(0); return; }
 
-  std::tuple<cudaDataType_t, cudaDataType_t, size_t, size_t, double> type = convert(ComputeType);
-  cudaDataType_t type_c = std::get<0>(type), type_r = std::get<1>(type);
+  cudaDataType_t type_c = cudaDataType_t(), type_r = cudaDataType_t();
+  double cutoff = 0.; uint64_t size_c = uint64_t(0), size_r = uint64_t(0);
+  switch(ComputeType) {
+    case HYACIN_F64: 
+    { type_c = type_r = cuda_type<double>(); cutoff = cutoff_epi<double>(); size_c = size_r = sizeof(double); break; }
+    case HYACIN_F32:
+    { type_c = type_r = cuda_type<float>(); cutoff = cutoff_epi<float>(); size_c = size_r = sizeof(float); break; }
+    case HYACIN_F64_COMPLEX:
+    { type_c = cuda_type<cuDoubleComplex>(); type_r = cuda_type<double>(); cutoff = cutoff_epi<double>(); size_c = sizeof(cuDoubleComplex); size_r = sizeof(double); break; }
+    case HYACIN_F32_COMPLEX:
+    { type_c = cuda_type<cuComplex>(); type_r = cuda_type<float>(); cutoff = cutoff_epi<float>(); size_c = sizeof(cuComplex); size_r = sizeof(float); break; }
+    default: break;
+  }
+
   int32_t algnK = (K + 63) & (~63), algnN = (N + 63) & (~63);
   size_t workspaceInBytesOnDevice, workspaceInBytesOnHost; uint64_t basis_bytes;
-
-  if (epi < std::get<2>(type)) {
+  if (epi < cutoff) {
     cusolverDnXgesvd_bufferSize(handle, params, 'O', 'N', N, K,
       type_c, nullptr, algnN, type_r, nullptr, type_c, nullptr, algnN, type_c, nullptr, algnK, type_c, &workspaceInBytesOnDevice, &workspaceInBytesOnHost);
-    basis_bytes = uint64_t(std::get<3>(type)) * uint64_t(algnN) * uint64_t(K);
+    basis_bytes = size_c * uint64_t(algnN) * uint64_t(K);
   }
   else {
     cusolverDnXgesvdp_bufferSize(handle, params, CUSOLVER_EIG_MODE_VECTOR, 1, N, K,
       type_c, nullptr, algnN, type_r, nullptr, type_c, nullptr, algnN, type_c, nullptr, algnK, type_c, &workspaceInBytesOnDevice, &workspaceInBytesOnHost);
-    basis_bytes = uint64_t(std::get<3>(type)) * (uint64_t(algnN) + uint64_t(algnN) + uint64_t(algnK)) * uint64_t(K);
+    basis_bytes = size_c * (uint64_t(algnN) + uint64_t(algnN) + uint64_t(algnK)) * uint64_t(K);
   }
 
-  uint64_t s_bytes = uint64_t(std::get<4>(type)) * uint64_t(algnK);
-  uint64_t trans_bytes = uint64_t(std::get<3>(type)) * uint64_t(algnN + 16384) * uint64_t(K);
+  uint64_t s_bytes = size_r * uint64_t(algnK);
+  uint64_t trans_bytes = size_c * uint64_t(algnN + 16384) * uint64_t(K);
   *dev_work_bytes = std::max(uint64_t(workspaceInBytesOnDevice) + basis_bytes + s_bytes, trans_bytes);
   *pinned_work_bytes = uint64_t(workspaceInBytesOnHost) + s_bytes;
 }
-
-template <class T> inline void constants(cudaDataType_t&, cudaDataType_t&, double&);
-template <> inline void constants<double>(cudaDataType_t& type_c, cudaDataType_t& type_r, double& epi)
-{ type_c = type_r = CUDA_R_64F; epi = f64_polar_svd_cutoff_epi; }
-template <> inline void constants<float>(cudaDataType_t& type_c, cudaDataType_t& type_r, double& epi)
-{ type_c = type_r = CUDA_R_32F; epi = f32_polar_svd_cutoff_epi; }
-template <> inline void constants<cuDoubleComplex>(cudaDataType_t& type_c, cudaDataType_t& type_r, double& epi)
-{ type_c = CUDA_C_64F; type_r = CUDA_R_64F; epi = f64_polar_svd_cutoff_epi; }
-template <> inline void constants<cuComplex>(cudaDataType_t& type_c, cudaDataType_t& type_r, double& epi)
-{ type_c = CUDA_C_32F; type_r = CUDA_R_32F; epi = f32_polar_svd_cutoff_epi; }
 
 inline void tranpose_copy(cublasHandle_t handle, char trans, int32_t Mb, int32_t Nb, const double* A, int32_t lda, double* B, int32_t ldb)
 { double one = 1., zero = 0.; cublasDgeam(handle, trans == 'C' ? CUBLAS_OP_T : CUBLAS_OP_N, CUBLAS_OP_N, Mb, Nb, &one, A, lda, &zero, B, ldb, B, ldb); }
@@ -71,7 +69,7 @@ inline void nn_gemm(cublasHandle_t handle, int32_t M, int32_t N, int32_t K, cons
 { cuComplex one = make_cuComplex(1.f, 0.f), zero = make_cuComplex(0.f, 0.f); cublasCgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &one, A, lda, B, ldb, &zero, C, ldc); }
 
 template <class real_t, class complex_t>
-inline int32_t utv_k_dispatcher(cublasHandle_t handle, cusolverDnHandle_t s_handle, cusolverDnParams_t params, char transform, double epi, int32_t M, int32_t N, int32_t K, int32_t p,
+inline int32_t svdk_dispatcher(cublasHandle_t handle, cusolverDnHandle_t s_handle, cusolverDnParams_t params, char transform, double epi, int32_t M, int32_t N, int32_t K, int32_t p,
   real_t* sigma, complex_t* UA, int32_t ldu, complex_t* RJ, int32_t ldr, uint64_t dev_work_bytes, void* dev_work, uint64_t pinned_work_bytes, void* pinned_work) {
 
   cudaStream_t stream; cublasGetStream(handle, &stream);
@@ -81,10 +79,10 @@ inline int32_t utv_k_dispatcher(cublasHandle_t handle, cusolverDnHandle_t s_hand
   int8_t* R = (int8_t*)dev_work, *S = &R[r_bytes], *bufferOnDevice = &S[s_bytes];
   int8_t* Sh = (int8_t*)pinned_work, *bufferOnHost = &Sh[s_bytes];
 
-  cudaDataType_t type_c, type_r; double cutoff_epi;
-  constants<complex_t>(type_c, type_r, cutoff_epi);
+  cudaDataType_t type_c = cuda_type<complex_t>(), type_r = cuda_type<real_t>();
+  double cutoff = cutoff_epi<real_t>();
 
-  if (epi < cutoff_epi) {
+  if (epi < cutoff) {
     size_t workspaceInBytesOnDevice = size_t(dev_work_bytes - uint64_t(r_bytes + s_bytes));
 
     tranpose_copy(handle, 'C', N, K, RJ, ldr, (complex_t*)R, algnN);
@@ -122,18 +120,18 @@ inline int32_t utv_k_dispatcher(cublasHandle_t handle, cusolverDnHandle_t s_hand
   return K;
 }
 
-extern "C" int32_t hyacinXutvk(cublasHandle_t handle, cusolverDnHandle_t s_handle, cusolverDnParams_t params, char transform, double epi, int32_t M, int32_t N, int32_t K, int32_t p,
+extern "C" int32_t hyacinXsvdk(cublasHandle_t handle, cusolverDnHandle_t s_handle, cusolverDnParams_t params, char transform, double epi, int32_t M, int32_t N, int32_t K, int32_t p,
   void* sigma, void* UA, int32_t ldu, void* RJ, int32_t ldr, hyacinPrecision_t ComputeType, uint64_t dev_work_bytes, void* dev_work, uint64_t pinned_work_bytes, void* pinned_work) {
 
   if (0 < N && 0 < K) switch(ComputeType) {
     case HYACIN_F64:
-      return utv_k_dispatcher(handle, s_handle, params, transform, epi, M, N, K, p, (double*)sigma, (double*)UA, ldu, (double*)RJ, ldr, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
+      return svdk_dispatcher(handle, s_handle, params, transform, epi, M, N, K, p, (double*)sigma, (double*)UA, ldu, (double*)RJ, ldr, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
     case HYACIN_F32:
-      return utv_k_dispatcher(handle, s_handle, params, transform, epi, M, N, K, p, (float*)sigma, (float*)UA, ldu, (float*)RJ, ldr, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
+      return svdk_dispatcher(handle, s_handle, params, transform, epi, M, N, K, p, (float*)sigma, (float*)UA, ldu, (float*)RJ, ldr, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
     case HYACIN_F64_COMPLEX:
-      return utv_k_dispatcher(handle, s_handle, params, transform, epi, M, N, K, p, (double*)sigma, (cuDoubleComplex*)UA, ldu, (cuDoubleComplex*)RJ, ldr, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
+      return svdk_dispatcher(handle, s_handle, params, transform, epi, M, N, K, p, (double*)sigma, (cuDoubleComplex*)UA, ldu, (cuDoubleComplex*)RJ, ldr, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
     case HYACIN_F32_COMPLEX:
-      return utv_k_dispatcher(handle, s_handle, params, transform, epi, M, N, K, p, (float*)sigma, (cuComplex*)UA, ldu, (cuComplex*)RJ, ldr, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
+      return svdk_dispatcher(handle, s_handle, params, transform, epi, M, N, K, p, (float*)sigma, (cuComplex*)UA, ldu, (cuComplex*)RJ, ldr, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
     default: return 0;
   }
   return 0;

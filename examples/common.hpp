@@ -9,7 +9,10 @@
 #include <string>
 #include <tuple>
 #include <mpi.h>
-using blas_int = int; // LP64
+
+using blas_int = int; // LP64 for blas
+const int32_t oversampling = 10; // increase for better LRA accuracy
+const int32_t u_extra = 6; // increase for better Quantization accuracy 
 
 std::string replace_suffix(const std::string& str, const std::string& suffix) {
   std::string result = str;
@@ -180,17 +183,17 @@ std::pair<double, double> check_answer_svd(int32_t M, int32_t N, int32_t r1, int
   return check_answer_svd(M, N, r1, U, ldu, &matV[0], r1, B, ldb);
 }
 
-template <class T> struct __precA;
-template <> struct __precA<double> { static constexpr hyacinPrecision_t value = HYACIN_F64; };
-template <> struct __precA<float> { static constexpr hyacinPrecision_t value = HYACIN_F32; };
-template <> struct __precA<std::complex<double>> { static constexpr hyacinPrecision_t value = HYACIN_F64_COMPLEX; };
-template <> struct __precA<std::complex<float>> { static constexpr hyacinPrecision_t value = HYACIN_F32_COMPLEX; };
+template <class T> inline hyacinPrecision_t __precA();
+template <> inline hyacinPrecision_t __precA<double>() { return HYACIN_F64; };
+template <> inline hyacinPrecision_t __precA<float>() { return HYACIN_F32; };
+template <> inline hyacinPrecision_t __precA<std::complex<double>>() { return HYACIN_F64_COMPLEX; };
+template <> inline hyacinPrecision_t __precA<std::complex<float>>() { return HYACIN_F32_COMPLEX; };
 
 template <class T>
 int32_t geqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, int32_t* jpiv, T* R, int32_t ldr) {
   cudaStream_t stream; cublasGetStream(handle, &stream);
-  int32_t umax; hyacinPrecision_t precA = __precA<T>::value, precC; hyacinAlgorithm_t alg; uint64_t dev_work_bytes, pinned_work_bytes;
-  hyacinXcpqrk_autoTune(epi, M, 6, &umax, precA, &precC, &alg);
+  int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg; uint64_t dev_work_bytes, pinned_work_bytes;
+  hyacinXcpqrk_autoTune(epi, M, u_extra, &umax, precA, &precC, &alg);
   hyacinXcpqrk_bufferSize(M, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
 
   void* dev_work = nullptr, *piv = nullptr, *pinned_work = nullptr;
@@ -198,8 +201,7 @@ int32_t geqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32_t N, int
   cudaMalloc(&piv, int64_t(N) * sizeof(int32_t));
   cudaMallocHost(&pinned_work, pinned_work_bytes);
 
-  int32_t p = 0;
-  int32_t rank = hyacinXcpqrk(handle, 'R', epi, M, N, K, p, umax, precA, A, lda, (int32_t*)piv, precA, R, ldr, precC, dev_work, pinned_work, alg);
+  int32_t rank = hyacinXcpqrk(handle, 'R', epi, M, N, K, oversampling, umax, precA, A, lda, (int32_t*)piv, precA, R, ldr, precC, dev_work, pinned_work, alg);
 
   cudaStreamSynchronize(stream);
   cudaMemcpy(jpiv, piv, sizeof(int32_t) * N, cudaMemcpyDefault);
@@ -211,9 +213,9 @@ int32_t geqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32_t N, int
 
 template <class T>
 int32_t utv_factorize_phase1(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv) {
-  int32_t umax; hyacinPrecision_t precA = __precA<T>::value, precC; hyacinAlgorithm_t alg;
+  int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg;
   uint64_t dev_work_bytes, pinned_work_bytes, dev_work_bytes_new, pinned_work_bytes_new;
-  hyacinXcpqrk_autoTune(epi, M, 6, &umax, precA, &precC, &alg);
+  hyacinXcpqrk_autoTune(epi, M, u_extra, &umax, precA, &precC, &alg);
   hyacinXcpqrk_bufferSize(M, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
 
   void* jpiv = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
@@ -221,14 +223,13 @@ int32_t utv_factorize_phase1(cudaStream_t stream, cublasHandle_t cublasH, cusolv
   cudaMalloc(&dev_work, dev_work_bytes);
   cudaMallocHost(&pinned_work, pinned_work_bytes);
 
-  int32_t p = 0; 
-  int32_t rank = hyacinXcpqrk(cublasH, 'J', epi, M, N, K, p, umax, precA, A, lda, (int32_t*)jpiv, precA, V, ldv, precC, dev_work, pinned_work, alg);
+  int32_t rank = hyacinXcpqrk(cublasH, 'J', epi, M, N, K, oversampling, umax, precA, A, lda, (int32_t*)jpiv, precA, V, ldv, precC, dev_work, pinned_work, alg);
 
-  hyacinXutvk_bufferSize(cusolverH, params, epi, N, rank, precA, &dev_work_bytes_new, &pinned_work_bytes_new);
+  hyacinXsvdk_bufferSize(cusolverH, params, epi, N, rank, precA, &dev_work_bytes_new, &pinned_work_bytes_new);
   if (dev_work_bytes < dev_work_bytes_new) { cudaStreamSynchronize(stream); cudaFree(dev_work); cudaMalloc(&dev_work, dev_work_bytes = dev_work_bytes_new); }
   if (pinned_work_bytes < pinned_work_bytes_new) { cudaStreamSynchronize(stream); cudaFreeHost(pinned_work); cudaMallocHost(&pinned_work, pinned_work_bytes = pinned_work_bytes_new); }
 
-  rank = hyacinXutvk(cublasH, cusolverH, params, 'Y', epi, M, N, rank, p, nullptr, A, lda, V, ldv, precA, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
+  rank = hyacinXsvdk(cublasH, cusolverH, params, 'Y', epi, M, N, rank, oversampling, nullptr, A, lda, V, ldv, precA, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
 
   cudaStreamSynchronize(stream);
   cudaFree(jpiv);
@@ -239,9 +240,9 @@ int32_t utv_factorize_phase1(cudaStream_t stream, cublasHandle_t cublasH, cusolv
 
 template <class T>
 int32_t utv_factorize_phase1_1dr(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t gM, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv, ncclComm_t comm) {
-  int32_t umax; hyacinPrecision_t precA = __precA<T>::value, precC; hyacinAlgorithm_t alg;
+  int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg;
   uint64_t dev_work_bytes, pinned_work_bytes;
-  hyacinXcpqrk_autoTune(epi, gM, 6, &umax, precA, &precC, &alg);
+  hyacinXcpqrk_autoTune(epi, gM, u_extra, &umax, precA, &precC, &alg);
   hyacinXcpqrk1Drow_bufferSize(M, gM, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
 
   void* jpiv = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
@@ -249,15 +250,14 @@ int32_t utv_factorize_phase1_1dr(cudaStream_t stream, cublasHandle_t cublasH, cu
   cudaMalloc(&dev_work, dev_work_bytes);
   cudaMallocHost(&pinned_work, pinned_work_bytes);
 
-  int32_t p = 0; 
-  int32_t rank = hyacinXcpqrk1Drow(cublasH, 'J', epi, M, gM, N, K, p, umax, precA, A, lda, (int32_t*)jpiv, precA, V, ldv, precC, dev_work, pinned_work, alg, comm);
+  int32_t rank = hyacinXcpqrk1Drow(cublasH, 'J', epi, M, gM, N, K, oversampling, umax, precA, A, lda, (int32_t*)jpiv, precA, V, ldv, precC, dev_work, pinned_work, alg, comm);
 
   uint64_t dev_work_bytes_new, pinned_work_bytes_new;
-  hyacinXutvk_bufferSize(cusolverH, params, epi, N, rank, precA, &dev_work_bytes_new, &pinned_work_bytes_new);
+  hyacinXsvdk_bufferSize(cusolverH, params, epi, N, rank, precA, &dev_work_bytes_new, &pinned_work_bytes_new);
   if (dev_work_bytes < dev_work_bytes_new) { cudaStreamSynchronize(stream); cudaFree(dev_work); cudaMalloc(&dev_work, dev_work_bytes = dev_work_bytes_new); }
   if (pinned_work_bytes < pinned_work_bytes_new) { cudaStreamSynchronize(stream); cudaFreeHost(pinned_work); cudaMallocHost(&pinned_work, pinned_work_bytes = pinned_work_bytes_new); }
 
-  rank = hyacinXutvk(cublasH, cusolverH, params, 'Y', epi, M, N, rank, p, nullptr, A, lda, V, ldv, precA, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
+  rank = hyacinXsvdk(cublasH, cusolverH, params, 'Y', epi, M, N, rank, oversampling, nullptr, A, lda, V, ldv, precA, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
 
   cudaStreamSynchronize(stream);
   cudaFree(jpiv);
@@ -275,9 +275,9 @@ std::pair<int32_t, int32_t> utv_factorize_phase2_1dc(cudaStream_t stream, cublas
   int32_t v_offset = std::reduce(ranks_arr.begin(), ranks_arr.begin() + mpi_rank, 0, std::plus<int32_t>());
   N = std::reduce(ranks_arr.begin() + mpi_rank, ranks_arr.end(), v_offset, std::plus<int32_t>());
 
-  int32_t umax; hyacinPrecision_t precA = __precA<T>::value, precC; hyacinAlgorithm_t alg;
+  int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg;
   uint64_t dev_work_bytes, pinned_work_bytes, dev_work_bytes_new, pinned_work_bytes_new;
-  hyacinXcpqrk_autoTune(epi, M, 6, &umax, precA, &precC, &alg);
+  hyacinXcpqrk_autoTune(epi, M, u_extra, &umax, precA, &precC, &alg);
   hyacinXcpqrk_bufferSize(M, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
   hyacinXAllGatherV1Dcol_bufferSize(M, rank_max, mpi_size, precA, &dev_work_bytes_new);
   dev_work_bytes = std::max(dev_work_bytes, dev_work_bytes_new);
@@ -289,14 +289,13 @@ std::pair<int32_t, int32_t> utv_factorize_phase2_1dc(cudaStream_t stream, cublas
 
   hyacinXAllGatherV1Dcol(cublasH, M, mpi_rank, mpi_size, ranks_arr.data(), precA, A, lda, dev_work, comm);
 
-  int32_t p = 0; 
-  int32_t rank = hyacinXcpqrk(cublasH, 'J', epi, M, N, K, p, umax, precA, A, lda, (int32_t*)jpiv, precA, V, ldv, precC, dev_work, pinned_work, alg);
+  int32_t rank = hyacinXcpqrk(cublasH, 'J', epi, M, N, K, oversampling, umax, precA, A, lda, (int32_t*)jpiv, precA, V, ldv, precC, dev_work, pinned_work, alg);
 
-  hyacinXutvk_bufferSize(cusolverH, params, epi, N, rank, precA, &dev_work_bytes_new, &pinned_work_bytes_new);
+  hyacinXsvdk_bufferSize(cusolverH, params, epi, N, rank, precA, &dev_work_bytes_new, &pinned_work_bytes_new);
   if (dev_work_bytes < dev_work_bytes_new) { cudaStreamSynchronize(stream); cudaFree(dev_work); cudaMalloc(&dev_work, dev_work_bytes = dev_work_bytes_new); }
   if (pinned_work_bytes < pinned_work_bytes_new) { cudaStreamSynchronize(stream); cudaFreeHost(pinned_work); cudaMallocHost(&pinned_work, pinned_work_bytes = pinned_work_bytes_new); }
 
-  rank = hyacinXutvk(cublasH, cusolverH, params, 'Y', epi, M, N, rank, p, nullptr, A, lda, V, ldv, precA, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
+  rank = hyacinXsvdk(cublasH, cusolverH, params, 'Y', epi, M, N, rank, oversampling, nullptr, A, lda, V, ldv, precA, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
 
   cudaStreamSynchronize(stream);
   cudaFree(jpiv);
@@ -314,9 +313,9 @@ std::pair<int32_t, int32_t> utv_factorize_phase2_2d(cudaStream_t stream, cublasH
   int32_t v_offset = std::reduce(ranks_arr.begin(), ranks_arr.begin() + mpi_rank, 0, std::plus<int32_t>());
   N = std::reduce(ranks_arr.begin() + mpi_rank, ranks_arr.end(), v_offset, std::plus<int32_t>());
 
-  int32_t umax; hyacinPrecision_t precA = __precA<T>::value, precC; hyacinAlgorithm_t alg;
+  int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg;
   uint64_t dev_work_bytes, pinned_work_bytes, dev_work_bytes_new, pinned_work_bytes_new;
-  hyacinXcpqrk_autoTune(epi, gM, 6, &umax, precA, &precC, &alg);
+  hyacinXcpqrk_autoTune(epi, gM, u_extra, &umax, precA, &precC, &alg);
   hyacinXcpqrk1Drow_bufferSize(M, gM, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
   hyacinXAllGatherV1Dcol_bufferSize(M, rank_max, mpi_size, precA, &dev_work_bytes_new);
   dev_work_bytes = std::max(dev_work_bytes, dev_work_bytes_new);
@@ -328,14 +327,13 @@ std::pair<int32_t, int32_t> utv_factorize_phase2_2d(cudaStream_t stream, cublasH
 
   hyacinXAllGatherV1Dcol(cublasH, M, mpi_rank, mpi_size, ranks_arr.data(), precA, A, lda, dev_work, comm_row);
 
-  int32_t p = 0; 
-  int32_t rank = hyacinXcpqrk1Drow(cublasH, 'J', epi, M, gM, N, K, p, umax, precA, A, lda, (int32_t*)jpiv, precA, V, ldv, precC, dev_work, pinned_work, alg, comm_col);
+  int32_t rank = hyacinXcpqrk1Drow(cublasH, 'J', epi, M, gM, N, K, oversampling, umax, precA, A, lda, (int32_t*)jpiv, precA, V, ldv, precC, dev_work, pinned_work, alg, comm_col);
 
-  hyacinXutvk_bufferSize(cusolverH, params, epi, N, rank, precA, &dev_work_bytes_new, &pinned_work_bytes_new);
+  hyacinXsvdk_bufferSize(cusolverH, params, epi, N, rank, precA, &dev_work_bytes_new, &pinned_work_bytes_new);
   if (dev_work_bytes < dev_work_bytes_new) { cudaStreamSynchronize(stream); cudaFree(dev_work); cudaMalloc(&dev_work, dev_work_bytes = dev_work_bytes_new); }
   if (pinned_work_bytes < pinned_work_bytes_new) { cudaStreamSynchronize(stream); cudaFreeHost(pinned_work); cudaMallocHost(&pinned_work, pinned_work_bytes = pinned_work_bytes_new); }
 
-  rank = hyacinXutvk(cublasH, cusolverH, params, 'Y', epi, M, N, rank, p, nullptr, A, lda, V, ldv, precA, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
+  rank = hyacinXsvdk(cublasH, cusolverH, params, 'Y', epi, M, N, rank, oversampling, nullptr, A, lda, V, ldv, precA, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
 
   cudaStreamSynchronize(stream);
   cudaFree(jpiv);
