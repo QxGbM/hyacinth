@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_BUILD_TYPE Release)
 
 option(BUILD_EXAMPLES "Example files" ON)
-option(USE_NCCL "Enable NCCL backend (falls back to NO_NCCL if not found)" ON)
+option(USE_NCCL "Enable NCCL backend" OFF)
 
 project("hyacin" LANGUAGES CXX CUDA)
 set(SM_TARGETS "80;86;89;90;100;120")

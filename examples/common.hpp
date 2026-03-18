@@ -8,7 +8,6 @@
 #include <fstream>
 #include <string>
 #include <tuple>
-#include <mpi.h>
 
 using blas_int = int; // LP64 for blas
 const int32_t oversampling = 10; // increase for better LRA accuracy
@@ -25,73 +24,6 @@ std::string replace_suffix(const std::string& str, const std::string& suffix) {
 template <class T>
 inline void copy2d(int32_t M, int32_t N, const T* A, int32_t lda, T* B, int32_t ldb)
 { for (int32_t j = 0; j < N; ++j) { std::copy_n(&A[int64_t(j) * int64_t(lda)], M, &B[int64_t(j) * int64_t(ldb)]); } }
-
-inline void parse_char(double& a, const std::string& s) { a = std::stod(s); }
-inline void parse_char(float& a, const std::string& s) { a = std::stof(s); }
-inline void parse_char(std::complex<double>& a, const std::string& s) {
-  std::string::size_type l; double rl = std::stod(s, &l);
-  try { double im = std::stod(s.substr(l)); a = std::complex<double>(rl, im); }
-  catch (const std::invalid_argument&) { a = std::complex<double>(rl, 0.); }
-}
-inline void parse_char(std::complex<float>& a, const std::string& s) {
-  std::string::size_type l; float rl = std::stod(s, &l);
-  try { float im = std::stof(s.substr(l)); a = std::complex<float>(rl, im); }
-  catch (const std::invalid_argument&) { a = std::complex<float>(rl, 0.f); }
-}
-
-template <class T>
-void matrix_from_row_major_csv(int32_t M, int32_t N, int32_t mb, int32_t nb, T* A, int32_t lda, const std::string& file, MPI_Comm comm_row, MPI_Comm comm_col) {
-  int32_t grid_row = 0, grid_col = 0, tile_m = 1, tile_n = 1;
-  MPI_Comm_rank(comm_row, &grid_col); MPI_Comm_size(comm_row, &tile_n);
-  MPI_Comm_rank(comm_col, &grid_row); MPI_Comm_size(comm_col, &tile_m);
-  std::ifstream csv; std::vector<int64_t> row_bytes;
-  if (grid_col == 0) {
-    csv.open(replace_suffix(file, "csv"));
-    if (grid_row == 0) {
-      std::ifstream idx(replace_suffix(file, "cache"));
-      if (idx.is_open()) { while (!idx.eof()) { int64_t i; idx >> i; row_bytes.push_back(i); } idx.close(); }
-      else {
-        int64_t len = 0; std::string line; row_bytes.push_back(int64_t(0));
-        while(std::getline(csv, line)) row_bytes.push_back(len += 1 + line.length());
-        std::ofstream idx_cache(replace_suffix(file, "cache"));
-        for (int64_t i : row_bytes) idx_cache << i << std::endl;
-        idx_cache.close(); csv.clear();
-      }
-    }
-    
-    if (1 < tile_m)
-    { row_bytes.resize(M + 1); MPI_Bcast(&row_bytes[0], M + 1, MPI_INT64_T, 0, comm_col); }
-  }
-
-  for (int32_t i = grid_row * mb, y = 0; i < M; i = grid_row * mb + tile_m * (y += mb)) {
-    int32_t ib = std::min(M - i, mb);
-    std::vector<T> mat(int64_t(ib) * int64_t(N));
-
-    if (grid_col == 0 && csv.is_open()) {
-      int64_t start_byte = row_bytes[i], n_bytes = row_bytes[i + ib] - start_byte;
-      std::vector<char> buf(n_bytes); char* str = &buf[0], *end = &buf[n_bytes];
-      csv.seekg(start_byte, std::ios::beg); csv.read(str, n_bytes);
-      auto cmp = [](char c){ return c == ' ' || c == ',' || c == '\n' || c == '(' || c == ')'; };
-      while(cmp(*str)) ++str;
-
-      for (int32_t y = 0; y < ib; ++y)
-        for (int32_t x = 0; x < N; ++x) {
-          std::string Ayx(str, std::distance(str, std::find_if(str, end, cmp)));
-          parse_char(mat[int64_t(y) + int64_t(x) * int64_t(ib)], Ayx);
-          str += Ayx.length(); while(cmp(*str)) ++str;
-        }
-    }
-
-    if (1 < tile_n)
-      MPI_Bcast(&mat[0], mat.size() * sizeof(T), MPI_BYTE, 0, comm_row);
-
-    for (int32_t j = grid_col * nb, x = 0; j < N; j = grid_col * nb + tile_n * (x += nb))
-      copy2d(ib, std::min(N - j, nb), &mat[int64_t(j) * int64_t(ib)], ib, &A[int64_t(y) + int64_t(x) * int64_t(lda)], lda);
-  }
-
-  if (grid_col == 0 && csv.is_open())
-    csv.close();
-}
 
 inline void matrix_eval(double& a, double d, double w) { a = std::cos(w * d) / d; }
 inline void matrix_eval(float& a, double d, double w) { a = float(std::cos(w * d) / d); }
@@ -238,6 +170,76 @@ int32_t utv_factorize_phase1(cudaStream_t stream, cublasHandle_t cublasH, cusolv
   return rank;
 }
 
+#ifndef NO_NCCL
+#include <mpi.h>
+
+inline void parse_char(double& a, const std::string& s) { a = std::stod(s); }
+inline void parse_char(float& a, const std::string& s) { a = std::stof(s); }
+inline void parse_char(std::complex<double>& a, const std::string& s) {
+  std::string::size_type l; double rl = std::stod(s, &l);
+  try { double im = std::stod(s.substr(l)); a = std::complex<double>(rl, im); }
+  catch (const std::invalid_argument&) { a = std::complex<double>(rl, 0.); }
+}
+inline void parse_char(std::complex<float>& a, const std::string& s) {
+  std::string::size_type l; float rl = std::stod(s, &l);
+  try { float im = std::stof(s.substr(l)); a = std::complex<float>(rl, im); }
+  catch (const std::invalid_argument&) { a = std::complex<float>(rl, 0.f); }
+}
+
+template <class T>
+void matrix_from_row_major_csv(int32_t M, int32_t N, int32_t mb, int32_t nb, T* A, int32_t lda, const std::string& file, MPI_Comm comm_row, MPI_Comm comm_col) {
+  int32_t grid_row = 0, grid_col = 0, tile_m = 1, tile_n = 1;
+  MPI_Comm_rank(comm_row, &grid_col); MPI_Comm_size(comm_row, &tile_n);
+  MPI_Comm_rank(comm_col, &grid_row); MPI_Comm_size(comm_col, &tile_m);
+  std::ifstream csv; std::vector<int64_t> row_bytes;
+  if (grid_col == 0) {
+    csv.open(replace_suffix(file, "csv"));
+    if (grid_row == 0) {
+      std::ifstream idx(replace_suffix(file, "cache"));
+      if (idx.is_open()) { while (!idx.eof()) { int64_t i; idx >> i; row_bytes.push_back(i); } idx.close(); }
+      else {
+        int64_t len = 0; std::string line; row_bytes.push_back(int64_t(0));
+        while(std::getline(csv, line)) row_bytes.push_back(len += 1 + line.length());
+        std::ofstream idx_cache(replace_suffix(file, "cache"));
+        for (int64_t i : row_bytes) idx_cache << i << std::endl;
+        idx_cache.close(); csv.clear();
+      }
+    }
+    
+    if (1 < tile_m)
+    { row_bytes.resize(M + 1); MPI_Bcast(&row_bytes[0], M + 1, MPI_INT64_T, 0, comm_col); }
+  }
+
+  for (int32_t i = grid_row * mb, y = 0; i < M; i = grid_row * mb + tile_m * (y += mb)) {
+    int32_t ib = std::min(M - i, mb);
+    std::vector<T> mat(int64_t(ib) * int64_t(N));
+
+    if (grid_col == 0 && csv.is_open()) {
+      int64_t start_byte = row_bytes[i], n_bytes = row_bytes[i + ib] - start_byte;
+      std::vector<char> buf(n_bytes); char* str = &buf[0], *end = &buf[n_bytes];
+      csv.seekg(start_byte, std::ios::beg); csv.read(str, n_bytes);
+      auto cmp = [](char c){ return c == ' ' || c == ',' || c == '\n' || c == '(' || c == ')'; };
+      while(cmp(*str)) ++str;
+
+      for (int32_t y = 0; y < ib; ++y)
+        for (int32_t x = 0; x < N; ++x) {
+          std::string Ayx(str, std::distance(str, std::find_if(str, end, cmp)));
+          parse_char(mat[int64_t(y) + int64_t(x) * int64_t(ib)], Ayx);
+          str += Ayx.length(); while(cmp(*str)) ++str;
+        }
+    }
+
+    if (1 < tile_n)
+      MPI_Bcast(&mat[0], mat.size() * sizeof(T), MPI_BYTE, 0, comm_row);
+
+    for (int32_t j = grid_col * nb, x = 0; j < N; j = grid_col * nb + tile_n * (x += nb))
+      copy2d(ib, std::min(N - j, nb), &mat[int64_t(j) * int64_t(ib)], ib, &A[int64_t(y) + int64_t(x) * int64_t(lda)], lda);
+  }
+
+  if (grid_col == 0 && csv.is_open())
+    csv.close();
+}
+
 template <class T>
 int32_t utv_factorize_phase1_1dr(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t gM, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv, ncclComm_t comm) {
   int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg;
@@ -341,3 +343,5 @@ std::pair<int32_t, int32_t> utv_factorize_phase2_2d(cudaStream_t stream, cublasH
   cudaFreeHost(pinned_work);
   return std::make_pair(rank, v_offset);
 }
+
+#endif
