@@ -34,7 +34,7 @@ template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, 
   cudaMalloc((void**)(&d_A), lM * N * sizeof(T));
   cudaMalloc((void**)(&d_V), K * N * sizeof(T));
   cudaMemcpy(d_A, matA.data(), lM * N * sizeof(T), cudaMemcpyHostToDevice);
-  cudaMemset(d_barrier, 0xDEADBEAF, sizeof(double2));
+  cudaMemset(d_barrier, 0xDEADBEEF, sizeof(double2));
 
   svd_fit_transform_1dr(stream, cublasH, cusolverH, params, epi, lM, gM, N, K, d_A, lM, d_V, K, comm);
   cudaMemcpy(d_A, matA.data(), lM * N * sizeof(T), cudaMemcpyHostToDevice);
@@ -79,11 +79,10 @@ template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, 
 }
 
 #include <mpi.h>
+#include <filesystem>
 
 int32_t main(int32_t argc, char* argv[]) {
-  MPI_Init(&argc, &argv);
-
-  char prec = 'D'; std::string file;
+  char prec = 'D'; std::string file, id_path("id.out");
   int64_t gM = 2048, N = 2048, K = 2048, mb = 512;
   double epi = 1.e-12;
 
@@ -95,35 +94,34 @@ int32_t main(int32_t argc, char* argv[]) {
     else if (std::strncmp(argv[i], "epi=", 4) == 0) { std::sscanf(argv[i], "epi=%lf", &epi); }
     else if (std::strncmp(argv[i], "mb=", 3) == 0) { std::sscanf(argv[i], "mb=%ld", &mb); }
     else if (std::strncmp(argv[i], "file=", 5) == 0) { file.resize(std::strlen(argv[i])); std::sscanf(argv[i], "file=%s", file.data()); }
+    else if (std::strncmp(argv[i], "ccl=", 4) == 0) { id_path.resize(std::strlen(argv[i])); std::sscanf(argv[i], "ccl=%s", id_path.data()); }
     else { std::cerr << "Ignored parameter: " << argv[i] << std::endl; }
   }
   N = std::min(gM, N); K = std::min(N, K);
 
-  int32_t local_rank = 0;
+  MPI_Init(&argc, &argv);
+  int32_t world_rank = 0, local_rank = 0, world_size = 1;
   MPI_Comm shmcomm; MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL, &shmcomm);
+  MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
   MPI_Comm_rank(shmcomm, &local_rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &world_size);
   MPI_Comm_free(&shmcomm);
+  MPI_Finalize();
 
   int32_t device_count = 0; cudaGetDeviceCount(&device_count);
   auto cu_err = cudaSetDevice(1 < device_count ? local_rank : 0);
   cudaDeviceReset();
   if (cu_err != cudaSuccess)
-  { std::cerr << cudaGetErrorString(cu_err) << std::endl; MPI_Finalize(); return -1; }
+  { std::cerr << cudaGetErrorString(cu_err) << std::endl; return -1; }
 
-  int32_t mpi_rank = 0, mpi_size = 1;
-  MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
-
-  ncclUniqueId id; ncclComm_t comm;
-  if (mpi_rank == 0) ncclGetUniqueId(&id);
-  MPI_Bcast((void*)&id, sizeof(ncclUniqueId), MPI_BYTE, 0, MPI_COMM_WORLD);
-  ncclCommInitRank(&comm, mpi_size, id, mpi_rank);
+  ncclUniqueId id = world_rank == 0 ? nccl_id_to_file(id_path) : nccl_id_from_file(id_path); ncclComm_t comm;
+  ncclCommInitRank(&comm, world_size, id, world_rank);
 
   switch(prec) {
-    case 'D': run<double>(prec, gM, N, K, mb, epi, mpi_rank, mpi_size, comm, file); break;
-    case 'S': run<float>(prec, gM, N, K, mb, epi, mpi_rank, mpi_size, comm, file); break;
-    case 'Z': run<std::complex<double>>(prec, gM, N, K, mb, epi, mpi_rank, mpi_size, comm, file); break;
-    case 'C': run<std::complex<float>>(prec, gM, N, K, mb, epi, mpi_rank, mpi_size, comm, file); break;
+    case 'D': run<double>(prec, gM, N, K, mb, epi, world_rank, world_size, comm, file); break;
+    case 'S': run<float>(prec, gM, N, K, mb, epi, world_rank, world_size, comm, file); break;
+    case 'Z': run<std::complex<double>>(prec, gM, N, K, mb, epi, world_rank, world_size, comm, file); break;
+    case 'C': run<std::complex<float>>(prec, gM, N, K, mb, epi, world_rank, world_size, comm, file); break;
     default: break;
   }
 
@@ -132,6 +130,6 @@ int32_t main(int32_t argc, char* argv[]) {
     std::cerr << cudaGetErrorString(cu_err) << std::endl;
 
   ncclCommDestroy(comm);
-  MPI_Finalize();
+  if (world_rank == 0) { std::filesystem::remove(id_path); }
   return 0;
 }

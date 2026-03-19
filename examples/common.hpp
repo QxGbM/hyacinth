@@ -220,24 +220,24 @@ int32_t svd_fit_transform(cudaStream_t stream, cublasHandle_t cublasH, cusolverD
 
 #ifndef NO_NCCL
 
-void nccl_id_from_file(const std::string& id_path, std::vector<ncclUniqueId>& arr) {
-  arr.clear();
-  std::ifstream ids(id_path);
-  if (ids.is_open()) {
-    std::string line;
-    while(std::getline(ids, line)) {
-      std::stringstream stream(line);
-      std::vector<uint8_t> arr(sizeof(ncclUniqueId));
-      int32_t byte; std::vector<uint8_t>::iterator iter = arr.begin();
-      while ((stream >> byte) && iter != arr.end())
-        *iter = uint8_t(byte);
-      
-      size_t len = arr.size();
-      arr.resize(len + 1);
-      std::memcpy(&arr[len], arr.data(), sizeof(ncclUniqueId));
-    }
-    ids.close();
-  }
+#include <thread>
+#include <chrono>
+
+ncclUniqueId nccl_id_to_file(const std::string& id_path) {
+  ncclUniqueId id; ncclGetUniqueId(&id);
+  std::ofstream stream(id_path, std::ios::binary);
+  if (stream.is_open()) 
+  { stream.write((const char*)&id, sizeof(ncclUniqueId)); stream.close(); }
+  return id;
+}
+
+ncclUniqueId nccl_id_from_file(const std::string& id_path) {
+  ncclUniqueId id; std::ifstream stream(id_path, std::ios::binary);
+  int32_t trials = 0;
+  while (!stream.is_open() && ++trials <= 20) { std::this_thread::sleep_for(std::chrono::seconds(1)); stream.open(id_path, std::ios::binary); }
+  if (stream.is_open())
+  { stream.read((char*)&id, sizeof(ncclUniqueId)); stream.close(); }
+  return id;
 }
 
 template <class T>
