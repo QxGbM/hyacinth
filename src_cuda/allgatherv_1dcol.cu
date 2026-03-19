@@ -26,11 +26,15 @@ __global__ void imatrix_copy(int64_t M, const int32_t* __restrict__ A, int64_t l
 }
 
 inline void matrix_move(cudaStream_t stream, int64_t M, int32_t N, int32_t j, int32_t* A, int64_t lda, int32_t wcols, int32_t* W) {
-  uint32_t grid_x = uint32_t((uint64_t(M) + uint64_t(511)) >> 9), grid_y = uint32_t(N);
+  uint32_t grid_x = uint32_t((uint64_t(M) + uint64_t(511)) >> 9);
   if (N <= j)
-    imatrix_copy <<< dim3(grid_x, grid_y), 512, 0, stream >>> (M, A, lda, &A[int64_t(j) * lda], lda);
+    imatrix_copy <<< dim3(grid_x, uint32_t(N)), 512, 0, stream >>> (M, A, lda, &A[int64_t(j) * lda], lda);
+  else if (512 <= j) for (int32_t x = N; 0 < x; x -= 512) {
+    int32_t x_start = std::max(x - 512, 0); uint32_t cols = uint32_t(x - x_start);
+    imatrix_copy <<< dim3(grid_x, cols), 512, 0, stream >>> (M, &A[int64_t(x_start) * lda], lda, &A[int64_t(x_start + j) * lda], lda);
+  }
   else if (0 < j) for (int32_t x = N; 0 < x; x -= wcols) {
-    int32_t x_start = std::max(x - wcols, 0); uint32_t cols = x - x_start;
+    int32_t x_start = std::max(x - wcols, 0); uint32_t cols = uint32_t(x - x_start);
     imatrix_copy <<< dim3(grid_x, cols), 512, 0, stream >>> (M, &A[int64_t(x_start) * lda], lda, W, M);
     imatrix_copy <<< dim3(grid_x, cols), 512, 0, stream >>> (M, W, M, &A[int64_t(x_start + j) * lda], lda);
   }
