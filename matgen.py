@@ -10,25 +10,20 @@ parser.add_argument("file", type=str, nargs='?', default="matrix.csv", help="Out
 parser.add_argument("omega", type=float, nargs='?', default=1., help="Kernel omega (default: 1.0)")
 args = parser.parse_args()
 
-# indices
 i = np.arange(args.M)
 j = np.arange(args.N)
 
-# grid coordinates
 xi = i // 128
 yi = i - 128 * xi
 
 xj = j // 128
 yj = j - 128 * xj
 
-# broadcast to matrix form
 diff_x = xi[:, None] - (-1 - xj[None, :])
 diff_y = yi[:, None] - yj[None, :]
 
-# distance
 r = np.sqrt(diff_x * diff_x + diff_y * diff_y)
 
-# Helmholtz kernel
 if args.data == "Z" or args.data == "C":
   A = np.exp(1j * args.omega * r) / r
   np.savetxt(args.file, A, delimiter=',', newline='\n')
@@ -36,3 +31,16 @@ if args.data == "Z" or args.data == "C":
 if args.data == "D" or args.data == "S":
   A = np.cos(args.omega * r) / r
   np.savetxt(args.file, A, delimiter=',', newline='\n')
+
+row_bytes = [0]
+length = 0
+idx_cache = (args.file).removesuffix(".csv") + ".cache"
+
+with open(args.file, 'rb') as f:
+  for line in f:
+    length += len(line)
+    row_bytes.append(length)
+
+with open(idx_cache, 'w') as out:
+  for offset in row_bytes:
+    out.write(f"{offset}\n")

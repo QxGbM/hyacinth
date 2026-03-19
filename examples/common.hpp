@@ -13,6 +13,10 @@ using blas_int = int; // LP64 for blas
 const int32_t oversampling = 10; // increase for better LRA accuracy
 const int32_t u_extra = 6; // increase for better Quantization accuracy 
 
+template <class T>
+inline void copy2d(int32_t M, int32_t N, const T* A, int32_t lda, T* B, int32_t ldb)
+{ for (int32_t j = 0; j < N; ++j) { std::copy_n(&A[int64_t(j) * int64_t(lda)], M, &B[int64_t(j) * int64_t(ldb)]); } }
+
 std::string replace_suffix(const std::string& str, const std::string& suffix) {
   std::string result = str;
   std::size_t pos = result.rfind('.');
@@ -21,9 +25,52 @@ std::string replace_suffix(const std::string& str, const std::string& suffix) {
   return result;
 }
 
+inline void parse_char(double& a, const std::string& s) { a = std::stod(s); }
+inline void parse_char(float& a, const std::string& s) { a = std::stof(s); }
+inline void parse_char(std::complex<double>& a, const std::string& s) {
+  std::string::size_type l; double rl = std::stod(s, &l);
+  try { double im = std::stod(s.substr(l)); a = std::complex<double>(rl, im); }
+  catch (const std::invalid_argument&) { a = std::complex<double>(rl, 0.); }
+}
+inline void parse_char(std::complex<float>& a, const std::string& s) {
+  std::string::size_type l; float rl = std::stod(s, &l);
+  try { float im = std::stof(s.substr(l)); a = std::complex<float>(rl, im); }
+  catch (const std::invalid_argument&) { a = std::complex<float>(rl, 0.f); }
+}
+
 template <class T>
-inline void copy2d(int32_t M, int32_t N, const T* A, int32_t lda, T* B, int32_t ldb)
-{ for (int32_t j = 0; j < N; ++j) { std::copy_n(&A[int64_t(j) * int64_t(lda)], M, &B[int64_t(j) * int64_t(ldb)]); } }
+void matrix_from_row_major_csv(int32_t M, int32_t N, int32_t mb, int32_t nb, T* A, int32_t lda, const std::string& file, int32_t grid_row = 0, int32_t grid_col = 0, int32_t tile_m = 1, int32_t tile_n = 1) {
+  std::ifstream csv(replace_suffix(file, "csv")), idx(replace_suffix(file, "cache"));
+  std::vector<int64_t> row_bytes;
+  if (idx.is_open()) 
+  { while (!idx.eof() && row_bytes.size() <= size_t(M)) { int64_t i; idx >> i; row_bytes.push_back(i); } idx.close(); }
+
+  for (int32_t i = grid_row * mb, y = 0; i < M; i = grid_row * mb + tile_m * (y += mb)) {
+    int32_t ib = std::min(M - i, mb);
+    std::vector<T> mat(int64_t(ib) * int64_t(N));
+
+    if (csv.is_open()) {
+      int64_t start_byte = row_bytes[i], n_bytes = row_bytes[i + ib] - start_byte;
+      std::vector<char> buf(n_bytes); char* str = &buf[0], *end = &buf[n_bytes];
+      csv.seekg(start_byte, std::ios::beg); csv.read(str, n_bytes);
+      auto cmp = [](char c){ return c == ' ' || c == ',' || c == '\n' || c == '(' || c == ')'; };
+      while(cmp(*str)) ++str;
+
+      for (int32_t y = 0; y < ib; ++y)
+        for (int32_t x = 0; x < N; ++x) {
+          std::string Ayx(str, std::distance(str, std::find_if(str, end, cmp)));
+          parse_char(mat[int64_t(y) + int64_t(x) * int64_t(ib)], Ayx);
+          str += Ayx.length(); while(cmp(*str)) ++str;
+        }
+    }
+
+    for (int32_t j = grid_col * nb, x = 0; j < N; j = grid_col * nb + tile_n * (x += nb))
+      copy2d(ib, std::min(N - j, nb), &mat[int64_t(j) * int64_t(ib)], ib, &A[int64_t(y) + int64_t(x) * int64_t(lda)], lda);
+  }
+
+  if (csv.is_open())
+    csv.close();
+}
 
 inline void matrix_eval(double& a, double d, double w) { a = std::cos(w * d) / d; }
 inline void matrix_eval(float& a, double d, double w) { a = float(std::cos(w * d) / d); }
@@ -144,7 +191,7 @@ int32_t geqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32_t N, int
 }
 
 template <class T>
-int32_t utv_factorize_phase1(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv) {
+int32_t svd_fit_transform(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv) {
   int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg;
   uint64_t dev_work_bytes, pinned_work_bytes, dev_work_bytes_new, pinned_work_bytes_new;
   hyacinXcpqrk_autoTune(epi, M, u_extra, &umax, precA, &precC, &alg);
@@ -171,77 +218,9 @@ int32_t utv_factorize_phase1(cudaStream_t stream, cublasHandle_t cublasH, cusolv
 }
 
 #ifndef NO_NCCL
-#include <mpi.h>
-
-inline void parse_char(double& a, const std::string& s) { a = std::stod(s); }
-inline void parse_char(float& a, const std::string& s) { a = std::stof(s); }
-inline void parse_char(std::complex<double>& a, const std::string& s) {
-  std::string::size_type l; double rl = std::stod(s, &l);
-  try { double im = std::stod(s.substr(l)); a = std::complex<double>(rl, im); }
-  catch (const std::invalid_argument&) { a = std::complex<double>(rl, 0.); }
-}
-inline void parse_char(std::complex<float>& a, const std::string& s) {
-  std::string::size_type l; float rl = std::stod(s, &l);
-  try { float im = std::stof(s.substr(l)); a = std::complex<float>(rl, im); }
-  catch (const std::invalid_argument&) { a = std::complex<float>(rl, 0.f); }
-}
 
 template <class T>
-void matrix_from_row_major_csv(int32_t M, int32_t N, int32_t mb, int32_t nb, T* A, int32_t lda, const std::string& file, MPI_Comm comm_row, MPI_Comm comm_col) {
-  int32_t grid_row = 0, grid_col = 0, tile_m = 1, tile_n = 1;
-  MPI_Comm_rank(comm_row, &grid_col); MPI_Comm_size(comm_row, &tile_n);
-  MPI_Comm_rank(comm_col, &grid_row); MPI_Comm_size(comm_col, &tile_m);
-  std::ifstream csv; std::vector<int64_t> row_bytes;
-  if (grid_col == 0) {
-    csv.open(replace_suffix(file, "csv"));
-    if (grid_row == 0) {
-      std::ifstream idx(replace_suffix(file, "cache"));
-      if (idx.is_open()) { while (!idx.eof()) { int64_t i; idx >> i; row_bytes.push_back(i); } idx.close(); }
-      else {
-        int64_t len = 0; std::string line; row_bytes.push_back(int64_t(0));
-        while(std::getline(csv, line)) row_bytes.push_back(len += 1 + line.length());
-        std::ofstream idx_cache(replace_suffix(file, "cache"));
-        for (int64_t i : row_bytes) idx_cache << i << std::endl;
-        idx_cache.close(); csv.clear();
-      }
-    }
-    
-    if (1 < tile_m)
-    { row_bytes.resize(M + 1); MPI_Bcast(&row_bytes[0], M + 1, MPI_INT64_T, 0, comm_col); }
-  }
-
-  for (int32_t i = grid_row * mb, y = 0; i < M; i = grid_row * mb + tile_m * (y += mb)) {
-    int32_t ib = std::min(M - i, mb);
-    std::vector<T> mat(int64_t(ib) * int64_t(N));
-
-    if (grid_col == 0 && csv.is_open()) {
-      int64_t start_byte = row_bytes[i], n_bytes = row_bytes[i + ib] - start_byte;
-      std::vector<char> buf(n_bytes); char* str = &buf[0], *end = &buf[n_bytes];
-      csv.seekg(start_byte, std::ios::beg); csv.read(str, n_bytes);
-      auto cmp = [](char c){ return c == ' ' || c == ',' || c == '\n' || c == '(' || c == ')'; };
-      while(cmp(*str)) ++str;
-
-      for (int32_t y = 0; y < ib; ++y)
-        for (int32_t x = 0; x < N; ++x) {
-          std::string Ayx(str, std::distance(str, std::find_if(str, end, cmp)));
-          parse_char(mat[int64_t(y) + int64_t(x) * int64_t(ib)], Ayx);
-          str += Ayx.length(); while(cmp(*str)) ++str;
-        }
-    }
-
-    if (1 < tile_n)
-      MPI_Bcast(&mat[0], mat.size() * sizeof(T), MPI_BYTE, 0, comm_row);
-
-    for (int32_t j = grid_col * nb, x = 0; j < N; j = grid_col * nb + tile_n * (x += nb))
-      copy2d(ib, std::min(N - j, nb), &mat[int64_t(j) * int64_t(ib)], ib, &A[int64_t(y) + int64_t(x) * int64_t(lda)], lda);
-  }
-
-  if (grid_col == 0 && csv.is_open())
-    csv.close();
-}
-
-template <class T>
-int32_t utv_factorize_phase1_1dr(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t gM, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv, ncclComm_t comm) {
+int32_t svd_fit_transform_1dr(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t gM, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv, ncclComm_t comm) {
   int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg;
   uint64_t dev_work_bytes, pinned_work_bytes;
   hyacinXcpqrk_autoTune(epi, gM, u_extra, &umax, precA, &precC, &alg);
@@ -269,77 +248,20 @@ int32_t utv_factorize_phase1_1dr(cudaStream_t stream, cublasHandle_t cublasH, cu
 }
 
 template <class T>
-std::pair<int32_t, int32_t> utv_factorize_phase2_1dc(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv, ncclComm_t comm, MPI_Comm mpi_comm) {
-  int32_t mpi_rank, mpi_size; MPI_Comm_rank(mpi_comm, &mpi_rank); MPI_Comm_size(mpi_comm, &mpi_size);
-  std::vector<int32_t> ranks_arr(mpi_size);
-  MPI_Allgather(&N, 1, MPI_INT32_T, ranks_arr.data(), 1, MPI_INT32_T, mpi_comm);
-  int32_t r1 = N;
-  N = std::reduce(ranks_arr.begin(), ranks_arr.end(), 0, std::plus<int32_t>());
+std::pair<int32_t, int32_t> allgatherv_1dc(cudaStream_t stream, int32_t M, int32_t N, T* A, int32_t lda, ncclComm_t comm) {
+  hyacinPrecision_t precA = __precA<T>(); int32_t comm_size; ncclCommCount(comm, &comm_size);
+  uint64_t dev_work_bytes, pinned_work_bytes;
+  hyacinXAllGatherV1Dcol_bufferSize(M, comm_size, precA, &dev_work_bytes, &pinned_work_bytes);
 
-  int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg;
-  uint64_t dev_work_bytes, pinned_work_bytes, dev_work_bytes_new, pinned_work_bytes_new;
-  hyacinXcpqrk_autoTune(epi, M, u_extra, &umax, precA, &precC, &alg);
-  hyacinXcpqrk_bufferSize(M, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
-  hyacinXAllGatherV1Dcol_bufferSize(M, mpi_size, precA, &dev_work_bytes_new, &pinned_work_bytes_new);
-  dev_work_bytes = std::max(dev_work_bytes, dev_work_bytes_new);
-  pinned_work_bytes = std::max(pinned_work_bytes, pinned_work_bytes_new);
-
-  void* jpiv = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
-  cudaMalloc(&jpiv, int64_t(N) * sizeof(int32_t));
+  void* dev_work = nullptr, *pinned_work = nullptr;
   cudaMalloc(&dev_work, dev_work_bytes);
   cudaMallocHost(&pinned_work, pinned_work_bytes);
-
-  int32_t v_offset = hyacinXAllGatherV1Dcol(stream, M, &r1, precA, A, lda, dev_work_bytes, dev_work, pinned_work, comm);
-  int32_t rank = hyacinXcpqrk(cublasH, 'J', epi, M, N, K, oversampling, umax, precA, A, lda, (int32_t*)jpiv, precA, V, ldv, precC, dev_work, pinned_work, alg);
-
-  hyacinXsvdk_bufferSize(cusolverH, params, epi, N, rank, precA, &dev_work_bytes_new, &pinned_work_bytes_new);
-  if (dev_work_bytes < dev_work_bytes_new) { cudaStreamSynchronize(stream); cudaFree(dev_work); cudaMalloc(&dev_work, dev_work_bytes = dev_work_bytes_new); }
-  if (pinned_work_bytes < pinned_work_bytes_new) { cudaStreamSynchronize(stream); cudaFreeHost(pinned_work); cudaMallocHost(&pinned_work, pinned_work_bytes = pinned_work_bytes_new); }
-
-  rank = hyacinXsvdk(cublasH, cusolverH, params, 'Y', epi, M, N, rank, oversampling, nullptr, A, lda, V, ldv, precA, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
+  int32_t v_offset = hyacinXAllGatherV1Dcol(stream, M, &N, precA, A, lda, dev_work_bytes, dev_work, pinned_work, comm);
 
   cudaStreamSynchronize(stream);
-  cudaFree(jpiv);
   cudaFree(dev_work);
   cudaFreeHost(pinned_work);
-  return std::make_pair(rank, v_offset);
-}
-
-template <class T>
-std::pair<int32_t, int32_t> utv_factorize_phase2_2d(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t gM, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv, ncclComm_t comm_row, ncclComm_t comm_col, MPI_Comm mpi_comm_row) {
-  int32_t mpi_rank, mpi_size; MPI_Comm_rank(mpi_comm_row, &mpi_rank); MPI_Comm_size(mpi_comm_row, &mpi_size);
-  std::vector<int32_t> ranks_arr(mpi_size);
-  MPI_Allgather(&N, 1, MPI_INT32_T, ranks_arr.data(), 1, MPI_INT32_T, mpi_comm_row);
-  int32_t r1 = N;
-  N = std::reduce(ranks_arr.begin(), ranks_arr.end(), 0, std::plus<int32_t>());
-
-  int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg;
-  uint64_t dev_work_bytes, pinned_work_bytes, dev_work_bytes_new, pinned_work_bytes_new;
-  hyacinXcpqrk_autoTune(epi, gM, u_extra, &umax, precA, &precC, &alg);
-  hyacinXcpqrk1Drow_bufferSize(M, gM, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
-  hyacinXAllGatherV1Dcol_bufferSize(M, mpi_size, precA, &dev_work_bytes_new, &pinned_work_bytes_new);
-  dev_work_bytes = std::max(dev_work_bytes, dev_work_bytes_new);
-  pinned_work_bytes = std::max(pinned_work_bytes, pinned_work_bytes_new);
-
-  void* jpiv = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
-  cudaMalloc(&jpiv, int64_t(N) * sizeof(int32_t));
-  cudaMalloc(&dev_work, dev_work_bytes);
-  cudaMallocHost(&pinned_work, pinned_work_bytes);
-
-  int32_t v_offset = hyacinXAllGatherV1Dcol(stream, M, &r1, precA, A, lda, dev_work_bytes, dev_work, pinned_work, comm_row);
-  int32_t rank = hyacinXcpqrk1Drow(cublasH, 'J', epi, M, gM, N, K, oversampling, umax, precA, A, lda, (int32_t*)jpiv, precA, V, ldv, precC, dev_work, pinned_work, alg, comm_col);
-
-  hyacinXsvdk_bufferSize(cusolverH, params, epi, N, rank, precA, &dev_work_bytes_new, &pinned_work_bytes_new);
-  if (dev_work_bytes < dev_work_bytes_new) { cudaStreamSynchronize(stream); cudaFree(dev_work); cudaMalloc(&dev_work, dev_work_bytes = dev_work_bytes_new); }
-  if (pinned_work_bytes < pinned_work_bytes_new) { cudaStreamSynchronize(stream); cudaFreeHost(pinned_work); cudaMallocHost(&pinned_work, pinned_work_bytes = pinned_work_bytes_new); }
-
-  rank = hyacinXsvdk(cublasH, cusolverH, params, 'Y', epi, M, N, rank, oversampling, nullptr, A, lda, V, ldv, precA, dev_work_bytes, dev_work, pinned_work_bytes, pinned_work);
-
-  cudaStreamSynchronize(stream);
-  cudaFree(jpiv);
-  cudaFree(dev_work);
-  cudaFreeHost(pinned_work);
-  return std::make_pair(rank, v_offset);
+  return std::make_pair(N, v_offset);
 }
 
 #endif

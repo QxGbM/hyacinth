@@ -1,6 +1,7 @@
 
 #include <common.hpp>
 #include <iostream>
+#include <mpi.h>
 
 template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, int64_t mb, double epi, const std::string& file) {
   int32_t mpi_rank = 0, mpi_size = 1;
@@ -17,7 +18,7 @@ template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, 
 
   std::vector<T> matA(lM * N);
   if (!file.empty())
-    matrix_from_row_major_csv(gM, N, mb, N, matA.data(), lM, file, MPI_COMM_SELF, MPI_COMM_WORLD);
+    matrix_from_row_major_csv(gM, N, mb, N, matA.data(), lM, file, mpi_rank, 0, mpi_size, 1);
   else for (int64_t i = mpi_rank * mb, y = 0; i < gM; i = mpi_rank * mb + mpi_size * (y += mb))
     make_2D_oscillatory(1., i, 0, std::min(gM - i, mb), N, &matA[y], lM);
 
@@ -38,13 +39,13 @@ template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, 
   cudaMalloc((void**)(&d_V), K * N * sizeof(T));
   cudaMemcpy(d_A, matA.data(), lM * N * sizeof(T), cudaMemcpyHostToDevice);
 
-  utv_factorize_phase1_1dr(stream, cublasH, cusolverH, params, epi, lM, gM, N, K, d_A, lM, d_V, K, comm);
+  svd_fit_transform_1dr(stream, cublasH, cusolverH, params, epi, lM, gM, N, K, d_A, lM, d_V, K, comm);
   cudaMemcpy(d_A, matA.data(), lM * N * sizeof(T), cudaMemcpyHostToDevice);
 
   MPI_Barrier(MPI_COMM_WORLD);
   double start = MPI_Wtime();
 
-  int32_t rank = utv_factorize_phase1_1dr(stream, cublasH, cusolverH, params, epi, lM, gM, N, K, d_A, lM, d_V, K, comm);
+  int32_t rank = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, epi, lM, gM, N, K, d_A, lM, d_V, K, comm);
   cudaDeviceSynchronize();
 
   MPI_Barrier(MPI_COMM_WORLD);

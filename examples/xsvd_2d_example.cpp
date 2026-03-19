@@ -1,6 +1,7 @@
 
 #include <common.hpp>
 #include <iostream>
+#include <mpi.h>
 
 template <class T> inline void run(char prec, int32_t tile_m, int32_t tile_n, int64_t gM, int64_t gN, int64_t K, int64_t mb, int64_t nb, double epi, const std::string& file) {
   int32_t mpi_rank = 0; MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
@@ -25,7 +26,7 @@ template <class T> inline void run(char prec, int32_t tile_m, int32_t tile_n, in
   
   std::vector<T> matA(lM * lN);
   if (!file.empty())
-    matrix_from_row_major_csv(gM, gN, mb, nb, matA.data(), lM, file, mpi_comm_row, mpi_comm_col);
+    matrix_from_row_major_csv(gM, gN, mb, nb, matA.data(), lM, file, grid_row, grid_col, tile_m, tile_n);
   else for (int64_t i = grid_row * mb, y = 0; i < gM; i = grid_row * mb + tile_m * (y += mb)) {
     int64_t rows = std::min(gM - i, mb);
     for (int64_t j = grid_col * nb, x = 0; j < gN; j = grid_col * nb + tile_n * (x += nb))
@@ -50,16 +51,18 @@ template <class T> inline void run(char prec, int32_t tile_m, int32_t tile_n, in
   cudaMalloc((void**)(&d_V2), K * gK * sizeof(T));
   cudaMemcpy(d_A, matA.data(), lM * lN * sizeof(T), cudaMemcpyHostToDevice);
 
-  int32_t r1, r2, offset;
-  r1 = utv_factorize_phase1_1dr(stream, cublasH, cusolverH, params, epi, lM, gM, lN, K, d_A, lM, d_V1, K, comm_col);
-  std::tie(r2, offset) = utv_factorize_phase2_2d(stream, cublasH, cusolverH, params, epi, lM, gM, r1, K, d_A, lM, d_V2, K, comm_row, comm_col, mpi_comm_row);
+  int32_t r1, r2, N2, offset;
+  r1 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, epi, lM, gM, lN, K, d_A, lM, d_V1, K, comm_col);
+  std::tie(N2, offset) = allgatherv_1dc(stream, lM, r1, d_A, lM, comm_row);
+  r2 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, epi, lM, gM, N2, K, d_A, lM, d_V2, K, comm_col);
   cudaMemcpy(d_A, matA.data(), lM * lN * sizeof(T), cudaMemcpyHostToDevice);
 
   MPI_Barrier(MPI_COMM_WORLD);
   double start = MPI_Wtime();
 
-  r1 = utv_factorize_phase1_1dr(stream, cublasH, cusolverH, params, epi, lM, gM, lN, K, d_A, lM, d_V1, K, comm_col);
-  std::tie(r2, offset) = utv_factorize_phase2_2d(stream, cublasH, cusolverH, params, epi, lM, gM, r1, K, d_A, lM, d_V2, K, comm_row, comm_col, mpi_comm_row);
+  r1 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, epi, lM, gM, lN, K, d_A, lM, d_V1, K, comm_col);
+  std::tie(N2, offset) = allgatherv_1dc(stream, lM, r1, d_A, lM, comm_row);
+  r2 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, epi, lM, gM, N2, K, d_A, lM, d_V2, K, comm_col);
   cudaDeviceSynchronize();
 
   MPI_Barrier(MPI_COMM_WORLD);

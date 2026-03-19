@@ -14,7 +14,7 @@ extern "C" void hyacinXAllGatherV1Dcol_bufferSize(int32_t M, int32_t comm_size, 
     case HYACIN_DD_COMPLEX: case HYACIN_QF_COMPLEX: Mi <<= 3; break;
     default: break;
   }
-  *dev_work_bytes = (uint64_t(Mi) << 11) * uint64_t(comm_size) * sizeof(int32_t);
+  *dev_work_bytes = uint64_t(Mi) * uint64_t(2048) * uint64_t(comm_size) * sizeof(int32_t);
   *pinned_work_bytes = uint64_t(comm_size) * sizeof(int32_t);
 }
 
@@ -74,14 +74,13 @@ extern "C" int32_t hyacinXAllGatherV1Dcol(cudaStream_t stream, int32_t M, int32_
   
   int32_t* Aptr = (int32_t*)A, *Wptr = (int32_t*)dev_work;
   int32_t maxK = std::reduce(N, &N[comm_size], 0, [](int32_t i, int32_t j) { return std::max(i, j); });
-  int32_t offset_j = std::reduce(N, &N[comm_rank]);
+  int32_t offset_j = std::reduce(N, &N[comm_rank]), totalK = std::reduce(&N[comm_rank], &N[comm_size], offset_j);
   int32_t wcols = int32_t(dev_work_bytes / uint64_t(Mi * sizeof(int32_t))) & (~63);
   matrix_move(stream, Mi, N[comm_rank], offset_j, Aptr, LDAi, wcols, Wptr);
 
   for (int32_t iter = maxK; iter > 0; iter -= wcols)
     allgather_iter(stream, comm_rank, Mi, std::min(iter, wcols), N, iN, Aptr, LDAi, Wptr, row_comm);
-  *K = std::reduce(&N[comm_rank], &N[comm_size], offset_j);
-  return offset_j;
+  *K = totalK; return offset_j;
 }
 
 #endif

@@ -1,6 +1,7 @@
 
 #include <common.hpp>
 #include <iostream>
+#include <mpi.h>
 
 template <class T> inline void run(char prec, int64_t M, int64_t gN, int64_t K, int64_t nb, double epi, const std::string& file) {
   int32_t mpi_rank = 0, mpi_size = 1;
@@ -18,7 +19,7 @@ template <class T> inline void run(char prec, int64_t M, int64_t gN, int64_t K, 
 
   std::vector<T> matA(M * lN);
   if (!file.empty())
-    matrix_from_row_major_csv(M, gN, 512, nb, matA.data(), M, file, MPI_COMM_WORLD, MPI_COMM_SELF);
+    matrix_from_row_major_csv(M, gN, 512, nb, matA.data(), M, file, 0, mpi_rank, 1, mpi_size);
   else for (int64_t j = mpi_rank * nb, x = 0; j < gN; j = mpi_rank * nb + mpi_size * (x += nb))
     make_2D_oscillatory(1., 0, j, M, std::min(gN - j, nb), &matA[x * M], M);
 
@@ -40,16 +41,18 @@ template <class T> inline void run(char prec, int64_t M, int64_t gN, int64_t K, 
   cudaMalloc((void**)(&d_V2), K * gK * sizeof(T));
   cudaMemcpy(d_A, matA.data(), M * lN * sizeof(T), cudaMemcpyHostToDevice);
 
-  int32_t r1, r2, offset;
-  r1 = utv_factorize_phase1(stream, cublasH, cusolverH, params, epi, M, lN, K, d_A, M, d_V1, K);
-  std::tie(r2, offset) = utv_factorize_phase2_1dc(stream, cublasH, cusolverH, params, epi, M, r1, K, d_A, M, d_V2, K, comm, MPI_COMM_WORLD);
+  int32_t r1, r2, N2, offset;
+  r1 = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, lN, K, d_A, M, d_V1, K);
+  std::tie(N2, offset) = allgatherv_1dc(stream, M, r1, d_A, M, comm);
+  r2 = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, N2, K, d_A, M, d_V2, K);
   cudaMemcpy(d_A, matA.data(), M * lN * sizeof(T), cudaMemcpyHostToDevice);
 
   MPI_Barrier(MPI_COMM_WORLD);
   double start = MPI_Wtime();
 
-  r1 = utv_factorize_phase1(stream, cublasH, cusolverH, params, epi, M, lN, K, d_A, M, d_V1, K);
-  std::tie(r2, offset) = utv_factorize_phase2_1dc(stream, cublasH, cusolverH, params, epi, M, r1, K, d_A, M, d_V2, K, comm, MPI_COMM_WORLD);
+  r1 = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, lN, K, d_A, M, d_V1, K);
+  std::tie(N2, offset) = allgatherv_1dc(stream, M, r1, d_A, M, comm);
+  r2 = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, N2, K, d_A, M, d_V2, K);
   cudaDeviceSynchronize();
 
   MPI_Barrier(MPI_COMM_WORLD);

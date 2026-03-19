@@ -27,11 +27,11 @@ template <class T> inline void run(char prec, int64_t M, int64_t N, int64_t K, d
   cudaMalloc((void**)(&d_V), K * N * sizeof(T));
   cudaMemcpy(d_A, matA.data(), M * N * sizeof(T), cudaMemcpyHostToDevice);
 
-  utv_factorize_phase1(stream, cublasH, cusolverH, params, epi, M, N, K, d_A, M, d_V, K);
+  svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, N, K, d_A, M, d_V, K);
   cudaMemcpy(d_A, matA.data(), M * N * sizeof(T), cudaMemcpyHostToDevice);
 
   cudaEventRecord(start, stream);
-  int32_t rank = utv_factorize_phase1(stream, cublasH, cusolverH, params, epi, M, N, K, d_A, M, d_V, K);
+  int32_t rank = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, N, K, d_A, M, d_V, K);
   cudaEventRecord(stop, stream);
 
   cudaDeviceSynchronize();
