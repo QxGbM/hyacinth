@@ -86,9 +86,6 @@ template <class T> inline void run(char prec, int64_t M, int64_t gN, int64_t K, 
   cusolverDnDestroyParams(params);
 }
 
-#include <mpi.h>
-#include <filesystem>
-
 int32_t main(int32_t argc, char* argv[]) {
   char prec = 'D'; std::string file, id_path("id.out");
   int64_t M = 2048, gN = 2048, K = 1500, nb = 512;
@@ -107,14 +104,8 @@ int32_t main(int32_t argc, char* argv[]) {
   }
   gN = std::min(M, gN); K = std::min(gN, K);
 
-  MPI_Init(&argc, &argv);
-  int32_t world_rank = 0, local_rank = 0, world_size = 1;
-  MPI_Comm shmcomm; MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL, &shmcomm);
-  MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-  MPI_Comm_rank(shmcomm, &local_rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &world_size);
-  MPI_Comm_free(&shmcomm);
-  MPI_Finalize();
+  int32_t world_rank, world_size, local_rank; ncclUniqueId id;
+  bootstrap_mpi(world_rank, world_size, local_rank, id);
 
   int32_t device_count = 0; cudaGetDeviceCount(&device_count);
   auto cu_err = cudaSetDevice(1 < device_count ? local_rank : 0);
@@ -122,7 +113,7 @@ int32_t main(int32_t argc, char* argv[]) {
   if (cu_err != cudaSuccess)
   { std::cerr << cudaGetErrorString(cu_err) << std::endl; return -1; }
 
-  ncclUniqueId id = world_rank == 0 ? nccl_id_to_file(id_path) : nccl_id_from_file(id_path); ncclComm_t comm;
+  ncclComm_t comm;
   ncclCommInitRank(&comm, world_size, id, world_rank);
 
   switch(prec) {
@@ -138,6 +129,6 @@ int32_t main(int32_t argc, char* argv[]) {
     std::cerr << cudaGetErrorString(cu_err) << std::endl;
 
   ncclCommDestroy(comm);
-  if (world_rank == 0) { std::filesystem::remove(id_path); }
+  if (world_rank == 0) { std::remove(id_path.data()); }
   return 0;
 }

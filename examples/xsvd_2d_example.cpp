@@ -1,5 +1,6 @@
 
 #include <common.hpp>
+#include <cstdlib>
 #include <iostream>
 
 template <class T> inline void run(char prec, int64_t gM, int64_t gN, int64_t K, int64_t mb, int64_t nb, double epi, int32_t grid_row, int32_t grid_col, int32_t tile_m, int32_t tile_n, ncclComm_t comm, const std::string& file) {
@@ -48,7 +49,7 @@ template <class T> inline void run(char prec, int64_t gM, int64_t gN, int64_t K,
   cudaMemset(d_barrier, 0xDEADBEEF, sizeof(double2));
 
   int32_t r1, r2, N2, offset;
-  r1 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, epi, lM, gM, lN, K, d_A, lM, d_V1, K, comm_col);
+  N2 = r1 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, epi, lM, gM, lN, K, d_A, lM, d_V1, K, comm_col);
   std::tie(N2, offset) = allgatherv_1dc(stream, lM, r1, d_A, lM, comm_row);
   r2 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, epi, lM, gM, N2, K, d_A, lM, d_V2, K, comm_col);
   cudaMemcpy(d_A, matA.data(), lM * lN * sizeof(T), cudaMemcpyHostToDevice);
@@ -97,12 +98,9 @@ template <class T> inline void run(char prec, int64_t gM, int64_t gN, int64_t K,
   ncclCommDestroy(comm_col);
 }
 
-#include <mpi.h>
-#include <filesystem>
-
 int32_t main(int32_t argc, char* argv[]) {
-  char prec = 'D'; std::string file, id_path("id.out");
-  int32_t tile_m = 1, tile_n = 1;
+  char prec = 'D'; std::string file, id_path("./id.out");
+  int32_t tile_m = 1, tile_n = 1, use_mpi = 0, use_slurm = 0;
   int64_t gM = 2048, gN = 2048, K = 2048, mb = 512, nb = 512;
   double epi = 1.e-12;
 
@@ -117,19 +115,28 @@ int32_t main(int32_t argc, char* argv[]) {
     else if (std::strncmp(argv[i], "tilem=", 6) == 0) { std::sscanf(argv[i], "tilem=%d", &tile_m); }
     else if (std::strncmp(argv[i], "tilen=", 6) == 0) { std::sscanf(argv[i], "tilen=%d", &tile_n); }
     else if (std::strncmp(argv[i], "file=", 5) == 0) { file.resize(std::strlen(argv[i])); std::sscanf(argv[i], "file=%s", file.data()); }
-    else if (std::strncmp(argv[i], "ccl=", 4) == 0) { id_path.resize(std::strlen(argv[i])); std::sscanf(argv[i], "ccl=%s", id_path.data()); }
+#ifndef NO_SLURM
+    else if (std::strncmp(argv[i], "--slurm,path=", 13) == 0) { use_slurm = 1; id_path.resize(std::strlen(argv[i])); std::sscanf(argv[i], "--slurm,path=%s", id_path.data()); }
+    else if (std::strncmp(argv[i], "--slurm", 7) == 0) { use_slurm = 1; }
+#endif
+#ifndef NO_MPI
+    else if (std::strncmp(argv[i], "--mpi", 5) == 0) { use_mpi = 1; }
+#endif
     else { std::cerr << "Ignored parameter: " << argv[i] << std::endl; }
   }
+
+  if (!use_slurm && !use_mpi)
+  { std::cerr << "No bootstrap selected." << std::endl; return -1; }
+
   gN = std::min(gM, gN); K = std::min(gN, K);
 
-  MPI_Init(&argc, &argv);
-  int32_t world_rank = 0, local_rank = 0, world_size = 1;
-  MPI_Comm shmcomm; MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL, &shmcomm);
-  MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-  MPI_Comm_rank(shmcomm, &local_rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &world_size);
-  MPI_Comm_free(&shmcomm);
-  MPI_Finalize();
+  int32_t world_rank, world_size, local_rank; ncclUniqueId id;
+#ifndef NO_SLURM
+  if (use_slurm) bootstrap_slurm_posix(world_rank, world_size, local_rank, id, id_path);
+#endif
+#ifndef NO_MPI
+  if (use_mpi) bootstrap_mpi(world_rank, world_size, local_rank, id);
+#endif
 
   if (world_size != tile_m * tile_n)
   { if (world_rank == 0) std::cerr << "Incorrect process grid launch configuration." << std::endl; return -1; }
@@ -141,7 +148,7 @@ int32_t main(int32_t argc, char* argv[]) {
   { std::cerr << cudaGetErrorString(cu_err) << std::endl; return -1; }
 
   int32_t grid_row = world_rank % tile_m, grid_col = world_rank / tile_m;
-  ncclUniqueId id = world_rank == 0 ? nccl_id_to_file(id_path) : nccl_id_from_file(id_path); ncclComm_t comm;
+  ncclComm_t comm;
   ncclCommInitRank(&comm, world_size, id, world_rank);
 
   switch(prec) {
@@ -157,6 +164,6 @@ int32_t main(int32_t argc, char* argv[]) {
     std::cerr << cudaGetErrorString(cu_err) << std::endl;
 
   ncclCommDestroy(comm);
-  if (world_rank == 0) { std::filesystem::remove(id_path); }
+  if (world_rank == 0 && use_slurm) { std::remove(id_path.c_str()); }
   return 0;
 }

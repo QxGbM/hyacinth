@@ -220,26 +220,6 @@ int32_t svd_fit_transform(cudaStream_t stream, cublasHandle_t cublasH, cusolverD
 
 #ifndef NO_NCCL
 
-#include <thread>
-#include <chrono>
-
-ncclUniqueId nccl_id_to_file(const std::string& id_path) {
-  ncclUniqueId id; ncclGetUniqueId(&id);
-  std::ofstream stream(id_path, std::ios::binary);
-  if (stream.is_open()) 
-  { stream.write((const char*)&id, sizeof(ncclUniqueId)); stream.close(); }
-  return id;
-}
-
-ncclUniqueId nccl_id_from_file(const std::string& id_path) {
-  ncclUniqueId id; std::ifstream stream(id_path, std::ios::binary);
-  int32_t trials = 0;
-  while (!stream.is_open() && ++trials <= 20) { std::this_thread::sleep_for(std::chrono::seconds(1)); stream.open(id_path, std::ios::binary); }
-  if (stream.is_open())
-  { stream.read((char*)&id, sizeof(ncclUniqueId)); stream.close(); }
-  return id;
-}
-
 template <class T>
 int32_t svd_fit_transform_1dr(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t gM, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv, ncclComm_t comm) {
   int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg;
@@ -285,4 +265,53 @@ std::pair<int32_t, int32_t> allgatherv_1dc(cudaStream_t stream, int32_t M, int32
   return std::make_pair(N, v_offset);
 }
 
+#ifndef NO_POSIX
+#include <unistd.h>
+#include <fcntl.h>
+
+void bootstrap_slurm_posix(int32_t& world_rank, int32_t& world_size, int32_t& local_rank, ncclUniqueId& id, const std::string& id_path) {
+  const char* slurm_rank = std::getenv("SLURM_PROCID"), *slurm_size = std::getenv("SLURM_NTASKS");
+  const char* slurm_local_rank = std::getenv("SLURM_LOCALID");
+  world_rank = std::stoi(std::string(slurm_rank ?: "0"));
+  world_size = std::stoi(std::string(slurm_size ?: "1"));
+  local_rank = std::stoi(std::string(slurm_local_rank ?: "0"));
+
+  if (world_rank == 0) {
+    ncclGetUniqueId(&id); std::string tmp = id_path + ".tmp";
+    int fd = ::open(tmp.c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+    if (fd != -1 && ::write(fd, &id, sizeof(ncclUniqueId)) == sizeof(ncclUniqueId))
+    { if (::fsync(fd) != -1) if (::close(fd) != -1) ::rename(tmp.c_str(), id_path.c_str()); }
+    else if (fd != -1) { ::close(fd); throw std::runtime_error("I/O error writing nccl unique ID."); }
+  }
+  else {
+    int trials = 0, fd = ::open(id_path.c_str(), O_RDONLY);
+    while (fd == -1 && ++trials <= 20) { ::sleep(1); fd = ::open(id_path.c_str(), O_RDONLY); }
+    if (fd != -1) {
+      if (::read(fd, (char*)&id, sizeof(ncclUniqueId)) != sizeof(ncclUniqueId))
+      { ::close(fd); throw std::runtime_error("I/O error reading nccl unique ID."); }
+      else { ::close(fd); }
+    }
+    else { throw std::runtime_error("Timeout reading nccl unique ID."); }
+  }
+}
+
+#endif
+
+#ifndef NO_MPI
+#include <mpi.h>
+
+void bootstrap_mpi(int32_t& world_rank, int32_t& world_size, int32_t& local_rank, ncclUniqueId& id) {
+  MPI_Init(nullptr, nullptr);
+  MPI_Comm shmcomm; MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL, &shmcomm);
+  MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+  MPI_Comm_rank(shmcomm, &local_rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+  MPI_Comm_free(&shmcomm);
+
+  if (world_rank == 0) ncclGetUniqueId(&id);
+  MPI_Bcast(&id, sizeof(ncclUniqueId), MPI_BYTE, 0, MPI_COMM_WORLD);
+  MPI_Finalize();
+}
+
+#endif
 #endif
