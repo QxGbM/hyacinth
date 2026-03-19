@@ -1,25 +1,15 @@
 
 #include <common.hpp>
 #include <iostream>
-#include <mpi.h>
 
-template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, int64_t mb, double epi, const std::string& file) {
-  int32_t mpi_rank = 0, mpi_size = 1;
-  MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
-
-  ncclUniqueId id; ncclComm_t comm;
-  if (mpi_rank == 0) ncclGetUniqueId(&id);
-  MPI_Bcast((void*)&id, sizeof(ncclUniqueId), MPI_BYTE, 0, MPI_COMM_WORLD);
-  ncclCommInitRank(&comm, mpi_size, id, mpi_rank);
-
-  int64_t lM = mb * (gM / (mb * mpi_size));
-  lM += std::max(int64_t(0), std::min(mb, gM - lM * mpi_size - mb * mpi_rank));
+template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, int64_t mb, double epi, int32_t grid_row, int32_t tile_m, ncclComm_t comm, const std::string& file) {
+  int64_t lM = mb * (gM / (mb * tile_m));
+  lM += std::max(int64_t(0), std::min(mb, gM - lM * tile_m - mb * grid_row));
 
   std::vector<T> matA(lM * N);
   if (!file.empty())
-    matrix_from_row_major_csv(gM, N, mb, N, matA.data(), lM, file, mpi_rank, 0, mpi_size, 1);
-  else for (int64_t i = mpi_rank * mb, y = 0; i < gM; i = mpi_rank * mb + mpi_size * (y += mb))
+    matrix_from_row_major_csv(gM, N, mb, N, matA.data(), lM, file, grid_row, 0, tile_m, 1);
+  else for (int64_t i = grid_row * mb, y = 0; i < gM; i = grid_row * mb + tile_m * (y += mb))
     make_2D_oscillatory(1., i, 0, std::min(gM - i, mb), N, &matA[y], lM);
 
   cudaStream_t stream;
@@ -34,45 +24,61 @@ template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, 
   cusolverDnSetStream(cusolverH, stream);
   cusolverDnCreateParams(&params);
 
+  cudaEvent_t start, stop;
+  cudaEventCreate(&start);
+  cudaEventCreate(&stop);
+
+  int32_t* d_barrier = nullptr;
   T* d_A = nullptr, *d_V = nullptr;
+  cudaMalloc((void**)(&d_barrier), sizeof(double2));
   cudaMalloc((void**)(&d_A), lM * N * sizeof(T));
   cudaMalloc((void**)(&d_V), K * N * sizeof(T));
   cudaMemcpy(d_A, matA.data(), lM * N * sizeof(T), cudaMemcpyHostToDevice);
+  cudaMemset(d_barrier, 0xDEADBEAF, sizeof(double2));
 
   svd_fit_transform_1dr(stream, cublasH, cusolverH, params, epi, lM, gM, N, K, d_A, lM, d_V, K, comm);
   cudaMemcpy(d_A, matA.data(), lM * N * sizeof(T), cudaMemcpyHostToDevice);
 
-  MPI_Barrier(MPI_COMM_WORLD);
-  double start = MPI_Wtime();
+  ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMax, comm, stream);
+  cudaStreamSynchronize(stream);
+  cudaEventRecord(start, stream);
 
   int32_t rank = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, epi, lM, gM, N, K, d_A, lM, d_V, K, comm);
-  cudaDeviceSynchronize();
 
-  MPI_Barrier(MPI_COMM_WORLD);
-  double end = MPI_Wtime();
+  ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMax, comm, stream);
+  cudaStreamSynchronize(stream);
+  cudaEventRecord(stop, stream);
 
   std::vector<T> matU(lM * K), matV(K * N);
   cudaMemcpy(matU.data(), d_A, lM * K * sizeof(T), cudaMemcpyDeviceToHost);
   cudaMemcpy(matV.data(), d_V, K * N * sizeof(T), cudaMemcpyDeviceToHost);
 
   std::pair<double, double> ret = check_answer_svd(lM, N, rank, &matU[0], lM, &matV[0], K, &matA[0], lM);
-  MPI_Allreduce(MPI_IN_PLACE, &ret, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+  cudaMemcpy(d_barrier, &ret, sizeof(double2), cudaMemcpyHostToDevice);
+  ncclAllReduce(d_barrier, d_barrier, 2, ncclDouble, ncclSum, comm, stream);
+  cudaStreamSynchronize(stream);
+  cudaMemcpy(&ret, d_barrier, sizeof(double2), cudaMemcpyDeviceToHost);
   double err = std::sqrt(ret.first / ret.second);
 
-  double milliseconds = 1.e3 * (end - start);
+  float milliseconds = 0.0f; cudaEventElapsedTime(&milliseconds, start, stop);
   int64_t flops = ((int64_t(gM) + int64_t(N)) * int64_t(rank) * int64_t(2)) + (int64_t(gM) * int64_t(N) * int64_t(rank) * int64_t(4));
-  double gflops = double(flops) * 1.e-6 / milliseconds;
+  double gflops = double(flops) * 1.e-6 / double(milliseconds);
 
-  std::cout << prec << "-UTVK," << gM << "," << N << "," << epi << "," << err << "," << rank << "," << milliseconds << "," << gflops << std::endl;
+  std::cout << prec << "-SVD," << gM << "," << N << "," << epi << "," << err << "," << rank << "," << milliseconds << "," << gflops << std::endl;
 
+  cudaFree(d_barrier);
   cudaFree(d_A);
   cudaFree(d_V);
+  cudaEventDestroy(start);
+  cudaEventDestroy(stop);
   cudaStreamDestroy(stream);
   cublasDestroy(cublasH);
   cusolverDnDestroy(cusolverH);
   cusolverDnDestroyParams(params);
   ncclCommDestroy(comm);
 }
+
+#include <mpi.h>
 
 int32_t main(int32_t argc, char* argv[]) {
   MPI_Init(&argc, &argv);
@@ -104,17 +110,28 @@ int32_t main(int32_t argc, char* argv[]) {
   if (cu_err != cudaSuccess)
   { std::cerr << cudaGetErrorString(cu_err) << std::endl; MPI_Finalize(); return -1; }
 
+  int32_t mpi_rank = 0, mpi_size = 1;
+  MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+
+  ncclUniqueId id; ncclComm_t comm;
+  if (mpi_rank == 0) ncclGetUniqueId(&id);
+  MPI_Bcast((void*)&id, sizeof(ncclUniqueId), MPI_BYTE, 0, MPI_COMM_WORLD);
+  ncclCommInitRank(&comm, mpi_size, id, mpi_rank);
+
   switch(prec) {
-    case 'D': run<double>(prec, gM, N, K, mb, epi, file); break;
-    case 'S': run<float>(prec, gM, N, K, mb, epi, file); break;
-    case 'Z': run<std::complex<double>>(prec, gM, N, K, mb, epi, file); break;
-    case 'C': run<std::complex<float>>(prec, gM, N, K, mb, epi, file); break;
+    case 'D': run<double>(prec, gM, N, K, mb, epi, mpi_rank, mpi_size, comm, file); break;
+    case 'S': run<float>(prec, gM, N, K, mb, epi, mpi_rank, mpi_size, comm, file); break;
+    case 'Z': run<std::complex<double>>(prec, gM, N, K, mb, epi, mpi_rank, mpi_size, comm, file); break;
+    case 'C': run<std::complex<float>>(prec, gM, N, K, mb, epi, mpi_rank, mpi_size, comm, file); break;
     default: break;
   }
-  MPI_Finalize();
 
   cu_err = cudaGetLastError();
   if (cu_err != cudaSuccess)
     std::cerr << cudaGetErrorString(cu_err) << std::endl;
+
+  ncclCommDestroy(comm);
+  MPI_Finalize();
   return 0;
 }

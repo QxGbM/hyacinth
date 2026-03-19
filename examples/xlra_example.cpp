@@ -34,12 +34,11 @@ template <class T> inline void run(char prec, int64_t M, int64_t N, double epi, 
   cudaMemcpy(matX.data(), d_X, N * N * sizeof(T), cudaMemcpyDeviceToHost);
   double rel_err = check_answer_lra(rank, M, N, matA.data(), M, ipiv.data(), matX.data(), N);
 
-  float milliseconds = 0.0f;
-  cudaEventElapsedTime(&milliseconds, start, stop);
+  float milliseconds = 0.0f; cudaEventElapsedTime(&milliseconds, start, stop);
   // QR flops = 2mnk - nk^2 + 1/3k^3 + k(n-k)
   int64_t qr_flops = (int64_t(M) * int64_t(N) * int64_t(rank) * 2) - (int64_t(N) * int64_t(rank) * int64_t(rank)) + (int64_t(rank) * int64_t(rank) * int64_t(rank) / 3) + (int64_t(rank) * int64_t(N - rank));
   int64_t trsm_flops = int64_t(N) * int64_t(rank) * int64_t(rank);
-  double gflops = double(qr_flops + trsm_flops) * 1.e-6 / milliseconds;
+  double gflops = double(qr_flops + trsm_flops) * 1.e-6 / double(milliseconds);
 
   std::cout << prec << "-LRA," << M << "," << N << "," << epi << "," << rel_err << "," << rank << "," << milliseconds << "," << gflops << std::endl;
 

@@ -81,9 +81,9 @@ else()
   set_source_files_properties(src_cuda/hyacin.cu src_cuda/allgatherv_1dcol.cu PROPERTIES COMPILE_DEFINITIONS "NO_NCCL")
 endif()
 
+message(STATUS "Will install to: ${CMAKE_INSTALL_PREFIX}")
 install(TARGETS hyacin LIBRARY DESTINATION .)
 install(FILES hyacin.h DESTINATION .)
-message(STATUS "Will install to: ${CMAKE_INSTALL_PREFIX}")
 
 if (BUILD_EXAMPLES)
   message(STATUS "Will build: Example files")

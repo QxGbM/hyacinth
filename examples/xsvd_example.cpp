@@ -43,12 +43,11 @@ template <class T> inline void run(char prec, int64_t M, int64_t N, int64_t K, d
   std::pair<double, double> ret = check_answer_svd(M, N, rank, &matU[0], M, &matV[0], K, &matA[0], M);
   double err = std::sqrt(ret.first / ret.second);
 
-  float milliseconds = 0.0f;
-  cudaEventElapsedTime(&milliseconds, start, stop);
+  float milliseconds = 0.0f; cudaEventElapsedTime(&milliseconds, start, stop);
   int64_t flops = ((int64_t(M) + int64_t(N)) * int64_t(rank) * int64_t(2)) + (int64_t(M) * int64_t(N) * int64_t(rank) * int64_t(4));
-  double gflops = double(flops) * 1.e-6 / milliseconds;
+  double gflops = double(flops) * 1.e-6 / double(milliseconds);
 
-  std::cout << prec << "-UTVK," << M << "," << N << "," << epi << "," << err << "," << rank << "," << milliseconds << "," << gflops << std::endl;
+  std::cout << prec << "-SVD," << M << "," << N << "," << epi << "," << err << "," << rank << "," << milliseconds << "," << gflops << std::endl;
 
   cudaFree(d_A);
   cudaFree(d_V);

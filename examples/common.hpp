@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <numeric>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <tuple>
 
@@ -218,6 +219,26 @@ int32_t svd_fit_transform(cudaStream_t stream, cublasHandle_t cublasH, cusolverD
 }
 
 #ifndef NO_NCCL
+
+void nccl_id_from_file(const std::string& id_path, std::vector<ncclUniqueId>& arr) {
+  arr.clear();
+  std::ifstream ids(id_path);
+  if (ids.is_open()) {
+    std::string line;
+    while(std::getline(ids, line)) {
+      std::stringstream stream(line);
+      std::vector<uint8_t> arr(sizeof(ncclUniqueId));
+      int32_t byte; std::vector<uint8_t>::iterator iter = arr.begin();
+      while ((stream >> byte) && iter != arr.end())
+        *iter = uint8_t(byte);
+      
+      size_t len = arr.size();
+      arr.resize(len + 1);
+      std::memcpy(&arr[len], arr.data(), sizeof(ncclUniqueId));
+    }
+    ids.close();
+  }
+}
 
 template <class T>
 int32_t svd_fit_transform_1dr(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t gM, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv, ncclComm_t comm) {

@@ -246,10 +246,12 @@ extern "C" int32_t hyacinXcpqrk1Drow(cublasHandle_t handle, char mode, double ep
   vexp_dispatcher(stream, localM, N, Atype, A, lda, (int32_t*)jpiv);
   ncclAllReduce(jpiv, jpiv, int64_t(N), ncclInt32, ncclMax, col_comm, stream);
 
-  if (0 < localM) { igemm_dispatcher(stream, handle, localM, N, Atype, A, lda, umax, (const int32_t*)jpiv, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA, alg); }
-    else { cudaMemsetAsync(acc, 0, acc_bytes, stream); }
   int64_t stride = int64_t(algnN) * int64_t(N) + int64_t(algnN), acc_len = stride * (int64_t(orderC + 1) << Complex);
-  internal::int8::accumulate_conv_i63_u47(stream, orderC, Complex, stride, (uint64_t*)acc);
+  if (0 < localM) { 
+    igemm_dispatcher(stream, handle, localM, N, Atype, A, lda, umax, (const int32_t*)jpiv, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA, alg);
+    internal::int8::accumulate_conv_i63_u47(stream, orderC, Complex, stride, (uint64_t*)acc);
+  }
+  else { cudaMemsetAsync(acc, 0, acc_bytes, stream); }
   ncclAllReduce(acc, acc, acc_len, ncclUint64, ncclSum, col_comm, stream);
 
   int32_t* hpiv = (int32_t*)(&((int8_t*)pinned_work)[idx_bytes]);
