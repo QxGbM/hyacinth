@@ -276,8 +276,10 @@ void __bootstrap(int32_t& world_rank, int32_t& world_size, int32_t& local_rank, 
   world_size = std::stoi(std::string(slurm_size ?: "1"));
   local_rank = std::stoi(std::string(slurm_local_rank ?: "0"));
 
-  std::string job_dir(std::getenv("SLURM_SUBMIT_DIR") ?: "."), job_id(std::getenv("SLURM_JOB_ID") ?: "");
-  std::string id_path = job_dir + std::string("/") + job_id + std::string(".id.out");
+  std::string slurm_job_dir(std::getenv("SLURM_SUBMIT_DIR") ?: ".");
+  std::string slurm_job_id(std::getenv("SLURM_JOB_ID") ?: "0");
+  std::string hyac_job_id(std::getenv("HYACIN_JOB_ID") ?: "0");
+  std::string id_path = slurm_job_dir + "/" + slurm_job_id + "-" + hyac_job_id + ".id.out";
   if (world_rank == 0) {
     ncclGetUniqueId(&id); std::string tmp = id_path + ".tmp";
     int fd = ::open(tmp.c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);

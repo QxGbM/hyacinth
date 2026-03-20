@@ -9,8 +9,8 @@
 
 module load cuda nccl intel/2022/mkl
 
-#NCCL_DEBUG=WARN srun --cpu-bind=cores --gres-flags=allow-task-sharing /home/ma/hyacinth/build/examples/bootstrap_check.app
-#rm -f "${SLURM_JOB_ID}.id.out"
+HYACIN_JOB_ID=1 NCCL_DEBUG=WARN srun --cpu-bind=cores --gres-flags=allow-task-sharing /home/ma/hyacinth/build/examples/bootstrap_check.app
+rm -f "${SLURM_JOB_ID}-1.id.out"
 
-NCCL_DEBUG=WARN srun --cpu-bind=cores --gres-flags=allow-task-sharing /home/ma/hyacinth/build/examples/xsvd_2d_example.app tilem=2 tilen=2 M=65536 N=4096
-rm -f "${SLURM_JOB_ID}.id.out"
+HYACIN_JOB_ID=2 NCCL_DEBUG=WARN srun --cpu-bind=cores --gres-flags=allow-task-sharing /home/ma/hyacinth/build/examples/xsvd_2d_example.app tilem=2 tilen=2 M=65536 N=4096
+rm -f "${SLURM_JOB_ID}-2.id.out"
