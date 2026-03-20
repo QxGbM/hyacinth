@@ -265,17 +265,18 @@ std::pair<int32_t, int32_t> allgatherv_1dc(cudaStream_t stream, int32_t M, int32
   return std::make_pair(N, v_offset);
 }
 
-#ifndef NO_POSIX
+#ifdef BOOTSTRAP_POSIX
 #include <unistd.h>
 #include <fcntl.h>
 
-void bootstrap_slurm_posix(int32_t& world_rank, int32_t& world_size, int32_t& local_rank, ncclUniqueId& id, const std::string& id_path) {
+void __bootstrap(int32_t& world_rank, int32_t& world_size, int32_t& local_rank, ncclUniqueId& id) {
   const char* slurm_rank = std::getenv("SLURM_PROCID"), *slurm_size = std::getenv("SLURM_NTASKS");
   const char* slurm_local_rank = std::getenv("SLURM_LOCALID");
   world_rank = std::stoi(std::string(slurm_rank ?: "0"));
   world_size = std::stoi(std::string(slurm_size ?: "1"));
   local_rank = std::stoi(std::string(slurm_local_rank ?: "0"));
 
+  std::string id_path("./id.out");
   if (world_rank == 0) {
     ncclGetUniqueId(&id); std::string tmp = id_path + ".tmp";
     int fd = ::open(tmp.c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
@@ -284,23 +285,17 @@ void bootstrap_slurm_posix(int32_t& world_rank, int32_t& world_size, int32_t& lo
     else if (fd != -1) { ::close(fd); throw std::runtime_error("I/O error writing nccl unique ID."); }
   }
   else {
-    int trials = 0, fd = ::open(id_path.c_str(), O_RDONLY);
-    while (fd == -1 && ++trials <= 20) { ::sleep(1); fd = ::open(id_path.c_str(), O_RDONLY); }
-    if (fd != -1) {
-      if (::read(fd, (char*)&id, sizeof(ncclUniqueId)) != sizeof(ncclUniqueId))
-      { ::close(fd); throw std::runtime_error("I/O error reading nccl unique ID."); }
-      else { ::close(fd); }
-    }
+    int trials = 0; std::ifstream stream(id_path, std::ios::binary);
+    while (!stream.is_open() && ++trials <= 20) { ::sleep(1); stream.open(id_path, std::ios::binary); }
+    if (stream.is_open()) { stream.read((char*)&id, sizeof(ncclUniqueId)); stream.close(); }
     else { throw std::runtime_error("Timeout reading nccl unique ID."); }
   }
 }
 
-#endif
-
-#ifndef NO_MPI
+#else
 #include <mpi.h>
 
-void bootstrap_mpi(int32_t& world_rank, int32_t& world_size, int32_t& local_rank, ncclUniqueId& id) {
+void __bootstrap(int32_t& world_rank, int32_t& world_size, int32_t& local_rank, ncclUniqueId& id) {
   MPI_Init(nullptr, nullptr);
   MPI_Comm shmcomm; MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL, &shmcomm);
   MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);

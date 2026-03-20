@@ -79,7 +79,7 @@ template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, 
 }
 
 int32_t main(int32_t argc, char* argv[]) {
-  char prec = 'D'; std::string file, id_path("id.out");
+  char prec = 'D'; std::string file;
   int64_t gM = 2048, N = 2048, K = 2048, mb = 512;
   double epi = 1.e-12;
 
@@ -91,13 +91,12 @@ int32_t main(int32_t argc, char* argv[]) {
     else if (std::strncmp(argv[i], "epi=", 4) == 0) { std::sscanf(argv[i], "epi=%lf", &epi); }
     else if (std::strncmp(argv[i], "mb=", 3) == 0) { std::sscanf(argv[i], "mb=%ld", &mb); }
     else if (std::strncmp(argv[i], "file=", 5) == 0) { file.resize(std::strlen(argv[i])); std::sscanf(argv[i], "file=%s", file.data()); }
-    else if (std::strncmp(argv[i], "ccl=", 4) == 0) { id_path.resize(std::strlen(argv[i])); std::sscanf(argv[i], "ccl=%s", id_path.data()); }
     else { std::cerr << "Ignored parameter: " << argv[i] << std::endl; }
   }
   N = std::min(gM, N); K = std::min(N, K);
 
   int32_t world_rank, world_size, local_rank; ncclUniqueId id;
-  bootstrap_mpi(world_rank, world_size, local_rank, id);
+  __bootstrap(world_rank, world_size, local_rank, id);
 
   int32_t device_count = 0; cudaGetDeviceCount(&device_count);
   auto cu_err = cudaSetDevice(1 < device_count ? local_rank : 0);
@@ -121,6 +120,5 @@ int32_t main(int32_t argc, char* argv[]) {
     std::cerr << cudaGetErrorString(cu_err) << std::endl;
 
   ncclCommDestroy(comm);
-  if (world_rank == 0) { std::remove(id_path.data()); }
   return 0;
 }

@@ -99,8 +99,8 @@ template <class T> inline void run(char prec, int64_t gM, int64_t gN, int64_t K,
 }
 
 int32_t main(int32_t argc, char* argv[]) {
-  char prec = 'D'; std::string file, id_path("./id.out");
-  int32_t tile_m = 1, tile_n = 1, use_mpi = 0, use_slurm = 0;
+  char prec = 'D'; std::string file;
+  int32_t tile_m = 1, tile_n = 1;
   int64_t gM = 2048, gN = 2048, K = 2048, mb = 512, nb = 512;
   double epi = 1.e-12;
 
@@ -115,28 +115,13 @@ int32_t main(int32_t argc, char* argv[]) {
     else if (std::strncmp(argv[i], "tilem=", 6) == 0) { std::sscanf(argv[i], "tilem=%d", &tile_m); }
     else if (std::strncmp(argv[i], "tilen=", 6) == 0) { std::sscanf(argv[i], "tilen=%d", &tile_n); }
     else if (std::strncmp(argv[i], "file=", 5) == 0) { file.resize(std::strlen(argv[i])); std::sscanf(argv[i], "file=%s", file.data()); }
-#ifndef NO_SLURM
-    else if (std::strncmp(argv[i], "--slurm,path=", 13) == 0) { use_slurm = 1; id_path.resize(std::strlen(argv[i])); std::sscanf(argv[i], "--slurm,path=%s", id_path.data()); }
-    else if (std::strncmp(argv[i], "--slurm", 7) == 0) { use_slurm = 1; }
-#endif
-#ifndef NO_MPI
-    else if (std::strncmp(argv[i], "--mpi", 5) == 0) { use_mpi = 1; }
-#endif
     else { std::cerr << "Ignored parameter: " << argv[i] << std::endl; }
   }
-
-  if (!use_slurm && !use_mpi)
-  { std::cerr << "No bootstrap selected." << std::endl; return -1; }
 
   gN = std::min(gM, gN); K = std::min(gN, K);
 
   int32_t world_rank, world_size, local_rank; ncclUniqueId id;
-#ifndef NO_SLURM
-  if (use_slurm) bootstrap_slurm_posix(world_rank, world_size, local_rank, id, id_path);
-#endif
-#ifndef NO_MPI
-  if (use_mpi) bootstrap_mpi(world_rank, world_size, local_rank, id);
-#endif
+  __bootstrap(world_rank, world_size, local_rank, id);
 
   if (world_size != tile_m * tile_n)
   { if (world_rank == 0) std::cerr << "Incorrect process grid launch configuration." << std::endl; return -1; }
@@ -164,6 +149,5 @@ int32_t main(int32_t argc, char* argv[]) {
     std::cerr << cudaGetErrorString(cu_err) << std::endl;
 
   ncclCommDestroy(comm);
-  if (world_rank == 0 && use_slurm) { std::remove(id_path.c_str()); }
   return 0;
 }
