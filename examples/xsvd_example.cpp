@@ -2,9 +2,12 @@
 #include <common.hpp>
 #include <iostream>
 
-template <class T> inline void run(char prec, int64_t M, int64_t N, int64_t K, double epi, double omega) {
+template <class T> inline void run(char prec, int64_t M, int64_t N, int64_t K, double epi, const std::string& file, const std::string& out) {
   std::vector<T> matA(M * N);
-  make_2D_oscillatory(omega, 0, 0, M, N, &matA[0], M);
+  if (!file.empty())
+    matrix_from_row_major_csv(M, N, 512, N, matA.data(), M, file, 0, 0, 1, 1);
+  else
+    make_2D_oscillatory(1., 0, 0, M, N, &matA[0], M);
 
   cudaStream_t stream;
   cublasHandle_t cublasH;
@@ -47,7 +50,10 @@ template <class T> inline void run(char prec, int64_t M, int64_t N, int64_t K, d
   int64_t flops = ((int64_t(M) + int64_t(N)) * int64_t(rank) * int64_t(2)) + (int64_t(M) * int64_t(N) * int64_t(rank) * int64_t(4));
   double gflops = double(flops) * 1.e-6 / double(milliseconds);
 
-  std::cout << prec << "-SVD," << M << "," << N << "," << epi << "," << err << "," << rank << "," << milliseconds << "," << gflops << std::endl;
+  printf("%c-SVD,%ld,%ld,%.1le,%.12le,%d,%f,%lf\n", prec, M, N, epi, err, rank, milliseconds, gflops);
+
+  if (!out.empty())
+    write_matrix_to_csv(rank, N, &matV[0], K, out);
 
   cudaFree(d_A);
   cudaFree(d_V);
@@ -60,26 +66,33 @@ template <class T> inline void run(char prec, int64_t M, int64_t N, int64_t K, d
 }
 
 int32_t main(int32_t argc, char* argv[]) {
+  char prec = 'D'; std::string file, out;
+  int64_t M = 2048, N = 2048, K = 2048, mb = 512;
+  double epi = 1.e-12;
+
+  for (int32_t i = 1; i < argc; ++i) {
+    if (std::strncmp(argv[i], "M=", 2) == 0) { std::sscanf(argv[i], "M=%ld", &M); }
+    else if (std::strncmp(argv[i], "N=", 2) == 0) { std::sscanf(argv[i], "N=%ld", &N); }
+    else if (std::strncmp(argv[i], "K=", 2) == 0) { std::sscanf(argv[i], "K=%ld", &K); }
+    else if (std::strncmp(argv[i], "data=", 5) == 0) { std::sscanf(argv[i], "data=%c", &prec); }
+    else if (std::strncmp(argv[i], "epi=", 4) == 0) { std::sscanf(argv[i], "epi=%lf", &epi); }
+    else if (std::strncmp(argv[i], "mb=", 3) == 0) { std::sscanf(argv[i], "mb=%ld", &mb); }
+    else if (std::strncmp(argv[i], "file=", 5) == 0) { file.resize(std::strlen(argv[i])); std::sscanf(argv[i], "file=%s", file.data()); }
+    else if (std::strncmp(argv[i], "out=", 4) == 0) { out.resize(std::strlen(argv[i])); std::sscanf(argv[i], "out=%s", out.data()); }
+    else { std::cerr << "Ignored parameter: " << argv[i] << std::endl; }
+  }
+  N = std::min(M, N); K = std::min(N, K);
+
   auto cu_err = cudaSetDevice(0);
   cudaDeviceReset();
   if (cu_err != cudaSuccess)
   { std::cerr << cudaGetErrorString(cu_err) << std::endl; return -1; }
 
-  char prec = 1 < argc ? *argv[1] : 'D';
-  int64_t M = 2 < argc ? std::atoi(argv[2]) : 2048;
-  int64_t N = 3 < argc ? std::atoi(argv[3]) : 2048;
-  N = std::min(M, N);
-
-  int64_t K = 4 < argc ? std::atoi(argv[4]) : N;
-  double epi = 5 < argc ? std::atof(argv[5]) : 1.e-12;
-  double omega = 6 < argc ? std::atof(argv[6]) : 1.;
-  K = std::min(K, N);
-
   switch(prec) {
-    case 'D': run<double>(prec, M, N, K, epi, omega); break;
-    case 'S': run<float>(prec, M, N, K, epi, omega); break;
-    case 'Z': run<std::complex<double>>(prec, M, N, K, epi, omega); break;
-    case 'C': run<std::complex<float>>(prec, M, N, K, epi, omega); break;
+    case 'D': run<double>(prec, M, N, K, epi, file, out); break;
+    case 'S': run<float>(prec, M, N, K, epi, file, out); break;
+    case 'Z': run<std::complex<double>>(prec, M, N, K, epi, file, out); break;
+    case 'C': run<std::complex<float>>(prec, M, N, K, epi, file, out); break;
     default: break;
   }
 

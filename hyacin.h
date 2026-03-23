@@ -22,7 +22,9 @@ typedef enum {
 
 typedef enum {
   HYACIN_ALG_LIMBS,
-  HYACIN_ALG_CRT
+  HYACIN_ALG_CRT,
+  HYACIN_ALG_LIMBS_ND,
+  HYACIN_ALG_CRT_ND
 } hyacinAlgorithm_t;
 
 #ifdef __cplusplus
@@ -32,6 +34,7 @@ extern "C" {
 void hyacinXcpqrk_autoTune(
   double epi,
   int32_t globalM,
+  int32_t use_nd_allreduce,
   int32_t u_extra,
   int32_t* umax,
   hyacinPrecision_t Atype,

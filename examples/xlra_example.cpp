@@ -40,7 +40,7 @@ template <class T> inline void run(char prec, int64_t M, int64_t N, double epi, 
   int64_t trsm_flops = int64_t(N) * int64_t(rank) * int64_t(rank);
   double gflops = double(qr_flops + trsm_flops) * 1.e-6 / double(milliseconds);
 
-  std::cout << prec << "-LRA," << M << "," << N << "," << epi << "," << rel_err << "," << rank << "," << milliseconds << "," << gflops << std::endl;
+  printf("%c-LRA,%ld,%ld,%.1le,%.12le,%d,%f,%lf\n", prec, M, N, epi, rel_err, rank, milliseconds, gflops);
 
   cudaFree(d_A);
   cudaFree(d_X);

@@ -44,7 +44,7 @@ template <class T> inline void run(char prec, int64_t M, int64_t gN, int64_t K, 
   r2 = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, N2, K, d_A, M, d_V2, K);
   cudaMemcpy(d_A, matA.data(), M * lN * sizeof(T), cudaMemcpyHostToDevice);
 
-  ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMax, comm, stream);
+  ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
   cudaStreamSynchronize(stream);
   cudaEventRecord(start, stream);
 
@@ -52,7 +52,7 @@ template <class T> inline void run(char prec, int64_t M, int64_t gN, int64_t K, 
   std::tie(N2, offset) = allgatherv_1dc(stream, M, r1, d_A, M, comm);
   r2 = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, N2, K, d_A, M, d_V2, K);
 
-  ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMax, comm, stream);
+  ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
   cudaStreamSynchronize(stream);
   cudaEventRecord(stop, stream);
 
@@ -72,7 +72,7 @@ template <class T> inline void run(char prec, int64_t M, int64_t gN, int64_t K, 
   int64_t flops = ((int64_t(M) + int64_t(gN)) * int64_t(r2) * int64_t(2)) + (int64_t(M) * int64_t(gN) * int64_t(r2) * int64_t(4));
   double gflops = double(flops) * 1.e-6 / double(milliseconds);
 
-  std::cout << prec << "-SVD," << M << "," << gN << "," << epi << "," << err << "," << r1 << "," << r2 << "," << milliseconds << "," << gflops << std::endl;
+  printf("%c-SVD,%ld,%ld,%.1le,%.12le,%d,%d,%f,%lf\n", prec, M, gN, epi, err, r1, r2, milliseconds, gflops);
 
   cudaFree(d_barrier);
   cudaFree(d_A);

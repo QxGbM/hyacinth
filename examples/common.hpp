@@ -12,7 +12,8 @@
 
 using blas_int = int; // LP64 for blas
 const int32_t oversampling = 10; // increase for better LRA accuracy
-const int32_t u_extra = 6; // increase for better Quantization accuracy 
+const int32_t u_extra = 6; // increase for better Quantization accuracy
+const int32_t usd_nd_allreduce = 0; // non-zero for use float(non-deterministic) all reduce when possible, 0 for deterministic
 
 template <class T>
 inline void copy2d(int32_t M, int32_t N, const T* A, int32_t lda, T* B, int32_t ldb)
@@ -163,6 +164,27 @@ std::pair<double, double> check_answer_svd(int32_t M, int32_t N, int32_t r1, int
   return check_answer_svd(M, N, r1, U, ldu, &matV[0], r1, B, ldb);
 }
 
+inline std::string conv_to_string(double f) { char s[30]; std::sprintf(s, "%.18le", f); return std::string(s); }
+inline std::string conv_to_string(float f) { char s[30]; std::sprintf(s, "%.18le", double(f)); return std::string(s); }
+inline std::string conv_to_string(std::complex<double> f)
+{ char s[70]; char sign = 0. <= f.imag() ? '+':'-'; std::sprintf(s, " (%.18le%c%.18lej)", f.real(), sign, std::abs(f.imag())); return std::string(s); }
+inline std::string conv_to_string(std::complex<float> f)
+{ char s[70]; char sign = 0. <= f.imag() ? '+':'-'; std::sprintf(s, " (%.18le%c%.18lej)", double(f.real()), sign, double(std::fabs(f.imag()))); return std::string(s); }
+
+template <class T>
+void write_matrix_to_csv(int32_t M, int32_t N, const T* A, int32_t lda, const std::string& csv) {
+  std::ofstream stream(csv);
+  if (stream.is_open()) {
+    for (int32_t i = 0; i < M; ++i) {
+      for (int32_t j = 0; j < N; ++j)
+        if (j == 0) stream << conv_to_string(A[int64_t(i) + int64_t(j) * int64_t(lda)]);
+          else stream << "," << conv_to_string(A[int64_t(i) + int64_t(j) * int64_t(lda)]);
+      stream << std::endl;
+    }
+    stream.close();
+  }
+}
+
 template <class T> inline hyacinPrecision_t __precA();
 template <> inline hyacinPrecision_t __precA<double>() { return HYACIN_F64; };
 template <> inline hyacinPrecision_t __precA<float>() { return HYACIN_F32; };
@@ -173,7 +195,7 @@ template <class T>
 int32_t geqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, int32_t* jpiv, T* R, int32_t ldr) {
   cudaStream_t stream; cublasGetStream(handle, &stream);
   int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg; uint64_t dev_work_bytes, pinned_work_bytes;
-  hyacinXcpqrk_autoTune(epi, M, u_extra, &umax, precA, &precC, &alg);
+  hyacinXcpqrk_autoTune(epi, M, usd_nd_allreduce, u_extra, &umax, precA, &precC, &alg);
   hyacinXcpqrk_bufferSize(M, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
 
   void* dev_work = nullptr, *piv = nullptr, *pinned_work = nullptr;
@@ -195,7 +217,7 @@ template <class T>
 int32_t svd_fit_transform(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv) {
   int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg;
   uint64_t dev_work_bytes, pinned_work_bytes, dev_work_bytes_new, pinned_work_bytes_new;
-  hyacinXcpqrk_autoTune(epi, M, u_extra, &umax, precA, &precC, &alg);
+  hyacinXcpqrk_autoTune(epi, M, usd_nd_allreduce, u_extra, &umax, precA, &precC, &alg);
   hyacinXcpqrk_bufferSize(M, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
 
   void* jpiv = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
@@ -224,7 +246,7 @@ template <class T>
 int32_t svd_fit_transform_1dr(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t gM, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv, ncclComm_t comm) {
   int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg;
   uint64_t dev_work_bytes, pinned_work_bytes;
-  hyacinXcpqrk_autoTune(epi, gM, u_extra, &umax, precA, &precC, &alg);
+  hyacinXcpqrk_autoTune(epi, gM, usd_nd_allreduce, u_extra, &umax, precA, &precC, &alg);
   hyacinXcpqrk1Drow_bufferSize(M, gM, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
 
   void* jpiv = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
