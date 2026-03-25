@@ -33,7 +33,6 @@ extern "C" {
 
 void hyacinXcpqrk_autoTune(
   double epi,
-  int32_t globalM,
   int32_t use_nd_allreduce,
   int32_t u_extra,
   int32_t* umax,

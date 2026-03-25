@@ -67,7 +67,7 @@ template <class T> inline void run(char prec, int64_t M, int64_t N, int64_t K, d
 
 int32_t main(int32_t argc, char* argv[]) {
   char prec = 'D'; std::string file, out;
-  int64_t M = 2048, N = 2048, K = 2048, mb = 512;
+  int64_t M = 2048, N = 2048, K = 2048;
   double epi = 1.e-12;
 
   for (int32_t i = 1; i < argc; ++i) {
@@ -76,7 +76,6 @@ int32_t main(int32_t argc, char* argv[]) {
     else if (std::strncmp(argv[i], "K=", 2) == 0) { std::sscanf(argv[i], "K=%ld", &K); }
     else if (std::strncmp(argv[i], "data=", 5) == 0) { std::sscanf(argv[i], "data=%c", &prec); }
     else if (std::strncmp(argv[i], "epi=", 4) == 0) { std::sscanf(argv[i], "epi=%lf", &epi); }
-    else if (std::strncmp(argv[i], "mb=", 3) == 0) { std::sscanf(argv[i], "mb=%ld", &mb); }
     else if (std::strncmp(argv[i], "file=", 5) == 0) { file.resize(std::strlen(argv[i])); std::sscanf(argv[i], "file=%s", file.data()); }
     else if (std::strncmp(argv[i], "out=", 4) == 0) { out.resize(std::strlen(argv[i])); std::sscanf(argv[i], "out=%s", out.data()); }
     else { std::cerr << "Ignored parameter: " << argv[i] << std::endl; }

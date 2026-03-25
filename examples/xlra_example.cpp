@@ -2,10 +2,10 @@
 #include <common.hpp>
 #include <iostream>
 
-template <class T> inline void run(char prec, int64_t M, int64_t N, double epi, double omega) {
+template <class T> inline void run(char prec, int64_t M, int64_t N, double epi, char algo) {
   std::vector<T> matA(M * N);
   std::vector<int32_t> ipiv(N);
-  make_2D_oscillatory(omega, 0, 0, M, N, &matA[0], M);
+  make_2D_oscillatory(1., 0, 0, M, N, &matA[0], M);
 
   cudaStream_t stream;
   cublasHandle_t handle;
@@ -22,12 +22,12 @@ template <class T> inline void run(char prec, int64_t M, int64_t N, double epi, 
   cudaMalloc((void**)(&d_X), N * N * sizeof(T));
   cudaMemcpy(d_A, matA.data(), M * N * sizeof(T), cudaMemcpyHostToDevice);
 
-  geqp3_ronly(handle, epi, M, N, N, d_A, M, ipiv.data(), d_X, N);
+  geqp3_ronly(handle, epi, M, N, N, d_A, M, ipiv.data(), d_X, N, algo);
   std::fill(ipiv.begin(), ipiv.end(), 0);
   cudaMemcpy(d_A, matA.data(), M * N * sizeof(T), cudaMemcpyHostToDevice);
 
   cudaEventRecord(start, stream);
-  int32_t rank = geqp3_ronly(handle, epi, M, N, N, d_A, M, ipiv.data(), d_X, N);
+  int32_t rank = geqp3_ronly(handle, epi, M, N, N, d_A, M, ipiv.data(), d_X, N, algo);
   cudaEventRecord(stop, stream);
 
   std::vector<T> matX(N * N);
@@ -51,24 +51,30 @@ template <class T> inline void run(char prec, int64_t M, int64_t N, double epi, 
 }
 
 int32_t main(int32_t argc, char* argv[]) {
+  char prec = 'D', algo = 'A';
+  int64_t M = 2048, N = 2048;
+  double epi = 1.e-12;
+
+  for (int32_t i = 1; i < argc; ++i) {
+    if (std::strncmp(argv[i], "M=", 2) == 0) { std::sscanf(argv[i], "M=%ld", &M); }
+    else if (std::strncmp(argv[i], "N=", 2) == 0) { std::sscanf(argv[i], "N=%ld", &N); }
+    else if (std::strncmp(argv[i], "data=", 5) == 0) { std::sscanf(argv[i], "data=%c", &prec); }
+    else if (std::strncmp(argv[i], "epi=", 4) == 0) { std::sscanf(argv[i], "epi=%lf", &epi); }
+    else if (std::strncmp(argv[i], "algo=", 5) == 0) { std::sscanf(argv[i], "algo=%c", &algo); }
+    else { std::cerr << "Ignored parameter: " << argv[i] << std::endl; }
+  }
+  N = std::min(M, N);
+
   auto cu_err = cudaSetDevice(0);
   cudaDeviceReset();
   if (cu_err != cudaSuccess)
   { std::cerr << cudaGetErrorString(cu_err) << std::endl; return -1; }
 
-  char prec = 1 < argc ? *argv[1] : 'D';
-  int64_t M = 2 < argc ? std::atoi(argv[2]) : 2048;
-  int64_t N = 3 < argc ? std::atoi(argv[3]) : 2048;
-  N = std::min(M, N);
-
-  double epi = 4 < argc ? std::atof(argv[4]) : 1.e-12;
-  double omega = 5 < argc ? std::atof(argv[5]) : 1.;
-
   switch(prec) {
-    case 'D': run<double>(prec, M, N, epi, omega); break;
-    case 'S': run<float>(prec, M, N, epi, omega); break;
-    case 'Z': run<std::complex<double>>(prec, M, N, epi, omega); break;
-    case 'C': run<std::complex<float>>(prec, M, N, epi, omega); break;
+    case 'D': run<double>(prec, M, N, epi, algo); break;
+    case 'S': run<float>(prec, M, N, epi, algo); break;
+    case 'Z': run<std::complex<double>>(prec, M, N, epi, algo); break;
+    case 'C': run<std::complex<float>>(prec, M, N, epi, algo); break;
     default: break;
   }
 

@@ -73,7 +73,7 @@ inline void crt_acc_dispatcher(cudaStream_t stream, int32_t option, int64_t N, c
 
     i32_array<pd_len> pd; std::copy_n(CRT::p_div(orderX, iter), pd_len, &pd.arr[0]);
     int32_t grid = int32_t((N + int64_t(511)) >> 9);
-    int32_t accum = int32_t(option & 1 == 1), last = int32_t(option & 2 == 2);
+    int32_t accum = int32_t((option & 1) == 1), last = int32_t((option & 2) == 2);
 
     if (accum && last)
       i32_crt_accum_kernel<orderM, orderA, orderPD, MO, MINV, R32, P0, P1, P2, 1> <<< grid, block_threads, 0, stream >>> (pd, N, X, incx, A, inca);

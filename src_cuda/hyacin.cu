@@ -95,15 +95,19 @@ inline std::pair<hyacinPrecision_t, int64_t> real_precision(hyacinPrecision_t pr
   }
 }
 
-inline std::tuple<int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int64_t, int64_t, int64_t, int64_t> ext_params(int32_t localM, int32_t globalM, int32_t N, int32_t umax, int32_t distribute, hyacinPrecision_t ComputeType, hyacinAlgorithm_t alg) {
+inline std::tuple<int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int64_t, int64_t, int64_t, int64_t> ext_params(int32_t localM, int32_t globalM, int32_t N, int32_t& umax, int32_t distribute, hyacinPrecision_t ComputeType, hyacinAlgorithm_t alg) {
   hyacinPrecision_t ComputeTypeReal; int64_t em_bytes;
   std::tie(ComputeTypeReal, em_bytes) = real_precision(ComputeType);
   int32_t Complex = int32_t(ComputeType != ComputeTypeReal);
-  int32_t algnM = (localM + 255) & (~255);
-  int32_t algnN = (N + 63) & (~63);
-  int32_t bits = int32_t(std::ceil(std::log2(double(globalM)))) + (umax << 1) + 2 + Complex;
   int32_t use_limbs = int32_t(alg == HYACIN_ALG_LIMBS || alg == HYACIN_ALG_LIMBS_ND);
   int32_t det_reduc = distribute && (alg == HYACIN_ALG_LIMBS || alg == HYACIN_ALG_CRT);
+
+  int32_t algnM = (localM + 255) & (~255);
+  int32_t algnN = (N + 63) & (~63);
+  int32_t bits_M = std::max(1, det_reduc ? globalM : localM);
+  int32_t bits_E = int32_t(std::ceil(std::log2(double(bits_M)))) + 2 + Complex;
+  umax = use_limbs ? (((umax + 10) & (~7)) - 3) : ((((bits_E + (umax << 1)) | 7) - bits_E) / 2);
+  int32_t bits = bits_E + (umax << 1);
 
   int32_t orderA = ((use_limbs ? umax : bits) + 8) >> 3;
   int64_t i8_bytes = int64_t(N) * int64_t(use_limbs ? orderA : 8) * ((int64_t(algnM) << Complex) + (int64_t(algnN) * sizeof(int32_t)));

@@ -29,10 +29,7 @@ inline hyacinPrecision_t complex_precision(hyacinPrecision_t prec) {
   }
 }
 
-inline int32_t pad_u_limbs(int32_t umax) { return ((umax + 10) & (~7)) - 3; }
-inline int32_t pad_u_crt(int32_t umax, int32_t extra) { int32_t b = ((umax * 2) + extra) | 7; return (b - extra) / 2; }
-
-extern "C" void hyacinXcpqrk_autoTune(double epi, int32_t globalM, int32_t use_nd_allreduce, int32_t u_extra, int32_t* umax, hyacinPrecision_t Atype, hyacinPrecision_t* ComputeType, hyacinAlgorithm_t* alg) {
+extern "C" void hyacinXcpqrk_autoTune(double epi, int32_t use_nd_allreduce, int32_t u_extra, int32_t* umax, hyacinPrecision_t Atype, hyacinPrecision_t* ComputeType, hyacinAlgorithm_t* alg) {
   int32_t device, major, minor;
   cudaGetDevice(&device);
   cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, device);
@@ -55,10 +52,9 @@ extern "C" void hyacinXcpqrk_autoTune(double epi, int32_t globalM, int32_t use_n
 
   int32_t u = u_extra + int32_t(std::ceil(-std::log2(epi_nrm)));
   int32_t Complex = int32_t(Atype != ATypeReal), use_limbs = int32_t(u < umax_threshold);
-  int32_t b_extra = int32_t(std::ceil(std::log2(double(globalM)))) + 2 + Complex;
   use_nd_allreduce = use_nd_allreduce && (auto_prec == HYACIN_F32 || auto_prec == HYACIN_F64);
 
-  *umax = std::min(umax_practical_limit, use_limbs ? pad_u_limbs(u) : pad_u_crt(u, b_extra));
+  *umax = std::min(umax_practical_limit, u);
   *ComputeType = Complex ? complex_precision(auto_prec) : auto_prec;
   *alg = use_nd_allreduce ? (use_limbs ? HYACIN_ALG_LIMBS_ND : HYACIN_ALG_CRT_ND) : (use_limbs ? HYACIN_ALG_LIMBS : HYACIN_ALG_CRT);
 }

@@ -192,10 +192,11 @@ template <> inline hyacinPrecision_t __precA<std::complex<double>>() { return HY
 template <> inline hyacinPrecision_t __precA<std::complex<float>>() { return HYACIN_F32_COMPLEX; };
 
 template <class T>
-int32_t geqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, int32_t* jpiv, T* R, int32_t ldr) {
+int32_t geqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, int32_t* jpiv, T* R, int32_t ldr, char algo) {
   cudaStream_t stream; cublasGetStream(handle, &stream);
   int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg; uint64_t dev_work_bytes, pinned_work_bytes;
-  hyacinXcpqrk_autoTune(epi, M, usd_nd_allreduce, u_extra, &umax, precA, &precC, &alg);
+  hyacinXcpqrk_autoTune(epi, usd_nd_allreduce, u_extra, &umax, precA, &precC, &alg);
+  if (algo == 'C') alg = HYACIN_ALG_CRT; else if (algo == 'L') alg = HYACIN_ALG_LIMBS;
   hyacinXcpqrk_bufferSize(M, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
 
   void* dev_work = nullptr, *piv = nullptr, *pinned_work = nullptr;
@@ -217,7 +218,7 @@ template <class T>
 int32_t svd_fit_transform(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv) {
   int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg;
   uint64_t dev_work_bytes, pinned_work_bytes, dev_work_bytes_new, pinned_work_bytes_new;
-  hyacinXcpqrk_autoTune(epi, M, usd_nd_allreduce, u_extra, &umax, precA, &precC, &alg);
+  hyacinXcpqrk_autoTune(epi, usd_nd_allreduce, u_extra, &umax, precA, &precC, &alg);
   hyacinXcpqrk_bufferSize(M, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
 
   void* jpiv = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
@@ -246,7 +247,7 @@ template <class T>
 int32_t svd_fit_transform_1dr(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t gM, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv, ncclComm_t comm) {
   int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg;
   uint64_t dev_work_bytes, pinned_work_bytes;
-  hyacinXcpqrk_autoTune(epi, gM, usd_nd_allreduce, u_extra, &umax, precA, &precC, &alg);
+  hyacinXcpqrk_autoTune(epi, usd_nd_allreduce, u_extra, &umax, precA, &precC, &alg);
   hyacinXcpqrk1Drow_bufferSize(M, gM, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
 
   void* jpiv = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
