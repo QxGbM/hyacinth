@@ -88,7 +88,7 @@ inline void conv_copy_dispatcher(cudaStream_t stream, int64_t M, int32_t N, cons
 inline std::pair<hyacinPrecision_t, int64_t> real_precision(hyacinPrecision_t prec) {
   switch(prec) {
     case HYACIN_F64: case HYACIN_F64_COMPLEX: return std::make_pair(HYACIN_F64, sizeof(double));
-    case HYACIN_F32: case HYACIN_F32_COMPLEX: return std::make_pair(HYACIN_F64, sizeof(float));
+    case HYACIN_F32: case HYACIN_F32_COMPLEX: return std::make_pair(HYACIN_F32, sizeof(float));
     case HYACIN_DD: case HYACIN_DD_COMPLEX: return std::make_pair(HYACIN_DD, sizeof(double2));
     case HYACIN_QF: case HYACIN_QF_COMPLEX: return std::make_pair(HYACIN_QF, sizeof(float4));
     default: return std::make_pair(hyacinPrecision_t(0), int64_t(0));
@@ -166,31 +166,32 @@ inline int32_t rrf_dispatcher(cudaStream_t stream, cublasHandle_t handle, double
   const uint64_t* acc, int32_t bits, int32_t order, void* A, int32_t* jpiv, int32_t* hpiv, hyacinPrecision_t ComputeType, void* pinned_work) {
 
   std::iota(hpiv, &hpiv[N], 1);
+  int64_t elements = int64_t(algnN) * int64_t(N);
   switch (ComputeType) {
     case HYACIN_F64:
       internal::int8::dequantize_i63_f64(stream, bits, order, M, N, acc, algnN, umax, jpiv, (double*)A, algnN);
-      K = internal::Cholesky::potrfp_f64(stream, handle, epi, K, p, N, (double*)A, algnN, hpiv, pinned_work); break;
+      K = internal::Cholesky::potrfp_f64(stream, handle, epi, K, p, N, (double*)A, algnN, hpiv, &((double*)A)[elements], pinned_work); break;
     case HYACIN_F32:
       internal::int8::dequantize_i63_f32(stream, bits, order, M, N, acc, algnN, umax, jpiv, (float*)A, algnN);
-      K = internal::Cholesky::potrfp_f32(stream, handle, epi, K, p, N, (float*)A, algnN, hpiv, pinned_work); break;
+      K = internal::Cholesky::potrfp_f32(stream, handle, epi, K, p, N, (float*)A, algnN, hpiv, &((float*)A)[elements], pinned_work); break;
     case HYACIN_DD:
       internal::int8::dequantize_i63_f128_dd(stream, bits, order, M, N, acc, algnN, umax, jpiv, (double2*)A, algnN);
-      K = internal::Cholesky::potrfp_f128_dd(stream, handle, epi, K, p, N, (double2*)A, algnN, hpiv, pinned_work); break;
+      K = internal::Cholesky::potrfp_f128_dd(stream, handle, epi, K, p, N, (double2*)A, algnN, hpiv, &((double2*)A)[elements], pinned_work); break;
     case HYACIN_QF:
       internal::int8::dequantize_i63_f128_qf(stream, bits, order, M, N, acc, algnN, umax, jpiv, (float4*)A, algnN);
-      K = internal::Cholesky::potrfp_f128_qf(stream, handle, epi, K, p, N, (float4*)A, algnN, hpiv, pinned_work); break;
+      K = internal::Cholesky::potrfp_f128_qf(stream, handle, epi, K, p, N, (float4*)A, algnN, hpiv, &((float4*)A)[elements], pinned_work); break;
     case HYACIN_F64_COMPLEX:
       internal::int8::dequantize_i63_cf64(stream, bits, order, M, N, acc, algnN, umax, jpiv, (std::complex<double>*)A, algnN);
-      K = internal::Cholesky::potrfp_cf64(stream, handle, epi, K, p, N, (std::complex<double>*)A, algnN, hpiv, pinned_work); break;
+      K = internal::Cholesky::potrfp_cf64(stream, handle, epi, K, p, N, (std::complex<double>*)A, algnN, hpiv, &((std::complex<double>*)A)[elements], pinned_work); break;
     case HYACIN_F32_COMPLEX:
       internal::int8::dequantize_i63_cf32(stream, bits, order, M, N, acc, algnN, umax, jpiv, (std::complex<float>*)A, algnN);
-      K = internal::Cholesky::potrfp_cf32(stream, handle, epi, K, p, N, (std::complex<float>*)A, algnN, hpiv, pinned_work); break;
+      K = internal::Cholesky::potrfp_cf32(stream, handle, epi, K, p, N, (std::complex<float>*)A, algnN, hpiv, &((std::complex<float>*)A)[elements], pinned_work); break;
     case HYACIN_DD_COMPLEX:
       internal::int8::dequantize_i63_cf128_dd(stream, bits, order, M, N, acc, algnN, umax, jpiv, (complex_double2*)A, algnN);
-      K = internal::Cholesky::potrfp_cf128_dd(stream, handle, epi, K, p, N, (complex_double2*)A, algnN, hpiv, pinned_work); break;
+      K = internal::Cholesky::potrfp_cf128_dd(stream, handle, epi, K, p, N, (complex_double2*)A, algnN, hpiv, &((complex_double2*)A)[elements], pinned_work); break;
     case HYACIN_QF_COMPLEX:
       internal::int8::dequantize_i63_cf128_qf(stream, bits, order, M, N, acc, algnN, umax, jpiv, (complex_float4*)A, algnN);
-      K = internal::Cholesky::potrfp_cf128_qf(stream, handle, epi, K, p, N, (complex_float4*)A, algnN, hpiv, pinned_work); break;
+      K = internal::Cholesky::potrfp_cf128_qf(stream, handle, epi, K, p, N, (complex_float4*)A, algnN, hpiv, &((complex_float4*)A)[elements], pinned_work); break;
     default: break;
   }
   return K;
@@ -248,19 +249,19 @@ inline int32_t rrf_nd_dispatcher(cudaStream_t stream, cublasHandle_t handle, dou
     case HYACIN_F64:
       internal::int8::dequantize_i63_f64(stream, bits, order, M, N, acc, algnN, umax, jpiv, (double*)A, algnN);
       ncclAllReduce(A, A, elements, ncclFloat64, ncclSum, col_comm, stream);
-      K = internal::Cholesky::potrfp_f64(stream, handle, epi, K, p, N, (double*)A, algnN, hpiv, pinned_work); break;
+      K = internal::Cholesky::potrfp_f64(stream, handle, epi, K, p, N, (double*)A, algnN, hpiv, &((double*)A)[elements], pinned_work); break;
     case HYACIN_F32:
       internal::int8::dequantize_i63_f32(stream, bits, order, M, N, acc, algnN, umax, jpiv, (float*)A, algnN);
       ncclAllReduce(A, A, elements, ncclFloat, ncclSum, col_comm, stream);
-      K = internal::Cholesky::potrfp_f32(stream, handle, epi, K, p, N, (float*)A, algnN, hpiv, pinned_work); break;
+      K = internal::Cholesky::potrfp_f32(stream, handle, epi, K, p, N, (float*)A, algnN, hpiv, &((float*)A)[elements], pinned_work); break;
     case HYACIN_F64_COMPLEX:
       internal::int8::dequantize_i63_cf64(stream, bits, order, M, N, acc, algnN, umax, jpiv, (std::complex<double>*)A, algnN);
       ncclAllReduce(A, A, elements << 1, ncclFloat64, ncclSum, col_comm, stream);
-      K = internal::Cholesky::potrfp_cf64(stream, handle, epi, K, p, N, (std::complex<double>*)A, algnN, hpiv, pinned_work); break;
+      K = internal::Cholesky::potrfp_cf64(stream, handle, epi, K, p, N, (std::complex<double>*)A, algnN, hpiv, &((std::complex<double>*)A)[elements], pinned_work); break;
     case HYACIN_F32_COMPLEX:
       internal::int8::dequantize_i63_cf32(stream, bits, order, M, N, acc, algnN, umax, jpiv, (std::complex<float>*)A, algnN);
       ncclAllReduce(A, A, elements << 1, ncclFloat, ncclSum, col_comm, stream);
-      K = internal::Cholesky::potrfp_cf32(stream, handle, epi, K, p, N, (std::complex<float>*)A, algnN, hpiv, pinned_work); break;
+      K = internal::Cholesky::potrfp_cf32(stream, handle, epi, K, p, N, (std::complex<float>*)A, algnN, hpiv, &((std::complex<float>*)A)[elements], pinned_work); break;
     default: break;
   }
   return K;

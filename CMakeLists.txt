@@ -19,6 +19,7 @@ set(CPP_SOURCES
   src_cpp/imax_host.cpp
   src_cpp/potrfp_uniform.cpp
   src_cpp/svd_pp.cpp
+  src_cpp/syherk.cpp
 )
 
 set(CU_SOURCES

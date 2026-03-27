@@ -41,6 +41,30 @@ void hyacinXcpqrk_autoTune(
   hyacinAlgorithm_t* alg
 );
 
+void hyacinXsyherk_bufferSize(
+  int32_t M,
+  int32_t N,
+  int32_t umax,
+  hyacinPrecision_t Gtype,
+  hyacinAlgorithm_t alg,
+  uint64_t* dev_work_bytes
+);
+
+void hyacinXsyherk(
+  cublasHandle_t handle,
+  int32_t M,
+  int32_t N,
+  int32_t umax,
+  hyacinPrecision_t Atype,
+  const void* A,
+  int32_t lda,
+  hyacinPrecision_t Gtype,
+  void* G,
+  int32_t ldg,
+  void* dev_work,
+  hyacinAlgorithm_t alg
+);
+
 void hyacinXcpqrk_bufferSize(
   int32_t M,
   int32_t N,
@@ -106,6 +130,16 @@ int32_t hyacinXsvdk(
   void* pinned_work
 );
 
+void hyacinXsyherk1Drow_bufferSize(
+  int32_t localM,
+  int32_t globalM,
+  int32_t N,
+  int32_t umax,
+  hyacinPrecision_t Gtype,
+  hyacinAlgorithm_t alg,
+  uint64_t* dev_work_bytes
+);
+
 void hyacinXcpqrk1Drow_bufferSize(
   int32_t localM,
   int32_t globalM,
@@ -126,6 +160,23 @@ void hyacinXAllGatherV1Dcol_bufferSize(
 );
 
 #ifndef NO_NCCL
+
+void hyacinXsyherk1Drow(
+  cublasHandle_t handle,
+  int32_t localM,
+  int32_t globalM,
+  int32_t N,
+  int32_t umax,
+  hyacinPrecision_t Atype,
+  const void* A,
+  int32_t lda,
+  hyacinPrecision_t Gtype,
+  void* G,
+  int32_t ldg,
+  void* dev_work,
+  hyacinAlgorithm_t alg,
+  ncclComm_t col_comm
+);
 
 int32_t hyacinXcpqrk1Drow(
   cublasHandle_t handle,
