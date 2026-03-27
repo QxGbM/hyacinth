@@ -104,15 +104,6 @@ extern "C" void dtrsm_(const char*, const char*, const char*, const char*, const
 extern "C" void ctrsm_(const char*, const char*, const char*, const char*, const blas_int*, const blas_int*, const void*, const void*, const blas_int*, void*, const blas_int*);
 extern "C" void ztrsm_(const char*, const char*, const char*, const char*, const blas_int*, const blas_int*, const void*, const void*, const blas_int*, void*, const blas_int*);
 
-inline void lrtrsm(blas_int M, blas_int N, const double* A, blas_int lda, double* B, blas_int ldb)
-{ char side = 'L', uplo = 'U', transa = 'N', diag = 'N'; double one = 1.; dtrsm_(&side, &uplo, &transa, &diag, &M, &N, &one, A, &lda, B, &ldb); }
-inline void lrtrsm(blas_int M, blas_int N, const float* A, blas_int lda, float* B, blas_int ldb)
-{ char side = 'L', uplo = 'U', transa = 'N', diag = 'N'; float one = 1.f; strsm_(&side, &uplo, &transa, &diag, &M, &N, &one, A, &lda, B, &ldb); }
-inline void lrtrsm(blas_int M, blas_int N, const std::complex<double>* A, blas_int lda, std::complex<double>* B, blas_int ldb)
-{ char side = 'L', uplo = 'U', transa = 'N', diag = 'N'; std::complex<double> one(1., 0.); ztrsm_(&side, &uplo, &transa, &diag, &M, &N, &one, A, &lda, B, &ldb); }
-inline void lrtrsm(blas_int M, blas_int N, const std::complex<float>* A, blas_int lda, std::complex<float>* B, blas_int ldb)
-{ char side = 'L', uplo = 'U', transa = 'N', diag = 'N'; std::complex<float> one(1.f, 0.f); ctrsm_(&side, &uplo, &transa, &diag, &M, &N, &one, A, &lda, B, &ldb); }
-
 inline void nngemm(blas_int M, blas_int N, blas_int K, const double* A, blas_int lda, const double* B, blas_int ldb, double* C, blas_int ldc)
 { char transa = 'N', transb = 'N'; double one = 1., minus_one = -1.; dgemm_(&transa, &transb, &M, &N, &K, &one, A, &lda, B, &ldb, &minus_one, C, &ldc); }
 inline void nngemm(blas_int M, blas_int N, blas_int K, const float* A, blas_int lda, const float* B, blas_int ldb, float* C, blas_int ldc)
@@ -130,12 +121,11 @@ double check_answer_lra(int32_t rank, int32_t M, int32_t N, const T* A, int32_t 
   std::vector<T> matB(int64_t(M) * int64_t(N)), matC(int64_t(M) * int64_t(rank)), matR(int64_t(N) * int64_t(rank));
   for (int32_t i = 0; i < N; ++i) {
     std::copy_n(&A[int64_t(i) * int64_t(lda)], M, &matB[int64_t(i) * int64_t(M)]);
-    std::copy_n(&R[int64_t(i) * int64_t(ldr)], rank, &matR[int64_t(jpiv[i] - 1) * int64_t(rank)]);
+    std::copy_n(&R[int64_t(i) * int64_t(ldr)], rank, &matR[int64_t(i) * int64_t(rank)]);
     if (i < rank)
       std::copy_n(&A[int64_t(jpiv[i] - 1) * int64_t(lda)], M, &matC[int64_t(i) * int64_t(M)]);
   }
 
-  lrtrsm(rank, N, R, ldr, &matR[0], rank);
   double nrm = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
   nngemm(M, N, rank, &matC[0], M, &matR[0], rank, &matB[0], M);
   double err = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
@@ -194,23 +184,25 @@ template <> inline hyacinPrecision_t __precA<std::complex<float>>() { return HYA
 template <class T>
 int32_t geqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, int32_t* jpiv, T* R, int32_t ldr, char algo) {
   cudaStream_t stream; cublasGetStream(handle, &stream);
-  int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg; uint64_t dev_work_bytes, pinned_work_bytes;
-  hyacinXcpqrk_autoTune(epi, usd_nd_allreduce, u_extra, &umax, precA, &precC, &alg);
+  int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg; uint64_t dev_work_bytes, dev_work_bytes_new, pinned_work_bytes;
+  hyacinXsyherk_autoTune(epi, usd_nd_allreduce, u_extra, &umax, precA, &precC, &alg);
   if (algo == 'C') alg = HYACIN_ALG_CRT; else if (algo == 'L') alg = HYACIN_ALG_LIMBS;
-  hyacinXcpqrk_bufferSize(M, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
+  hyacinXsyherk_bufferSize(M, N, umax, precC, alg, &dev_work_bytes);
+  hyacinXGinterp_bufferSize(N, K, precA, precC, &dev_work_bytes_new, &pinned_work_bytes);
 
-  void* dev_work = nullptr, *piv = nullptr, *pinned_work = nullptr;
-  cudaMalloc(&dev_work, dev_work_bytes);
+  void* gram = nullptr, *piv = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
+  cudaMalloc(&gram, int64_t(N) * int64_t(N) * int64_t(hyacinXelem_bytes(precC)));
   cudaMalloc(&piv, int64_t(N) * sizeof(int32_t));
+  cudaMalloc(&dev_work, std::max(dev_work_bytes, dev_work_bytes_new));
   cudaMallocHost(&pinned_work, pinned_work_bytes);
 
-  int32_t rank = hyacinXcpqrk(handle, 'R', epi, M, N, K, oversampling, umax, precA, A, lda, (int32_t*)piv, precA, R, ldr, precC, dev_work, pinned_work, alg);
+  hyacinXsyherk(handle, M, N, umax, precA, A, lda, precC, gram, N, dev_work, alg);
+  int32_t rank = hyacinXGinterp(handle, epi, N, K, oversampling, precA, R, ldr, (int32_t*)piv, precC, gram, N, dev_work, pinned_work);
 
   cudaStreamSynchronize(stream);
   cudaMemcpy(jpiv, piv, sizeof(int32_t) * N, cudaMemcpyDefault);
-  cudaFree(dev_work);
-  cudaFree(piv);
-  cudaFreeHost(pinned_work);
+  cudaFree(gram); cudaFree(piv);
+  cudaFree(dev_work); cudaFreeHost(pinned_work);
   return rank;
 }
 
@@ -218,7 +210,7 @@ template <class T>
 int32_t svd_fit_transform(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv) {
   int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg;
   uint64_t dev_work_bytes, pinned_work_bytes, dev_work_bytes_new, pinned_work_bytes_new;
-  hyacinXcpqrk_autoTune(epi, usd_nd_allreduce, u_extra, &umax, precA, &precC, &alg);
+  hyacinXsyherk_autoTune(epi, usd_nd_allreduce, u_extra, &umax, precA, &precC, &alg);
   hyacinXcpqrk_bufferSize(M, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
 
   void* jpiv = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
@@ -247,7 +239,7 @@ template <class T>
 int32_t svd_fit_transform_1dr(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t gM, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv, ncclComm_t comm) {
   int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg;
   uint64_t dev_work_bytes, pinned_work_bytes;
-  hyacinXcpqrk_autoTune(epi, usd_nd_allreduce, u_extra, &umax, precA, &precC, &alg);
+  hyacinXsyherk_autoTune(epi, usd_nd_allreduce, u_extra, &umax, precA, &precC, &alg);
   hyacinXcpqrk1Drow_bufferSize(M, gM, N, umax, precC, alg, &dev_work_bytes, &pinned_work_bytes);
 
   void* jpiv = nullptr, *dev_work = nullptr, *pinned_work = nullptr;

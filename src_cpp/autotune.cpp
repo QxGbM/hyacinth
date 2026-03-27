@@ -1,5 +1,9 @@
 
 #include <hyacin.h>
+#include <double_double.hpp>
+#include <quad_float.hpp>
+#include <cuComplex.h>
+
 #include <cmath>
 #include <vector>
 #include <algorithm>
@@ -29,7 +33,17 @@ inline hyacinPrecision_t complex_precision(hyacinPrecision_t prec) {
   }
 }
 
-extern "C" void hyacinXcpqrk_autoTune(double epi, int32_t use_nd_allreduce, int32_t u_extra, int32_t* umax, hyacinPrecision_t Atype, hyacinPrecision_t* ComputeType, hyacinAlgorithm_t* alg) {
+extern "C" int32_t hyacinXelem_bytes(hyacinPrecision_t Atype) {
+  switch(Atype) {
+    case HYACIN_F64: return sizeof(double); case HYACIN_F32: return sizeof(float);
+    case HYACIN_DD: return sizeof(double2); case HYACIN_QF: return sizeof(float4);
+    case HYACIN_F64_COMPLEX: return sizeof(cuDoubleComplex); case HYACIN_F32_COMPLEX: return sizeof(cuComplex);
+    case HYACIN_DD_COMPLEX: return sizeof(complex_double2); case HYACIN_QF_COMPLEX: return sizeof(complex_float4);
+    default: return 0;
+  }
+}
+
+extern "C" void hyacinXsyherk_autoTune(double epi, int32_t use_nd_allreduce, int32_t u_extra, int32_t* umax, hyacinPrecision_t Atype, hyacinPrecision_t* ComputeType, hyacinAlgorithm_t* alg) {
   int32_t device, major, minor;
   cudaGetDevice(&device);
   cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, device);

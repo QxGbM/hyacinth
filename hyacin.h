@@ -31,7 +31,11 @@ typedef enum {
 extern "C" {
 #endif
 
-void hyacinXcpqrk_autoTune(
+int32_t hyacinXelem_bytes(
+  hyacinPrecision_t Atype
+);
+
+void hyacinXsyherk_autoTune(
   double epi,
   int32_t use_nd_allreduce,
   int32_t u_extra,
@@ -95,6 +99,32 @@ int32_t hyacinXcpqrk(
   void* dev_work,
   void* pinned_work,
   hyacinAlgorithm_t alg
+);
+
+void hyacinXGinterp_bufferSize(
+  int32_t N,
+  int32_t K,
+  hyacinPrecision_t AXtype,
+  hyacinPrecision_t Gtype,
+  uint64_t* dev_work_bytes,
+  uint64_t* pinned_work_bytes
+);
+
+int32_t hyacinXGinterp(
+  cublasHandle_t handle,
+  double epi,
+  int32_t N,
+  int32_t K,
+  int32_t p,
+  hyacinPrecision_t AXtype,
+  void* X,
+  int32_t ldx,
+  int32_t* jpiv,
+  hyacinPrecision_t Gtype,
+  void* G,
+  int32_t ldg,
+  void* dev_work,
+  void* pinned_work
 );
 
 void hyacinXsvdk_bufferSize(
