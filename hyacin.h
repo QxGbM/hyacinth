@@ -128,9 +128,12 @@ int32_t hyacinXGinterp(
 );
 
 void hyacinXGsvd_bufferSize(
+  cusolverDnHandle_t s_handle,
+  cusolverDnParams_t params,
   int32_t N,
   int32_t K,
   hyacinPrecision_t AXtype,
+  int32_t ldx,
   hyacinPrecision_t Gtype,
   uint64_t* dev_work_bytes,
   uint64_t* pinned_work_bytes
@@ -139,14 +142,13 @@ void hyacinXGsvd_bufferSize(
 int32_t hyacinXGsvd(
   cublasHandle_t handle,
   cusolverDnHandle_t s_handle,
+  cusolverDnParams_t params,
   double epi,
-  int32_t M,
   int32_t N,
   int32_t K,
   int32_t p,
   hyacinPrecision_t AXtype,
-  void* A,
-  int32_t lda,
+  void* S,
   void* X,
   int32_t ldx,
   hyacinPrecision_t Gtype,
@@ -158,37 +160,24 @@ int32_t hyacinXGsvd(
   uint64_t pinned_work_bytes
 );
 
-void hyacinXsvdk_bufferSize(
-  cusolverDnHandle_t handle,
-  cusolverDnParams_t params,
-  double epi,
-  int32_t N,
+void hyacinXtransform_bufferSize(
   int32_t K,
-  hyacinPrecision_t ComputeType,
-  uint64_t* dev_work_bytes,
-  uint64_t* pinned_work_bytes
+  hyacinPrecision_t AXtype,
+  uint64_t* dev_work_bytes
 );
 
-int32_t hyacinXsvdk(
+void hyacinXtransform(
   cublasHandle_t handle,
-  cusolverDnHandle_t s_handle,
-  cusolverDnParams_t params,
-  char transform,
-  double epi,
   int32_t M,
   int32_t N,
   int32_t K,
-  int32_t p,
-  void* sigma,
-  void* UA,
-  int32_t ldu,
-  void* RJ,
-  int32_t ldr,
-  hyacinPrecision_t ComputeType,
-  uint64_t dev_work_bytes,
+  hyacinPrecision_t AXtype,
+  void* A,
+  int32_t lda,
+  const void* X,
+  int32_t ldx,
   void* dev_work,
-  uint64_t pinned_work_bytes,
-  void* pinned_work
+  uint64_t dev_work_bytes
 );
 
 void hyacinXsyherk1Drow_bufferSize(
@@ -199,17 +188,6 @@ void hyacinXsyherk1Drow_bufferSize(
   hyacinPrecision_t Gtype,
   hyacinAlgorithm_t alg,
   uint64_t* dev_work_bytes
-);
-
-void hyacinXcpqrk1Drow_bufferSize(
-  int32_t localM,
-  int32_t globalM,
-  int32_t N,
-  int32_t umax,
-  hyacinPrecision_t ComputeType,
-  hyacinAlgorithm_t alg,
-  uint64_t* dev_work_bytes,
-  uint64_t* pinned_work_bytes
 );
 
 void hyacinXAllGatherV1Dcol_bufferSize(
@@ -235,30 +213,6 @@ void hyacinXsyherk1Drow(
   void* G,
   int32_t ldg,
   void* dev_work,
-  hyacinAlgorithm_t alg,
-  ncclComm_t col_comm
-);
-
-int32_t hyacinXcpqrk1Drow(
-  cublasHandle_t handle,
-  char mode,
-  double epi,
-  int32_t localM,
-  int32_t globalM,
-  int32_t N,
-  int32_t K,
-  int32_t p,
-  int32_t umax,
-  hyacinPrecision_t Atype,
-  const void* A,
-  int32_t lda,
-  int32_t* jpiv,
-  hyacinPrecision_t Rtype,
-  void* R,
-  int32_t ldr,
-  hyacinPrecision_t ComputeType,
-  void* dev_work,
-  void* pinned_work,
   hyacinAlgorithm_t alg,
   ncclComm_t col_comm
 );

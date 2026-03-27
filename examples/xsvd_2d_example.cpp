@@ -49,18 +49,18 @@ template <class T> inline void run(char prec, int64_t gM, int64_t gN, int64_t K,
   cudaMemset(d_barrier, 0xDEADBEEF, sizeof(double2));
 
   int32_t r1, r2, N2, offset;
-  N2 = r1 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, epi, lM, gM, lN, K, d_A, lM, d_V1, K, comm_col);
+  N2 = r1 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, epi, lM, gM, lN, K, d_A, lM, d_V1, lN, comm_col);
   std::tie(N2, offset) = allgatherv_1dc(stream, lM, r1, d_A, lM, comm_row);
-  r2 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, epi, lM, gM, N2, K, d_A, lM, d_V2, K, comm_col);
+  r2 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, epi, lM, gM, N2, K, d_A, lM, d_V2, gK, comm_col);
   cudaMemcpy(d_A, matA.data(), lM * lN * sizeof(T), cudaMemcpyHostToDevice);
 
   ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
   cudaStreamSynchronize(stream);
   cudaEventRecord(start, stream);
 
-  r1 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, epi, lM, gM, lN, K, d_A, lM, d_V1, K, comm_col);
+  r1 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, epi, lM, gM, lN, K, d_A, lM, d_V1, lN, comm_col);
   std::tie(N2, offset) = allgatherv_1dc(stream, lM, r1, d_A, lM, comm_row);
-  r2 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, epi, lM, gM, N2, K, d_A, lM, d_V2, K, comm_col);
+  r2 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, epi, lM, gM, N2, K, d_A, lM, d_V2, gK, comm_col);
 
   ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
   cudaStreamSynchronize(stream);
@@ -71,7 +71,7 @@ template <class T> inline void run(char prec, int64_t gM, int64_t gN, int64_t K,
   cudaMemcpy(matV1.data(), d_V1, K * lN * sizeof(T), cudaMemcpyDeviceToHost);
   cudaMemcpy(matV2.data(), d_V2, K * gK * sizeof(T), cudaMemcpyDeviceToHost);
 
-  std::pair<double, double> ret = check_answer_svd(lM, lN, r2, r1, &matU[0], lM, &matV2[int64_t(offset) * int64_t(K)], K, &matV1[0], K, &matA[0], lM);
+  std::pair<double, double> ret = check_answer_svd(lM, lN, r1, r2, &matU[0], lM, &matV1[0], lN, &matV2[offset], gK, &matA[0], lM);
   cudaMemcpy(d_barrier, &ret, sizeof(double2), cudaMemcpyHostToDevice);
   ncclAllReduce(d_barrier, d_barrier, 2, ncclDouble, ncclSum, comm, stream);
   cudaStreamSynchronize(stream);

@@ -19,6 +19,7 @@ set(CPP_SOURCES
   src_cpp/imax_host.cpp
   src_cpp/potrfp_uniform.cpp
   src_cpp/syherk.cpp
+  src_cpp/transform.cpp
 )
 
 set(CU_SOURCES
@@ -33,7 +34,6 @@ set(CU_SOURCES
   src_cuda/gemv_scal_f128.cu
   src_cuda/gram_id.cu
   src_cuda/gram_svd.cu
-  src_cuda/hyacin.cu
   src_cuda/i32_accum.cu
   src_cuda/i32_rem_accum.cu
   src_cuda/i63_u47_accum_conv.cu

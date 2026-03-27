@@ -39,18 +39,18 @@ template <class T> inline void run(char prec, int64_t M, int64_t gN, int64_t K, 
   cudaMemset(d_barrier, 0xDEADBEEF, sizeof(double2));
 
   int32_t r1, r2, N2, offset;
-  r1 = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, lN, K, d_A, M, d_V1, K);
+  r1 = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, lN, K, d_A, M, d_V1, lN);
   std::tie(N2, offset) = allgatherv_1dc(stream, M, r1, d_A, M, comm);
-  r2 = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, N2, K, d_A, M, d_V2, K);
+  r2 = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, N2, K, d_A, M, d_V2, gK);
   cudaMemcpy(d_A, matA.data(), M * lN * sizeof(T), cudaMemcpyHostToDevice);
 
   ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
   cudaStreamSynchronize(stream);
   cudaEventRecord(start, stream);
 
-  r1 = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, lN, K, d_A, M, d_V1, K);
+  r1 = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, lN, K, d_A, M, d_V1, lN);
   std::tie(N2, offset) = allgatherv_1dc(stream, M, r1, d_A, M, comm);
-  r2 = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, N2, K, d_A, M, d_V2, K);
+  r2 = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, N2, K, d_A, M, d_V2, gK);
 
   ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
   cudaStreamSynchronize(stream);
@@ -61,7 +61,7 @@ template <class T> inline void run(char prec, int64_t M, int64_t gN, int64_t K, 
   cudaMemcpy(matV1.data(), d_V1, K * lN * sizeof(T), cudaMemcpyDeviceToHost);
   cudaMemcpy(matV2.data(), d_V2, K * gK * sizeof(T), cudaMemcpyDeviceToHost);
 
-  std::pair<double, double> ret = check_answer_svd(M, lN, r2, r1, &matU[0], M, &matV2[int64_t(offset) * int64_t(K)], K, &matV1[0], K, &matA[0], M);
+  std::pair<double, double> ret = check_answer_svd(M, lN, r1, r2, &matU[0], M, &matV1[0], lN, &matV2[offset], gK, &matA[0], M);
   cudaMemcpy(d_barrier, &ret, sizeof(double2), cudaMemcpyHostToDevice);
   ncclAllReduce(d_barrier, d_barrier, 2, ncclDouble, ncclSum, comm, stream);
   cudaStreamSynchronize(stream);

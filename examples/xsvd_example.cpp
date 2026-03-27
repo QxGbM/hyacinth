@@ -30,11 +30,11 @@ template <class T> inline void run(char prec, int64_t M, int64_t N, int64_t K, d
   cudaMalloc((void**)(&d_V), K * N * sizeof(T));
   cudaMemcpy(d_A, matA.data(), M * N * sizeof(T), cudaMemcpyHostToDevice);
 
-  svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, N, K, d_A, M, d_V, K);
+  svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, N, K, d_A, M, d_V, N);
   cudaMemcpy(d_A, matA.data(), M * N * sizeof(T), cudaMemcpyHostToDevice);
 
   cudaEventRecord(start, stream);
-  int32_t rank = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, N, K, d_A, M, d_V, K);
+  int32_t rank = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, N, K, d_A, M, d_V, N);
   cudaEventRecord(stop, stream);
 
   cudaDeviceSynchronize();
@@ -43,7 +43,7 @@ template <class T> inline void run(char prec, int64_t M, int64_t N, int64_t K, d
   cudaMemcpy(matU.data(), d_A, M * K * sizeof(T), cudaMemcpyDeviceToHost);
   cudaMemcpy(matV.data(), d_V, K * N * sizeof(T), cudaMemcpyDeviceToHost);
 
-  std::pair<double, double> ret = check_answer_svd(M, N, rank, &matU[0], M, &matV[0], K, &matA[0], M);
+  std::pair<double, double> ret = check_answer_svd(M, N, rank, &matU[0], M, &matV[0], N, &matA[0], M);
   double err = std::sqrt(ret.first / ret.second);
 
   float milliseconds = 0.0f; cudaEventElapsedTime(&milliseconds, start, stop);

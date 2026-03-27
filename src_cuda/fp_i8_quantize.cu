@@ -32,8 +32,8 @@ __device__ __forceinline__ void quantize_f64_i8rems(double x, int32_t expon, uin
 template <uint32_t ORDER, uint64_t MO, uint64_t R32, uint64_t R63, class matrix_t, class matrix_const_ptr, int32_t op>
 __global__ void quantize_kernel(int64_t M, int64_t N, matrix_const_ptr A, int64_t lda, uint64_t lo, uint32_t hi, int32_t umax, const int32_t* __restrict__ vec_expon, int8_t* __restrict__ B, int64_t ldb, int64_t strideB) {
   int64_t y = (int64_t(blockIdx.x) << 8) + int64_t(threadIdx.x), iter = y + (int64_t(blockIdx.y) * lda);
-  int32_t expon = umax - vec_expon[blockIdx.y], invalidA = int32_t(M <= y && N <= int64_t(blockIdx.y));
-  matrix_t A_i = !invalidA ? A[iter] : matrix_t();
+  int32_t expon = umax - vec_expon[blockIdx.y], invalidA = int32_t(M <= y || N <= int64_t(blockIdx.y));
+  matrix_t A_i = invalidA ? matrix_t() : A[iter];
   uint32_t code[3]; int8_t* bytes = (int8_t*)&code[0];
 
   if constexpr(op == 0)
