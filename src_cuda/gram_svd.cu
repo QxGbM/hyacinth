@@ -4,7 +4,6 @@
 #include <double_double.hpp>
 #include <quad_float.hpp>
 #include <cuComplex.h>
-#include <tuple>
 #include <algorithm>
 #include <numeric>
 #include <stdexcept>
@@ -57,9 +56,9 @@ inline int32_t ge_tsvd(cudaStream_t stream, cusolverDnHandle_t s_handle, cusolve
   void* X, int32_t ldx, void* S, void* dev_work, uint64_t dev_work_bytes, void* pinned_work, uint64_t pinned_work_bytes) {
   cudaDataType_t type_c = cuda_type<complex_t>(), type_r = cuda_type<real_t>();
   size_t workspaceInBytesOnDevice, workspaceInBytesOnHost;
-  cusolverDnXgesvd_bufferSize(s_handle, params, 'O', 'N', N, K, type_c, X, ldx, type_r, S, type_c, X, ldx, type_c, nullptr, K, type_c, &workspaceInBytesOnDevice, &workspaceInBytesOnHost);
+  cusolverDnXgesvd_bufferSize(s_handle, params, 'O', 'N', N, K, type_c, nullptr, ldx, type_r, nullptr, type_c, nullptr, ldx, type_c, nullptr, K, type_c, &workspaceInBytesOnDevice, &workspaceInBytesOnHost);
   if (uint64_t(workspaceInBytesOnDevice) <= dev_work_bytes && uint64_t(workspaceInBytesOnHost) <= pinned_work_bytes) {
-    cusolverDnXgesvd(s_handle, params, 'O', 'N', N, K, type_c, X, ldx, type_r, S, type_c, X, ldx, type_c, nullptr, K, type_c, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes, nullptr);
+    cusolverDnXgesvd(s_handle, params, 'O', 'N', N, K, type_c, X, ldx, type_r, S, type_c, X, ldx, type_c, nullptr, K, type_c, dev_work, workspaceInBytesOnDevice, pinned_work, workspaceInBytesOnHost, nullptr);
     cudaMemcpyAsync(pinned_work, S, int64_t(N) * sizeof(real_t), cudaMemcpyDeviceToHost, stream);
     
     cudaStreamSynchronize(stream);

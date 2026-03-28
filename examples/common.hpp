@@ -214,8 +214,14 @@ int32_t svd_fit_transform(cudaStream_t stream, cublasHandle_t cublasH, cusolverD
   int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg; uint64_t dev_work_bytes, dev_work_bytes_new, pinned_work_bytes;
   hyacinXsyherk_autoTune(epi, usd_nd_allreduce, u_extra, &umax, precA, &precC, &alg);
   hyacinXsyherk_bufferSize(M, N, umax, precC, alg, &dev_work_bytes);
-  hyacinXGsvd_bufferSize(cusolverH, params, N, K, precA, ldv, precC, &dev_work_bytes_new, &pinned_work_bytes);
-  dev_work_bytes = std::max(dev_work_bytes, dev_work_bytes_new);
+  if (precA == precC) {
+    hyacinXGevd_bufferSize(cusolverH, params, N, K, precA, N, &dev_work_bytes_new, &pinned_work_bytes);
+    dev_work_bytes = std::max(dev_work_bytes, dev_work_bytes_new);
+  }
+  else {
+    hyacinXGsvd_bufferSize(cusolverH, params, N, K, precA, ldv, precC, &dev_work_bytes_new, &pinned_work_bytes);
+    dev_work_bytes = std::max(dev_work_bytes, dev_work_bytes_new);
+  }
 
   hyacinXtransform_bufferSize(K, precA, &dev_work_bytes_new);
   dev_work_bytes = std::max(dev_work_bytes, dev_work_bytes_new);
@@ -227,7 +233,11 @@ int32_t svd_fit_transform(cudaStream_t stream, cublasHandle_t cublasH, cusolverD
   cudaMallocHost(&pinned_work, pinned_work_bytes);
 
   hyacinXsyherk(cublasH, M, N, umax, precA, A, lda, precC, gram, N, dev_work, alg);
-  int32_t rank = hyacinXGsvd(cublasH, cusolverH, params, epi, N, K, oversampling, precA, S, V, ldv, precC, gram, N, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
+  int32_t rank = 0;
+  if (precA == precC)
+    rank = hyacinXGevd(cusolverH, params, epi, N, K, oversampling, precA, S, V, ldv, gram, N, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
+  else
+    rank = hyacinXGsvd(cublasH, cusolverH, params, epi, N, K, oversampling, precA, S, V, ldv, precC, gram, N, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
   hyacinXtransform(cublasH, M, N, rank, precA, A, lda, V, ldv, dev_work, dev_work_bytes);
 
   cudaStreamSynchronize(stream);

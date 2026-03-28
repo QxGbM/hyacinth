@@ -127,6 +127,36 @@ int32_t hyacinXGinterp(
   void* pinned_work
 );
 
+void hyacinXGevd_bufferSize(
+  cusolverDnHandle_t s_handle,
+  cusolverDnParams_t params,
+  int32_t N,
+  int32_t K,
+  hyacinPrecision_t AXGtype,
+  int32_t ldg,
+  uint64_t* dev_work_bytes,
+  uint64_t* pinned_work_bytes
+);
+
+int32_t hyacinXGevd(
+  cusolverDnHandle_t s_handle,
+  cusolverDnParams_t params,
+  double epi,
+  int32_t N,
+  int32_t K,
+  int32_t p,
+  hyacinPrecision_t AXGtype,
+  void* S,
+  void* X,
+  int32_t ldx,
+  void* G,
+  int32_t ldg,
+  void* dev_work,
+  uint64_t dev_work_bytes,
+  void* pinned_work,
+  uint64_t pinned_work_bytes
+);
+
 void hyacinXGsvd_bufferSize(
   cusolverDnHandle_t s_handle,
   cusolverDnParams_t params,
