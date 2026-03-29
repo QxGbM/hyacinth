@@ -6,21 +6,21 @@
 #include <cuComplex.h>
 #include <numeric>
 
-__device__ __forceinline__ void conv(float a, double& b) { b = double(a); }
-__device__ __forceinline__ void conv(double2 a, double& b) { b = device::dd::dd2double(a); }
-__device__ __forceinline__ void conv(float4 a, double& b) { b = device::qf::qf2double(a); }
+template<class TGT, class SRC> __device__ __forceinline__ TGT conv(SRC a);
+template <> __device__ __forceinline__ double conv<double, double>(double a) { return a; }
+template <> __device__ __forceinline__ double conv<double, float>(float a) { return double(a); }
+template <> __device__ __forceinline__ double conv<double, double2>(double2 a) { return device::dd::dd2double(a); }
+template <> __device__ __forceinline__ double conv<double, float4>(float4 a) { return device::qf::qf2double(a); }
 
-__device__ __forceinline__ void conv(double a, float& b) { b = float(a); }
-__device__ __forceinline__ void conv(double2 a, float& b) { b = float(a.x); }
-__device__ __forceinline__ void conv(float4 a, float& b) { b = a.x; }
+template <> __device__ __forceinline__ float conv<float, double>(double a) { return float(a); }
+template <> __device__ __forceinline__ float conv<float, float>(float a) { return a; }
+template <> __device__ __forceinline__ float conv<float, double2>(double2 a) { return float(a.x); }
+template <> __device__ __forceinline__ float conv<float, float4>(float4 a) { return a.x; }
 
-template <int32_t no_conv, class constGptr, class BType, class Bptr>
+template <class Atype, class constGptr, class Btype, class Bptr>
 __global__ void cvcpy_kernel(int64_t M, constGptr A, int64_t lda, Bptr B, int64_t ldb) {
   int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
-  if (y < M) {
-    A = &A[y + x * lda]; B = &B[y + x * ldb];
-    if constexpr(no_conv) *B = *A; else conv(*A, *B);
-  }
+  if (y < M) B[y + x * ldb] = conv<Btype, Atype>(A[y + x * lda]);
 };
 
 template <class T> __device__ __forceinline__ T float_one();
@@ -58,7 +58,7 @@ template<> inline int32_t potrfp<HYACIN_QF_COMPLEX>(cudaStream_t stream, cublasH
 { return internal::Cholesky::potrfp_cf128_qf(stream, handle, epi, k, p, N, (complex_float4*)A, lda, jpiv, dev_work, pinned_work); }
 
 template <hyacinPrecision_t precG, class constGptr, class Gtype>
-inline int32_t diag_piv_dispatcher(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t N, int32_t K, int32_t p, hyacinPrecision_t AXtype, int32_t* jpiv, Gtype* G, int32_t ldg, void* dev_work, void* pinned_work) {
+inline int32_t diag_piv_dispatcher(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t N, int32_t K, int32_t p, hyacinPrecision_t AXtype, int32_t* jpiv, void* X, int32_t ldx, Gtype* G, int32_t ldg, void* dev_work, void* pinned_work) {
   int32_t* hpiv = (int32_t*)(&((Gtype*)pinned_work)[512]);
   std::iota(hpiv, &hpiv[N], 1);
   K = potrfp<precG>(stream, handle, epi, K, p, N, G, ldg, hpiv, dev_work, pinned_work);
@@ -67,37 +67,47 @@ inline int32_t diag_piv_dispatcher(cudaStream_t stream, cublasHandle_t handle, d
     constexpr int32_t block_threads = 512;
     if (AXtype == HYACIN_F64) {
       double* Bptr = (double*)dev_work;
-      dim3 grid(uint32_t(K + block_threads - 1) >> 9, uint32_t(N), 1);
-      if constexpr (precG == HYACIN_F64) cvcpy_kernel <1, constGptr, double, double* __restrict__> <<< grid, block_threads, 0, stream >>> (int64_t(K), G, int64_t(ldg), Bptr, int64_t(K));
-        else cvcpy_kernel <0, constGptr, double, double* __restrict__> <<< grid, block_threads, 0, stream >>> (int64_t(K), G, int64_t(ldg), Bptr, int64_t(K));
+      uint32_t grid_x = uint32_t(K + block_threads - 1) >> 9;
+      cvcpy_kernel <Gtype, constGptr, double, double* __restrict__>
+        <<< dim3(grid_x, N), block_threads, 0, stream >>> (int64_t(K), G, int64_t(ldg), Bptr, int64_t(K));
       if (K < N)
       { double one = 1.; cublasDtrsm(handle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, K, N - K, &one, Bptr, K, &Bptr[int64_t(K) * int64_t(K)], K); };
+      scatter_cpy_kernel <double, const double* __restrict__, double* __restrict__>
+        <<< dim3(grid_x, N), block_threads, 0, stream >>> (int64_t(K), jpiv, Bptr, int64_t(K), (double*)X, int64_t(ldx));
     }
     else if (AXtype == HYACIN_F32) {
       float* Bptr = (float*)dev_work;
-      dim3 grid(uint32_t(K + block_threads - 1) >> 9, uint32_t(N), 1);
-      if constexpr (precG == HYACIN_F32) cvcpy_kernel <1, constGptr, float, float* __restrict__> <<< grid, block_threads, 0, stream >>> (int64_t(K), G, int64_t(ldg), Bptr, int64_t(K));
-        else cvcpy_kernel <0, constGptr, float, float* __restrict__> <<< grid, block_threads, 0, stream >>> (int64_t(K), G, int64_t(ldg), Bptr, int64_t(K));
+      uint32_t grid_x = uint32_t(K + block_threads - 1) >> 9;
+      cvcpy_kernel <Gtype, constGptr, float, float* __restrict__>
+        <<< dim3(grid_x, N), block_threads, 0, stream >>> (int64_t(K), G, int64_t(ldg), Bptr, int64_t(K));
       if (K < N)
       { float one = 1.f; cublasStrsm(handle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, K, N - K, &one, Bptr, K, &Bptr[int64_t(K) * int64_t(K)], K); };
+      scatter_cpy_kernel <float, const float* __restrict__, float* __restrict__>
+        <<< dim3(grid_x, N), block_threads, 0, stream >>> (int64_t(K), jpiv, Bptr, int64_t(K), (float*)X, int64_t(ldx));
     }
     else if (AXtype == HYACIN_F64_COMPLEX) {
       cuDoubleComplex* Bptr = (cuDoubleComplex*)dev_work;
       int64_t CK = int64_t(K) << 1, cldg = int64_t(ldg) << 1;
-      dim3 grid(uint32_t(CK + int64_t(block_threads - 1)) >> 9, uint32_t(N), 1);
-      if constexpr (precG == HYACIN_F64_COMPLEX) cvcpy_kernel <1, constGptr, double, double* __restrict__> <<< grid, block_threads, 0, stream >>> (CK, G, cldg, (double*)Bptr, CK);
-        else cvcpy_kernel <0, constGptr, double, double* __restrict__> <<< grid, block_threads, 0, stream >>> (CK, G, cldg, (double*)Bptr, CK);
+      uint32_t grid_x = uint32_t(K + block_threads - 1) >> 9;
+      uint32_t grid_cx = uint32_t(uint64_t(CK) + uint64_t(block_threads - 1) >> 9);
+      cvcpy_kernel <Gtype, constGptr, double, double* __restrict__>
+        <<< dim3(grid_cx, N), block_threads, 0, stream >>> (CK, G, cldg, (double*)Bptr, CK);
       if (K < N)
       { cuDoubleComplex one = make_cuDoubleComplex(1., 0.); cublasZtrsm(handle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, K, N - K, &one, Bptr, K, &Bptr[int64_t(K) * int64_t(K)], K); };
+      scatter_cpy_kernel <cuDoubleComplex, const cuDoubleComplex* __restrict__, cuDoubleComplex* __restrict__>
+        <<< dim3(grid_x, N), block_threads, 0, stream >>> (int64_t(K), jpiv, Bptr, int64_t(K), (cuDoubleComplex*)X, int64_t(ldx));
     }
     else if (AXtype == HYACIN_F32_COMPLEX) {
       cuComplex* Bptr = (cuComplex*)dev_work;
       int64_t CK = int64_t(K) << 1, cldg = int64_t(ldg) << 1;
-      dim3 grid(uint32_t(CK + int64_t(block_threads - 1)) >> 9, uint32_t(N), 1);
-      if constexpr (precG == HYACIN_F32_COMPLEX) cvcpy_kernel <1, constGptr, float, float* __restrict__> <<< grid, block_threads, 0, stream >>> (CK, G, cldg, (float*)Bptr, CK);
-        else cvcpy_kernel <0, constGptr, float, float* __restrict__> <<< grid, block_threads, 0, stream >>> (CK, G, cldg, (float*)Bptr, CK);
+      uint32_t grid_x = uint32_t(K + block_threads - 1) >> 9;
+      uint32_t grid_cx = uint32_t(uint64_t(CK) + uint64_t(block_threads - 1) >> 9);
+      cvcpy_kernel <Gtype, constGptr, float, float* __restrict__>
+        <<< dim3(grid_cx, N), block_threads, 0, stream >>> (CK, G, cldg, (float*)Bptr, CK);
       if (K < N)
       { cuComplex one = make_cuComplex(1.f, 0.f); cublasCtrsm(handle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, K, N - K, &one, Bptr, K, &Bptr[int64_t(K) * int64_t(K)], K); };
+      scatter_cpy_kernel <cuComplex, const cuComplex* __restrict__, cuComplex* __restrict__>
+        <<< dim3(grid_x, N), block_threads, 0, stream >>> (int64_t(K), jpiv, Bptr, int64_t(K), (cuComplex*)X, int64_t(ldx));
     }
   }
   return K;
@@ -129,38 +139,21 @@ extern "C" int32_t hyacinXGinterp(cublasHandle_t handle, double epi, int32_t N, 
   cudaStream_t stream; cublasGetStream(handle, &stream);
   switch (Gtype) {
     case HYACIN_F64:
-      K = diag_piv_dispatcher<HYACIN_F64, const double* __restrict__>(stream, handle, epi, N, K, p, AXtype, jpiv, (double*)G, ldg, dev_work, pinned_work); break;
+      return diag_piv_dispatcher<HYACIN_F64, const double* __restrict__>(stream, handle, epi, N, K, p, AXtype, jpiv, X, ldx, (double*)G, ldg, dev_work, pinned_work);
     case HYACIN_F32:
-      K = diag_piv_dispatcher<HYACIN_F32, const float* __restrict__>(stream, handle, epi, N, K, p, AXtype, jpiv, (float*)G, ldg, dev_work, pinned_work); break;
+      return diag_piv_dispatcher<HYACIN_F32, const float* __restrict__>(stream, handle, epi, N, K, p, AXtype, jpiv, X, ldx, (float*)G, ldg, dev_work, pinned_work);
     case HYACIN_DD:
-      K = diag_piv_dispatcher<HYACIN_DD, const double2* __restrict__>(stream, handle, epi, N, K, p, AXtype, jpiv, (double2*)G, ldg, dev_work, pinned_work); break;
+      return diag_piv_dispatcher<HYACIN_DD, const double2* __restrict__>(stream, handle, epi, N, K, p, AXtype, jpiv, X, ldx, (double2*)G, ldg, dev_work, pinned_work);
     case HYACIN_QF:
-      K = diag_piv_dispatcher<HYACIN_QF, const float4* __restrict__>(stream, handle, epi, N, K, p, AXtype, jpiv, (float4*)G, ldg, dev_work, pinned_work); break;
+      return diag_piv_dispatcher<HYACIN_QF, const float4* __restrict__>(stream, handle, epi, N, K, p, AXtype, jpiv, X, ldx, (float4*)G, ldg, dev_work, pinned_work);
     case HYACIN_F64_COMPLEX:
-      K = diag_piv_dispatcher<HYACIN_F64_COMPLEX, const double* __restrict__>(stream, handle, epi, N, K, p, AXtype, jpiv, (double*)G, ldg, dev_work, pinned_work); break;
+      return diag_piv_dispatcher<HYACIN_F64_COMPLEX, const double* __restrict__>(stream, handle, epi, N, K, p, AXtype, jpiv, X, ldx, (double*)G, ldg, dev_work, pinned_work);
     case HYACIN_F32_COMPLEX:
-      K = diag_piv_dispatcher<HYACIN_F32_COMPLEX, const float* __restrict__>(stream, handle, epi, N, K, p, AXtype, jpiv, (float*)G, ldg, dev_work, pinned_work); break;
+      return diag_piv_dispatcher<HYACIN_F32_COMPLEX, const float* __restrict__>(stream, handle, epi, N, K, p, AXtype, jpiv, X, ldx, (float*)G, ldg, dev_work, pinned_work);
     case HYACIN_DD_COMPLEX:
-      K = diag_piv_dispatcher<HYACIN_DD_COMPLEX, const double2* __restrict__>(stream, handle, epi, N, K, p, AXtype, jpiv, (double2*)G, ldg, dev_work, pinned_work); break;
+      return diag_piv_dispatcher<HYACIN_DD_COMPLEX, const double2* __restrict__>(stream, handle, epi, N, K, p, AXtype, jpiv, X, ldx, (double2*)G, ldg, dev_work, pinned_work);
     case HYACIN_QF_COMPLEX:
-      K = diag_piv_dispatcher<HYACIN_QF_COMPLEX, const float4* __restrict__>(stream, handle, epi, N, K, p, AXtype, jpiv, (float4*)G, ldg, dev_work, pinned_work); break;
-    default: K = 0; break;
+      return diag_piv_dispatcher<HYACIN_QF_COMPLEX, const float4* __restrict__>(stream, handle, epi, N, K, p, AXtype, jpiv, X, ldx, (float4*)G, ldg, dev_work, pinned_work);
+    default: return 0;
   }
-
-  if (0 < K) {
-    constexpr int32_t block_threads = 512;
-    dim3 grid(uint32_t(K + block_threads - 1) >> 9, uint32_t(N), 1);
-    switch (AXtype) {
-      case HYACIN_F64:
-        scatter_cpy_kernel <double, const double* __restrict__, double* __restrict__> <<< grid, block_threads, 0, stream >>> (int64_t(K), jpiv, (double*)dev_work, int64_t(K), (double*)X, int64_t(ldx)); break;
-      case HYACIN_F32:
-        scatter_cpy_kernel <float, const float* __restrict__, float* __restrict__> <<< grid, block_threads, 0, stream >>> (int64_t(K), jpiv, (float*)dev_work, int64_t(K), (float*)X, int64_t(ldx)); break;
-      case HYACIN_F64_COMPLEX:
-        scatter_cpy_kernel <cuDoubleComplex, const cuDoubleComplex* __restrict__, cuDoubleComplex* __restrict__> <<< grid, block_threads, 0, stream >>> (int64_t(K), jpiv, (cuDoubleComplex*)dev_work, int64_t(K), (cuDoubleComplex*)X, int64_t(ldx)); break;
-      case HYACIN_F32_COMPLEX:
-        scatter_cpy_kernel <cuComplex, const cuComplex* __restrict__, cuComplex* __restrict__> <<< grid, block_threads, 0, stream >>> (int64_t(K), jpiv, (cuComplex*)dev_work, int64_t(K), (cuComplex*)X, int64_t(ldx)); break;
-      default: break;
-    }
-  }
-  return K;
 }

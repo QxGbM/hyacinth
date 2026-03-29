@@ -8,22 +8,24 @@
 #include <numeric>
 #include <stdexcept>
 
-__device__ __forceinline__ void conv(float a, double& b) { b = double(a); }
-__device__ __forceinline__ void conv(double2 a, double& b) { b = device::dd::dd2double(a); }
-__device__ __forceinline__ void conv(float4 a, double& b) { b = device::qf::qf2double(a); }
+template<class TGT, class SRC> __device__ __forceinline__ TGT conv(SRC a);
+template <> __device__ __forceinline__ double conv<double, double>(double a) { return a; }
+template <> __device__ __forceinline__ double conv<double, float>(float a) { return double(a); }
+template <> __device__ __forceinline__ double conv<double, double2>(double2 a) { return device::dd::dd2double(a); }
+template <> __device__ __forceinline__ double conv<double, float4>(float4 a) { return device::qf::qf2double(a); }
 
-__device__ __forceinline__ void conv(double a, float& b) { b = float(a); }
-__device__ __forceinline__ void conv(double2 a, float& b) { b = float(a.x); }
-__device__ __forceinline__ void conv(float4 a, float& b) { b = a.x; }
+template <> __device__ __forceinline__ float conv<float, double>(double a) { return float(a); }
+template <> __device__ __forceinline__ float conv<float, float>(float a) { return a; }
+template <> __device__ __forceinline__ float conv<float, double2>(double2 a) { return float(a.x); }
+template <> __device__ __forceinline__ float conv<float, float4>(float4 a) { return a.x; }
 
-template <int32_t complex, int32_t no_conv, class constAptr, class Btype, class Bptr> 
+template <int32_t complex, class Atype, class constAptr, class Btype, class Bptr> 
 __global__ void scatter_cvcpy_kernel(int64_t M, const int32_t* __restrict__ jpiv, constAptr A, int64_t lda, Bptr B, int64_t ldb) {
   int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
   int32_t pred; if constexpr(complex) pred = (((x << 1) | int64_t(1)) < y); else pred = (x < y);
   if (y < M) {
     A = &A[y + x * lda]; B = &B[y + int64_t(jpiv[x] - 1) * ldb];
-    if (pred) *B = Btype();
-      else { if constexpr(no_conv) *B = *A; else conv(*A, *B); }
+    if (pred) *B = Btype(); else *B = conv<Btype, Atype>(*A);
   }
 };
 
@@ -76,31 +78,31 @@ inline int32_t gsvd_dispatcher(cublasHandle_t handle, cusolverDnHandle_t s_handl
   int32_t* hpiv = (int32_t*)(&((Gtype*)pinned_work)[512]);
   std::iota(hpiv, &hpiv[N], 1);
   K = potrfp<precG>(stream, handle, epi, K, p, N, G, ldg, hpiv, dev_work, pinned_work);
-  cudaMemcpyAsync(S, hpiv, int64_t(N) * sizeof(int32_t), cudaMemcpyHostToDevice, stream);
+  cudaMemcpyAsync(X, hpiv, int64_t(N) * sizeof(int32_t), cudaMemcpyHostToDevice, stream);
   if (0 < K) {
     constexpr int32_t block_threads = 512;
     if (AXtype == HYACIN_F64) {
       double* Xptr = (double*)X, *Wptr = (double*)dev_work;
-      dim3 grid(uint32_t(K + block_threads - 1) >> 9, uint32_t(N), 1);
-      if constexpr (precG == HYACIN_F64) scatter_cvcpy_kernel <0, 1, constGptr, double, double* __restrict__> <<< grid, block_threads, 0, stream >>> (int64_t(K), (const int32_t*)S, G, int64_t(ldg), Wptr, int64_t(K));
-        else scatter_cvcpy_kernel <0, 0, constGptr, double, double* __restrict__> <<< grid, block_threads, 0, stream >>> (int64_t(K), (const int32_t*)S, G, int64_t(ldg), Wptr, int64_t(K));
+      uint32_t grid_x = uint32_t(K + block_threads - 1) >> 9;
+      scatter_cvcpy_kernel <0, Gtype, constGptr, double, double* __restrict__>
+        <<< dim3(grid_x, N), block_threads, 0, stream >>> (int64_t(K), (const int32_t*)X, G, int64_t(ldg), Wptr, int64_t(K));
       double one = 1., zero = 0.; cublasDgeam(handle, CUBLAS_OP_T, CUBLAS_OP_N, N, K, &one, Wptr, K, &zero, Xptr, ldx, Xptr, ldx);
       return ge_tsvd<double, double>(stream, s_handle, params, epi, N, K, p, X, ldx, S, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
     }
     else if (AXtype == HYACIN_F32) {
       float* Xptr = (float*)X, *Wptr = (float*)dev_work;
-      dim3 grid(uint32_t(K + block_threads - 1) >> 9, uint32_t(N), 1);
-      if constexpr (precG == HYACIN_F32) scatter_cvcpy_kernel <0, 1, constGptr, float, float* __restrict__> <<< grid, block_threads, 0, stream >>> (int64_t(K), (const int32_t*)S, G, int64_t(ldg), Wptr, int64_t(K));
-        else scatter_cvcpy_kernel <0, 0, constGptr, float, float* __restrict__> <<< grid, block_threads, 0, stream >>> (int64_t(K), (const int32_t*)S, G, int64_t(ldg), Wptr, int64_t(K));
+      uint32_t grid_x = uint32_t(K + block_threads - 1) >> 9;
+      scatter_cvcpy_kernel <0, Gtype, constGptr, float, float* __restrict__>
+        <<< dim3(grid_x, N), block_threads, 0, stream >>> (int64_t(K), (const int32_t*)X, G, int64_t(ldg), Wptr, int64_t(K));
       float one = 1., zero = 0.; cublasSgeam(handle, CUBLAS_OP_T, CUBLAS_OP_N, N, K, &one, Wptr, K, &zero, Xptr, ldx, Xptr, ldx);
       return ge_tsvd<float, float>(stream, s_handle, params, epi, N, K, p, X, ldx, S, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
     }
     else if (AXtype == HYACIN_F64_COMPLEX) {
       cuDoubleComplex* Xptr = (cuDoubleComplex*)X, *Wptr = (cuDoubleComplex*)dev_work;
       int64_t CK = int64_t(K) << 1, cldg = int64_t(ldg) << 1;
-      dim3 grid(uint32_t(CK + int64_t(block_threads - 1)) >> 9, uint32_t(N), 1);
-      if constexpr (precG == HYACIN_F64_COMPLEX) scatter_cvcpy_kernel <1, 1, constGptr, double, double* __restrict__> <<< grid, block_threads, 0, stream >>> (CK, (const int32_t*)S, G, cldg, (double*)Wptr, CK);
-        else scatter_cvcpy_kernel <1, 0, constGptr, double, double* __restrict__> <<< grid, block_threads, 0, stream >>> (CK, (const int32_t*)S, G, cldg, (double*)Wptr, CK);
+      uint32_t grid_cx = uint32_t(uint64_t(CK) + uint64_t(block_threads - 1) >> 9);
+      scatter_cvcpy_kernel <1, Gtype, constGptr, double, double* __restrict__>
+        <<< dim3(grid_cx, N), block_threads, 0, stream >>> (CK, (const int32_t*)X, G, cldg, (double*)Wptr, CK);
       cuDoubleComplex one = make_cuDoubleComplex(1., 0.), zero = make_cuDoubleComplex(0., 0.);
       cublasZgeam(handle, CUBLAS_OP_C, CUBLAS_OP_N, N, K, &one, Wptr, K, &zero, Xptr, ldx, Xptr, ldx);
       return ge_tsvd<double, cuDoubleComplex>(stream, s_handle, params, epi, N, K, p, X, ldx, S, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
@@ -108,9 +110,9 @@ inline int32_t gsvd_dispatcher(cublasHandle_t handle, cusolverDnHandle_t s_handl
     else if (AXtype == HYACIN_F32_COMPLEX) {
       cuComplex* Xptr = (cuComplex*)X, *Wptr = (cuComplex*)dev_work;
       int64_t CK = int64_t(K) << 1, cldg = int64_t(ldg) << 1;
-      dim3 grid(uint32_t(CK + int64_t(block_threads - 1)) >> 9, uint32_t(N), 1);
-      if constexpr (precG == HYACIN_F32_COMPLEX) scatter_cvcpy_kernel <1, 1, constGptr, float, float* __restrict__> <<< grid, block_threads, 0, stream >>> (CK, (const int32_t*)S, G, cldg, (float*)Wptr, CK);
-        else scatter_cvcpy_kernel <1, 0, constGptr, float, float* __restrict__> <<< grid, block_threads, 0, stream >>> (CK, (const int32_t*)S, G, cldg, (float*)Wptr, CK);
+      uint32_t grid_cx = uint32_t(uint64_t(CK) + uint64_t(block_threads - 1) >> 9);
+      scatter_cvcpy_kernel <1, Gtype, constGptr, float, float* __restrict__>
+        <<< dim3(grid_cx, N), block_threads, 0, stream >>> (CK, (const int32_t*)X, G, cldg, (float*)Wptr, CK);
       cuComplex one = make_cuComplex(1.f, 0.f), zero = make_cuComplex(0.f, 0.f);
       cublasCgeam(handle, CUBLAS_OP_C, CUBLAS_OP_N, N, K, &one, Wptr, K, &zero, Xptr, ldx, Xptr, ldx);
       return ge_tsvd<float, cuComplex>(stream, s_handle, params, epi, N, K, p, X, ldx, S, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
@@ -168,5 +170,4 @@ extern "C" int32_t hyacinXGsvd(cublasHandle_t handle, cusolverDnHandle_t s_handl
       return gsvd_dispatcher<HYACIN_QF_COMPLEX, const float4* __restrict__>(handle, s_handle, params, epi, N, K, p, AXtype, S, X, ldx, (float4*)G, ldg, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
     default: return 0;
   }
-  return 0;
 }
