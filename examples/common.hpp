@@ -237,7 +237,7 @@ int32_t svd_fit_transform(cudaStream_t stream, cublasHandle_t cublasH, cusolverD
   //rank = hyacinXGevd(cusolverH, params, epi, N, K, oversampling, precA, S, V, ldv, gram, N, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
   rank = hyacinXGsvd(cublasH, cusolverH, params, epi, N, K, oversampling, precA, S, V, ldv, precC, gram, N, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
   //rank = hyacinXGsqr(cublasH, cusolverH, epi, N, K, oversampling, precA, V, ldv, precC, gram, N, dev_work, dev_work_bytes, pinned_work);
-  hyacinXtransform(cublasH, M, N, rank, precA, A, lda, V, ldv, dev_work, dev_work_bytes);
+  hyacinXtransform(cublasH, 'N', M, N, rank, precA, A, lda, V, ldv, dev_work, dev_work_bytes);
 
   cudaStreamSynchronize(stream);
   cudaFree(gram); cudaFree(S);
@@ -266,7 +266,7 @@ int32_t svd_fit_transform_1dr(cudaStream_t stream, cublasHandle_t cublasH, cusol
 
   hyacinXsyherk1Drow(cublasH, M, gM, N, umax, precA, A, lda, precC, gram, N, dev_work, alg, comm);
   int32_t rank = hyacinXGsvd(cublasH, cusolverH, params, epi, N, K, oversampling, precA, S, V, ldv, precC, gram, N, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
-  hyacinXtransform(cublasH, M, N, rank, precA, A, lda, V, ldv, dev_work, dev_work_bytes);
+  hyacinXtransform(cublasH, 'N', M, N, rank, precA, A, lda, V, ldv, dev_work, dev_work_bytes);
 
   cudaStreamSynchronize(stream);
   cudaFree(gram); cudaFree(S);
