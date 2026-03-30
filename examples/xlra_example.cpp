@@ -5,7 +5,8 @@
 template <class T> inline void run(char prec, int64_t M, int64_t N, double epi, char algo) {
   std::vector<T> matA(M * N);
   std::vector<int32_t> ipiv(N);
-  make_2D_oscillatory(1., 0, 0, M, N, &matA[0], M);
+  matrix_generator<T> gen(M, N);
+  gen.generate_block(1., 0, 0, M, N, &matA[0], M);
 
   cudaStream_t stream;
   cublasHandle_t handle;

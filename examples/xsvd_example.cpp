@@ -4,10 +4,11 @@
 
 template <class T> inline void run(char prec, int64_t M, int64_t N, int64_t K, double epi, const std::string& file, const std::string& out) {
   std::vector<T> matA(M * N);
+  matrix_generator<T> gen(M, N);
   if (!file.empty())
     matrix_from_row_major_csv(M, N, 512, N, matA.data(), M, file, 0, 0, 1, 1);
   else
-    make_2D_oscillatory(1., 0, 0, M, N, &matA[0], M);
+    gen.generate_block(1., 0, 0, M, N, &matA[0], M);
 
   cudaStream_t stream;
   cublasHandle_t cublasH;

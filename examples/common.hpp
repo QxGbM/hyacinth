@@ -74,25 +74,42 @@ void matrix_from_row_major_csv(int32_t M, int32_t N, int32_t mb, int32_t nb, T* 
     csv.close();
 }
 
-inline void matrix_eval(double& a, double d, double w) { a = std::cos(w * d) / d; }
-inline void matrix_eval(float& a, double d, double w) { a = float(std::cos(w * d) / d); }
-inline void matrix_eval(std::complex<double>& a, double d, double w) { a = std::complex<double>(std::cos(w * d) / d, std::sin(w * d) / d); }
-inline void matrix_eval(std::complex<float>& a, double d, double w) { a = std::complex<float>(float(std::cos(w * d) / d), float(std::sin(w * d) / d)); }
-
-template <class T>
-void make_2D_oscillatory(double w, int32_t iA, int32_t jA, int32_t M, int32_t N, T* A, int32_t lda) {
-  constexpr int64_t height = 128;
-  auto translate_2d = [](int64_t i) { int64_t x = i / height, y = i - height * x; return std::complex<double>(x, y); };
-
-  for (int64_t j = 0; j < N; ++j) {
-    auto vj = translate_2d(j + jA + height);
-    for (int64_t i = 0; i < M; ++i) {
-      auto vi = translate_2d(i + iA);
-      double d = std::abs(vi + std::conj(vj));
-      matrix_eval(A[i + j * lda], d, w);
+template <class T> struct matrix_generator {
+  uint64_t gN;
+  std::vector<double> bodies;
+  matrix_generator(uint64_t M, uint64_t N) : gN(N), bodies(uint64_t(3) * (M + N)) {
+    uint64_t nbodies = M + N;
+    const double phi = 2.39996322972865332223;  // golden angle in radians
+    for (uint64_t i = 0; i < nbodies; ++i) {
+      double di = double(i), dn = double(nbodies - uint64_t(1) ?: uint64_t(1));
+      double x = 1. - 2. * (di / dn);  // x goes from 1. to -1.
+      double radius = std::sqrt(1. - x * x);  // radius at x
+      bodies[i * 3] = x;
+      bodies[i * 3 + 1] = radius * std::cos(di * phi);
+      bodies[i * 3 + 2] = radius * std::sin(di * phi);
     }
   }
-}
+
+  inline static void matrix_eval(double& a, double d, double w) { a = std::cos(w * d) / d; }
+  inline static void matrix_eval(float& a, double d, double w) { a = float(std::cos(w * d) / d); }
+  inline static void matrix_eval(std::complex<double>& a, double d, double w) { a = std::complex<double>(std::cos(w * d) / d, std::sin(w * d) / d); }
+  inline static void matrix_eval(std::complex<float>& a, double d, double w) { a = std::complex<float>(float(std::cos(w * d) / d), float(std::sin(w * d) / d)); }
+
+  void generate_block(double w, int32_t iA, int32_t jA, int32_t M, int32_t N, T* A, int32_t lda) {
+    for (int64_t j = 0; j < N; ++j) {
+      int64_t j_loc = int64_t(3) * (j + int64_t(jA));
+      double pt_j[3]{ bodies[j_loc], bodies[j_loc + int64_t(1)], bodies[j_loc + int64_t(2)]};
+      for (int64_t i = 0; i < M; ++i) {
+        int64_t i_loc = int64_t(3) * (i + gN + int64_t(iA));
+        double diff_x = bodies[i_loc] - pt_j[0];
+        double diff_y = bodies[i_loc + int64_t(1)] - pt_j[1];
+        double diff_z = bodies[i_loc + int64_t(2)] - pt_j[2];
+        double d = std::sqrt(diff_x * diff_x + diff_y * diff_y + diff_z * diff_z);
+        matrix_eval(A[i + j * int64_t(lda)], d, w);
+      }
+    }
+  }
+};
 
 extern "C" void sgemm_(const char*, const char*, const blas_int*, const blas_int*, const blas_int*, const float*, const float*, const blas_int*, const float*, const blas_int*, const float*, float*, const blas_int*);
 extern "C" void dgemm_(const char*, const char*, const blas_int*, const blas_int*, const blas_int*, const double*, const double*, const blas_int*, const double*, const blas_int*, const double*, double*, const blas_int*);

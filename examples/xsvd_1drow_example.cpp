@@ -7,10 +7,11 @@ template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, 
   lM += std::max(int64_t(0), std::min(mb, gM - lM * tile_m - mb * grid_row));
 
   std::vector<T> matA(lM * N);
+  matrix_generator<T> gen(gM, N);
   if (!file.empty())
     matrix_from_row_major_csv(gM, N, mb, N, matA.data(), lM, file, grid_row, 0, tile_m, 1);
   else for (int64_t i = grid_row * mb, y = 0; i < gM; i = grid_row * mb + tile_m * (y += mb))
-    make_2D_oscillatory(1., i, 0, std::min(gM - i, mb), N, &matA[y], lM);
+    gen.generate_block(1., i, 0, std::min(gM - i, mb), N, &matA[y], lM);
 
   cudaStream_t stream;
   cublasHandle_t cublasH;
