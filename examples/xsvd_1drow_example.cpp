@@ -53,7 +53,7 @@ template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, 
   cudaMemcpy(matU.data(), d_A, lM * K * sizeof(T), cudaMemcpyDeviceToHost);
   cudaMemcpy(matV.data(), d_V, K * N * sizeof(T), cudaMemcpyDeviceToHost);
 
-  std::pair<double, double> ret = check_answer_svd(lM, N, rank, &matU[0], lM, &matV[0], N, &matA[0], lM);
+  std::pair<double, double> ret = check_answer_svd('N', lM, N, rank, &matU[0], lM, &matV[0], N, &matA[0], lM);
   cudaMemcpy(d_barrier, &ret, sizeof(double2), cudaMemcpyHostToDevice);
   ncclAllReduce(d_barrier, d_barrier, 2, ncclDouble, ncclSum, comm, stream);
   cudaStreamSynchronize(stream);

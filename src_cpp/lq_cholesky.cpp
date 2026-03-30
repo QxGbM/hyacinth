@@ -22,7 +22,7 @@ extern "C" void hyacinXlqchol_bufferSize(cusolverDnHandle_t s_handle, cusolverDn
 
   size_t workspaceInBytesOnDevice, workspaceInBytesOnHost;
   cusolverDnXpotrf_bufferSize(s_handle, params, CUBLAS_FILL_MODE_LOWER, K, type_c, nullptr, K, type_c, &workspaceInBytesOnDevice, &workspaceInBytesOnHost);
-  *dev_work_bytes = uint64_t(int64_t(K) * int64_t(K) * x_bytes) + uint64_t(workspaceInBytesOnDevice);
+  *dev_work_bytes = uint64_t(int64_t(K) * int64_t(K) * x_bytes) + uint64_t(workspaceInBytesOnDevice + sizeof(int32_t));
   *pinned_work_bytes = uint64_t(workspaceInBytesOnHost);
 }
 
@@ -50,10 +50,11 @@ inline void lq_cholesky(cublasHandle_t handle, cusolverDnHandle_t s_handle, cuso
   cudaDataType_t type_c = cuda_type<complex_t>();
   size_t workspaceInBytesOnDevice, workspaceInBytesOnHost;
   cusolverDnXpotrf_bufferSize(s_handle, params, CUBLAS_FILL_MODE_LOWER, K, type_c, dev_work, K, type_c, &workspaceInBytesOnDevice, &workspaceInBytesOnHost);
-  if (uint64_t(workspaceInBytesOnDevice) <= (dev_work_bytes - uint64_t(gram_bytes)) && uint64_t(workspaceInBytesOnHost) <= pinned_work_bytes) {
-    complex_t* G = (complex_t*)dev_work, *W = (complex_t*)&((int8_t*)dev_work)[gram_bytes];
+  if ((uint64_t(workspaceInBytesOnDevice + sizeof(int32_t)) + uint64_t(gram_bytes)) <= dev_work_bytes && uint64_t(workspaceInBytesOnHost) <= pinned_work_bytes) {
+    complex_t* W = (complex_t*)dev_work, *G = (complex_t*)&((int8_t*)dev_work)[workspaceInBytesOnDevice];
+    int32_t* info = (int32_t*)&((int8_t*)dev_work)[int64_t(workspaceInBytesOnDevice) + gram_bytes];
     nh_herk(handle, K, N, X, ldx, G, K);
-    cusolverDnXpotrf(s_handle, params, CUBLAS_FILL_MODE_LOWER, K, type_c, G, K, type_c, W, workspaceInBytesOnDevice, pinned_work, workspaceInBytesOnHost, nullptr);
+    cusolverDnXpotrf(s_handle, params, CUBLAS_FILL_MODE_LOWER, K, type_c, G, K, type_c, W, workspaceInBytesOnDevice, pinned_work, workspaceInBytesOnHost, info);
     ln_trsm(handle, K, N, G, K, X, ldx);
   } else throw std::runtime_error("Insufficient workspace for Cholesky-LQ.");
 }
