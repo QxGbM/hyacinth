@@ -42,41 +42,30 @@ inline void matcopy(cublasHandle_t handle, cublasOperation_t transa, int32_t Mb,
 { cuComplex one = make_cuComplex(1.f, 0.f), zero = make_cuComplex(0.f, 0.f); cublasCgeam(handle, transa, CUBLAS_OP_N, Mb, Nb, &one, A, lda, &zero, B, ldb, B, ldb); }
 
 template <class complex_t>
-inline void ax_transform(cublasHandle_t handle, char transb, int32_t M, int32_t N, int32_t K, complex_t* A, int32_t lda, const complex_t* X, int32_t ldx, void* dev_work, uint64_t dev_work_bytes) {
+inline void ax_transform(cublasHandle_t handle, cublasOperation_t transb, int32_t M, int32_t N, int32_t K, complex_t* A, int32_t lda, const complex_t* X, int32_t ldx, void* dev_work, uint64_t dev_work_bytes) {
   int32_t rows = int32_t(dev_work_bytes / (uint64_t(K) * sizeof(complex_t))) & (~63);
   if (rows < 256) { throw std::runtime_error("Insufficient workspace for transforming A."); }
-  cublasOperation_t op = adjoint_op<complex_t>(transb);
   for (int32_t i = 0; i < M; i += rows) {
     int32_t m = std::min(M - i, rows), ld = std::min((m + 63) & (~63), rows);
-    nb_gemm(handle, op, m, K, N, &A[i], lda, X, ldx, (complex_t*)dev_work, ld);
+    nb_gemm(handle, transb, m, K, N, &A[i], lda, X, ldx, (complex_t*)dev_work, ld);
     matcopy(handle, CUBLAS_OP_N, m, K, (const complex_t*)dev_work, ld, &A[i], lda);
   }
 }
 
-extern "C" void hyacinXtransform(cublasHandle_t handle, char transb, int32_t M, int32_t N, int32_t K, hyacinPrecision_t AXtype, void* A, int32_t lda, const void* X, int32_t ldx, void* dev_work, uint64_t dev_work_bytes) {
+extern "C" void hyacinXtransform(cublasHandle_t handle, char transx, int32_t M, int32_t N, int32_t K, hyacinPrecision_t AXtype, void* A, int32_t lda, const void* X, int32_t ldx, void* dev_work, uint64_t dev_work_bytes) {
   if (M <= 0 || K <= 0) { return; }
-  else if (N <= 0) { 
-    switch(AXtype) {
-      case HYACIN_F64:
-        matcopy(handle, adjoint_op<double>(transb), M, K, (const double*)X, ldx, (double*)A, lda); return;
-      case HYACIN_F32:
-        matcopy(handle, adjoint_op<float>(transb), M, K, (const float*)X, ldx, (float*)A, lda); return;
-      case HYACIN_F64_COMPLEX:
-        matcopy(handle, adjoint_op<cuDoubleComplex>(transb), M, K, (const cuDoubleComplex*)X, ldx, (cuDoubleComplex*)A, lda); return;
-      case HYACIN_F32_COMPLEX:
-        matcopy(handle, adjoint_op<cuComplex>(transb), M, K, (const cuComplex*)X, ldx, (cuComplex*)A, lda); return;
-      default: return;
-    }
+  else if (N <= 0) switch(AXtype) {
+    case HYACIN_F64: matcopy(handle, adjoint_op<double>(transx), M, K, (const double*)X, ldx, (double*)A, lda); return;
+    case HYACIN_F32: matcopy(handle, adjoint_op<float>(transx), M, K, (const float*)X, ldx, (float*)A, lda); return;
+    case HYACIN_F64_COMPLEX: matcopy(handle, adjoint_op<cuDoubleComplex>(transx), M, K, (const cuDoubleComplex*)X, ldx, (cuDoubleComplex*)A, lda); return;
+    case HYACIN_F32_COMPLEX: matcopy(handle, adjoint_op<cuComplex>(transx), M, K, (const cuComplex*)X, ldx, (cuComplex*)A, lda); return;
+    default: return;
   }
   else switch(AXtype) {
-    case HYACIN_F64:
-      ax_transform(handle, transb, M, N, K, (double*)A, lda, (const double*)X, ldx, dev_work, dev_work_bytes); return;
-    case HYACIN_F32:
-      ax_transform(handle, transb, M, N, K, (float*)A, lda, (const float*)X, ldx, dev_work, dev_work_bytes); return;
-    case HYACIN_F64_COMPLEX:
-      ax_transform(handle, transb, M, N, K, (cuDoubleComplex*)A, lda, (const cuDoubleComplex*)X, ldx, dev_work, dev_work_bytes); return;
-    case HYACIN_F32_COMPLEX:
-      ax_transform(handle, transb, M, N, K, (cuComplex*)A, lda, (const cuComplex*)X, ldx, dev_work, dev_work_bytes); return;
+    case HYACIN_F64: ax_transform(handle, adjoint_op<double>(transx), M, N, K, (double*)A, lda, (const double*)X, ldx, dev_work, dev_work_bytes); return;
+    case HYACIN_F32: ax_transform(handle, adjoint_op<float>(transx), M, N, K, (float*)A, lda, (const float*)X, ldx, dev_work, dev_work_bytes); return;
+    case HYACIN_F64_COMPLEX: ax_transform(handle, adjoint_op<cuDoubleComplex>(transx), M, N, K, (cuDoubleComplex*)A, lda, (const cuDoubleComplex*)X, ldx, dev_work, dev_work_bytes); return;
+    case HYACIN_F32_COMPLEX: ax_transform(handle, adjoint_op<cuComplex>(transx), M, N, K, (cuComplex*)A, lda, (const cuComplex*)X, ldx, dev_work, dev_work_bytes); return;
     default: return;
   }
 }

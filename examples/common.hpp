@@ -260,8 +260,7 @@ int32_t svd_fit_transform(cudaStream_t stream, cublasHandle_t handle, cusolverDn
   hyacinXsyherk_autoTune(epi, usd_nd_allreduce, u_extra, &umax, precA, &precC, &alg);
   hyacinXsyherk_bufferSize(M, N, umax, precC, alg, &dev_work_bytes);
 
-  //hyacinXGevd_bufferSize(s_handle, params, N, K, precA, N, &dev_work_bytes_new, &pinned_work_bytes);
-  hyacinXGsvd_bufferSize(s_handle, params, N, K, precA, ldv, precC, &dev_work_bytes_new, &pinned_work_bytes);
+  hyacinXGevPcsvd_bufferSize(s_handle, params, 'Y', N, K, precA, N, precC, N, &dev_work_bytes_new, &pinned_work_bytes);
   dev_work_bytes = std::max(dev_work_bytes, dev_work_bytes_new);
 
   hyacinXtransform_bufferSize(K, precA, &dev_work_bytes_new);
@@ -276,8 +275,7 @@ int32_t svd_fit_transform(cudaStream_t stream, cublasHandle_t handle, cusolverDn
 
   hyacinXsyherk(handle, M, N, umax, precA, A, lda, precC, gram, N, dev_work, alg);
   int32_t rank = 0;
-  //rank = hyacinXGevd(s_handle, params, epi, N, K, oversampling, precA, S, basis, N, gram, N, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
-  rank = hyacinXGsvd(handle, s_handle, params, epi, N, K, oversampling, precA, S, basis, N, precC, gram, N, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
+  rank = hyacinXGevPcsvd(handle, s_handle, params, 'Y', epi, N, K, oversampling, precA, S, basis, N, precC, gram, N, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
   hyacinXtransform(handle, 'N', M, N, rank, precA, A, lda, basis, N, dev_work, dev_work_bytes);
   hyacinXtransform(handle, 'N', Mv, Nv, rank, precA, V, ldv, &((const T*)basis)[lcol_offset], N, dev_work, dev_work_bytes);
 
@@ -296,7 +294,7 @@ int32_t svd_fit_transform_1dr(cudaStream_t stream, cublasHandle_t handle, cusolv
   hyacinXsyherk_autoTune(epi, usd_nd_allreduce, u_extra, &umax, precA, &precC, &alg);
   hyacinXsyherk1Drow_bufferSize(M, gM, N, umax, precC, alg, &dev_work_bytes);
 
-  hyacinXGsvd_bufferSize(s_handle, params, N, K, precA, ldv, precC, &dev_work_bytes_new, &pinned_work_bytes);
+  hyacinXGevPcsvd_bufferSize(s_handle, params, 'Y', N, K, precA, N, precC, N, &dev_work_bytes_new, &pinned_work_bytes);
   dev_work_bytes = std::max(dev_work_bytes, dev_work_bytes_new);
 
   hyacinXtransform_bufferSize(K, precA, &dev_work_bytes_new);
@@ -310,7 +308,7 @@ int32_t svd_fit_transform_1dr(cudaStream_t stream, cublasHandle_t handle, cusolv
   cudaMallocHost(&pinned_work, pinned_work_bytes);
 
   hyacinXsyherk1Drow(handle, M, gM, N, umax, precA, A, lda, precC, gram, N, dev_work, alg, comm);
-  int32_t rank = hyacinXGsvd(handle, s_handle, params, epi, N, K, oversampling, precA, S, basis, N, precC, gram, N, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
+  int32_t rank = hyacinXGevPcsvd(handle, s_handle, params, 'Y', epi, N, K, oversampling, precA, S, basis, N, precC, gram, N, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
   hyacinXtransform(handle, 'N', M, N, rank, precA, A, lda, basis, N, dev_work, dev_work_bytes);
   hyacinXtransform(handle, 'N', Mv, Nv, rank, precA, V, ldv, &((const T*)basis)[lcol_offset], N, dev_work, dev_work_bytes);
 

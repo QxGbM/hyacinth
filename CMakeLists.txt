@@ -33,7 +33,6 @@ set(CU_SOURCES
   src_cuda/gemv_pp_nopiv.cu
   src_cuda/gemv_pp.cu
   src_cuda/gemv_scal_f128.cu
-  src_cuda/gram_evd.cu
   src_cuda/gram_id.cu
   src_cuda/gram_svd.cu
   src_cuda/i32_accum.cu

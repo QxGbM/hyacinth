@@ -127,52 +127,25 @@ int32_t hyacinXGinterp(
   void* pinned_work
 );
 
-void hyacinXGevd_bufferSize(
+void hyacinXGevPcsvd_bufferSize(
   cusolverDnHandle_t s_handle,
   cusolverDnParams_t params,
-  int32_t N,
-  int32_t K,
-  hyacinPrecision_t AXGtype,
-  int32_t ldg,
-  uint64_t* dev_work_bytes,
-  uint64_t* pinned_work_bytes
-);
-
-int32_t hyacinXGevd(
-  cusolverDnHandle_t s_handle,
-  cusolverDnParams_t params,
-  double epi,
-  int32_t N,
-  int32_t K,
-  int32_t p,
-  hyacinPrecision_t AXGtype,
-  void* S,
-  void* X,
-  int32_t ldx,
-  void* G,
-  int32_t ldg,
-  void* dev_work,
-  uint64_t dev_work_bytes,
-  void* pinned_work,
-  uint64_t pinned_work_bytes
-);
-
-void hyacinXGsvd_bufferSize(
-  cusolverDnHandle_t s_handle,
-  cusolverDnParams_t params,
+  char usd_evd,
   int32_t N,
   int32_t K,
   hyacinPrecision_t AXtype,
   int32_t ldx,
   hyacinPrecision_t Gtype,
+  int32_t ldg,
   uint64_t* dev_work_bytes,
   uint64_t* pinned_work_bytes
 );
 
-int32_t hyacinXGsvd(
+int32_t hyacinXGevPcsvd(
   cublasHandle_t handle,
   cusolverDnHandle_t s_handle,
   cusolverDnParams_t params,
+  char usd_evd,
   double epi,
   int32_t N,
   int32_t K,
@@ -222,7 +195,7 @@ void hyacinXtransform_bufferSize(
 
 void hyacinXtransform(
   cublasHandle_t handle,
-  char transb,
+  char transx,
   int32_t M,
   int32_t N,
   int32_t K,
