@@ -118,8 +118,8 @@ extern "C" void hyacinXsyherk1Drow_bufferSize(int32_t localM, int32_t globalM, i
   *dev_work_bytes = uint64_t(i8_bytes + acc_bytes + vec_bytes);
 }
 
-extern "C" void hyacinXsyherk(cublasHandle_t handle, int32_t M, int32_t N, int32_t umax, hyacinPrecision_t Atype, const void* A, int32_t lda, hyacinPrecision_t Gtype, void* G, int32_t ldg, void* dev_work, hyacinAlgorithm_t alg) {
-  if (M <= 0 || N <= 0) { return; }
+extern "C" int32_t hyacinXsyherk(cublasHandle_t handle, int32_t M, int32_t N, int32_t umax, hyacinPrecision_t Atype, const void* A, int32_t lda, hyacinPrecision_t Gtype, void* G, int32_t ldg, void* dev_work, hyacinAlgorithm_t alg) {
+  if (M <= 0 || N <= 0) { return -1; }
   int32_t Complex, det_reduc, algnM, algnN, orderA, orderC; int64_t i8_bytes, acc_bytes, vec_bytes;
   std::tie(Complex, det_reduc, algnM, algnN, orderA, orderC, i8_bytes, acc_bytes, vec_bytes) = ext_params(M, M, N, umax, 0, Gtype, alg);
 
@@ -129,6 +129,7 @@ extern "C" void hyacinXsyherk(cublasHandle_t handle, int32_t M, int32_t N, int32
   vexp_dispatcher(stream, M, N, Atype, A, lda, (int32_t*)vexp);
   igemm_dispatcher(stream, handle, M, N, Atype, A, lda, umax, (const int32_t*)vexp, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA, alg);
   deq_dispatcher(stream, M, N, algnN, umax, (uint64_t*)acc, 63, orderC, G, ldg, (const int32_t*)vexp, Gtype);
+  return umax;
 }
 
 #ifndef NO_NCCL
@@ -161,8 +162,8 @@ inline void deq_nd_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_
   }
 }
 
-extern "C" void hyacinXsyherk1Drow(cublasHandle_t handle, int32_t localM, int32_t globalM, int32_t N, int32_t umax, hyacinPrecision_t Atype, const void* A, int32_t lda, hyacinPrecision_t Gtype, void* G, int32_t ldg, void* dev_work, hyacinAlgorithm_t alg, ncclComm_t col_comm) {
-  if (globalM <= 0 || N <= 0) { return; }
+extern "C" int32_t hyacinXsyherk1Drow(cublasHandle_t handle, int32_t localM, int32_t globalM, int32_t N, int32_t umax, hyacinPrecision_t Atype, const void* A, int32_t lda, hyacinPrecision_t Gtype, void* G, int32_t ldg, void* dev_work, hyacinAlgorithm_t alg, ncclComm_t col_comm) {
+  if (globalM <= 0 || N <= 0) { return -1; }
   int32_t Complex, det_reduc, algnM, algnN, orderA, orderC; int64_t i8_bytes, acc_bytes, vec_bytes;
   std::tie(Complex, det_reduc, algnM, algnN, orderA, orderC, i8_bytes, acc_bytes, vec_bytes) = ext_params(localM, globalM, N, umax, 1, Gtype, alg);
 
@@ -186,6 +187,7 @@ extern "C" void hyacinXsyherk1Drow(cublasHandle_t handle, int32_t localM, int32_
       igemm_dispatcher(stream, handle, localM, N, Atype, A, lda, umax, (const int32_t*)vexp, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA, alg);
     deq_nd_dispatcher(stream, handle, localM, N, algnN, umax, (uint64_t*)acc, 63, orderC, G, ldg, (const int32_t*)vexp, Gtype, iA, col_comm);
   }
+  return umax;
 }
 
 #endif

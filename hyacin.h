@@ -54,7 +54,7 @@ void hyacinXsyherk_bufferSize(
   uint64_t* dev_work_bytes
 );
 
-void hyacinXsyherk(
+int32_t hyacinXsyherk(
   cublasHandle_t handle,
   int32_t M,
   int32_t N,
@@ -228,7 +228,7 @@ void hyacinXAllGatherV1Dcol_bufferSize(
 
 #ifndef NO_NCCL
 
-void hyacinXsyherk1Drow(
+int32_t hyacinXsyherk1Drow(
   cublasHandle_t handle,
   int32_t localM,
   int32_t globalM,

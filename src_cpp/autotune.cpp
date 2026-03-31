@@ -11,7 +11,7 @@
 
 const int32_t umax_threshold = 30; // umax < 30 : Limbs, 30 <= umax : CRT
 const int32_t umax_practical_limit = 80; // umax <= 80 to satisfy implementation assumptions
-const std::vector<int32_t> dd_sm_list({ 800, 900, 1000 }); // sm80,sm90,sm100
+const std::vector<int32_t> f64_capable_sm_list({ 800, 900, 1000 }); // sm80,sm90,sm100
 
 inline hyacinPrecision_t real_precision(hyacinPrecision_t prec) {
   switch(prec) {
@@ -54,15 +54,15 @@ extern "C" void hyacinXsyherk_autoTune(double epi, int32_t use_nd_allreduce, int
   double epi_f64 = std::sqrt(std::numeric_limits<double>::epsilon());
   double epi_qf = std::pow(double(std::numeric_limits<float>::epsilon()), 2);
   double epi_dd = std::numeric_limits<double>::epsilon();
-  int32_t use_qf = int32_t(dd_sm_list.end() == std::find(dd_sm_list.begin(), dd_sm_list.end(), device));
+  int32_t f64_incapable = int32_t(f64_capable_sm_list.end() == std::find(f64_capable_sm_list.begin(), f64_capable_sm_list.end(), device));
 
   hyacinPrecision_t ATypeReal = real_precision(Atype);
-  double machine_epi = ATypeReal == HYACIN_F32 ? double(std::numeric_limits<float>::epsilon()) : epi_dd;
+  double machine_epi = (ATypeReal == HYACIN_F32) ? double(std::numeric_limits<float>::epsilon()) : epi_dd;
   double epi_nrm = std::min(1., std::max(epi, machine_epi));
   hyacinPrecision_t auto_prec =
-    epi_f32 <= epi_nrm ? HYACIN_F32 : (
+    (epi_f32 <= epi_nrm && (f64_incapable || ATypeReal == HYACIN_F32)) ? HYACIN_F32 : (
     epi_f64 <= epi_nrm ? HYACIN_F64 : (
-    (epi_qf <= epi_nrm && use_qf) ? HYACIN_QF : HYACIN_DD));
+    (epi_qf <= epi_nrm && f64_incapable) ? HYACIN_QF : HYACIN_DD));
 
   int32_t u = u_extra + int32_t(std::ceil(-std::log2(epi_nrm)));
   int32_t Complex = int32_t(Atype != ATypeReal), use_limbs = int32_t(u < umax_threshold);
