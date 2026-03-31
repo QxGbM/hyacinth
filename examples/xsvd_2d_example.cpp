@@ -15,14 +15,10 @@ template <class T> inline void run(char prec, int64_t gM, int64_t gN, int64_t K,
   lN += std::max(int64_t(0), std::min(nb, gN - lN * tile_n - nb * grid_col));
   
   std::vector<T> matA(lM * lN);
-  matrix_generator<T> gen(gM, gN);
   if (!file.empty())
     matrix_from_row_major_csv(gM, gN, mb, nb, matA.data(), lM, file, grid_row, grid_col, tile_m, tile_n);
-  else for (int64_t i = grid_row * mb, y = 0; i < gM; i = grid_row * mb + tile_m * (y += mb)) {
-    int64_t rows = std::min(gM - i, mb);
-    for (int64_t j = grid_col * nb, x = 0; j < gN; j = grid_col * nb + tile_n * (x += nb))
-      gen.generate_block(1., i, j, rows, std::min(gN - j, nb), &matA[y + (x * lM)], lM);
-  }
+  else
+    matrix_generator<T>(gM, gN).generate_block(1., mb, nb, &matA[0], lM, grid_row, grid_col, tile_m, tile_n);
 
   cudaStream_t stream;
   cublasHandle_t cublasH;

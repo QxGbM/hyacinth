@@ -49,26 +49,26 @@ void matrix_from_row_major_csv(int32_t M, int32_t N, int32_t mb, int32_t nb, T* 
   { while (!idx.eof() && row_bytes.size() <= size_t(M)) { int64_t i; idx >> i; row_bytes.push_back(i); } idx.close(); }
 
   for (int32_t i = grid_row * mb, y = 0; i < M; i = grid_row * mb + tile_m * (y += mb)) {
-    int32_t ib = std::min(M - i, mb);
-    std::vector<T> mat(int64_t(ib) * int64_t(N));
+    int32_t rows = std::min(M - i, mb);
+    std::vector<T> mat(int64_t(rows) * int64_t(N));
 
     if (csv.is_open()) {
-      int64_t start_byte = row_bytes[i], n_bytes = row_bytes[i + ib] - start_byte;
+      int64_t start_byte = row_bytes[i], n_bytes = row_bytes[i + rows] - start_byte;
       std::vector<char> buf(n_bytes); char* str = &buf[0], *end = &buf[n_bytes];
       csv.seekg(start_byte, std::ios::beg); csv.read(str, n_bytes);
       auto cmp = [](char c){ return c == ' ' || c == ',' || c == '\n' || c == '(' || c == ')'; };
       while(cmp(*str)) ++str;
 
-      for (int32_t y = 0; y < ib; ++y)
+      for (int32_t y = 0; y < rows; ++y)
         for (int32_t x = 0; x < N; ++x) {
           std::string Ayx(str, std::distance(str, std::find_if(str, end, cmp)));
-          parse_char(mat[int64_t(y) + int64_t(x) * int64_t(ib)], Ayx);
+          parse_char(mat[int64_t(y) + int64_t(x) * int64_t(rows)], Ayx);
           str += Ayx.length(); while(cmp(*str)) ++str;
         }
     }
 
     for (int32_t j = grid_col * nb, x = 0; j < N; j = grid_col * nb + tile_n * (x += nb))
-      copy2d(ib, std::min(N - j, nb), &mat[int64_t(j) * int64_t(ib)], ib, &A[int64_t(y) + int64_t(x) * int64_t(lda)], lda);
+      copy2d(rows, std::min(N - j, nb), &mat[int64_t(j) * int64_t(rows)], rows, &A[int64_t(y) + int64_t(x) * int64_t(lda)], lda);
   }
 
   if (csv.is_open())
@@ -76,12 +76,12 @@ void matrix_from_row_major_csv(int32_t M, int32_t N, int32_t mb, int32_t nb, T* 
 }
 
 template <class T> struct matrix_generator {
-  uint64_t gN;
+  int64_t gM, gN;
   std::vector<double> bodies;
-  matrix_generator(uint64_t M, uint64_t N) : gN(N), bodies(uint64_t(3) * (M + N)) {
-    uint64_t nbodies = M + N;
+  matrix_generator(int64_t M, int64_t N) : gM(M), gN(N), bodies(int64_t(3) * (M + N)) {
+    int64_t nbodies = M + N;
     const double phi = 2.39996322972865332223;  // golden angle in radians
-    for (uint64_t i = 0; i < nbodies; ++i) {
+    for (int64_t i = 0; i < nbodies; ++i) {
       double di = double(i), dn = double(nbodies - uint64_t(1) ?: uint64_t(1));
       double x = 1. - 2. * (di / dn);  // x goes from 1. to -1.
       double radius = std::sqrt(1. - x * x);  // radius at x
@@ -96,17 +96,24 @@ template <class T> struct matrix_generator {
   inline static void matrix_eval(std::complex<double>& a, double d, double w) { a = std::complex<double>(std::cos(w * d) / d, std::sin(w * d) / d); }
   inline static void matrix_eval(std::complex<float>& a, double d, double w) { a = std::complex<float>(float(std::cos(w * d) / d), float(std::sin(w * d) / d)); }
 
-  void generate_block(double w, int32_t iA, int32_t jA, int32_t M, int32_t N, T* A, int32_t lda) {
-    for (int64_t j = 0; j < N; ++j) {
-      int64_t j_loc = int64_t(3) * (j + int64_t(jA));
-      double pt_j[3]{ bodies[j_loc], bodies[j_loc + int64_t(1)], bodies[j_loc + int64_t(2)]};
-      for (int64_t i = 0; i < M; ++i) {
-        int64_t i_loc = int64_t(3) * (i + gN + int64_t(iA));
-        double diff_x = bodies[i_loc] - pt_j[0];
-        double diff_y = bodies[i_loc + int64_t(1)] - pt_j[1];
-        double diff_z = bodies[i_loc + int64_t(2)] - pt_j[2];
-        double d = std::sqrt(diff_x * diff_x + diff_y * diff_y + diff_z * diff_z);
-        matrix_eval(A[i + j * int64_t(lda)], d, w);
+  void generate_block(double w, int32_t mb, int32_t nb, T* A, int32_t lda, int32_t grid_row = 0, int32_t grid_col = 0, int32_t tile_m = 1, int32_t tile_n = 1) {
+    int64_t row_offset = int64_t(grid_row) * int64_t(mb), col_offset = int64_t(grid_col) * int64_t(nb);
+    for (int64_t iA = row_offset, y = 0; iA < gM; iA = row_offset + int64_t(tile_m) * (y += int64_t(mb))) {
+      int64_t rows = std::min(gM - iA, int64_t(mb));
+      for (int64_t jA = col_offset, x = 0; jA < gN; jA = col_offset + int64_t(tile_n) * (x += int64_t(nb))) {
+        int64_t cols = std::min(gN - jA, int64_t(nb));
+        for (int64_t j = 0; j < cols; ++j) {
+          int64_t j_loc = int64_t(3) * (j + jA);
+          double pt_j[3]{ bodies[j_loc], bodies[j_loc + int64_t(1)], bodies[j_loc + int64_t(2)]};
+          for (int64_t i = 0; i < rows; ++i) {
+            int64_t i_loc = int64_t(3) * (i + iA + gN);
+            double diff_x = bodies[i_loc] - pt_j[0];
+            double diff_y = bodies[i_loc + int64_t(1)] - pt_j[1];
+            double diff_z = bodies[i_loc + int64_t(2)] - pt_j[2];
+            double d = std::sqrt(diff_x * diff_x + diff_y * diff_y + diff_z * diff_z);
+            matrix_eval(A[(i + y) + (j + x) * int64_t(lda)], d, w);
+          }
+        }
       }
     }
   }
