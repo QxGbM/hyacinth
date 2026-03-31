@@ -31,38 +31,36 @@ template <class T> inline void run(char prec, int64_t M, int64_t gN, int64_t K, 
   cudaEventCreate(&stop);
 
   int32_t* d_barrier = nullptr;
-  T* d_A = nullptr, *d_V1 = nullptr, *d_V2 = nullptr;
+  T* d_A = nullptr, *d_V = nullptr;
   cudaMalloc((void**)(&d_barrier), sizeof(double2));
   cudaMalloc((void**)(&d_A), M * std::max(gK, lN) * sizeof(T));
-  cudaMalloc((void**)(&d_V1), K * lN * sizeof(T));
-  cudaMalloc((void**)(&d_V2), K * gK * sizeof(T));
+  cudaMalloc((void**)(&d_V), K * lN * sizeof(T));
   cudaMemcpy(d_A, matA.data(), M * lN * sizeof(T), cudaMemcpyHostToDevice);
   cudaMemset(d_barrier, 0xDEADBEEF, sizeof(double2));
 
   int32_t r1, r2, N2, offset;
-  r1 = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, lN, K, d_A, M, d_V1, lN);
-  std::tie(N2, offset) = allgatherv_1dc(stream, M, r1, d_A, M, comm);
-  r2 = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, N2, K, d_A, M, d_V2, gK);
+  r1 = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, lN, K, d_A, M, d_V, lN, lN);
+  std::tie(N2, offset) = allgatherv_1dc(stream, comm, M, r1, d_A, M);
+  r2 = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, N2, K, d_A, M, d_V, lN, lN, r1, offset);
   cudaMemcpy(d_A, matA.data(), M * lN * sizeof(T), cudaMemcpyHostToDevice);
 
   ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
   cudaStreamSynchronize(stream);
   cudaEventRecord(start, stream);
 
-  r1 = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, lN, K, d_A, M, d_V1, lN);
-  std::tie(N2, offset) = allgatherv_1dc(stream, M, r1, d_A, M, comm);
-  r2 = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, N2, K, d_A, M, d_V2, gK);
+  r1 = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, lN, K, d_A, M, d_V, lN, lN);
+  std::tie(N2, offset) = allgatherv_1dc(stream, comm, M, r1, d_A, M);
+  r2 = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, N2, K, d_A, M, d_V, lN, lN, r1, offset);
 
   ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
   cudaStreamSynchronize(stream);
   cudaEventRecord(stop, stream);
 
-  std::vector<T> matU(M * K), matV1(K * lN), matV2(K * gK);
+  std::vector<T> matU(M * K), matV(K * lN);
   cudaMemcpy(matU.data(), d_A, M * K * sizeof(T), cudaMemcpyDeviceToHost);
-  cudaMemcpy(matV1.data(), d_V1, K * lN * sizeof(T), cudaMemcpyDeviceToHost);
-  cudaMemcpy(matV2.data(), d_V2, K * gK * sizeof(T), cudaMemcpyDeviceToHost);
+  cudaMemcpy(matV.data(), d_V, K * lN * sizeof(T), cudaMemcpyDeviceToHost);
 
-  std::pair<double, double> ret = check_answer_svd(M, lN, r1, r2, &matU[0], M, &matV1[0], lN, &matV2[offset], gK, &matA[0], M);
+  std::pair<double, double> ret = check_answer_svd(M, lN, r2, &matU[0], M, &matV[0], lN, &matA[0], M);
   cudaMemcpy(d_barrier, &ret, sizeof(double2), cudaMemcpyHostToDevice);
   ncclAllReduce(d_barrier, d_barrier, 2, ncclDouble, ncclSum, comm, stream);
   cudaStreamSynchronize(stream);
@@ -77,8 +75,7 @@ template <class T> inline void run(char prec, int64_t M, int64_t gN, int64_t K, 
 
   cudaFree(d_barrier);
   cudaFree(d_A);
-  cudaFree(d_V1);
-  cudaFree(d_V2);
+  cudaFree(d_V);
   cudaEventDestroy(start);
   cudaEventDestroy(stop);
   cudaStreamDestroy(stream);

@@ -59,17 +59,17 @@ inline void lq_cholesky(cublasHandle_t handle, cusolverDnHandle_t s_handle, cuso
   } else throw std::runtime_error("Insufficient workspace for Cholesky-LQ.");
 }
 
-extern "C" void hyacinXlqchol(cublasHandle_t handle, cusolverDnHandle_t s_handle, cusolverDnParams_t params, int32_t K, int32_t N, hyacinPrecision_t AXtype, const void* X, int32_t ldx, void* dev_work, uint64_t dev_work_bytes, void* pinned_work, uint64_t pinned_work_bytes) {
+extern "C" void hyacinXlqchol(cublasHandle_t handle, cusolverDnHandle_t s_handle, cusolverDnParams_t params, int32_t K, int32_t N, hyacinPrecision_t AXtype, void* X, int32_t ldx, void* dev_work, uint64_t dev_work_bytes, void* pinned_work, uint64_t pinned_work_bytes) {
   if (K <= 0 || N <= 0) { return; }
   switch(AXtype) {
     case HYACIN_F64:
-      lq_cholesky(handle, s_handle, params, K, N, (double*)X, ldx, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes); break;
+      lq_cholesky(handle, s_handle, params, K, N, (double*)X, ldx, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes); return;
     case HYACIN_F32:
-      lq_cholesky(handle, s_handle, params, K, N, (float*)X, ldx, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes); break;
+      lq_cholesky(handle, s_handle, params, K, N, (float*)X, ldx, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes); return;
     case HYACIN_F64_COMPLEX:
-      lq_cholesky(handle, s_handle, params, K, N, (cuDoubleComplex*)X, ldx, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes); break;
+      lq_cholesky(handle, s_handle, params, K, N, (cuDoubleComplex*)X, ldx, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes); return;
     case HYACIN_F32_COMPLEX:
-      lq_cholesky(handle, s_handle, params, K, N, (cuComplex*)X, ldx, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes); break;
+      lq_cholesky(handle, s_handle, params, K, N, (cuComplex*)X, ldx, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes); return;
     default: return;
   }
 }

@@ -14,6 +14,7 @@ using blas_int = int; // LP64 for blas
 const int32_t oversampling = 10; // increase for better LRA accuracy
 const int32_t u_extra = 6; // increase for better Quantization accuracy
 const int32_t usd_nd_allreduce = 0; // non-zero for use float(non-deterministic) all reduce when possible, 0 for deterministic
+const int32_t warmup_run = 1;
 
 template <class T>
 inline void copy2d(int32_t M, int32_t N, const T* A, int32_t lda, T* B, int32_t ldb)
@@ -153,25 +154,16 @@ double check_answer_lra(int32_t rank, int32_t M, int32_t N, const T* A, int32_t 
 }
 
 template <class T>
-std::pair<double, double> check_answer_svd(char transv, int32_t M, int32_t N, int32_t rank, const T* U, int32_t ldu, const T* V, int32_t ldv, const T* B, int32_t ldb) {
+std::pair<double, double> check_answer_svd(int32_t M, int32_t N, int32_t rank, const T* U, int32_t ldu, const T* V, int32_t ldv, const T* B, int32_t ldb) {
   if (rank <= 0 || M <= 0 || N <= 0)
     return std::make_pair(0., 0.);
   std::vector<T> matB(M * N);
   copy2d(M, N, B, ldb, &matB[0], M);
 
   double nrm = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
-  if (transv == 'T' || transv == 't' || transv == 'C' || transv == 'c') nngemm(M, N, rank, U, ldu, V, ldv, &matB[0], M); else ntgemm(M, N, rank, U, ldu, V, ldv, &matB[0], M);
+  ntgemm(M, N, rank, U, ldu, V, ldv, &matB[0], M);
   double err = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
   return std::make_pair(err, nrm);
-}
-
-template <class T>
-std::pair<double, double> check_answer_svd(int32_t M, int32_t N, int32_t r1, int32_t r2, const T* U, int32_t ldu, const T* V1, int32_t ldv1, const T* V2, int32_t ldv2, const T* B, int32_t ldb) {
-  if (r2 <= 0)
-    return std::make_pair(0., 0.);
-  std::vector<T> matV(r2 * N, T());
-  nngemm(N, r2, r1, V1, ldv1, V2, ldv2, &matV[0], N);
-  return check_answer_svd('N', M, N, r2, U, ldu, &matV[0], N, B, ldb);
 }
 
 inline std::string conv_to_string(double f) { char s[30]; std::sprintf(s, "%.18le", f); return std::string(s); }
@@ -227,63 +219,70 @@ int32_t geqp3_ronly(cublasHandle_t handle, double epi, int32_t M, int32_t N, int
 }
 
 template <class T>
-int32_t id_fit_transform(cudaStream_t stream, cublasHandle_t handle, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv) {
+int32_t id_fit_transform(cudaStream_t stream, cublasHandle_t handle, cusolverDnHandle_t s_handle, cusolverDnParams_t params, double epi, 
+  int32_t M, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv, int32_t Mv, int32_t Nv = 0, int32_t lcol_offset = 0) {
   int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg; uint64_t dev_work_bytes, dev_work_bytes_new, pinned_work_bytes, pinned_work_bytes_new;
   hyacinXsyherk_autoTune(epi, usd_nd_allreduce, u_extra, &umax, precA, &precC, &alg);
   hyacinXsyherk_bufferSize(M, N, umax, precC, alg, &dev_work_bytes);
   hyacinXGinterp_bufferSize(N, K, precA, precC, &dev_work_bytes_new, &pinned_work_bytes);
   dev_work_bytes = std::max(dev_work_bytes, dev_work_bytes_new);
 
-  hyacinXlqchol_bufferSize(cusolverH, params, K, precA, &dev_work_bytes_new, &pinned_work_bytes_new);
+  hyacinXlqchol_bufferSize(s_handle, params, K, precA, &dev_work_bytes_new, &pinned_work_bytes_new);
   dev_work_bytes = std::max(dev_work_bytes, dev_work_bytes_new);
   pinned_work_bytes = std::max(pinned_work_bytes, pinned_work_bytes_new);
 
   hyacinXtransform_bufferSize(K, precA, &dev_work_bytes_new);
   dev_work_bytes = std::max(dev_work_bytes, dev_work_bytes_new);
 
-  void* gram = nullptr, *piv = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
+  void* gram = nullptr, *basis_h = nullptr, *piv = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
   cudaMalloc(&gram, int64_t(N) * int64_t(N) * int64_t(hyacinXelem_bytes(precC)));
+  cudaMalloc(&basis_h, int64_t(N) * int64_t(K) * int64_t(sizeof(T)));
   cudaMalloc(&piv, int64_t(N) * sizeof(int32_t));
   cudaMalloc(&dev_work, std::max(dev_work_bytes, dev_work_bytes_new));
   cudaMallocHost(&pinned_work, pinned_work_bytes);
 
   hyacinXsyherk(handle, M, N, umax, precA, A, lda, precC, gram, N, dev_work, alg);
-  int32_t rank = hyacinXGinterp(handle, epi, N, K, oversampling, precA, V, ldv, (int32_t*)piv, precC, gram, N, dev_work, pinned_work);
-  hyacinXlqchol(handle, cusolverH, params, rank, N, precA, V, ldv, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
-  hyacinXtransform(handle, 'C', M, N, rank, precA, A, lda, V, ldv, dev_work, dev_work_bytes);
+  int32_t rank = hyacinXGinterp(handle, epi, N, K, oversampling, precA, basis_h, K, (int32_t*)piv, precC, gram, N, dev_work, pinned_work);
+  hyacinXlqchol(handle, s_handle, params, rank, N, precA, basis_h, K, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
+  hyacinXtransform(handle, 'C', M, N, rank, precA, A, lda, basis_h, K, dev_work, dev_work_bytes);
+  hyacinXtransform(handle, 'C', Mv, Nv, rank, precA, V, ldv, &((const T*)basis_h)[int64_t(lcol_offset) * int64_t(K)], K, dev_work, dev_work_bytes);
 
   cudaStreamSynchronize(stream);
-  cudaFree(gram); cudaFree(piv);
+  cudaFree(gram); cudaFree(basis_h); cudaFree(piv);
   cudaFree(dev_work); cudaFreeHost(pinned_work);
   return rank;
 }
 
 template <class T>
-int32_t svd_fit_transform(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv) {
+int32_t svd_fit_transform(cudaStream_t stream, cublasHandle_t handle, cusolverDnHandle_t s_handle, cusolverDnParams_t params, double epi,
+  int32_t M, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv, int32_t Mv, int32_t Nv = 0, int32_t lcol_offset = 0) {
   int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg; uint64_t dev_work_bytes, dev_work_bytes_new, pinned_work_bytes;
   hyacinXsyherk_autoTune(epi, usd_nd_allreduce, u_extra, &umax, precA, &precC, &alg);
   hyacinXsyherk_bufferSize(M, N, umax, precC, alg, &dev_work_bytes);
-  //hyacinXGevd_bufferSize(cusolverH, params, N, K, precA, N, &dev_work_bytes_new, &pinned_work_bytes);
-  hyacinXGsvd_bufferSize(cusolverH, params, N, K, precA, ldv, precC, &dev_work_bytes_new, &pinned_work_bytes);
+
+  //hyacinXGevd_bufferSize(s_handle, params, N, K, precA, N, &dev_work_bytes_new, &pinned_work_bytes);
+  hyacinXGsvd_bufferSize(s_handle, params, N, K, precA, ldv, precC, &dev_work_bytes_new, &pinned_work_bytes);
   dev_work_bytes = std::max(dev_work_bytes, dev_work_bytes_new);
 
   hyacinXtransform_bufferSize(K, precA, &dev_work_bytes_new);
   dev_work_bytes = std::max(dev_work_bytes, dev_work_bytes_new);
 
-  void* gram = nullptr, *S = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
+  void* gram = nullptr, *basis = nullptr, *S = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
   cudaMalloc(&gram, int64_t(N) * int64_t(N) * int64_t(hyacinXelem_bytes(precC)));
-  cudaMalloc(&S, int64_t(N) * sizeof(T));
+  cudaMalloc(&basis, int64_t(N) * int64_t(K) * int64_t(sizeof(T)));
+  cudaMalloc(&S, int64_t(K) * sizeof(T));
   cudaMalloc(&dev_work, dev_work_bytes);
   cudaMallocHost(&pinned_work, pinned_work_bytes);
 
-  hyacinXsyherk(cublasH, M, N, umax, precA, A, lda, precC, gram, N, dev_work, alg);
+  hyacinXsyherk(handle, M, N, umax, precA, A, lda, precC, gram, N, dev_work, alg);
   int32_t rank = 0;
-  //rank = hyacinXGevd(cusolverH, params, epi, N, K, oversampling, precA, S, V, ldv, gram, N, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
-  rank = hyacinXGsvd(cublasH, cusolverH, params, epi, N, K, oversampling, precA, S, V, ldv, precC, gram, N, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
-  hyacinXtransform(cublasH, 'N', M, N, rank, precA, A, lda, V, ldv, dev_work, dev_work_bytes);
+  //rank = hyacinXGevd(s_handle, params, epi, N, K, oversampling, precA, S, basis, N, gram, N, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
+  rank = hyacinXGsvd(handle, s_handle, params, epi, N, K, oversampling, precA, S, basis, N, precC, gram, N, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
+  hyacinXtransform(handle, 'N', M, N, rank, precA, A, lda, basis, N, dev_work, dev_work_bytes);
+  hyacinXtransform(handle, 'N', Mv, Nv, rank, precA, V, ldv, &((const T*)basis)[lcol_offset], N, dev_work, dev_work_bytes);
 
   cudaStreamSynchronize(stream);
-  cudaFree(gram); cudaFree(S);
+  cudaFree(gram); cudaFree(basis); cudaFree(S);
   cudaFree(dev_work); cudaFreeHost(pinned_work);
   return rank;
 }
@@ -291,34 +290,38 @@ int32_t svd_fit_transform(cudaStream_t stream, cublasHandle_t cublasH, cusolverD
 #ifndef NO_NCCL
 
 template <class T>
-int32_t svd_fit_transform_1dr(cudaStream_t stream, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, cusolverDnParams_t params, double epi, int32_t M, int32_t gM, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv, ncclComm_t comm) {
+int32_t svd_fit_transform_1dr(cudaStream_t stream, cublasHandle_t handle, cusolverDnHandle_t s_handle, cusolverDnParams_t params, ncclComm_t comm, double epi,
+  int32_t M, int32_t gM, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv, int32_t Mv, int32_t Nv = 0, int32_t lcol_offset = 0) {
   int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg; uint64_t dev_work_bytes, dev_work_bytes_new, pinned_work_bytes;
   hyacinXsyherk_autoTune(epi, usd_nd_allreduce, u_extra, &umax, precA, &precC, &alg);
   hyacinXsyherk1Drow_bufferSize(M, gM, N, umax, precC, alg, &dev_work_bytes);
-  hyacinXGsvd_bufferSize(cusolverH, params, N, K, precA, ldv, precC, &dev_work_bytes_new, &pinned_work_bytes);
+
+  hyacinXGsvd_bufferSize(s_handle, params, N, K, precA, ldv, precC, &dev_work_bytes_new, &pinned_work_bytes);
   dev_work_bytes = std::max(dev_work_bytes, dev_work_bytes_new);
 
   hyacinXtransform_bufferSize(K, precA, &dev_work_bytes_new);
   dev_work_bytes = std::max(dev_work_bytes, dev_work_bytes_new);
 
-  void* gram = nullptr, *S = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
+  void* gram = nullptr, *basis = nullptr, *S = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
   cudaMalloc(&gram, int64_t(N) * int64_t(N) * int64_t(hyacinXelem_bytes(precC)));
-  cudaMalloc(&S, int64_t(N) * sizeof(T));
+  cudaMalloc(&basis, int64_t(N) * int64_t(K) * int64_t(sizeof(T)));
+  cudaMalloc(&S, int64_t(K) * sizeof(T));
   cudaMalloc(&dev_work, dev_work_bytes);
   cudaMallocHost(&pinned_work, pinned_work_bytes);
 
-  hyacinXsyherk1Drow(cublasH, M, gM, N, umax, precA, A, lda, precC, gram, N, dev_work, alg, comm);
-  int32_t rank = hyacinXGsvd(cublasH, cusolverH, params, epi, N, K, oversampling, precA, S, V, ldv, precC, gram, N, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
-  hyacinXtransform(cublasH, 'N', M, N, rank, precA, A, lda, V, ldv, dev_work, dev_work_bytes);
+  hyacinXsyherk1Drow(handle, M, gM, N, umax, precA, A, lda, precC, gram, N, dev_work, alg, comm);
+  int32_t rank = hyacinXGsvd(handle, s_handle, params, epi, N, K, oversampling, precA, S, basis, N, precC, gram, N, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
+  hyacinXtransform(handle, 'N', M, N, rank, precA, A, lda, basis, N, dev_work, dev_work_bytes);
+  hyacinXtransform(handle, 'N', Mv, Nv, rank, precA, V, ldv, &((const T*)basis)[lcol_offset], N, dev_work, dev_work_bytes);
 
   cudaStreamSynchronize(stream);
-  cudaFree(gram); cudaFree(S);
+  cudaFree(gram); cudaFree(basis); cudaFree(S);
   cudaFree(dev_work); cudaFreeHost(pinned_work);
   return rank;
 }
 
 template <class T>
-std::pair<int32_t, int32_t> allgatherv_1dc(cudaStream_t stream, int32_t M, int32_t N, T* A, int32_t lda, ncclComm_t comm) {
+std::pair<int32_t, int32_t> allgatherv_1dc(cudaStream_t stream, ncclComm_t comm, int32_t M, int32_t N, T* A, int32_t lda) {
   hyacinPrecision_t precA = __precA<T>(); int32_t comm_size; ncclCommCount(comm, &comm_size);
   uint64_t dev_work_bytes, pinned_work_bytes;
   hyacinXAllGatherV1Dcol_bufferSize(M, comm_size, precA, &dev_work_bytes, &pinned_work_bytes);

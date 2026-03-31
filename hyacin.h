@@ -206,7 +206,7 @@ void hyacinXlqchol(
   int32_t K,
   int32_t N,
   hyacinPrecision_t AXtype,
-  const void* X,
+  void* X,
   int32_t ldx,
   void* dev_work,
   uint64_t dev_work_bytes,

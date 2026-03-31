@@ -65,9 +65,10 @@ inline int32_t diag_piv_dispatcher(cudaStream_t stream, cublasHandle_t handle, d
   cudaMemcpyAsync(jpiv, hpiv, int64_t(N) * sizeof(int32_t), cudaMemcpyHostToDevice, stream);
   if (0 < K) {
     constexpr int32_t block_threads = 512;
+    int64_t CK = int64_t(K) << 1, cldg = int64_t(ldg) << 1;
+    uint32_t grid_x = uint32_t(K + 511) >> 9, grid_cx = uint32_t(uint64_t(CK) + uint64_t(511) >> 9);
     if (AXtype == HYACIN_F64) {
       double* Bptr = (double*)dev_work;
-      uint32_t grid_x = uint32_t(K + block_threads - 1) >> 9;
       cvcpy_kernel <Gtype, constGptr, double, double* __restrict__>
         <<< dim3(grid_x, N), block_threads, 0, stream >>> (int64_t(K), G, int64_t(ldg), Bptr, int64_t(K));
       if (K < N)
@@ -77,7 +78,6 @@ inline int32_t diag_piv_dispatcher(cudaStream_t stream, cublasHandle_t handle, d
     }
     else if (AXtype == HYACIN_F32) {
       float* Bptr = (float*)dev_work;
-      uint32_t grid_x = uint32_t(K + block_threads - 1) >> 9;
       cvcpy_kernel <Gtype, constGptr, float, float* __restrict__>
         <<< dim3(grid_x, N), block_threads, 0, stream >>> (int64_t(K), G, int64_t(ldg), Bptr, int64_t(K));
       if (K < N)
@@ -87,9 +87,6 @@ inline int32_t diag_piv_dispatcher(cudaStream_t stream, cublasHandle_t handle, d
     }
     else if (AXtype == HYACIN_F64_COMPLEX) {
       cuDoubleComplex* Bptr = (cuDoubleComplex*)dev_work;
-      int64_t CK = int64_t(K) << 1, cldg = int64_t(ldg) << 1;
-      uint32_t grid_x = uint32_t(K + block_threads - 1) >> 9;
-      uint32_t grid_cx = uint32_t(uint64_t(CK) + uint64_t(block_threads - 1) >> 9);
       cvcpy_kernel <Gtype, constGptr, double, double* __restrict__>
         <<< dim3(grid_cx, N), block_threads, 0, stream >>> (CK, G, cldg, (double*)Bptr, CK);
       if (K < N)
@@ -99,9 +96,6 @@ inline int32_t diag_piv_dispatcher(cudaStream_t stream, cublasHandle_t handle, d
     }
     else if (AXtype == HYACIN_F32_COMPLEX) {
       cuComplex* Bptr = (cuComplex*)dev_work;
-      int64_t CK = int64_t(K) << 1, cldg = int64_t(ldg) << 1;
-      uint32_t grid_x = uint32_t(K + block_threads - 1) >> 9;
-      uint32_t grid_cx = uint32_t(uint64_t(CK) + uint64_t(block_threads - 1) >> 9);
       cvcpy_kernel <Gtype, constGptr, float, float* __restrict__>
         <<< dim3(grid_cx, N), block_threads, 0, stream >>> (CK, G, cldg, (float*)Bptr, CK);
       if (K < N)
