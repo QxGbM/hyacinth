@@ -26,7 +26,7 @@ inline std::tuple<int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int64_t,
   int32_t algnM = (localM + 255) & (~255);
   int32_t algnN = (N + 63) & (~63);
   int32_t bits_M = std::max(1, det_reduc ? globalM : localM);
-  int32_t bits_E = int32_t(std::ceil(std::log2(double(bits_M)))) + 2 + Complex;
+  int32_t bits_E = int32_t(std::ceil(std::log2(double(bits_M)))) + (Complex ? 6 : 4);
   umax = use_limbs ? (((umax + 10) & (~7)) - 3) : ((((bits_E + (umax << 1)) | 7) - bits_E) / 2);
   int32_t bits = bits_E + (umax << 1);
 
