@@ -46,31 +46,31 @@ template <class T> inline void run(char prec, int64_t gM, int64_t gN, int64_t K,
   cudaEventCreate(&stop);
 
   int32_t* d_barrier = nullptr;
-  cudaMalloc((void**)(&d_barrier), sizeof(int32_t));
-  cudaMemset(d_barrier, 0xDEADBEEF, sizeof(int32_t));
-
   int32_t r1, r2, N2, offset;
-  if (warmup_run) {
+  if (time_kernel) {
+    cudaMalloc((void**)(&d_barrier), sizeof(int32_t));
+    cudaMemset(d_barrier, 0xDEADBEEF, sizeof(int32_t));
     r1 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm_col, epi, lM, gM, lN, K, d_A, lM, d_V, lN, lN);
     std::tie(N2, offset) = allgatherv_1dc(stream, comm_row, lM, r1, d_A, lM);
     r2 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm_col, epi, lM, gM, N2, K, d_A, lM, d_V, lN, lN, r1, offset);
     cudaMemcpy(d_A, matA.data(), lM * lN * sizeof(T), cudaMemcpyHostToDevice);
+    ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
+    cudaStreamSynchronize(stream);
   }
-
-  ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
-  cudaStreamSynchronize(stream);
   cudaEventRecord(start, stream);
 
   r1 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm_col, epi, lM, gM, lN, K, d_A, lM, d_V, lN, lN);
   std::tie(N2, offset) = allgatherv_1dc(stream, comm_row, lM, r1, d_A, lM);
   r2 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm_col, epi, lM, gM, N2, K, d_A, lM, d_V, lN, lN, r1, offset);
 
-  ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
+  if (time_kernel)
+    ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
   cudaEventRecord(stop, stream);
   cudaStreamSynchronize(stream);
   float milliseconds = 0.0f; cudaEventElapsedTime(&milliseconds, start, stop);
 
-  cudaFree(d_barrier);
+  if (time_kernel)
+    cudaFree(d_barrier);
   cudaEventDestroy(start);
   cudaEventDestroy(stop);
   cudaStreamDestroy(stream);
@@ -91,11 +91,12 @@ template <class T> inline void run(char prec, int64_t gM, int64_t gN, int64_t K,
   cudaFree(d_V);
 
   double err = check_answer_svd(lM, lN, r2, &matU[0], lM, &matV[0], lN, &matA[0], lM);
-  int64_t flops = ((int64_t(gM) + int64_t(gN)) * int64_t(r2) * int64_t(2)) + (int64_t(gM) * int64_t(gN) * int64_t(r2) * int64_t(4));
-  double gflops = double(flops) * 1.e-6 / double(milliseconds);
   std::chrono::duration<double, std::milli> host_wtime = host_end - host_start;
+  double duration = time_kernel ? double(milliseconds) : host_wtime.count();
+  int64_t flops = ((int64_t(gM) + int64_t(gN)) * int64_t(r2) * int64_t(2)) + (int64_t(gM) * int64_t(gN) * int64_t(r2) * int64_t(4));
+  double gflops = double(flops) * 1.e-6 / double(duration);
 
-  printf("%c-SVD#(%d,%d),%ld,%ld,%.1le,%.12le,%d,%d,%f,%lf,%lf\n", prec, grid_row, grid_col, gM, gN, epi, err, r1, r2, milliseconds, host_wtime.count(), gflops);
+  printf("%c-SVD#(%d,%d),%ld,%ld,%.1le,%.12le,%d,%d,%lf,%lf\n", prec, grid_row, grid_col, gM, gN, epi, err, r1, r2, duration, gflops);
 }
 
 int32_t main(int32_t argc, char* argv[]) {

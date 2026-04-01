@@ -26,7 +26,7 @@ template <class T> inline void run(char prec, int64_t M, int64_t N, double epi, 
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
 
-  if (warmup_run) {
+  if (time_kernel) {
     id_hyac(handle, epi, M, N, N, d_A, M, ipiv.data(), d_X, N, algo);
     std::fill(ipiv.begin(), ipiv.end(), 0);
     cudaMemcpy(d_A, matA.data(), M * N * sizeof(T), cudaMemcpyHostToDevice);
@@ -53,13 +53,14 @@ template <class T> inline void run(char prec, int64_t M, int64_t N, double epi, 
   cudaFree(d_X);
 
   double err = check_answer_lra(rank, M, N, matA.data(), M, ipiv.data(), matX.data(), N);
+  std::chrono::duration<double, std::milli> host_wtime = host_end - host_start;
+  double duration = time_kernel ? double(milliseconds) : host_wtime.count();
   // QR flops = 2mnk - nk^2 + 1/3k^3 + k(n-k)
   int64_t qr_flops = (int64_t(M) * int64_t(N) * int64_t(rank) * 2) - (int64_t(N) * int64_t(rank) * int64_t(rank)) + (int64_t(rank) * int64_t(rank) * int64_t(rank) / 3) + (int64_t(rank) * int64_t(N - rank));
   int64_t trsm_flops = int64_t(N) * int64_t(rank) * int64_t(rank);
-  double gflops = double(qr_flops + trsm_flops) * 1.e-6 / double(milliseconds);
-  std::chrono::duration<double, std::milli> host_wtime = host_end - host_start;
+  double gflops = double(qr_flops + trsm_flops) * 1.e-6 / duration;
 
-  printf("%c-LRA,%ld,%ld,%.1le,%.12le,%d,%f,%lf,%lf\n", prec, M, N, epi, err, rank, milliseconds, host_wtime.count(), gflops);
+  printf("%c-LRA,%ld,%ld,%.1le,%.12le,%d,%lf,%lf\n", prec, M, N, epi, err, rank, duration, gflops);
 }
 
 int32_t main(int32_t argc, char* argv[]) {
