@@ -55,11 +55,11 @@ inline int32_t tevd(cusolverDnHandle_t s_handle, cusolverDnParams_t params, doub
   cudaDataType_t type_c = cuda_type<complex_t>(), type_r = cuda_type<real_t>();
   K = std::min(K, N); uint64_t s_bytes = uint64_t(sizeof(real_t)) * K;
   size_t workspaceInBytesOnDevice, workspaceInBytesOnHost;
-  cusolverDnXsyevd_bufferSize(s_handle, params, CUSOLVER_EIG_MODE_VECTOR, CUBLAS_FILL_MODE_LOWER, N, type_c, nullptr, ldx, type_r, nullptr, type_c, &workspaceInBytesOnDevice, &workspaceInBytesOnHost);
+  cusolverDnXsyevd_bufferSize(s_handle, params, CUSOLVER_EIG_MODE_VECTOR, CUBLAS_FILL_MODE_UPPER, N, type_c, nullptr, ldx, type_r, nullptr, type_c, &workspaceInBytesOnDevice, &workspaceInBytesOnHost);
   if ((uint64_t(workspaceInBytesOnDevice) + s_bytes) <= dev_work_bytes && uint64_t(workspaceInBytesOnHost) <= pinned_work_bytes) {
     real_t* dev_S = (real_t*)(&((int8_t*)dev_work)[workspaceInBytesOnDevice]);
     int64_t x_start = int64_t(N - K);
-    cusolverDnXsyevd(s_handle, params, CUSOLVER_EIG_MODE_VECTOR, CUBLAS_FILL_MODE_LOWER, N, type_c, G, ldg, type_r, dev_S, type_c, dev_work, workspaceInBytesOnDevice, pinned_work, workspaceInBytesOnHost, nullptr);
+    cusolverDnXsyevd(s_handle, params, CUSOLVER_EIG_MODE_VECTOR, CUBLAS_FILL_MODE_UPPER, N, type_c, G, ldg, type_r, dev_S, type_c, dev_work, workspaceInBytesOnDevice, pinned_work, workspaceInBytesOnHost, nullptr);
     evd_reorder_kernel <real_t, complex_t, constCptr, Cptr, constRptr, Rptr> <<< dim3(uint32_t((N + 511) >> 9), uint32_t(K + 1)), 512, 0, stream >>>
       (int64_t(N), int64_t(K - 1), &((const complex_t*)G)[x_start * int64_t(ldg)], int64_t(ldg), (complex_t*)X, int64_t(ldx), &((const real_t*)dev_S)[x_start], (real_t*)S); 
     cudaMemcpyAsync(pinned_work, S, int64_t(K) * sizeof(real_t), cudaMemcpyDeviceToHost, stream);
@@ -72,23 +72,23 @@ inline int32_t tevd(cusolverDnHandle_t s_handle, cusolverDnParams_t params, doub
   else throw std::runtime_error("Insufficient workspace provided for SYEVD.");
 }
 
-template <hyacinPrecision_t precG> inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t k, int32_t p, int32_t N, void* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work);
-template<> inline int32_t potrfp<HYACIN_F64>(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t k, int32_t p, int32_t N, void* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
-{ return internal::Cholesky::potrfp_f64(stream, handle, epi, k, p, N, (double*)A, lda, jpiv, dev_work, pinned_work); }
-template<> inline int32_t potrfp<HYACIN_F32>(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t k, int32_t p, int32_t N, void* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
-{ return internal::Cholesky::potrfp_f32(stream, handle, epi, k, p, N, (float*)A, lda, jpiv, dev_work, pinned_work); }
-template<> inline int32_t potrfp<HYACIN_DD>(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t k, int32_t p, int32_t N, void* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
-{ return internal::Cholesky::potrfp_f128_dd(stream, handle, epi, k, p, N, (double2*)A, lda, jpiv, dev_work, pinned_work); }
-template<> inline int32_t potrfp<HYACIN_QF>(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t k, int32_t p, int32_t N, void* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
-{ return internal::Cholesky::potrfp_f128_qf(stream, handle, epi, k, p, N, (float4*)A, lda, jpiv, dev_work, pinned_work); }
-template<> inline int32_t potrfp<HYACIN_F64_COMPLEX>(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t k, int32_t p, int32_t N, void* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
-{ return internal::Cholesky::potrfp_cf64(stream, handle, epi, k, p, N, (std::complex<double>*)A, lda, jpiv, dev_work, pinned_work); }
-template<> inline int32_t potrfp<HYACIN_F32_COMPLEX>(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t k, int32_t p, int32_t N, void* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
-{ return internal::Cholesky::potrfp_cf32(stream, handle, epi, k, p, N, (std::complex<float>*)A, lda, jpiv, dev_work, pinned_work); }
-template<> inline int32_t potrfp<HYACIN_DD_COMPLEX>(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t k, int32_t p, int32_t N, void* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
-{ return internal::Cholesky::potrfp_cf128_dd(stream, handle, epi, k, p, N, (complex_double2*)A, lda, jpiv, dev_work, pinned_work); }
-template<> inline int32_t potrfp<HYACIN_QF_COMPLEX>(cudaStream_t stream, cublasHandle_t handle, double epi, int32_t k, int32_t p, int32_t N, void* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
-{ return internal::Cholesky::potrfp_cf128_qf(stream, handle, epi, k, p, N, (complex_float4*)A, lda, jpiv, dev_work, pinned_work); }
+template <hyacinPrecision_t precG> inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, void* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work);
+template<> inline int32_t potrfp<HYACIN_F64>(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, void* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
+{ return internal::Cholesky::potrfp_f64(stream, handle, fillmode, epi, k, p, N, (double*)A, lda, jpiv, dev_work, pinned_work); }
+template<> inline int32_t potrfp<HYACIN_F32>(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, void* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
+{ return internal::Cholesky::potrfp_f32(stream, handle, fillmode, epi, k, p, N, (float*)A, lda, jpiv, dev_work, pinned_work); }
+template<> inline int32_t potrfp<HYACIN_DD>(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, void* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
+{ return internal::Cholesky::potrfp_f128_dd(stream, handle, fillmode, epi, k, p, N, (double2*)A, lda, jpiv, dev_work, pinned_work); }
+template<> inline int32_t potrfp<HYACIN_QF>(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, void* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
+{ return internal::Cholesky::potrfp_f128_qf(stream, handle, fillmode, epi, k, p, N, (float4*)A, lda, jpiv, dev_work, pinned_work); }
+template<> inline int32_t potrfp<HYACIN_F64_COMPLEX>(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, void* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
+{ return internal::Cholesky::potrfp_cf64(stream, handle, fillmode, epi, k, p, N, (std::complex<double>*)A, lda, jpiv, dev_work, pinned_work); }
+template<> inline int32_t potrfp<HYACIN_F32_COMPLEX>(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, void* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
+{ return internal::Cholesky::potrfp_cf32(stream, handle, fillmode, epi, k, p, N, (std::complex<float>*)A, lda, jpiv, dev_work, pinned_work); }
+template<> inline int32_t potrfp<HYACIN_DD_COMPLEX>(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, void* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
+{ return internal::Cholesky::potrfp_cf128_dd(stream, handle, fillmode, epi, k, p, N, (complex_double2*)A, lda, jpiv, dev_work, pinned_work); }
+template<> inline int32_t potrfp<HYACIN_QF_COMPLEX>(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, void* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
+{ return internal::Cholesky::potrfp_cf128_qf(stream, handle, fillmode, epi, k, p, N, (complex_float4*)A, lda, jpiv, dev_work, pinned_work); }
 
 template <class real_t, class complex_t>
 inline int32_t ge_tsvd(cudaStream_t stream, cusolverDnHandle_t s_handle, cusolverDnParams_t params, double epi, int32_t N, int32_t K, int32_t p,
@@ -109,12 +109,12 @@ inline int32_t ge_tsvd(cudaStream_t stream, cusolverDnHandle_t s_handle, cusolve
 }
 
 template <hyacinPrecision_t precG, class constGptr, class Gtype>
-inline int32_t gsvd_dispatcher(cublasHandle_t handle, cusolverDnHandle_t s_handle, cusolverDnParams_t params,
+inline int32_t gsvd_dispatcher(cublasHandle_t handle, cusolverDnHandle_t s_handle, cusolverDnParams_t params, char fillmode,
   double epi, int32_t N, int32_t K, int32_t p, hyacinPrecision_t AXtype, void* S, void* X, int32_t ldx, Gtype* G, int32_t ldg, void* dev_work, uint64_t dev_work_bytes, void* pinned_work, uint64_t pinned_work_bytes) {
   cudaStream_t stream; cublasGetStream(handle, &stream);
   int32_t* hpiv = (int32_t*)(&((Gtype*)pinned_work)[512]);
   std::iota(hpiv, &hpiv[N], 1);
-  K = potrfp<precG>(stream, handle, epi, K, p, N, G, ldg, hpiv, dev_work, pinned_work);
+  K = potrfp<precG>(stream, handle, fillmode, epi, K, p, N, G, ldg, hpiv, dev_work, pinned_work);
   cudaMemcpyAsync(X, hpiv, int64_t(N) * sizeof(int32_t), cudaMemcpyHostToDevice, stream);
   if (0 < K) {
     constexpr int32_t block_threads = 512;
@@ -176,7 +176,7 @@ extern "C" void hyacinXGevPcsvd_bufferSize(cusolverDnHandle_t s_handle, cusolver
 
   size_t workspaceInBytesOnDevice, workspaceInBytesOnHost;
   if ((use_evd == 'Y' || use_evd == 'y') && (AXtype == Gtype)) {
-    cusolverDnXsyevd_bufferSize(s_handle, params, CUSOLVER_EIG_MODE_VECTOR, CUBLAS_FILL_MODE_LOWER, N, type_c, nullptr, ldg, type_r, nullptr, type_c, &workspaceInBytesOnDevice, &workspaceInBytesOnHost);
+    cusolverDnXsyevd_bufferSize(s_handle, params, CUSOLVER_EIG_MODE_VECTOR, CUBLAS_FILL_MODE_UPPER, N, type_c, nullptr, ldg, type_r, nullptr, type_c, &workspaceInBytesOnDevice, &workspaceInBytesOnHost);
     *dev_work_bytes = uint64_t(workspaceInBytesOnDevice) + uint64_t(x_real_bytes * int64_t(K));
     *pinned_work_bytes = std::max(uint64_t(workspaceInBytesOnHost), uint64_t(x_real_bytes * int64_t(K)));
   }
@@ -187,7 +187,7 @@ extern "C" void hyacinXGevPcsvd_bufferSize(cusolverDnHandle_t s_handle, cusolver
   }
 }
 
-extern "C" int32_t hyacinXGevPcsvd(cublasHandle_t handle, cusolverDnHandle_t s_handle, cusolverDnParams_t params, char use_evd, double epi, int32_t N, int32_t K, int32_t p,
+extern "C" int32_t hyacinXGevPcsvd(cublasHandle_t handle, cusolverDnHandle_t s_handle, cusolverDnParams_t params, char use_evd, char fillmode, double epi, int32_t N, int32_t K, int32_t p,
   hyacinPrecision_t AXtype, void* S, void* X, int32_t ldx, hyacinPrecision_t Gtype, void* G, int32_t ldg, void* dev_work, uint64_t dev_work_bytes, void* pinned_work, uint64_t pinned_work_bytes) {
   if (N <= 0 || K <= 0) { return 0; }
   else if ((use_evd == 'Y' || use_evd == 'y') && (AXtype == Gtype)) switch (AXtype) {
@@ -203,21 +203,21 @@ extern "C" int32_t hyacinXGevPcsvd(cublasHandle_t handle, cusolverDnHandle_t s_h
   }
   else switch(Gtype) {
     case HYACIN_F64: return gsvd_dispatcher<HYACIN_F64, const double* __restrict__>
-      (handle, s_handle, params, epi, N, K, p, AXtype, S, X, ldx, (double*)G, ldg, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
+      (handle, s_handle, params, fillmode, epi, N, K, p, AXtype, S, X, ldx, (double*)G, ldg, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
     case HYACIN_F32: return gsvd_dispatcher<HYACIN_F32, const float* __restrict__>
-      (handle, s_handle, params, epi, N, K, p, AXtype, S, X, ldx, (float*)G, ldg, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
+      (handle, s_handle, params, fillmode, epi, N, K, p, AXtype, S, X, ldx, (float*)G, ldg, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
     case HYACIN_DD: return gsvd_dispatcher<HYACIN_DD, const double2* __restrict__>
-      (handle, s_handle, params, epi, N, K, p, AXtype, S, X, ldx, (double2*)G, ldg, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
+      (handle, s_handle, params, fillmode, epi, N, K, p, AXtype, S, X, ldx, (double2*)G, ldg, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
     case HYACIN_QF: return gsvd_dispatcher<HYACIN_QF, const float4* __restrict__>
-      (handle, s_handle, params, epi, N, K, p, AXtype, S, X, ldx, (float4*)G, ldg, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
+      (handle, s_handle, params, fillmode, epi, N, K, p, AXtype, S, X, ldx, (float4*)G, ldg, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
     case HYACIN_F64_COMPLEX: return gsvd_dispatcher<HYACIN_F64_COMPLEX, const double* __restrict__>
-      (handle, s_handle, params, epi, N, K, p, AXtype, S, X, ldx, (double*)G, ldg, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
+      (handle, s_handle, params, fillmode, epi, N, K, p, AXtype, S, X, ldx, (double*)G, ldg, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
     case HYACIN_F32_COMPLEX: return gsvd_dispatcher<HYACIN_F32_COMPLEX, const float* __restrict__>
-      (handle, s_handle, params, epi, N, K, p, AXtype, S, X, ldx, (float*)G, ldg, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
+      (handle, s_handle, params, fillmode, epi, N, K, p, AXtype, S, X, ldx, (float*)G, ldg, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
     case HYACIN_DD_COMPLEX: return gsvd_dispatcher<HYACIN_DD_COMPLEX, const double2* __restrict__>
-      (handle, s_handle, params, epi, N, K, p, AXtype, S, X, ldx, (double2*)G, ldg, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
+      (handle, s_handle, params, fillmode, epi, N, K, p, AXtype, S, X, ldx, (double2*)G, ldg, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
     case HYACIN_QF_COMPLEX: return gsvd_dispatcher<HYACIN_QF_COMPLEX, const float4* __restrict__>
-      (handle, s_handle, params, epi, N, K, p, AXtype, S, X, ldx, (float4*)G, ldg, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
+      (handle, s_handle, params, fillmode, epi, N, K, p, AXtype, S, X, ldx, (float4*)G, ldg, dev_work, dev_work_bytes, pinned_work, pinned_work_bytes);
     default: return 0;
   }
 }

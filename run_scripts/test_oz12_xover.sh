@@ -6,6 +6,11 @@
 
 module load cuda nccl intel/2022/mkl
 
+/home/ma/hyacinth/build/examples/xlra_example.app M=262144 N=4096 epi=1.e-4 data=Z algo=F
+/home/ma/hyacinth/build/examples/xlra_example.app M=262144 N=4096 epi=1.e-6 data=Z algo=F
+/home/ma/hyacinth/build/examples/xlra_example.app M=262144 N=4096 epi=1.e-8 data=Z algo=F
+/home/ma/hyacinth/build/examples/xlra_example.app M=262144 N=4096 epi=1.e-10 data=Z algo=F
+
 /home/ma/hyacinth/build/examples/xlra_example.app M=262144 N=4096 epi=1.e-1 data=Z algo=L
 /home/ma/hyacinth/build/examples/xlra_example.app M=262144 N=4096 epi=1.e-2 data=Z algo=L
 /home/ma/hyacinth/build/examples/xlra_example.app M=262144 N=4096 epi=1.e-3 data=Z algo=L

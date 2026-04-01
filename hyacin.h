@@ -24,7 +24,8 @@ typedef enum {
   HYACIN_ALG_LIMBS,
   HYACIN_ALG_CRT,
   HYACIN_ALG_LIMBS_ND,
-  HYACIN_ALG_CRT_ND
+  HYACIN_ALG_CRT_ND,
+  CUBLAS_FLOAT_ND
 } hyacinAlgorithm_t;
 
 #ifdef __cplusplus
@@ -112,6 +113,7 @@ void hyacinXGinterp_bufferSize(
 
 int32_t hyacinXGinterp(
   cublasHandle_t handle,
+  char fillmode,
   double epi,
   int32_t N,
   int32_t K,
@@ -146,6 +148,7 @@ int32_t hyacinXGevPcsvd(
   cusolverDnHandle_t s_handle,
   cusolverDnParams_t params,
   char usd_evd,
+  char fillmode,
   double epi,
   int32_t N,
   int32_t K,

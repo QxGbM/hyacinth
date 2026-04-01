@@ -22,12 +22,12 @@ template <class T> inline void run(char prec, int64_t M, int64_t N, double epi, 
   cudaMalloc((void**)(&d_X), N * N * sizeof(T));
   cudaMemcpy(d_A, matA.data(), M * N * sizeof(T), cudaMemcpyHostToDevice);
 
-  geqp3_ronly(handle, epi, M, N, N, d_A, M, ipiv.data(), d_X, N, algo);
+  id_hyac(handle, epi, M, N, N, d_A, M, ipiv.data(), d_X, N, algo);
   std::fill(ipiv.begin(), ipiv.end(), 0);
   cudaMemcpy(d_A, matA.data(), M * N * sizeof(T), cudaMemcpyHostToDevice);
 
   cudaEventRecord(start, stream);
-  int32_t rank = geqp3_ronly(handle, epi, M, N, N, d_A, M, ipiv.data(), d_X, N, algo);
+  int32_t rank = id_hyac(handle, epi, M, N, N, d_A, M, ipiv.data(), d_X, N, algo);
   cudaEventRecord(stop, stream);
 
   std::vector<T> matX(N * N);
