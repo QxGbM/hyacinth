@@ -1,6 +1,7 @@
 
 #include <common.hpp>
 #include <iostream>
+#include <chrono>
 
 template <class T> inline void run(char prec, int64_t M, int64_t N, int64_t K, double epi, const std::string& file, const std::string& out) {
   std::vector<T> matA(M * N);
@@ -8,6 +9,9 @@ template <class T> inline void run(char prec, int64_t M, int64_t N, int64_t K, d
     matrix_from_row_major_csv(M, N, 512, 512, matA.data(), M, file);
   else
     matrix_generator<T>(M, N).generate_block(1., 512, 512, &matA[0], M);
+
+  /* Timed region start */
+  auto host_start = std::chrono::high_resolution_clock::now();
 
   cudaStream_t stream;
   cublasHandle_t cublasH;
@@ -42,31 +46,33 @@ template <class T> inline void run(char prec, int64_t M, int64_t N, int64_t K, d
   cudaEventRecord(stop, stream);
 
   cudaDeviceSynchronize();
-
-  std::vector<T> matU(M * K), matV(K * N);
-  cudaMemcpy(matU.data(), d_A, M * K * sizeof(T), cudaMemcpyDeviceToHost);
-  cudaMemcpy(matV.data(), d_V, K * N * sizeof(T), cudaMemcpyDeviceToHost);
-
-  std::pair<double, double> ret = check_answer_svd(M, N, rank, &matU[0], M, &matV[0], N, &matA[0], M);
-  double err = std::sqrt(ret.first / ret.second);
-
   float milliseconds = 0.0f; cudaEventElapsedTime(&milliseconds, start, stop);
-  int64_t flops = ((int64_t(M) + int64_t(N)) * int64_t(rank) * int64_t(2)) + (int64_t(M) * int64_t(N) * int64_t(rank) * int64_t(4));
-  double gflops = double(flops) * 1.e-6 / double(milliseconds);
 
-  printf("%c-SVD,%ld,%ld,%.1le,%.12le,%d,%f,%lf\n", prec, M, N, epi, err, rank, milliseconds, gflops);
-
-  if (!out.empty())
-    write_matrix_to_csv(rank, N, &matV[0], K, out);
-
-  cudaFree(d_A);
-  cudaFree(d_V);
   cudaEventDestroy(start);
   cudaEventDestroy(stop);
   cudaStreamDestroy(stream);
   cublasDestroy(cublasH);
   cusolverDnDestroy(cusolverH);
   cusolverDnDestroyParams(params);
+
+  /* Timed region end */
+  auto host_end = std::chrono::high_resolution_clock::now();
+
+  std::vector<T> matU(M * K), matV(K * N);
+  cudaMemcpy(matU.data(), d_A, M * K * sizeof(T), cudaMemcpyDeviceToHost);
+  cudaMemcpy(matV.data(), d_V, K * N * sizeof(T), cudaMemcpyDeviceToHost);
+  cudaFree(d_A);
+  cudaFree(d_V);
+
+  double err = check_answer_svd(M, N, rank, &matU[0], M, &matV[0], N, &matA[0], M);
+  int64_t flops = ((int64_t(M) + int64_t(N)) * int64_t(rank) * int64_t(2)) + (int64_t(M) * int64_t(N) * int64_t(rank) * int64_t(4));
+  double gflops = double(flops) * 1.e-6 / double(milliseconds);
+  std::chrono::duration<double, std::milli> host_wtime = host_end - host_start;
+
+  printf("%c-SVD,%ld,%ld,%.1le,%.12le,%d,%f,%lf,%lf\n", prec, M, N, epi, err, rank, milliseconds, host_wtime.count(), gflops);
+
+  if (!out.empty())
+    write_matrix_to_csv(rank, N, &matV[0], K, out);
 }
 
 int32_t main(int32_t argc, char* argv[]) {

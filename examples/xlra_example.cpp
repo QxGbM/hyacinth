@@ -1,11 +1,20 @@
 
 #include <common.hpp>
 #include <iostream>
+#include <chrono>
 
 template <class T> inline void run(char prec, int64_t M, int64_t N, double epi, char algo) {
   std::vector<T> matA(M * N);
   std::vector<int32_t> ipiv(N);
   matrix_generator<T>(M, N).generate_block(1., 512, 512, &matA[0], M);
+
+  T* d_A = nullptr, * d_X = nullptr;
+  cudaMalloc((void**)(&d_A), M * N * sizeof(T));
+  cudaMalloc((void**)(&d_X), N * N * sizeof(T));
+  cudaMemcpy(d_A, matA.data(), M * N * sizeof(T), cudaMemcpyHostToDevice);
+
+  /* Timed region start */
+  auto host_start = std::chrono::high_resolution_clock::now();
 
   cudaStream_t stream;
   cublasHandle_t handle;
@@ -17,37 +26,40 @@ template <class T> inline void run(char prec, int64_t M, int64_t N, double epi, 
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
 
-  T* d_A = nullptr, * d_X = nullptr;
-  cudaMalloc((void**)(&d_A), M * N * sizeof(T));
-  cudaMalloc((void**)(&d_X), N * N * sizeof(T));
-  cudaMemcpy(d_A, matA.data(), M * N * sizeof(T), cudaMemcpyHostToDevice);
-
-  id_hyac(handle, epi, M, N, N, d_A, M, ipiv.data(), d_X, N, algo);
-  std::fill(ipiv.begin(), ipiv.end(), 0);
-  cudaMemcpy(d_A, matA.data(), M * N * sizeof(T), cudaMemcpyHostToDevice);
+  if (warmup_run) {
+    id_hyac(handle, epi, M, N, N, d_A, M, ipiv.data(), d_X, N, algo);
+    std::fill(ipiv.begin(), ipiv.end(), 0);
+    cudaMemcpy(d_A, matA.data(), M * N * sizeof(T), cudaMemcpyHostToDevice);
+  }
 
   cudaEventRecord(start, stream);
   int32_t rank = id_hyac(handle, epi, M, N, N, d_A, M, ipiv.data(), d_X, N, algo);
   cudaEventRecord(stop, stream);
 
-  std::vector<T> matX(N * N);
-  cudaMemcpy(matX.data(), d_X, N * N * sizeof(T), cudaMemcpyDeviceToHost);
-  double rel_err = check_answer_lra(rank, M, N, matA.data(), M, ipiv.data(), matX.data(), N);
-
+  cudaStreamSynchronize(stream);
   float milliseconds = 0.0f; cudaEventElapsedTime(&milliseconds, start, stop);
-  // QR flops = 2mnk - nk^2 + 1/3k^3 + k(n-k)
-  int64_t qr_flops = (int64_t(M) * int64_t(N) * int64_t(rank) * 2) - (int64_t(N) * int64_t(rank) * int64_t(rank)) + (int64_t(rank) * int64_t(rank) * int64_t(rank) / 3) + (int64_t(rank) * int64_t(N - rank));
-  int64_t trsm_flops = int64_t(N) * int64_t(rank) * int64_t(rank);
-  double gflops = double(qr_flops + trsm_flops) * 1.e-6 / double(milliseconds);
 
-  printf("%c-LRA,%ld,%ld,%.1le,%.12le,%d,%f,%lf\n", prec, M, N, epi, rel_err, rank, milliseconds, gflops);
-
-  cudaFree(d_A);
-  cudaFree(d_X);
   cudaEventDestroy(start);
   cudaEventDestroy(stop);
   cudaStreamDestroy(stream);
   cublasDestroy(handle);
+
+  /* Timed region end */
+  auto host_end = std::chrono::high_resolution_clock::now();
+
+  std::vector<T> matX(N * N);
+  cudaMemcpy(matX.data(), d_X, N * N * sizeof(T), cudaMemcpyDeviceToHost);
+  cudaFree(d_A);
+  cudaFree(d_X);
+
+  double err = check_answer_lra(rank, M, N, matA.data(), M, ipiv.data(), matX.data(), N);
+  // QR flops = 2mnk - nk^2 + 1/3k^3 + k(n-k)
+  int64_t qr_flops = (int64_t(M) * int64_t(N) * int64_t(rank) * 2) - (int64_t(N) * int64_t(rank) * int64_t(rank)) + (int64_t(rank) * int64_t(rank) * int64_t(rank) / 3) + (int64_t(rank) * int64_t(N - rank));
+  int64_t trsm_flops = int64_t(N) * int64_t(rank) * int64_t(rank);
+  double gflops = double(qr_flops + trsm_flops) * 1.e-6 / double(milliseconds);
+  std::chrono::duration<double, std::milli> host_wtime = host_end - host_start;
+
+  printf("%c-LRA,%ld,%ld,%.1le,%.12le,%d,%f,%lf,%lf\n", prec, M, N, epi, err, rank, milliseconds, host_wtime.count(), gflops);
 }
 
 int32_t main(int32_t argc, char* argv[]) {

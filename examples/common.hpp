@@ -13,7 +13,7 @@
 using blas_int = int; // LP64 for blas
 const int32_t oversampling = 10; // increase for better LRA accuracy
 const int32_t u_extra = 6; // increase for better Quantization accuracy
-const int32_t usd_nd_allreduce = 0; // non-zero for use float(non-deterministic) all reduce when possible, 0 for deterministic
+const int32_t usd_nd_allreduce = 1; // non-zero for use float(non-deterministic) all reduce when possible, 0 for deterministic
 const int32_t warmup_run = 1;
 
 template <class T>
@@ -161,16 +161,16 @@ double check_answer_lra(int32_t rank, int32_t M, int32_t N, const T* A, int32_t 
 }
 
 template <class T>
-std::pair<double, double> check_answer_svd(int32_t M, int32_t N, int32_t rank, const T* U, int32_t ldu, const T* V, int32_t ldv, const T* B, int32_t ldb) {
+double check_answer_svd(int32_t M, int32_t N, int32_t rank, const T* U, int32_t ldu, const T* V, int32_t ldv, const T* B, int32_t ldb) {
   if (rank <= 0 || M <= 0 || N <= 0)
-    return std::make_pair(0., 0.);
+    return std::numeric_limits<double>::quiet_NaN();
   std::vector<T> matB(M * N);
   copy2d(M, N, B, ldb, &matB[0], M);
 
   double nrm = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
   ntgemm(M, N, rank, U, ldu, V, ldv, &matB[0], M);
   double err = std::transform_reduce(matB.begin(), matB.end(), 0., std::plus<double>(), [](auto i) { return double(std::norm(i)); });
-  return std::make_pair(err, nrm);
+  return std::sqrt(err / nrm);
 }
 
 inline std::string conv_to_string(double f) { char s[30]; std::sprintf(s, "%.18le", f); return std::string(s); }

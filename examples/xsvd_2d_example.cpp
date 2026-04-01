@@ -2,12 +2,9 @@
 #include <common.hpp>
 #include <cstdlib>
 #include <iostream>
+#include <chrono>
 
-template <class T> inline void run(char prec, int64_t gM, int64_t gN, int64_t K, int64_t mb, int64_t nb, double epi, int32_t grid_row, int32_t grid_col, int32_t tile_m, int32_t tile_n, ncclComm_t comm, const std::string& file) {
-  ncclComm_t comm_row, comm_col;
-  ncclCommSplit(comm, grid_row, grid_col, &comm_row, nullptr);
-  ncclCommSplit(comm, grid_col, grid_row, &comm_col, nullptr);
-
+template <class T> inline void run(char prec, int64_t gM, int64_t gN, int64_t K, int64_t mb, int64_t nb, double epi, int32_t grid_row, int32_t grid_col, int32_t tile_m, int32_t tile_n, ncclUniqueId id, const std::string& file) {
   int64_t gK = K * tile_n;
   int64_t lM = mb * (gM / (mb * tile_m));
   int64_t lN = nb * (gN / (nb * tile_n));
@@ -20,10 +17,19 @@ template <class T> inline void run(char prec, int64_t gM, int64_t gN, int64_t K,
   else
     matrix_generator<T>(gM, gN).generate_block(1., mb, nb, &matA[0], lM, grid_row, grid_col, tile_m, tile_n);
 
+  T* d_A = nullptr, *d_V = nullptr;
+  cudaMalloc((void**)(&d_A), lM * std::max(gK, lN) * sizeof(T));
+  cudaMalloc((void**)(&d_V), K * lN * sizeof(T));
+  cudaMemcpy(d_A, matA.data(), lM * lN * sizeof(T), cudaMemcpyHostToDevice);
+
+  /* Timed region start */
+  auto host_start = std::chrono::high_resolution_clock::now();
+
   cudaStream_t stream;
   cublasHandle_t cublasH;
   cusolverDnHandle_t cusolverH;
   cusolverDnParams_t params;
+  ncclComm_t comm, comm_row, comm_col;
 
   cudaStreamCreate(&stream);
   cublasCreate(&cublasH);
@@ -31,24 +37,25 @@ template <class T> inline void run(char prec, int64_t gM, int64_t gN, int64_t K,
   cusolverDnCreate(&cusolverH);
   cusolverDnSetStream(cusolverH, stream);
   cusolverDnCreateParams(&params);
+  ncclCommInitRank(&comm, tile_m * tile_n, id, grid_row + grid_col * tile_m);
+  ncclCommSplit(comm, grid_row, grid_col, &comm_row, nullptr);
+  ncclCommSplit(comm, grid_col, grid_row, &comm_col, nullptr);
 
   cudaEvent_t start, stop;
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
 
   int32_t* d_barrier = nullptr;
-  T* d_A = nullptr, *d_V = nullptr;
-  cudaMalloc((void**)(&d_barrier), sizeof(double2));
-  cudaMalloc((void**)(&d_A), lM * std::max(gK, lN) * sizeof(T));
-  cudaMalloc((void**)(&d_V), K * lN * sizeof(T));
-  cudaMemcpy(d_A, matA.data(), lM * lN * sizeof(T), cudaMemcpyHostToDevice);
-  cudaMemset(d_barrier, 0xDEADBEEF, sizeof(double2));
+  cudaMalloc((void**)(&d_barrier), sizeof(int32_t));
+  cudaMemset(d_barrier, 0xDEADBEEF, sizeof(int32_t));
 
   int32_t r1, r2, N2, offset;
-  r1 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm_col, epi, lM, gM, lN, K, d_A, lM, d_V, lN, lN);
-  std::tie(N2, offset) = allgatherv_1dc(stream, comm_row, lM, r1, d_A, lM);
-  r2 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm_col, epi, lM, gM, N2, K, d_A, lM, d_V, lN, lN, r1, offset);
-  cudaMemcpy(d_A, matA.data(), lM * lN * sizeof(T), cudaMemcpyHostToDevice);
+  if (warmup_run) {
+    r1 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm_col, epi, lM, gM, lN, K, d_A, lM, d_V, lN, lN);
+    std::tie(N2, offset) = allgatherv_1dc(stream, comm_row, lM, r1, d_A, lM);
+    r2 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm_col, epi, lM, gM, N2, K, d_A, lM, d_V, lN, lN, r1, offset);
+    cudaMemcpy(d_A, matA.data(), lM * lN * sizeof(T), cudaMemcpyHostToDevice);
+  }
 
   ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
   cudaStreamSynchronize(stream);
@@ -59,37 +66,36 @@ template <class T> inline void run(char prec, int64_t gM, int64_t gN, int64_t K,
   r2 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm_col, epi, lM, gM, N2, K, d_A, lM, d_V, lN, lN, r1, offset);
 
   ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
-  cudaStreamSynchronize(stream);
   cudaEventRecord(stop, stream);
-
-  std::vector<T> matU(lM * K), matV(K * lN);
-  cudaMemcpy(matU.data(), d_A, lM * K * sizeof(T), cudaMemcpyDeviceToHost);
-  cudaMemcpy(matV.data(), d_V, K * lN * sizeof(T), cudaMemcpyDeviceToHost);
-
-  std::pair<double, double> ret = check_answer_svd(lM, lN, r2, &matU[0], lM, &matV[0], lN, &matA[0], lM);
-  cudaMemcpy(d_barrier, &ret, sizeof(double2), cudaMemcpyHostToDevice);
-  ncclAllReduce(d_barrier, d_barrier, 2, ncclDouble, ncclSum, comm, stream);
   cudaStreamSynchronize(stream);
-  cudaMemcpy(&ret, d_barrier, sizeof(double2), cudaMemcpyDeviceToHost);
-  double err = std::sqrt(ret.first / ret.second);
-
   float milliseconds = 0.0f; cudaEventElapsedTime(&milliseconds, start, stop);
-  int64_t flops = ((int64_t(gM) + int64_t(gN)) * int64_t(r2) * int64_t(2)) + (int64_t(gM) * int64_t(gN) * int64_t(r2) * int64_t(4));
-  double gflops = double(flops) * 1.e-6 / double(milliseconds);
-
-  printf("%c-SVD,%ld,%ld,%.1le,%.12le,%d,%d,%f,%lf\n", prec, gM, gN, epi, err, r1, r2, milliseconds, gflops);
 
   cudaFree(d_barrier);
-  cudaFree(d_A);
-  cudaFree(d_V);
   cudaEventDestroy(start);
   cudaEventDestroy(stop);
   cudaStreamDestroy(stream);
   cublasDestroy(cublasH);
   cusolverDnDestroy(cusolverH);
   cusolverDnDestroyParams(params);
+  ncclCommDestroy(comm);
   ncclCommDestroy(comm_row);
   ncclCommDestroy(comm_col);
+
+  /* Timed region end */
+  auto host_end = std::chrono::high_resolution_clock::now();
+
+  std::vector<T> matU(lM * K), matV(K * lN);
+  cudaMemcpy(matU.data(), d_A, lM * K * sizeof(T), cudaMemcpyDeviceToHost);
+  cudaMemcpy(matV.data(), d_V, K * lN * sizeof(T), cudaMemcpyDeviceToHost);
+  cudaFree(d_A);
+  cudaFree(d_V);
+
+  double err = check_answer_svd(lM, lN, r2, &matU[0], lM, &matV[0], lN, &matA[0], lM);
+  int64_t flops = ((int64_t(gM) + int64_t(gN)) * int64_t(r2) * int64_t(2)) + (int64_t(gM) * int64_t(gN) * int64_t(r2) * int64_t(4));
+  double gflops = double(flops) * 1.e-6 / double(milliseconds);
+  std::chrono::duration<double, std::milli> host_wtime = host_end - host_start;
+
+  printf("%c-SVD#(%d,%d),%ld,%ld,%.1le,%.12le,%d,%d,%f,%lf,%lf\n", prec, grid_row, grid_col, gM, gN, epi, err, r1, r2, milliseconds, host_wtime.count(), gflops);
 }
 
 int32_t main(int32_t argc, char* argv[]) {
@@ -119,6 +125,7 @@ int32_t main(int32_t argc, char* argv[]) {
 
   if (world_size != tile_m * tile_n)
   { if (world_rank == 0) std::cerr << "Incorrect process grid launch configuration." << std::endl; return -1; }
+  int32_t grid_row = world_rank % tile_m, grid_col = world_rank / tile_m;
 
   int32_t device_count = 0; cudaGetDeviceCount(&device_count);
   auto cu_err = cudaSetDevice(1 < device_count ? local_rank : 0);
@@ -126,22 +133,16 @@ int32_t main(int32_t argc, char* argv[]) {
   if (cu_err != cudaSuccess)
   { std::cerr << cudaGetErrorString(cu_err) << std::endl; return -1; }
 
-  int32_t grid_row = world_rank % tile_m, grid_col = world_rank / tile_m;
-  ncclComm_t comm;
-  ncclCommInitRank(&comm, world_size, id, world_rank);
-
   switch(prec) {
-    case 'D': run<double>(prec, gM, gN, K, mb, nb, epi, grid_row, grid_col, tile_m, tile_n, comm, file); break;
-    case 'S': run<float>(prec, gM, gN, K, mb, nb, epi, grid_row, grid_col, tile_m, tile_n, comm, file); break;
-    case 'Z': run<std::complex<double>>(prec, gM, gN, K, mb, nb, epi, grid_row, grid_col, tile_m, tile_n, comm, file); break;
-    case 'C': run<std::complex<float>>(prec, gM, gN, K, mb, nb, epi, grid_row, grid_col, tile_m, tile_n, comm, file); break;
+    case 'D': run<double>(prec, gM, gN, K, mb, nb, epi, grid_row, grid_col, tile_m, tile_n, id, file); break;
+    case 'S': run<float>(prec, gM, gN, K, mb, nb, epi, grid_row, grid_col, tile_m, tile_n, id, file); break;
+    case 'Z': run<std::complex<double>>(prec, gM, gN, K, mb, nb, epi, grid_row, grid_col, tile_m, tile_n, id, file); break;
+    case 'C': run<std::complex<float>>(prec, gM, gN, K, mb, nb, epi, grid_row, grid_col, tile_m, tile_n, id, file); break;
     default: break;
   }
 
   cu_err = cudaGetLastError();
   if (cu_err != cudaSuccess)
     std::cerr << cudaGetErrorString(cu_err) << std::endl;
-
-  ncclCommDestroy(comm);
   return 0;
 }
