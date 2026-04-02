@@ -3,7 +3,7 @@
 #include <iostream>
 #include <chrono>
 
-template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, int64_t mb, double epi, int32_t grid_row, int32_t tile_m, ncclUniqueId id, const std::string& file, const std::string& out) {
+template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, int64_t mb, double epi, int32_t grid_row, int32_t tile_m, ncclUniqueId id, const std::string& file, const std::string& ref) {
   int64_t lM = mb * (gM / (mb * tile_m));
   lM += std::max(int64_t(0), std::min(mb, gM - lM * tile_m - mb * grid_row));
 
@@ -85,12 +85,16 @@ template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, 
 
   printf("%c-SVD#%d,%ld,%ld,%.1le,%.12le,%d,%lf,%lf\n", prec, grid_row, gM, N, epi, err, rank, duration, gflops);
 
-  if (!out.empty() && grid_row == 0)
-    write_matrix_to_csv(rank, N, &matV[0], K, out);
+  if (!ref.empty() && grid_row == 0) {
+    std::vector<T> ref_V(N * int64_t(rank));
+    matrix_from_row_major_csv(N, rank, N, rank, ref_V.data(), N, ref);
+    std::pair<double, double> bits_err = check_bit(N, rank, ref_V.data(), N, matV.data(), N);
+    printf("%le,%le\n", bits_err.first, bits_err.second);
+  }
 }
 
 int32_t main(int32_t argc, char* argv[]) {
-  char prec = 'D'; std::string file, out;
+  char prec = 'D'; std::string file, ref;
   int64_t gM = 2048, N = 2048, K = 2048, mb = 512;
   double epi = 1.e-12;
 
@@ -102,7 +106,7 @@ int32_t main(int32_t argc, char* argv[]) {
     else if (std::strncmp(argv[i], "epi=", 4) == 0) { std::sscanf(argv[i], "epi=%lf", &epi); }
     else if (std::strncmp(argv[i], "mb=", 3) == 0) { std::sscanf(argv[i], "mb=%ld", &mb); }
     else if (std::strncmp(argv[i], "file=", 5) == 0) { file.resize(std::strlen(argv[i])); std::sscanf(argv[i], "file=%s", file.data()); }
-    else if (std::strncmp(argv[i], "out=", 4) == 0) { out.resize(std::strlen(argv[i])); std::sscanf(argv[i], "out=%s", out.data()); }
+    else if (std::strncmp(argv[i], "ref=", 4) == 0) { ref.resize(std::strlen(argv[i])); std::sscanf(argv[i], "ref=%s", ref.data()); }
     else { std::cerr << "Ignored parameter: " << argv[i] << std::endl; }
   }
   N = std::min(gM, N); K = std::min(N, K);
@@ -117,10 +121,10 @@ int32_t main(int32_t argc, char* argv[]) {
   { std::cerr << cudaGetErrorString(cu_err) << std::endl; return -1; }
 
   switch(prec) {
-    case 'D': run<double>(prec, gM, N, K, mb, epi, world_rank, world_size, id, file, out); break;
-    case 'S': run<float>(prec, gM, N, K, mb, epi, world_rank, world_size, id, file, out); break;
-    case 'Z': run<std::complex<double>>(prec, gM, N, K, mb, epi, world_rank, world_size, id, file, out); break;
-    case 'C': run<std::complex<float>>(prec, gM, N, K, mb, epi, world_rank, world_size, id, file, out); break;
+    case 'D': run<double>(prec, gM, N, K, mb, epi, world_rank, world_size, id, file, ref); break;
+    case 'S': run<float>(prec, gM, N, K, mb, epi, world_rank, world_size, id, file, ref); break;
+    case 'Z': run<std::complex<double>>(prec, gM, N, K, mb, epi, world_rank, world_size, id, file, ref); break;
+    case 'C': run<std::complex<float>>(prec, gM, N, K, mb, epi, world_rank, world_size, id, file, ref); break;
     default: break;
   }
 

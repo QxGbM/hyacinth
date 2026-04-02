@@ -73,7 +73,7 @@ template <class T> inline void run(char prec, int64_t M, int64_t N, int64_t K, d
   printf("%c-SVD,%ld,%ld,%.1le,%.12le,%d,%lf,%lf\n", prec, M, N, epi, err, rank, duration, gflops);
 
   if (!out.empty())
-    write_matrix_to_csv(rank, N, &matV[0], K, out);
+    write_matrix_to_csv(N, rank, &matV[0], N, out);
 }
 
 int32_t main(int32_t argc, char* argv[]) {

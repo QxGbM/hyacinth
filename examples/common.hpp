@@ -75,6 +75,30 @@ void matrix_from_row_major_csv(int32_t M, int32_t N, int32_t mb, int32_t nb, T* 
     csv.close();
 }
 
+inline std::string conv_to_string(double f) { char s[30]; std::sprintf(s, "%.18le", f); return std::string(s); }
+inline std::string conv_to_string(float f) { char s[30]; std::sprintf(s, "%.18le", double(f)); return std::string(s); }
+inline std::string conv_to_string(std::complex<double> f)
+{ char s[70]; char sign = 0. <= f.imag() ? '+':'-'; std::sprintf(s, " (%.18le%c%.18lej)", f.real(), sign, std::abs(f.imag())); return std::string(s); }
+inline std::string conv_to_string(std::complex<float> f)
+{ char s[70]; char sign = 0. <= f.imag() ? '+':'-'; std::sprintf(s, " (%.18le%c%.18lej)", double(f.real()), sign, double(std::fabs(f.imag()))); return std::string(s); }
+
+template <class T>
+void write_matrix_to_csv(int32_t M, int32_t N, const T* A, int32_t lda, const std::string& file) {
+  std::ofstream csv(replace_suffix(file, "csv")), idx(replace_suffix(file, "cache"));
+  if (csv.is_open() && idx.is_open()) {
+    int64_t bytes = 0; idx << "0\n";
+    for (int32_t i = 0; i < M; ++i) {
+      std::string str;
+      for (int32_t j = 0; j < N; ++j)
+        if (j == 0) str += conv_to_string(A[int64_t(i) + int64_t(j) * int64_t(lda)]);
+          else str += "," + conv_to_string(A[int64_t(i) + int64_t(j) * int64_t(lda)]);
+      str += '\n'; bytes += str.size();
+      csv << str; idx << bytes << '\n';
+    }
+    csv.close(); idx.close();
+  }
+}
+
 template <class T> struct matrix_generator {
   int64_t gM, gN;
   std::vector<double> bodies;
@@ -173,25 +197,20 @@ double check_answer_svd(int32_t M, int32_t N, int32_t rank, const T* U, int32_t 
   return std::sqrt(err / nrm);
 }
 
-inline std::string conv_to_string(double f) { char s[30]; std::sprintf(s, "%.18le", f); return std::string(s); }
-inline std::string conv_to_string(float f) { char s[30]; std::sprintf(s, "%.18le", double(f)); return std::string(s); }
-inline std::string conv_to_string(std::complex<double> f)
-{ char s[70]; char sign = 0. <= f.imag() ? '+':'-'; std::sprintf(s, " (%.18le%c%.18lej)", f.real(), sign, std::abs(f.imag())); return std::string(s); }
-inline std::string conv_to_string(std::complex<float> f)
-{ char s[70]; char sign = 0. <= f.imag() ? '+':'-'; std::sprintf(s, " (%.18le%c%.18lej)", double(f.real()), sign, double(std::fabs(f.imag()))); return std::string(s); }
-
 template <class T>
-void write_matrix_to_csv(int32_t M, int32_t N, const T* A, int32_t lda, const std::string& csv) {
-  std::ofstream stream(csv);
-  if (stream.is_open()) {
+std::pair<double, double> check_bit(int32_t M, int32_t N, const T* ref, int32_t ldr, const T* test, int32_t ldt) {
+  if (M <= 0 || N <= 0)
+    return std::make_pair(std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN());
+  double err_max = 0., err_avg = 0.;
+  for (int32_t j = 0; j < N; ++j)
     for (int32_t i = 0; i < M; ++i) {
-      for (int32_t j = 0; j < N; ++j)
-        if (j == 0) stream << conv_to_string(A[int64_t(i) + int64_t(j) * int64_t(lda)]);
-          else stream << "," << conv_to_string(A[int64_t(i) + int64_t(j) * int64_t(lda)]);
-      stream << std::endl;
+      double r = double(std::norm(ref[int64_t(i) + int64_t(j) * int64_t(ldr)]));
+      double t = double(std::norm(test[int64_t(i) + int64_t(j) * int64_t(ldt)] - ref[int64_t(i) + int64_t(j) * int64_t(ldr)]));
+      double e = t / (r == 0. ? 1. : r);
+      err_max = std::max(e, err_max);
+      err_avg += err_max;
     }
-    stream.close();
-  }
+  return std::make_pair(err_max, err_avg / (double(M) * double(N)));
 }
 
 template <class T> inline hyacinPrecision_t __precA();
