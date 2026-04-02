@@ -3,7 +3,7 @@
 #include <iostream>
 #include <chrono>
 
-template <class T> inline void run(char prec, int64_t M, int64_t N, int64_t K, double epi, const std::string& file, const std::string& out) {
+template <class T> inline void run(char prec, int64_t M, int64_t N, int64_t K, char algo, double epi, const std::string& file, const std::string& out) {
   std::vector<T> matA(M * N);
   if (!file.empty())
     matrix_from_row_major_csv(M, N, 512, 512, matA.data(), M, file);
@@ -35,13 +35,13 @@ template <class T> inline void run(char prec, int64_t M, int64_t N, int64_t K, d
   cudaEventCreate(&stop);
 
   if (time_kernel) {
-    svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, N, K, d_A, M, d_V, N, N);
+    svd_fit_transform(stream, cublasH, cusolverH, params, algo, epi, M, N, K, d_A, M, d_V, N, N);
     //id_fit_transform(stream, cublasH, cusolverH, params, epi, M, N, K, d_A, M, d_V, N, N);
     cudaMemcpy(d_A, matA.data(), M * N * sizeof(T), cudaMemcpyHostToDevice);
   }
 
   cudaEventRecord(start, stream);
-  int32_t rank = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, N, K, d_A, M, d_V, N, N);
+  int32_t rank = svd_fit_transform(stream, cublasH, cusolverH, params, algo, epi, M, N, K, d_A, M, d_V, N, N);
   //int32_t rank = id_fit_transform(stream, cublasH, cusolverH, params, epi, M, N, K, d_A, M, d_V, N, N);
   cudaEventRecord(stop, stream);
 
@@ -77,7 +77,7 @@ template <class T> inline void run(char prec, int64_t M, int64_t N, int64_t K, d
 }
 
 int32_t main(int32_t argc, char* argv[]) {
-  char prec = 'D'; std::string file, out;
+  char prec = 'D', algo = 'A'; std::string file, out;
   int64_t M = 2048, N = 2048, K = 2048;
   double epi = 1.e-12;
 
@@ -89,6 +89,7 @@ int32_t main(int32_t argc, char* argv[]) {
     else if (std::strncmp(argv[i], "epi=", 4) == 0) { std::sscanf(argv[i], "epi=%lf", &epi); }
     else if (std::strncmp(argv[i], "file=", 5) == 0) { file.resize(std::strlen(argv[i])); std::sscanf(argv[i], "file=%s", file.data()); }
     else if (std::strncmp(argv[i], "out=", 4) == 0) { out.resize(std::strlen(argv[i])); std::sscanf(argv[i], "out=%s", out.data()); }
+    else if (std::strncmp(argv[i], "algo=", 5) == 0) { std::sscanf(argv[i], "algo=%c", &algo); }
     else { std::cerr << "Ignored parameter: " << argv[i] << std::endl; }
   }
   N = std::min(M, N); K = std::min(N, K);
@@ -99,10 +100,10 @@ int32_t main(int32_t argc, char* argv[]) {
   { std::cerr << cudaGetErrorString(cu_err) << std::endl; return -1; }
 
   switch(prec) {
-    case 'D': run<double>(prec, M, N, K, epi, file, out); break;
-    case 'S': run<float>(prec, M, N, K, epi, file, out); break;
-    case 'Z': run<std::complex<double>>(prec, M, N, K, epi, file, out); break;
-    case 'C': run<std::complex<float>>(prec, M, N, K, epi, file, out); break;
+    case 'D': run<double>(prec, M, N, K, algo, epi, file, out); break;
+    case 'S': run<float>(prec, M, N, K, algo, epi, file, out); break;
+    case 'Z': run<std::complex<double>>(prec, M, N, K, algo, epi, file, out); break;
+    case 'C': run<std::complex<float>>(prec, M, N, K, algo, epi, file, out); break;
     default: break;
   }
 

@@ -3,7 +3,7 @@
 #include <iostream>
 #include <chrono>
 
-template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, int64_t mb, double epi, int32_t grid_row, int32_t tile_m, ncclUniqueId id, const std::string& file, const std::string& ref) {
+template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, int64_t mb, char algo, double epi, int32_t grid_row, int32_t tile_m, ncclUniqueId id, const std::string& file, const std::string& ref) {
   int64_t lM = mb * (gM / (mb * tile_m));
   lM += std::max(int64_t(0), std::min(mb, gM - lM * tile_m - mb * grid_row));
 
@@ -43,14 +43,14 @@ template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, 
   if (time_kernel) {
     cudaMalloc((void**)(&d_barrier), sizeof(int32_t));
     cudaMemset(d_barrier, 0xDEADBEEF, sizeof(int32_t));
-    svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm, epi, lM, gM, N, K, d_A, lM, d_V, N, N);
+    svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm, algo, epi, lM, gM, N, K, d_A, lM, d_V, N, N);
     cudaMemcpy(d_A, matA.data(), lM * N * sizeof(T), cudaMemcpyHostToDevice);
     ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
     cudaStreamSynchronize(stream);
   }
   cudaEventRecord(start, stream);
 
-  int32_t rank = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm, epi, lM, gM, N, K, d_A, lM, d_V, N, N);
+  int32_t rank = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm, algo, epi, lM, gM, N, K, d_A, lM, d_V, N, N);
 
   if (time_kernel)
     ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
@@ -87,14 +87,14 @@ template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, 
 
   if (!ref.empty() && grid_row == 0) {
     std::vector<T> ref_V(N * int64_t(rank));
-    matrix_from_row_major_csv(N, rank, N, rank, ref_V.data(), N, ref);
+    matrix_from_row_major_csv(N, rank, 512, 512, ref_V.data(), N, ref);
     std::pair<double, double> bits_err = check_bit(N, rank, ref_V.data(), N, matV.data(), N);
     printf("%le,%le\n", bits_err.first, bits_err.second);
   }
 }
 
 int32_t main(int32_t argc, char* argv[]) {
-  char prec = 'D'; std::string file, ref;
+  char prec = 'D', algo = 'A'; std::string file, ref;
   int64_t gM = 2048, N = 2048, K = 2048, mb = 512;
   double epi = 1.e-12;
 
@@ -107,6 +107,7 @@ int32_t main(int32_t argc, char* argv[]) {
     else if (std::strncmp(argv[i], "mb=", 3) == 0) { std::sscanf(argv[i], "mb=%ld", &mb); }
     else if (std::strncmp(argv[i], "file=", 5) == 0) { file.resize(std::strlen(argv[i])); std::sscanf(argv[i], "file=%s", file.data()); }
     else if (std::strncmp(argv[i], "ref=", 4) == 0) { ref.resize(std::strlen(argv[i])); std::sscanf(argv[i], "ref=%s", ref.data()); }
+    else if (std::strncmp(argv[i], "algo=", 5) == 0) { std::sscanf(argv[i], "algo=%c", &algo); }
     else { std::cerr << "Ignored parameter: " << argv[i] << std::endl; }
   }
   N = std::min(gM, N); K = std::min(N, K);
@@ -121,10 +122,10 @@ int32_t main(int32_t argc, char* argv[]) {
   { std::cerr << cudaGetErrorString(cu_err) << std::endl; return -1; }
 
   switch(prec) {
-    case 'D': run<double>(prec, gM, N, K, mb, epi, world_rank, world_size, id, file, ref); break;
-    case 'S': run<float>(prec, gM, N, K, mb, epi, world_rank, world_size, id, file, ref); break;
-    case 'Z': run<std::complex<double>>(prec, gM, N, K, mb, epi, world_rank, world_size, id, file, ref); break;
-    case 'C': run<std::complex<float>>(prec, gM, N, K, mb, epi, world_rank, world_size, id, file, ref); break;
+    case 'D': run<double>(prec, gM, N, K, mb, algo, epi, world_rank, world_size, id, file, ref); break;
+    case 'S': run<float>(prec, gM, N, K, mb, algo, epi, world_rank, world_size, id, file, ref); break;
+    case 'Z': run<std::complex<double>>(prec, gM, N, K, mb, algo, epi, world_rank, world_size, id, file, ref); break;
+    case 'C': run<std::complex<float>>(prec, gM, N, K, mb, algo, epi, world_rank, world_size, id, file, ref); break;
     default: break;
   }
 

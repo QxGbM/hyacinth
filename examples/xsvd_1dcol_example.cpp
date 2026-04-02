@@ -3,7 +3,7 @@
 #include <iostream>
 #include <chrono>
 
-template <class T> inline void run(char prec, int64_t M, int64_t gN, int64_t K, int64_t nb, double epi, int32_t grid_col, int32_t tile_n, ncclUniqueId id, const std::string& file) {
+template <class T> inline void run(char prec, int64_t M, int64_t gN, int64_t K, int64_t nb, char algo, double epi, int32_t grid_col, int32_t tile_n, ncclUniqueId id, const std::string& file) {
   int64_t gK = K * tile_n;
   int64_t lN = nb * (gN / (nb * tile_n));
   lN += std::max(int64_t(0), std::min(nb, gN - lN * tile_n - nb * grid_col));
@@ -45,18 +45,18 @@ template <class T> inline void run(char prec, int64_t M, int64_t gN, int64_t K, 
   if (time_kernel) {
     cudaMalloc((void**)(&d_barrier), sizeof(int32_t));
     cudaMemset(d_barrier, 0xDEADBEEF, sizeof(int32_t));
-    r1 = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, lN, K, d_A, M, d_V, lN, lN);
+    r1 = svd_fit_transform(stream, cublasH, cusolverH, params, algo, epi, M, lN, K, d_A, M, d_V, lN, lN);
     std::tie(N2, offset) = allgatherv_1dc(stream, comm, M, r1, d_A, M);
-    r2 = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, N2, K, d_A, M, d_V, lN, lN, r1, offset);
+    r2 = svd_fit_transform(stream, cublasH, cusolverH, params, algo, epi, M, N2, K, d_A, M, d_V, lN, lN, r1, offset);
     cudaMemcpy(d_A, matA.data(), M * lN * sizeof(T), cudaMemcpyHostToDevice);
     ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
     cudaStreamSynchronize(stream);
   }
   cudaEventRecord(start, stream);
 
-  r1 = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, lN, K, d_A, M, d_V, lN, lN);
+  r1 = svd_fit_transform(stream, cublasH, cusolverH, params, algo, epi, M, lN, K, d_A, M, d_V, lN, lN);
   std::tie(N2, offset) = allgatherv_1dc(stream, comm, M, r1, d_A, M);
-  r2 = svd_fit_transform(stream, cublasH, cusolverH, params, epi, M, N2, K, d_A, M, d_V, lN, lN, r1, offset);
+  r2 = svd_fit_transform(stream, cublasH, cusolverH, params, algo, epi, M, N2, K, d_A, M, d_V, lN, lN, r1, offset);
 
   if (time_kernel)
     ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
@@ -93,7 +93,7 @@ template <class T> inline void run(char prec, int64_t M, int64_t gN, int64_t K, 
 }
 
 int32_t main(int32_t argc, char* argv[]) {
-  char prec = 'D'; std::string file;
+  char prec = 'D', algo = 'A'; std::string file;
   int64_t M = 2048, gN = 2048, K = 1500, nb = 512;
   double epi = 1.e-12;
 
@@ -105,6 +105,7 @@ int32_t main(int32_t argc, char* argv[]) {
     else if (std::strncmp(argv[i], "epi=", 4) == 0) { std::sscanf(argv[i], "epi=%lf", &epi); }
     else if (std::strncmp(argv[i], "nb=", 3) == 0) { std::sscanf(argv[i], "nb=%ld", &nb); }
     else if (std::strncmp(argv[i], "file=", 5) == 0) { file.resize(std::strlen(argv[i])); std::sscanf(argv[i], "file=%s", file.data()); }
+    else if (std::strncmp(argv[i], "algo=", 5) == 0) { std::sscanf(argv[i], "algo=%c", &algo); }
     else { std::cerr << "Ignored parameter: " << argv[i] << std::endl; }
   }
   gN = std::min(M, gN); K = std::min(gN, K);
@@ -119,10 +120,10 @@ int32_t main(int32_t argc, char* argv[]) {
   { std::cerr << cudaGetErrorString(cu_err) << std::endl; return -1; }
 
   switch(prec) {
-    case 'D': run<double>(prec, M, gN, K, nb, epi, world_rank, world_size, id, file); break;
-    case 'S': run<float>(prec, M, gN, K, nb, epi, world_rank, world_size, id, file); break;
-    case 'Z': run<std::complex<double>>(prec, M, gN, K, nb, epi, world_rank, world_size, id, file); break;
-    case 'C': run<std::complex<float>>(prec, M, gN, K, nb, epi, world_rank, world_size, id, file); break;
+    case 'D': run<double>(prec, M, gN, K, nb, algo, epi, world_rank, world_size, id, file); break;
+    case 'S': run<float>(prec, M, gN, K, nb, algo, epi, world_rank, world_size, id, file); break;
+    case 'Z': run<std::complex<double>>(prec, M, gN, K, nb, algo, epi, world_rank, world_size, id, file); break;
+    case 'C': run<std::complex<float>>(prec, M, gN, K, nb, algo, epi, world_rank, world_size, id, file); break;
     default: break;
   }
 
