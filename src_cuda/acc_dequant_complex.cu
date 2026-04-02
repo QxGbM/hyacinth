@@ -35,20 +35,11 @@ __global__ void dequantize_complex_kernel(int64_t K, int64_t N, const uint64_t* 
         device::int8::add_shifted(acc_rl, int64_t(A[iter += strideA]), shifts[limb]);
     }
 
-    uint64_t acc_im[orderA] { A[iter += strideA] };
-    if constexpr(orderA == orderL) {
-      #pragma unroll
-      for (uint32_t limb = 1; limb < orderA; ++limb)
-        acc_im[limb] = A[iter += strideA];
-    }
-    else {
-      #pragma unroll
-      for (uint32_t limb = 1; limb < orderL; ++limb)
-        device::int8::add_shifted(acc_im, int64_t(A[iter += strideA]), shifts[limb]);
-    }  
-
+    uint64_t acc_im[orderA] {};
+    #pragma unroll
+    for (uint32_t limb = 0; limb < orderL; ++limb)
+      device::int8::add_shifted(acc_im, -int64_t(A[iter += strideA]), shifts[limb]);
     iter = y + x * lda;
-    device::int8::negate_shifted(acc_im);
 
     #pragma unroll
     for (uint32_t limb = 0; limb < orderL; ++limb)
