@@ -108,24 +108,10 @@ inline int32_t diag_piv_dispatcher(cudaStream_t stream, cublasHandle_t handle, c
 }
 
 extern "C" void hyacinXGinterp_bufferSize(int32_t N, int32_t K, hyacinPrecision_t AXtype, hyacinPrecision_t Gtype, uint64_t* dev_work_bytes, uint64_t* pinned_work_bytes) {
-  if (N <= 0 || K <= 0) { *dev_work_bytes = *pinned_work_bytes = uint64_t(0); return; }
-  int64_t x_bytes = int64_t(0), g_real_bytes = int64_t(0);
-  switch (Gtype) {
-    case HYACIN_F64: { g_real_bytes = sizeof(double); break; } case HYACIN_F32: { g_real_bytes = sizeof(float); break; }
-    case HYACIN_DD: { g_real_bytes = sizeof(double2); break; } case HYACIN_QF: { g_real_bytes = sizeof(float4); break; }
-    case HYACIN_F64_COMPLEX: { g_real_bytes = sizeof(double); break; } case HYACIN_F32_COMPLEX: { g_real_bytes = sizeof(float); break; }
-    case HYACIN_DD_COMPLEX: { g_real_bytes = sizeof(double2); break; } case HYACIN_QF_COMPLEX: { g_real_bytes = sizeof(float4); break; }
-    default: break;
-  }
-
-  switch (AXtype) {
-    case HYACIN_F64: { x_bytes = sizeof(double); break; } case HYACIN_F32: { x_bytes = sizeof(float); break; }
-    case HYACIN_F64_COMPLEX: { x_bytes = sizeof(cuDoubleComplex); break; } case HYACIN_F32_COMPLEX: { x_bytes = sizeof(cuComplex); break; }
-    default: break;
-  }
-
-  *dev_work_bytes = uint64_t(std::max(x_bytes * int64_t(N) * int64_t(std::min(N, K)), g_real_bytes * int64_t(N)));
-  *pinned_work_bytes = uint64_t(g_real_bytes * int64_t(512)) + uint64_t(sizeof(int32_t) * int64_t(N));
+  if (N <= 0 || K <= 0) { return; }
+  int32_t x_bytes, g_real_bytes; hyacinXelem('A', AXtype, nullptr, &x_bytes, nullptr); hyacinXelem('R', Gtype, nullptr, &g_real_bytes, nullptr);
+  *dev_work_bytes = std::max(*dev_work_bytes, uint64_t(std::max(int64_t(x_bytes) * int64_t(N) * int64_t(std::min(N, K)), int64_t(g_real_bytes) * int64_t(N))));
+  *pinned_work_bytes = std::max(*pinned_work_bytes, uint64_t(int64_t(g_real_bytes) * int64_t(512)) + uint64_t(sizeof(int32_t) * int64_t(N)));
 }
 
 extern "C" int32_t hyacinXGinterp(cublasHandle_t handle, char fillmode, double epi, int32_t N, int32_t K, int32_t p, hyacinPrecision_t AXtype, void* X, int32_t ldx, int32_t* jpiv, hyacinPrecision_t Gtype, void* G, int32_t ldg, void* dev_work, void* pinned_work) {

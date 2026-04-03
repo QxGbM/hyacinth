@@ -10,30 +10,34 @@
 #endif
 
 typedef enum { 
-  HYACIN_F64,
-  HYACIN_F32,
-  HYACIN_DD,
-  HYACIN_QF,
-  HYACIN_F64_COMPLEX,
-  HYACIN_F32_COMPLEX,
-  HYACIN_DD_COMPLEX,
-  HYACIN_QF_COMPLEX
+  HYACIN_F64 = 0,
+  HYACIN_F32 = 1,
+  HYACIN_DD = 2,
+  HYACIN_QF = 3,
+  HYACIN_F64_COMPLEX = 4,
+  HYACIN_F32_COMPLEX = 5,
+  HYACIN_DD_COMPLEX = 6,
+  HYACIN_QF_COMPLEX = 7
 } hyacinPrecision_t;
 
 typedef enum {
-  HYACIN_ALG_LIMBS,
-  HYACIN_ALG_CRT,
-  HYACIN_ALG_LIMBS_ND,
-  HYACIN_ALG_CRT_ND,
-  CUBLAS_FLOAT_ND
+  HYACIN_ALG_LIMBS = 0,
+  HYACIN_ALG_CRT = 1,
+  HYACIN_ALG_LIMBS_ND = 2,
+  HYACIN_ALG_CRT_ND = 3,
+  CUBLAS_FLOAT_ND = 4
 } hyacinAlgorithm_t;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-int32_t hyacinXelem_bytes(
-  hyacinPrecision_t Atype
+void hyacinXelem(
+  char sel,
+  hyacinPrecision_t Atype,
+  hyacinPrecision_t* type,
+  int32_t* bytes,
+  cudaDataType_t* cutype
 );
 
 void hyacinXsyherk_autoTune(
@@ -70,38 +74,6 @@ int32_t hyacinXsyherk(
   hyacinAlgorithm_t alg
 );
 
-void hyacinXcpqrk_bufferSize(
-  int32_t M,
-  int32_t N,
-  int32_t umax,
-  hyacinPrecision_t ComputeType,
-  hyacinAlgorithm_t alg,
-  uint64_t* dev_work_bytes,
-  uint64_t* pinned_work_bytes
-);
-
-int32_t hyacinXcpqrk(
-  cublasHandle_t handle,
-  char mode,
-  double epi,
-  int32_t M,
-  int32_t N,
-  int32_t K,
-  int32_t p,
-  int32_t umax,
-  hyacinPrecision_t Atype,
-  const void* A,
-  int32_t lda,
-  int32_t* jpiv,
-  hyacinPrecision_t Rtype,
-  void* R,
-  int32_t ldr,
-  hyacinPrecision_t ComputeType,
-  void* dev_work,
-  void* pinned_work,
-  hyacinAlgorithm_t alg
-);
-
 void hyacinXGinterp_bufferSize(
   int32_t N,
   int32_t K,
@@ -129,10 +101,17 @@ int32_t hyacinXGinterp(
   void* pinned_work
 );
 
+void hyacinXGevPcsvd_autoTune(
+  char* use_evd,
+  int32_t N,
+  int32_t K,
+  hyacinPrecision_t Gtype
+);
+
 void hyacinXGevPcsvd_bufferSize(
   cusolverDnHandle_t s_handle,
   cusolverDnParams_t params,
-  char usd_evd,
+  char use_evd,
   int32_t N,
   int32_t K,
   hyacinPrecision_t AXtype,
@@ -147,7 +126,7 @@ int32_t hyacinXGevPcsvd(
   cublasHandle_t handle,
   cusolverDnHandle_t s_handle,
   cusolverDnParams_t params,
-  char usd_evd,
+  char use_evd,
   char fillmode,
   double epi,
   int32_t N,

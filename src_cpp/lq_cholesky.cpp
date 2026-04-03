@@ -11,19 +11,11 @@ template <> inline cudaDataType_t cuda_type<cuComplex>() { return CUDA_C_32F; }
 
 extern "C" void hyacinXlqchol_bufferSize(cusolverDnHandle_t s_handle, cusolverDnParams_t params, int32_t K, hyacinPrecision_t AXtype, uint64_t* dev_work_bytes, uint64_t* pinned_work_bytes) {
   if (K <= 0) { *dev_work_bytes = 0; return; }
-  int64_t x_bytes = int64_t(0); cudaDataType_t type_c = cudaDataType_t();
-  switch (AXtype) {
-    case HYACIN_F64: { x_bytes = sizeof(double); type_c = cuda_type<double>(); break; }
-    case HYACIN_F32: { x_bytes = sizeof(float); type_c = cuda_type<float>(); break; } 
-    case HYACIN_F64_COMPLEX: { x_bytes = sizeof(cuDoubleComplex); type_c = cuda_type<cuDoubleComplex>(); break; }
-    case HYACIN_F32_COMPLEX: { x_bytes = sizeof(cuComplex); type_c = cuda_type<cuComplex>(); break; }
-    default: break;
-  }
-
+  int32_t x_bytes; cudaDataType_t type_c; hyacinXelem('A', AXtype, nullptr, &x_bytes, &type_c);
   size_t workspaceInBytesOnDevice, workspaceInBytesOnHost;
   cusolverDnXpotrf_bufferSize(s_handle, params, CUBLAS_FILL_MODE_LOWER, K, type_c, nullptr, K, type_c, &workspaceInBytesOnDevice, &workspaceInBytesOnHost);
-  *dev_work_bytes = uint64_t(int64_t(K) * int64_t(K) * x_bytes) + uint64_t(workspaceInBytesOnDevice + sizeof(int32_t));
-  *pinned_work_bytes = uint64_t(workspaceInBytesOnHost);
+  *dev_work_bytes = std::max(*dev_work_bytes, uint64_t(int64_t(K) * int64_t(K) * int64_t(x_bytes)) + uint64_t(workspaceInBytesOnDevice) + uint64_t(sizeof(int32_t)));
+  *pinned_work_bytes = std::max(*pinned_work_bytes, uint64_t(workspaceInBytesOnHost));
 }
 
 inline void nh_herk(cublasHandle_t handle, int32_t K, int32_t N, const double* A, int32_t lda, double* C, int32_t ldc)

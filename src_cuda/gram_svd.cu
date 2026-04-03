@@ -155,35 +155,20 @@ inline int32_t gsvd_dispatcher(cublasHandle_t handle, cusolverDnHandle_t s_handl
 }
 
 extern "C" void hyacinXGevPcsvd_bufferSize(cusolverDnHandle_t s_handle, cusolverDnParams_t params, char use_evd, int32_t N, int32_t K, hyacinPrecision_t AXtype, int32_t ldx, hyacinPrecision_t Gtype, int32_t ldg, uint64_t* dev_work_bytes, uint64_t* pinned_work_bytes) {
-  if (N <= 0 || K <= 0) { *dev_work_bytes = *pinned_work_bytes = uint64_t(0); return; }
-  int64_t x_bytes = int64_t(0), x_real_bytes = int64_t(0), g_real_bytes = int64_t(0);
-  cudaDataType_t type_c = cudaDataType_t(), type_r = cudaDataType_t();
-  switch (Gtype) {
-    case HYACIN_F64: { g_real_bytes = sizeof(double); break; } case HYACIN_F32: { g_real_bytes = sizeof(float); break; } 
-    case HYACIN_DD: { g_real_bytes = sizeof(double2); break; } case HYACIN_QF: { g_real_bytes = sizeof(float4); break; }
-    case HYACIN_F64_COMPLEX: { g_real_bytes = sizeof(double); break; } case HYACIN_F32_COMPLEX: { g_real_bytes = sizeof(float); break; } 
-    case HYACIN_DD_COMPLEX: { g_real_bytes = sizeof(double2); break; } case HYACIN_QF_COMPLEX: { g_real_bytes = sizeof(float4); break; }
-    default: break;
-  }
+  if (N <= 0 || K <= 0) { return; }
+  int32_t x_bytes, x_real_bytes, g_real_bytes; cudaDataType_t type_c, type_r;
+  hyacinXelem('A', AXtype, nullptr, &x_bytes, &type_c); hyacinXelem('R', AXtype, nullptr, &x_real_bytes, &type_r); hyacinXelem('R', Gtype, nullptr, &g_real_bytes, nullptr);
 
-  switch (AXtype) {
-    case HYACIN_F64: { type_c = type_r = cuda_type<double>(); x_bytes = x_real_bytes = sizeof(double); break; }
-    case HYACIN_F32: { type_c = type_r = cuda_type<float>(); x_bytes = x_real_bytes = sizeof(float); break; } 
-    case HYACIN_F64_COMPLEX: { type_c = cuda_type<cuDoubleComplex>(); type_r = cuda_type<double>(); x_bytes = sizeof(cuDoubleComplex); x_real_bytes = sizeof(double); break; }
-    case HYACIN_F32_COMPLEX: { type_c = cuda_type<cuComplex>(); type_r = cuda_type<float>(); x_bytes = sizeof(cuComplex); x_real_bytes = sizeof(float); break; }
-    default: break;
-  }
-
-  size_t workspaceInBytesOnDevice, workspaceInBytesOnHost;
+  size_t workspaceInBytesOnDevice, workspaceInBytesOnHost; K = std::min(N, K);
   if ((use_evd == 'Y' || use_evd == 'y') && (AXtype == Gtype)) {
     cusolverDnXsyevd_bufferSize(s_handle, params, CUSOLVER_EIG_MODE_VECTOR, CUBLAS_FILL_MODE_UPPER, N, type_c, nullptr, ldg, type_r, nullptr, type_c, &workspaceInBytesOnDevice, &workspaceInBytesOnHost);
-    *dev_work_bytes = uint64_t(workspaceInBytesOnDevice) + uint64_t(x_real_bytes * int64_t(K));
-    *pinned_work_bytes = std::max(uint64_t(workspaceInBytesOnHost), uint64_t(x_real_bytes * int64_t(K)));
+    *dev_work_bytes = std::max(*dev_work_bytes, uint64_t(workspaceInBytesOnDevice) + uint64_t(int64_t(x_real_bytes) * int64_t(K)));
+    *pinned_work_bytes = std::max(*pinned_work_bytes, std::max(uint64_t(workspaceInBytesOnHost), uint64_t(int64_t(x_real_bytes) * int64_t(K))));
   }
   else {
     cusolverDnXgesvd_bufferSize(s_handle, params, 'O', 'N', N, K, type_c, nullptr, ldx, type_r, nullptr, type_c, nullptr, ldx, type_c, nullptr, K, type_c, &workspaceInBytesOnDevice, &workspaceInBytesOnHost);
-    *dev_work_bytes = std::max(uint64_t(workspaceInBytesOnDevice), uint64_t(std::max(x_bytes * int64_t(N) * int64_t(std::min(N, K)), g_real_bytes * int64_t(N))));
-    *pinned_work_bytes = std::max(uint64_t(workspaceInBytesOnHost), uint64_t(std::max(g_real_bytes * int64_t(512) + int64_t(sizeof(int32_t)) * int64_t(N), x_real_bytes * int64_t(K))));
+    *dev_work_bytes = std::max(*dev_work_bytes, std::max(uint64_t(workspaceInBytesOnDevice), uint64_t(std::max(int64_t(x_bytes) * int64_t(N) * int64_t(K), int64_t(g_real_bytes) * int64_t(N)))));
+    *pinned_work_bytes = std::max(*pinned_work_bytes, std::max(uint64_t(workspaceInBytesOnHost), uint64_t(std::max(int64_t(g_real_bytes) * int64_t(512) + int64_t(sizeof(int32_t)) * int64_t(N), int64_t(x_real_bytes) * int64_t(K)))));
   }
 }
 

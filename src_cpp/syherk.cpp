@@ -7,18 +7,7 @@
 #include <tuple>
 
 inline std::tuple<int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int64_t, int64_t, int64_t> ext_params(int32_t localM, int32_t globalM, int32_t N, int32_t& umax, int32_t distribute, hyacinPrecision_t Gtype, hyacinAlgorithm_t alg) {
-  hyacinPrecision_t GtypeReal = hyacinPrecision_t(); int64_t em_bytes = int64_t(0);
-  switch(Gtype) {
-    case HYACIN_F64: { GtypeReal = HYACIN_F64; em_bytes = sizeof(double); break; }
-    case HYACIN_F64_COMPLEX: { GtypeReal = HYACIN_F64; em_bytes = sizeof(cuDoubleComplex); break; }
-    case HYACIN_F32: { GtypeReal = HYACIN_F32; em_bytes = sizeof(float); break; }
-    case HYACIN_F32_COMPLEX: { GtypeReal = HYACIN_F32; em_bytes = sizeof(cuComplex); break; }
-    case HYACIN_DD: { GtypeReal = HYACIN_DD; em_bytes = sizeof(double2); break; }
-    case HYACIN_DD_COMPLEX: { GtypeReal = HYACIN_DD; em_bytes = sizeof(complex_double2); break; }
-    case HYACIN_QF: { GtypeReal = HYACIN_QF; em_bytes = sizeof(float4); break; }
-    case HYACIN_QF_COMPLEX: { GtypeReal = HYACIN_QF; em_bytes = sizeof(complex_float4); break; }
-    default: break;
-  }
+  hyacinPrecision_t GtypeReal; hyacinXelem('R', Gtype, &GtypeReal, nullptr, nullptr);
   int32_t Complex = int32_t(Gtype != GtypeReal);
   int32_t use_limbs = int32_t(alg == HYACIN_ALG_LIMBS || alg == HYACIN_ALG_LIMBS_ND);
   int32_t det_reduc = distribute && (alg == HYACIN_ALG_LIMBS || alg == HYACIN_ALG_CRT);
@@ -32,8 +21,10 @@ inline std::tuple<int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int64_t,
 
   int32_t orderA = ((use_limbs ? umax : bits) + 8) >> 3;
   int64_t i8_bytes = int64_t(N) * int64_t(use_limbs ? orderA : 8) * ((int64_t(algnM) << Complex) + (int64_t(algnN) * sizeof(int32_t)));
-  if (distribute && (alg == HYACIN_ALG_LIMBS_ND || alg == HYACIN_ALG_CRT_ND))
-    i8_bytes = std::max(i8_bytes, int64_t(N) * int64_t(N) * em_bytes);
+  if (distribute && (alg == HYACIN_ALG_LIMBS_ND || alg == HYACIN_ALG_CRT_ND)) {
+    int32_t em_bytes; hyacinXelem('A', Gtype, nullptr, &em_bytes, nullptr);
+    i8_bytes = std::max(i8_bytes, int64_t(N) * int64_t(N) * int64_t(em_bytes));
+  }
 
   int32_t orderC = ((use_limbs ? bits : (orderA << 3)) + 63) / 63;
   int32_t orderD = (orderC + det_reduc) << Complex;
@@ -120,18 +111,23 @@ inline void cublas_dispatcher(cublasHandle_t handle, int32_t M, int32_t N, const
 }
 
 extern "C" void hyacinXsyherk_bufferSize(int32_t M, int32_t N, int32_t umax, hyacinPrecision_t Gtype, hyacinAlgorithm_t alg, uint64_t* dev_work_bytes) {
-  if (M <= 0 || N <= 0 || alg == CUBLAS_FLOAT_ND) { *dev_work_bytes = uint64_t(0); return; }
+  if (M <= 0 || N <= 0 || alg == CUBLAS_FLOAT_ND) { return; }
   int32_t Complex, det_reduc, algnM, algnN, orderA, orderC; int64_t i8_bytes, acc_bytes, vec_bytes;
   std::tie(Complex, det_reduc, algnM, algnN, orderA, orderC, i8_bytes, acc_bytes, vec_bytes) = ext_params(M, M, N, umax, 0, Gtype, alg);
-  *dev_work_bytes = uint64_t(i8_bytes + acc_bytes + vec_bytes);
+  *dev_work_bytes = std::max(*dev_work_bytes, uint64_t(i8_bytes + acc_bytes + vec_bytes));
 }
 
 extern "C" void hyacinXsyherk1Drow_bufferSize(int32_t localM, int32_t globalM, int32_t N, int32_t umax, hyacinPrecision_t Gtype, hyacinAlgorithm_t alg, uint64_t* dev_work_bytes) {
-  if (globalM <= 0 || N <= 0) { *dev_work_bytes = uint64_t(0); return; }
-  if (alg == CUBLAS_FLOAT_ND) { *dev_work_bytes = uint64_t(N) * uint64_t(N) * uint64_t(hyacinXelem_bytes(Gtype)); return; }
-  int32_t Complex, det_reduc, algnM, algnN, orderA, orderC; int64_t i8_bytes, acc_bytes, vec_bytes;
-  std::tie(Complex, det_reduc, algnM, algnN, orderA, orderC, i8_bytes, acc_bytes, vec_bytes) = ext_params(localM, globalM, N, umax, 1, Gtype, alg);
-  *dev_work_bytes = uint64_t(i8_bytes + acc_bytes + vec_bytes);
+  int32_t pred = (0 < globalM) && (0 < N);
+  if (pred && alg == CUBLAS_FLOAT_ND) {
+    int32_t em_bytes; hyacinXelem('A', Gtype, nullptr, &em_bytes, nullptr);
+    *dev_work_bytes = std::max(*dev_work_bytes, uint64_t(N) * uint64_t(N) * uint64_t(em_bytes));
+  }
+  else if (pred) {
+    int32_t Complex, det_reduc, algnM, algnN, orderA, orderC; int64_t i8_bytes, acc_bytes, vec_bytes;
+    std::tie(Complex, det_reduc, algnM, algnN, orderA, orderC, i8_bytes, acc_bytes, vec_bytes) = ext_params(localM, globalM, N, umax, 1, Gtype, alg);
+    *dev_work_bytes = std::max(*dev_work_bytes, uint64_t(i8_bytes + acc_bytes + vec_bytes));
+  }
 }
 
 extern "C" int32_t hyacinXsyherk(cublasHandle_t handle, int32_t M, int32_t N, int32_t umax, hyacinPrecision_t Atype, const void* A, int32_t lda, hyacinPrecision_t Gtype, void* G, int32_t ldg, void* dev_work, hyacinAlgorithm_t alg) {

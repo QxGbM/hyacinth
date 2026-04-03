@@ -4,16 +4,10 @@
 #include <numeric>
 
 extern "C" void hyacinXAllGatherV1Dcol_bufferSize(int32_t M, int32_t comm_size, hyacinPrecision_t Atype, uint64_t* dev_work_bytes, uint64_t* pinned_work_bytes) {
-  *pinned_work_bytes = uint64_t(comm_size) * sizeof(int32_t);
-  if (M <= 0) { *dev_work_bytes = uint64_t(0); return; }
-
-  *dev_work_bytes = uint64_t(M) * uint64_t(2048) * uint64_t(comm_size) * sizeof(int32_t);
-  switch(Atype) {
-    case HYACIN_F32: break;
-    case HYACIN_F64: case HYACIN_F32_COMPLEX: *dev_work_bytes <<= 1; break; 
-    case HYACIN_DD: case HYACIN_QF: case HYACIN_F64_COMPLEX: *dev_work_bytes <<= 2; break;
-    case HYACIN_DD_COMPLEX: case HYACIN_QF_COMPLEX: *dev_work_bytes <<= 3; break;
-    default: break;
+  *pinned_work_bytes = std::max(*pinned_work_bytes, uint64_t(comm_size) * sizeof(int32_t));
+  if (0 < M) {
+    int32_t a_bytes; hyacinXelem('A', Atype, nullptr, &a_bytes, nullptr);
+    *dev_work_bytes = std::max(*dev_work_bytes, uint64_t(M) * uint64_t(2048) * uint64_t(comm_size) * uint64_t(a_bytes));
   }
 }
 

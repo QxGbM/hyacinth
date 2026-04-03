@@ -4,16 +4,9 @@
 #include <stdexcept>
 
 extern "C" void hyacinXtransform_bufferSize(int32_t K, hyacinPrecision_t AXtype, uint64_t* dev_work_bytes) {
-  if (K <= 0) { *dev_work_bytes = 0; return; }
-  int64_t x_bytes = int64_t(0);
-  switch (AXtype) {
-    case HYACIN_F64: { x_bytes = sizeof(double); break; }
-    case HYACIN_F32: { x_bytes = sizeof(float); break; } 
-    case HYACIN_F64_COMPLEX: { x_bytes = sizeof(cuDoubleComplex); break; }
-    case HYACIN_F32_COMPLEX: { x_bytes = sizeof(cuComplex); break; }
-    default: break;
-  }
-  *dev_work_bytes = uint64_t(int64_t(K) * int64_t(16384) * x_bytes);
+  if (K <= 0) { return; }
+  int32_t x_bytes; hyacinXelem('A', AXtype, nullptr, &x_bytes, nullptr);
+  *dev_work_bytes = std::max(*dev_work_bytes, uint64_t(int64_t(K) * int64_t(16384) * int64_t(x_bytes)));
 }
 
 inline int32_t char_adj(char trans) { return trans == 'T' || trans == 't' || trans == 'C' || trans == 'c'; }
@@ -53,15 +46,15 @@ inline void ax_transform(cublasHandle_t handle, cublasOperation_t transb, int32_
 }
 
 extern "C" void hyacinXtransform(cublasHandle_t handle, char transx, int32_t M, int32_t N, int32_t K, hyacinPrecision_t AXtype, void* A, int32_t lda, const void* X, int32_t ldx, void* dev_work, uint64_t dev_work_bytes) {
-  if (M <= 0 || K <= 0) { return; }
-  else if (N <= 0) switch(AXtype) {
+  int32_t pred = (0 < M) && (0 < K);
+  if (pred && N <= 0) switch(AXtype) {
     case HYACIN_F64: matcopy(handle, adjoint_op<double>(transx), M, K, (const double*)X, ldx, (double*)A, lda); return;
     case HYACIN_F32: matcopy(handle, adjoint_op<float>(transx), M, K, (const float*)X, ldx, (float*)A, lda); return;
     case HYACIN_F64_COMPLEX: matcopy(handle, adjoint_op<cuDoubleComplex>(transx), M, K, (const cuDoubleComplex*)X, ldx, (cuDoubleComplex*)A, lda); return;
     case HYACIN_F32_COMPLEX: matcopy(handle, adjoint_op<cuComplex>(transx), M, K, (const cuComplex*)X, ldx, (cuComplex*)A, lda); return;
     default: return;
   }
-  else switch(AXtype) {
+  else if (pred) switch(AXtype) {
     case HYACIN_F64: ax_transform(handle, adjoint_op<double>(transx), M, N, K, (double*)A, lda, (const double*)X, ldx, dev_work, dev_work_bytes); return;
     case HYACIN_F32: ax_transform(handle, adjoint_op<float>(transx), M, N, K, (float*)A, lda, (const float*)X, ldx, dev_work, dev_work_bytes); return;
     case HYACIN_F64_COMPLEX: ax_transform(handle, adjoint_op<cuDoubleComplex>(transx), M, N, K, (cuDoubleComplex*)A, lda, (const cuDoubleComplex*)X, ldx, dev_work, dev_work_bytes); return;
