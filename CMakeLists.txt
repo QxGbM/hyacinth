@@ -3,13 +3,12 @@ cmake_minimum_required (VERSION 3.18)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_BUILD_TYPE Release)
+set(CMAKE_CUDA_ARCHITECTURES "80;86;89;90;100;120")
 
 option(BUILD_EXAMPLES "Example files" ON)
 option(USE_NCCL "Enable NCCL backend" ON)
 
 project("hyacin" LANGUAGES CXX CUDA)
-set(SM_TARGETS "80;86;89;90;100;120")
-
 find_package(CUDAToolkit REQUIRED)
 
 set(CPP_SOURCES
@@ -47,7 +46,6 @@ set_source_files_properties(${CU_SOURCES} PROPERTIES COMPILE_OPTIONS
   "-Xcompiler=-march=native;-Xcompiler=-Wall;-Xcompiler=-Wextra;-Xcompiler=-fexceptions;--use_fast_math")
 
 add_library(hyacin SHARED ${CPP_SOURCES} ${CU_SOURCES})
-set_property(TARGET hyacin PROPERTY CUDA_ARCHITECTURES ${SM_TARGETS})
 
 target_include_directories(hyacin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(hyacin PRIVATE CUDA::cudart CUDA::cublas CUDA::cusolver)

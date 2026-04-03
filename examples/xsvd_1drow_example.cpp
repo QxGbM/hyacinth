@@ -88,8 +88,7 @@ template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, 
   if (!ref.empty() && grid_row == 0) {
     std::vector<T> ref_V(N * int64_t(rank));
     matrix_from_row_major_csv(N, rank, 512, 512, ref_V.data(), N, ref);
-    std::pair<double, double> bits_err = check_bit(N, rank, ref_V.data(), N, matV.data(), N);
-    printf("%le,%le\n", bits_err.first, bits_err.second);
+    printf("max-elementwise-relerr: %le\n", max_elementwise_relerr(N, rank, ref_V.data(), N, matV.data(), N));
   }
 }
 

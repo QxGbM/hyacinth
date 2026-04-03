@@ -50,20 +50,14 @@ inline void allgather_iter(cudaStream_t stream, int32_t comm_rank, int64_t M, in
 }
 
 extern "C" int32_t hyacinXAllGatherV1Dcol(cudaStream_t stream, int32_t M, int32_t* K, hyacinPrecision_t Atype, void* A, int32_t lda, uint64_t dev_work_bytes, void* dev_work, void* pinned_work, ncclComm_t row_comm) {
-  int64_t Mi = int64_t(M), LDAi = int64_t(lda);
-  switch(Atype) {
-    case HYACIN_F32: break;
-    case HYACIN_F64: case HYACIN_F32_COMPLEX: Mi <<= 1; LDAi <<= 1; break; 
-    case HYACIN_DD: case HYACIN_QF: case HYACIN_F64_COMPLEX: Mi <<= 2; LDAi <<= 2; break;
-    case HYACIN_DD_COMPLEX: case HYACIN_QF_COMPLEX: Mi <<= 3; LDAi <<= 3; break;
-    default: break;
-  }
+  int32_t a_bytes; hyacinXelem('A', Atype, nullptr, &a_bytes, nullptr);
+  int64_t Mi = int64_t(M) * int64_t(a_bytes / int32_t(sizeof(int32_t))), LDAi = int64_t(lda) * int64_t(a_bytes / int32_t(sizeof(int32_t)));
 
   int32_t comm_rank, comm_size; ncclCommUserRank(row_comm, &comm_rank); ncclCommCount(row_comm, &comm_size);
   int32_t* N = (int32_t*)pinned_work; N[comm_rank] = *K;
   ncclAllGather(&N[comm_rank], N, 1, ncclInt32, row_comm, stream);
   cudaStreamSynchronize(stream);
-  int32_t offset_j = std::reduce(N, &N[comm_rank]); 
+  int32_t offset_j = std::reduce(N, &N[comm_rank], 0); 
   *K = std::reduce(&N[comm_rank], &N[comm_size], offset_j);
   if (M <= 0) { return 0; }
 
