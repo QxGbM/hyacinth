@@ -1,5 +1,6 @@
 
 #include <hyacin.h>
+#include <internal.hpp>
 #include <cuComplex.h>
 #include <stdexcept>
 
@@ -38,6 +39,7 @@ inline void ln_trsm(cublasHandle_t handle, int32_t K, int32_t N, const cuComplex
 
 template <class complex_t>
 inline void lq_cholesky(cublasHandle_t handle, cusolverDnHandle_t s_handle, cusolverDnParams_t params, int32_t K, int32_t N, complex_t* X, int32_t ldx, void* dev_work, uint64_t dev_work_bytes, void* pinned_work, uint64_t pinned_work_bytes) {
+  cudaStream_t stream; cublasGetStream(handle, &stream); Timer::register_kernel(stream);
   int64_t gram_bytes = int64_t(K) * int64_t(K) * int64_t(sizeof(complex_t));
   cudaDataType_t type_c = cuda_type<complex_t>();
   size_t workspaceInBytesOnDevice, workspaceInBytesOnHost;

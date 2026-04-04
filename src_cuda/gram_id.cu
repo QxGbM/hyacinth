@@ -116,7 +116,7 @@ extern "C" void hyacinXGinterp_bufferSize(int32_t N, int32_t K, hyacinPrecision_
 
 extern "C" int32_t hyacinXGinterp(cublasHandle_t handle, char fillmode, double epi, int32_t N, int32_t K, int32_t p, hyacinPrecision_t AXtype, void* X, int32_t ldx, int32_t* jpiv, hyacinPrecision_t Gtype, void* G, int32_t ldg, void* dev_work, void* pinned_work) {
   if (N <= 0 || K <= 0) { return 0; }
-  cudaStream_t stream; cublasGetStream(handle, &stream);
+  cudaStream_t stream; cublasGetStream(handle, &stream); Timer::register_kernel(stream);
   switch (Gtype) {
     case HYACIN_F64:
       return diag_piv_dispatcher<HYACIN_F64, const double* __restrict__>(stream, handle, fillmode, epi, N, K, p, AXtype, jpiv, X, ldx, (double*)G, ldg, dev_work, pinned_work);

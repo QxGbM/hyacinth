@@ -173,3 +173,12 @@ namespace internal::int8 {
 
 };
 
+namespace Timer {
+#ifdef BUILTIN_TIMER
+  void register_kernel(cudaStream_t stream);
+  void register_comm(cudaStream_t stream);
+#else
+  inline void register_kernel(cudaStream_t) noexcept {};
+  inline void register_comm(cudaStream_t) noexcept {};
+#endif
+};

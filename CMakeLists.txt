@@ -7,6 +7,7 @@ set(CMAKE_CUDA_ARCHITECTURES "80;86;89;90;100;120")
 
 option(BUILD_EXAMPLES "Example files" ON)
 option(USE_NCCL "Enable NCCL backend" ON)
+option(BUILTIN_TIMER "Enable Built-in timer" ON)
 
 project("hyacin" LANGUAGES CXX CUDA)
 find_package(CUDAToolkit REQUIRED)
@@ -18,6 +19,7 @@ set(CPP_SOURCES
   src_cpp/imax_host.cpp
   src_cpp/lq_cholesky.cpp
   src_cpp/syherk.cpp
+  src_cpp/timer.cpp
   src_cpp/transform.cpp
 )
 
@@ -78,8 +80,15 @@ if(USE_NCCL)
     message(FATAL_ERROR "NCCL requested but not found.")
   endif()
 else()
-  message(STATUS "NO NCCL")
+  message(STATUS "NO: NCCL")
   set_source_files_properties(src_cuda/hyacin.cu src_cuda/allgatherv_1dcol.cu PROPERTIES COMPILE_DEFINITIONS "NO_NCCL")
+endif()
+
+if (BUILTIN_TIMER)
+  message(STATUS "USE: Built-in timer")
+  target_compile_definitions(hyacin PRIVATE "BUILTIN_TIMER")
+else()
+  message(STATUS "NO: Built-in timer")
 endif()
 
 message(STATUS "Will install to: ${CMAKE_INSTALL_PREFIX}")

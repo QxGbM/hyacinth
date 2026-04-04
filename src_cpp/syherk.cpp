@@ -132,13 +132,15 @@ extern "C" void hyacinXsyherk1Drow_bufferSize(int32_t localM, int32_t globalM, i
 
 extern "C" int32_t hyacinXsyherk(cublasHandle_t handle, int32_t M, int32_t N, int32_t umax, hyacinPrecision_t Atype, const void* A, int32_t lda, hyacinPrecision_t Gtype, void* G, int32_t ldg, void* dev_work, hyacinAlgorithm_t alg) {
   if (M <= 0 || N <= 0) { return -1; }
-  if (alg == CUBLAS_FLOAT_ND) { cublas_dispatcher(handle, M, N, A, lda, G, ldg, Atype); return 0; }
+  cudaStream_t stream; cublasGetStream(handle, &stream);
+  Timer::register_kernel(stream);
+
+  if (alg == CUBLAS_FLOAT_ND)
+  { cublas_dispatcher(handle, M, N, A, lda, G, ldg, Atype); return 0; }
   int32_t Complex, det_reduc, algnM, algnN, orderA, orderC; int64_t i8_bytes, acc_bytes, vec_bytes;
   std::tie(Complex, det_reduc, algnM, algnN, orderA, orderC, i8_bytes, acc_bytes, vec_bytes) = ext_params(M, M, N, umax, 0, Gtype, alg);
 
-  cudaStream_t stream; cublasGetStream(handle, &stream);
   int8_t* iA = (int8_t*)(dev_work), *acc = &iA[i8_bytes], *vexp = &acc[acc_bytes];
-
   vexp_dispatcher(stream, M, N, Atype, A, lda, (int32_t*)vexp);
   igemm_dispatcher(stream, handle, M, N, Atype, A, lda, umax, (const int32_t*)vexp, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA, alg);
   deq_dispatcher(stream, M, N, algnN, umax, (uint64_t*)acc, 63, orderC, G, ldg, (const int32_t*)vexp, Gtype);
@@ -148,22 +150,26 @@ extern "C" int32_t hyacinXsyherk(cublasHandle_t handle, int32_t M, int32_t N, in
 #ifndef NO_NCCL
 
 inline void all_reduce_in_place(cudaStream_t stream, cublasHandle_t handle, int32_t pred, int32_t M, int32_t N, double* A, int32_t lda, void* dev_work, ncclComm_t comm) {
-  double* C = pred ? (double*)dev_work : A; ncclAllReduce(C, C, int64_t(M) * int64_t(N), ncclFloat64, ncclSum, comm, stream);
+  double* C = pred ? (double*)dev_work : A; Timer::register_comm(stream);
+  ncclAllReduce(C, C, int64_t(M) * int64_t(N), ncclFloat64, ncclSum, comm, stream); Timer::register_kernel(stream);
   if (pred) { double one = 1., zero = 0.; cublasDgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, &one, C, M, &zero, A, lda, A, lda); }
 }
 
 inline void all_reduce_in_place(cudaStream_t stream, cublasHandle_t handle, int32_t pred, int32_t M, int32_t N, float* A, int32_t lda, void* dev_work, ncclComm_t comm) {
-  float* C = pred ? (float*)dev_work : A; ncclAllReduce(C, C, int64_t(M) * int64_t(N), ncclFloat32, ncclSum, comm, stream);
+  float* C = pred ? (float*)dev_work : A; Timer::register_comm(stream);
+  ncclAllReduce(C, C, int64_t(M) * int64_t(N), ncclFloat32, ncclSum, comm, stream); Timer::register_kernel(stream);
   if (pred) { float one = 1.f, zero = 0.f; cublasSgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, &one, C, M, &zero, A, lda, A, lda); }
 }
 
 inline void all_reduce_in_place(cudaStream_t stream, cublasHandle_t handle, int32_t pred, int32_t M, int32_t N, cuDoubleComplex* A, int32_t lda, void* dev_work, ncclComm_t comm) {
-  cuDoubleComplex* C = pred ? (cuDoubleComplex*)dev_work : A; ncclAllReduce(C, C, int64_t(M) * int64_t(N) * int64_t(2), ncclFloat64, ncclSum, comm, stream);
+  cuDoubleComplex* C = pred ? (cuDoubleComplex*)dev_work : A; Timer::register_comm(stream);
+  ncclAllReduce(C, C, int64_t(M) * int64_t(N) * int64_t(2), ncclFloat64, ncclSum, comm, stream); Timer::register_kernel(stream);
   if (pred) { cuDoubleComplex one = make_cuDoubleComplex(1., 0.), zero = make_cuDoubleComplex(0., 0.); cublasZgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, &one, C, M, &zero, A, lda, A, lda); }
 }
 
 inline void all_reduce_in_place(cudaStream_t stream, cublasHandle_t handle, int32_t pred, int32_t M, int32_t N, cuComplex* A, int32_t lda, void* dev_work, ncclComm_t comm) {
-  cuComplex* C = pred ? (cuComplex*)dev_work : A; ncclAllReduce(C, C, int64_t(M) * int64_t(N) * int64_t(2), ncclFloat32, ncclSum, comm, stream);
+  cuComplex* C = pred ? (cuComplex*)dev_work : A; Timer::register_comm(stream);
+  ncclAllReduce(C, C, int64_t(M) * int64_t(N) * int64_t(2), ncclFloat32, ncclSum, comm, stream); Timer::register_kernel(stream);
   if (pred) { cuComplex one = make_cuComplex(1.f, 0.f), zero = make_cuComplex(0.f, 0.f); cublasCgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, &one, C, M, &zero, A, lda, A, lda); }
 }
 
@@ -209,6 +215,7 @@ inline void cublas_nd_dispatcher(cudaStream_t stream, cublasHandle_t handle, int
 extern "C" int32_t hyacinXsyherk1Drow(cublasHandle_t handle, int32_t localM, int32_t globalM, int32_t N, int32_t umax, hyacinPrecision_t Atype, const void* A, int32_t lda, hyacinPrecision_t Gtype, void* G, int32_t ldg, void* dev_work, hyacinAlgorithm_t alg, ncclComm_t col_comm) {
   if (globalM <= 0 || N <= 0) { return -1; }
   cudaStream_t stream; cublasGetStream(handle, &stream);
+  Timer::register_kernel(stream);
 
   if (alg == CUBLAS_FLOAT_ND) { cublas_nd_dispatcher(stream, handle, localM, N, A, lda, G, ldg, Atype, dev_work, col_comm); return 0; }
   int32_t Complex, det_reduc, algnM, algnN, orderA, orderC; int64_t i8_bytes, acc_bytes, vec_bytes;
@@ -219,13 +226,17 @@ extern "C" int32_t hyacinXsyherk1Drow(cublasHandle_t handle, int32_t localM, int
 
   if (det_reduc) {
     int64_t stride = int64_t(algnN) * int64_t(N) + int64_t(algnN), acc_len = stride * (int64_t(orderC + 1) << Complex);
+    Timer::register_comm(stream);
     ncclAllReduce(vexp, vexp, int64_t(N), ncclInt32, ncclMax, col_comm, stream);
-    if (0 < localM) { 
+    if (0 < localM) {
+      Timer::register_kernel(stream);
       igemm_dispatcher(stream, handle, localM, N, Atype, A, lda, umax, (const int32_t*)vexp, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA, alg);
       internal::int8::accumulate_conv_i63_u47(stream, orderC, Complex, stride, (uint64_t*)acc);
     }
     else { cudaMemsetAsync(acc, 0, acc_bytes, stream); }
+    Timer::register_comm(stream);
     ncclAllReduce(acc, acc, acc_len, ncclUint64, ncclSum, col_comm, stream);
+    Timer::register_kernel(stream);
     deq_dispatcher(stream, globalM, N, algnN, umax, (uint64_t*)acc, 47, orderC, G, ldg, (const int32_t*)vexp, Gtype);
   }
   else {

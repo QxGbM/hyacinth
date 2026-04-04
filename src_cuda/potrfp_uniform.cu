@@ -59,7 +59,7 @@ inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode,
   if (fillmode == 'U' || fillmode == 'u')
     matrix_fill_upper_to_full<matrix_t, matrixPtr> <<< dim3(uint32_t((N + 511) >> 9), uint32_t(N)), 512, 0, stream >>> (A, int64_t(lda));
   imax_dispatcher(stream, N, A, lda + 1, dvec, hvec);
-  int32_t* pivot_i = (int32_t*)&hvec[2], iters = std::min(N, std::max(0, k)) ?: N;
+  int32_t* pivot_i = (int32_t*)&hvec[2], iters = std::min(N, std::max(0, k)); iters = iters ? iters : N;
   epi = conv_f64(hvec[0]) * std::min(1., std::max(0., std::abs(epi)));
 
   for (int32_t i = 0, s = 0; i < iters; ++i) {

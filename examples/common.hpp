@@ -14,6 +14,7 @@ using blas_int = int; // LP64 for blas
 const int32_t oversampling = 10; // increase for better LRA accuracy
 const int32_t u_extra = 6; // increase for better Quantization accuracy
 const int32_t time_kernel = 1;
+double kernel_time = 0., comm_time = 0.;
 
 template <class T>
 inline void copy2d(int32_t M, int32_t N, const T* A, int32_t lda, T* B, int32_t ldb)
@@ -236,7 +237,7 @@ int32_t id_hyac(cublasHandle_t handle, double epi, int32_t M, int32_t N, int32_t
   hyacinXsyherk(handle, M, N, umax, precA, A, lda, precC, gram, N, dev_work, alg);
   int32_t rank = hyacinXGinterp(handle, alg == CUBLAS_FLOAT_ND ? 'U' : 'F', epi, N, K, oversampling, precA, R, ldr, (int32_t*)piv, precC, gram, N, dev_work, pinned_work);
 
-  cudaStreamSynchronize(stream);
+  hyacinSync_TimerSegments(stream, &kernel_time, &comm_time);
   cudaMemcpy(jpiv, piv, sizeof(int32_t) * N, cudaMemcpyDefault);
   cudaFree(gram); cudaFree(piv);
   cudaFree(dev_work); cudaFreeHost(pinned_work);
@@ -269,7 +270,7 @@ int32_t id_fit_transform(cudaStream_t stream, cublasHandle_t handle, cusolverDnH
   hyacinXtransform(handle, 'C', M, N, rank, precA, A, lda, basis_h, K, dev_work, dev_work_bytes);
   hyacinXtransform(handle, 'C', Mv, Nv, rank, precA, V, ldv, &((const T*)basis_h)[int64_t(lcol_offset) * int64_t(K)], K, dev_work, dev_work_bytes);
 
-  cudaStreamSynchronize(stream);
+  hyacinSync_TimerSegments(stream, &kernel_time, &comm_time);
   cudaFree(gram); cudaFree(basis_h); cudaFree(piv);
   cudaFree(dev_work); cudaFreeHost(pinned_work);
   return rank;
@@ -303,7 +304,7 @@ int32_t svd_fit_transform(cudaStream_t stream, cublasHandle_t handle, cusolverDn
   hyacinXtransform(handle, 'N', M, N, rank, precA, A, lda, basis, N, dev_work, dev_work_bytes);
   hyacinXtransform(handle, 'N', Mv, Nv, rank, precA, V, ldv, &((const T*)basis)[lcol_offset], N, dev_work, dev_work_bytes);
 
-  cudaStreamSynchronize(stream);
+  hyacinSync_TimerSegments(stream, &kernel_time, &comm_time);
   cudaFree(gram); cudaFree(basis); cudaFree(S);
   cudaFree(dev_work); cudaFreeHost(pinned_work);
   return rank;
@@ -338,9 +339,11 @@ int32_t svd_fit_transform_1dr(cudaStream_t stream, cublasHandle_t handle, cusolv
   hyacinXtransform(handle, 'N', M, N, rank, precA, A, lda, basis, N, dev_work, dev_work_bytes);
   hyacinXtransform(handle, 'N', Mv, Nv, rank, precA, V, ldv, &((const T*)basis)[lcol_offset], N, dev_work, dev_work_bytes);
 
-  cudaStreamSynchronize(stream);
+  double kernel_time, comm_time;
+  hyacinSync_TimerSegments(stream, &kernel_time, &comm_time);
   cudaFree(gram); cudaFree(basis); cudaFree(S);
   cudaFree(dev_work); cudaFreeHost(pinned_work);
+  printf("SVD-fit-transform: kernel %.3lf ms, comm %.3lf ms.\n", kernel_time, comm_time);
   return rank;
 }
 
@@ -355,7 +358,7 @@ std::pair<int32_t, int32_t> allgatherv_1dc(cudaStream_t stream, ncclComm_t comm,
   cudaMallocHost(&pinned_work, pinned_work_bytes);
   int32_t v_offset = hyacinXAllGatherV1Dcol(stream, M, &N, precA, A, lda, dev_work_bytes, dev_work, pinned_work, comm);
 
-  cudaStreamSynchronize(stream);
+  hyacinSync_TimerSegments(stream, &kernel_time, &comm_time);
   cudaFree(dev_work);
   cudaFreeHost(pinned_work);
   return std::make_pair(N, v_offset);

@@ -242,6 +242,12 @@ int32_t hyacinXAllGatherV1Dcol(
 
 #endif
 
+void hyacinSync_TimerSegments(
+  cudaStream_t stream,
+  double* kernel_time,
+  double* comm_time
+);
+
 #ifdef __cplusplus
 }
 #endif

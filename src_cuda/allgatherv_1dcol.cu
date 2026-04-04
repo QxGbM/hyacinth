@@ -1,5 +1,6 @@
 
 #include <hyacin.h>
+#include <internal.hpp>
 #include <vector>
 #include <numeric>
 
@@ -55,6 +56,7 @@ extern "C" int32_t hyacinXAllGatherV1Dcol(cudaStream_t stream, int32_t M, int32_
 
   int32_t comm_rank, comm_size; ncclCommUserRank(row_comm, &comm_rank); ncclCommCount(row_comm, &comm_size);
   int32_t* N = (int32_t*)pinned_work; N[comm_rank] = *K;
+  Timer::register_comm(stream);
   ncclAllGather(&N[comm_rank], N, 1, ncclInt32, row_comm, stream);
   cudaStreamSynchronize(stream);
   int32_t offset_j = std::reduce(N, &N[comm_rank], 0); 
