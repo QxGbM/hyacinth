@@ -3,7 +3,7 @@
 #include <iostream>
 #include <chrono>
 
-template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, int64_t mb, char algo, double epi, int32_t grid_row, int32_t tile_m, ncclUniqueId id, const std::string& file, const std::string& ref) {
+template <class T, class R> inline void run(char prec, int64_t gM, int64_t N, int64_t K, int64_t mb, char algo, double epi, int32_t grid_row, int32_t tile_m, ncclUniqueId id, const std::string& file, const std::string& ref) {
   int64_t lM = mb * (gM / (mb * tile_m));
   lM += std::max(int64_t(0), std::min(mb, gM - lM * tile_m - mb * grid_row));
 
@@ -13,9 +13,10 @@ template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, 
   else
     matrix_generator<T>(gM, N).generate_block(1., mb, 512, &matA[0], lM, grid_row, 0, tile_m, 1);
 
-  T* d_A = nullptr, *d_V = nullptr;
+  T* d_A = nullptr, *d_V = nullptr; R* d_S = nullptr;
   cudaMalloc((void**)(&d_A), lM * N * sizeof(T));
   cudaMalloc((void**)(&d_V), K * N * sizeof(T));
+  cudaMalloc((void**)(&d_S), K * sizeof(R));
   cudaMemcpy(d_A, matA.data(), lM * N * sizeof(T), cudaMemcpyHostToDevice);
 
   /* Timed region start */
@@ -43,14 +44,14 @@ template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, 
   if (time_kernel) {
     cudaMalloc((void**)(&d_barrier), sizeof(int32_t));
     cudaMemset(d_barrier, 0xDEADBEEF, sizeof(int32_t));
-    svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm, algo, epi, lM, gM, N, K, d_A, lM, d_V, N, N);
+    svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm, algo, epi, lM, gM, N, K, d_A, lM, d_S, d_V, N, N);
     cudaMemcpy(d_A, matA.data(), lM * N * sizeof(T), cudaMemcpyHostToDevice);
     ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
     cudaStreamSynchronize(stream);
   }
   cudaEventRecord(start, stream);
 
-  int32_t rank = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm, algo, epi, lM, gM, N, K, d_A, lM, d_V, N, N);
+  int32_t rank = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm, algo, epi, lM, gM, N, K, d_A, lM, d_S, d_V, N, N);
 
   if (time_kernel)
     ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
@@ -71,11 +72,13 @@ template <class T> inline void run(char prec, int64_t gM, int64_t N, int64_t K, 
   /* Timed region end */
   auto host_end = std::chrono::high_resolution_clock::now();
 
-  std::vector<T> matU(lM * K), matV(K * N);
+  std::vector<T> matU(lM * K), matV(K * N); std::vector<R> vecS(K);
   cudaMemcpy(matU.data(), d_A, lM * K * sizeof(T), cudaMemcpyDeviceToHost);
   cudaMemcpy(matV.data(), d_V, K * N * sizeof(T), cudaMemcpyDeviceToHost);
+  cudaMemcpy(vecS.data(), d_S, K * sizeof(R), cudaMemcpyDeviceToHost);
   cudaFree(d_A);
   cudaFree(d_V);
+  cudaFree(d_S);
 
   double err = check_answer_svd(lM, N, rank, &matU[0], lM, &matV[0], N, &matA[0], lM);
   std::chrono::duration<double, std::milli> host_wtime = host_end - host_start;
@@ -121,10 +124,10 @@ int32_t main(int32_t argc, char* argv[]) {
   { std::cerr << cudaGetErrorString(cu_err) << std::endl; return -1; }
 
   switch(prec) {
-    case 'D': run<double>(prec, gM, N, K, mb, algo, epi, world_rank, world_size, id, file, ref); break;
-    case 'S': run<float>(prec, gM, N, K, mb, algo, epi, world_rank, world_size, id, file, ref); break;
-    case 'Z': run<std::complex<double>>(prec, gM, N, K, mb, algo, epi, world_rank, world_size, id, file, ref); break;
-    case 'C': run<std::complex<float>>(prec, gM, N, K, mb, algo, epi, world_rank, world_size, id, file, ref); break;
+    case 'D': run<double, double>(prec, gM, N, K, mb, algo, epi, world_rank, world_size, id, file, ref); break;
+    case 'S': run<float, float>(prec, gM, N, K, mb, algo, epi, world_rank, world_size, id, file, ref); break;
+    case 'Z': run<std::complex<double>, double>(prec, gM, N, K, mb, algo, epi, world_rank, world_size, id, file, ref); break;
+    case 'C': run<std::complex<float>, float>(prec, gM, N, K, mb, algo, epi, world_rank, world_size, id, file, ref); break;
     default: break;
   }
 

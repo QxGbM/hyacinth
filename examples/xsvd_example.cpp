@@ -3,16 +3,17 @@
 #include <iostream>
 #include <chrono>
 
-template <class T> inline void run(char prec, int64_t M, int64_t N, int64_t K, char algo, double epi, const std::string& file, const std::string& out) {
+template <class T, class R> inline void run(char prec, int64_t M, int64_t N, int64_t K, char algo, double epi, const std::string& file, const std::string& out) {
   std::vector<T> matA(M * N);
   if (!file.empty())
     matrix_from_row_major_csv(M, N, 512, 512, matA.data(), M, file);
   else
     matrix_generator<T>(M, N).generate_block(1., 512, 512, &matA[0], M);
 
-  T* d_A = nullptr, *d_V = nullptr;
+  T* d_A = nullptr, *d_V = nullptr; R* d_S = nullptr;
   cudaMalloc((void**)(&d_A), M * N * sizeof(T));
   cudaMalloc((void**)(&d_V), K * N * sizeof(T));
+  cudaMalloc((void**)(&d_S), K * sizeof(R));
   cudaMemcpy(d_A, matA.data(), M * N * sizeof(T), cudaMemcpyHostToDevice);
 
   /* Timed region start */
@@ -35,13 +36,13 @@ template <class T> inline void run(char prec, int64_t M, int64_t N, int64_t K, c
   cudaEventCreate(&stop);
 
   if (time_kernel) {
-    svd_fit_transform(stream, cublasH, cusolverH, params, algo, epi, M, N, K, d_A, M, d_V, N, N);
+    svd_fit_transform(stream, cublasH, cusolverH, params, algo, epi, M, N, K, d_A, M, d_S, d_V, N, N);
     //id_fit_transform(stream, cublasH, cusolverH, params, epi, M, N, K, d_A, M, d_V, N, N);
     cudaMemcpy(d_A, matA.data(), M * N * sizeof(T), cudaMemcpyHostToDevice);
   }
 
   cudaEventRecord(start, stream);
-  int32_t rank = svd_fit_transform(stream, cublasH, cusolverH, params, algo, epi, M, N, K, d_A, M, d_V, N, N);
+  int32_t rank = svd_fit_transform(stream, cublasH, cusolverH, params, algo, epi, M, N, K, d_A, M, d_S, d_V, N, N);
   //int32_t rank = id_fit_transform(stream, cublasH, cusolverH, params, epi, M, N, K, d_A, M, d_V, N, N);
   cudaEventRecord(stop, stream);
 
@@ -58,11 +59,13 @@ template <class T> inline void run(char prec, int64_t M, int64_t N, int64_t K, c
   /* Timed region end */
   auto host_end = std::chrono::high_resolution_clock::now();
 
-  std::vector<T> matU(M * K), matV(K * N);
+  std::vector<T> matU(M * K), matV(K * N); std::vector<R> vecS(K);
   cudaMemcpy(matU.data(), d_A, M * K * sizeof(T), cudaMemcpyDeviceToHost);
   cudaMemcpy(matV.data(), d_V, K * N * sizeof(T), cudaMemcpyDeviceToHost);
+  cudaMemcpy(vecS.data(), d_S, K * sizeof(R), cudaMemcpyDeviceToHost);
   cudaFree(d_A);
   cudaFree(d_V);
+  cudaFree(d_S);
 
   double err = check_answer_svd(M, N, rank, &matU[0], M, &matV[0], N, &matA[0], M);
   std::chrono::duration<double, std::milli> host_wtime = host_end - host_start;
@@ -100,10 +103,10 @@ int32_t main(int32_t argc, char* argv[]) {
   { std::cerr << cudaGetErrorString(cu_err) << std::endl; return -1; }
 
   switch(prec) {
-    case 'D': run<double>(prec, M, N, K, algo, epi, file, out); break;
-    case 'S': run<float>(prec, M, N, K, algo, epi, file, out); break;
-    case 'Z': run<std::complex<double>>(prec, M, N, K, algo, epi, file, out); break;
-    case 'C': run<std::complex<float>>(prec, M, N, K, algo, epi, file, out); break;
+    case 'D': run<double, double>(prec, M, N, K, algo, epi, file, out); break;
+    case 'S': run<float, float>(prec, M, N, K, algo, epi, file, out); break;
+    case 'Z': run<std::complex<double>, double>(prec, M, N, K, algo, epi, file, out); break;
+    case 'C': run<std::complex<float>, float>(prec, M, N, K, algo, epi, file, out); break;
     default: break;
   }
 

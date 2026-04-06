@@ -276,9 +276,9 @@ int32_t id_fit_transform(cudaStream_t stream, cublasHandle_t handle, cusolverDnH
   return rank;
 }
 
-template <class T>
+template <class T, class R>
 int32_t svd_fit_transform(cudaStream_t stream, cublasHandle_t handle, cusolverDnHandle_t s_handle, cusolverDnParams_t params, char algo, double epi,
-  int32_t M, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv, int32_t Mv, int32_t Nv = 0, int32_t lcol_offset = 0) {
+  int32_t M, int32_t N, int32_t K, T* A, int32_t lda, R* S, T* V, int32_t ldv, int32_t Mv, int32_t Nv = 0, int32_t lcol_offset = 0) {
   int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg;
   hyacinXsyherk_autoTune(epi, algo == 'N', u_extra, &umax, precA, &precC, &alg);
   if (algo == 'F') { alg = CUBLAS_FLOAT_ND; precC = precA; }
@@ -289,12 +289,10 @@ int32_t svd_fit_transform(cudaStream_t stream, cublasHandle_t handle, cusolverDn
   hyacinXGevPcsvd_bufferSize(s_handle, params, use_evd, N, K, precA, N, precC, N, &dev_work_bytes, &pinned_work_bytes);
   hyacinXtransform_bufferSize(K, precA, &dev_work_bytes);
   int32_t c_bytes; hyacinXelem('A', precC, nullptr, &c_bytes, nullptr);
-  int32_t r_bytes; hyacinXelem('R', precA, nullptr, &r_bytes, nullptr);
 
-  void* gram = nullptr, *basis = nullptr, *S = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
+  void* gram = nullptr, *basis = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
   cudaMalloc(&gram, int64_t(N) * int64_t(N) * int64_t(c_bytes));
   cudaMalloc(&basis, int64_t(N) * int64_t(K) * int64_t(sizeof(T)));
-  cudaMalloc(&S, int64_t(K) * int64_t(r_bytes));
   cudaMalloc(&dev_work, dev_work_bytes);
   cudaMallocHost(&pinned_work, pinned_work_bytes);
 
@@ -305,16 +303,16 @@ int32_t svd_fit_transform(cudaStream_t stream, cublasHandle_t handle, cusolverDn
   hyacinXtransform(handle, 'N', Mv, Nv, rank, precA, V, ldv, &((const T*)basis)[lcol_offset], N, dev_work, dev_work_bytes);
 
   hyacinSync_TimerSegments(stream, &kernel_time, &comm_time);
-  cudaFree(gram); cudaFree(basis); cudaFree(S);
+  cudaFree(gram); cudaFree(basis);
   cudaFree(dev_work); cudaFreeHost(pinned_work);
   return rank;
 }
 
 #ifndef NO_NCCL
 
-template <class T>
+template <class T, class R>
 int32_t svd_fit_transform_1dr(cudaStream_t stream, cublasHandle_t handle, cusolverDnHandle_t s_handle, cusolverDnParams_t params, ncclComm_t comm, char algo, double epi,
-  int32_t M, int32_t gM, int32_t N, int32_t K, T* A, int32_t lda, T* V, int32_t ldv, int32_t Mv, int32_t Nv = 0, int32_t lcol_offset = 0) {
+  int32_t M, int32_t gM, int32_t N, int32_t K, T* A, int32_t lda, R* S, T* V, int32_t ldv, int32_t Mv, int32_t Nv = 0, int32_t lcol_offset = 0) {
   int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg;
   hyacinXsyherk_autoTune(epi, algo == 'N', u_extra, &umax, precA, &precC, &alg);
   if (algo == 'F') { alg = CUBLAS_FLOAT_ND; precC = precA; }
@@ -325,12 +323,10 @@ int32_t svd_fit_transform_1dr(cudaStream_t stream, cublasHandle_t handle, cusolv
   hyacinXGevPcsvd_bufferSize(s_handle, params, use_evd, N, K, precA, N, precC, N, &dev_work_bytes, &pinned_work_bytes);
   hyacinXtransform_bufferSize(K, precA, &dev_work_bytes);
   int32_t c_bytes; hyacinXelem('A', precC, nullptr, &c_bytes, nullptr);
-  int32_t r_bytes; hyacinXelem('R', precA, nullptr, &r_bytes, nullptr);
 
-  void* gram = nullptr, *basis = nullptr, *S = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
+  void* gram = nullptr, *basis = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
   cudaMalloc(&gram, int64_t(N) * int64_t(N) * int64_t(c_bytes));
   cudaMalloc(&basis, int64_t(N) * int64_t(K) * int64_t(sizeof(T)));
-  cudaMalloc(&S, int64_t(K) * int64_t(r_bytes));
   cudaMalloc(&dev_work, dev_work_bytes);
   cudaMallocHost(&pinned_work, pinned_work_bytes);
 
@@ -341,7 +337,7 @@ int32_t svd_fit_transform_1dr(cudaStream_t stream, cublasHandle_t handle, cusolv
 
   double kernel_time, comm_time;
   hyacinSync_TimerSegments(stream, &kernel_time, &comm_time);
-  cudaFree(gram); cudaFree(basis); cudaFree(S);
+  cudaFree(gram); cudaFree(basis);
   cudaFree(dev_work); cudaFreeHost(pinned_work);
   return rank;
 }

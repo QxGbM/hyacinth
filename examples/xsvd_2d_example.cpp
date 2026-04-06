@@ -4,7 +4,7 @@
 #include <iostream>
 #include <chrono>
 
-template <class T> inline void run(char prec, int64_t gM, int64_t gN, int64_t K, int64_t mb, int64_t nb, char algo, double epi, int32_t grid_row, int32_t grid_col, int32_t tile_m, int32_t tile_n, ncclUniqueId id, const std::string& file) {
+template <class T, class R> inline void run(char prec, int64_t gM, int64_t gN, int64_t K, int64_t mb, int64_t nb, char algo, double epi, int32_t grid_row, int32_t grid_col, int32_t tile_m, int32_t tile_n, ncclUniqueId id, const std::string& file) {
   int64_t gK = K * tile_n;
   int64_t lM = mb * (gM / (mb * tile_m));
   int64_t lN = nb * (gN / (nb * tile_n));
@@ -17,9 +17,10 @@ template <class T> inline void run(char prec, int64_t gM, int64_t gN, int64_t K,
   else
     matrix_generator<T>(gM, gN).generate_block(1., mb, nb, &matA[0], lM, grid_row, grid_col, tile_m, tile_n);
 
-  T* d_A = nullptr, *d_V = nullptr;
+  T* d_A = nullptr, *d_V = nullptr; R* d_S = nullptr;
   cudaMalloc((void**)(&d_A), lM * std::max(gK, lN) * sizeof(T));
   cudaMalloc((void**)(&d_V), K * lN * sizeof(T));
+  cudaMalloc((void**)(&d_S), K * sizeof(R));
   cudaMemcpy(d_A, matA.data(), lM * lN * sizeof(T), cudaMemcpyHostToDevice);
 
   /* Timed region start */
@@ -50,18 +51,18 @@ template <class T> inline void run(char prec, int64_t gM, int64_t gN, int64_t K,
   if (time_kernel) {
     cudaMalloc((void**)(&d_barrier), sizeof(int32_t));
     cudaMemset(d_barrier, 0xDEADBEEF, sizeof(int32_t));
-    r1 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm_col, algo, epi, lM, gM, lN, K, d_A, lM, d_V, lN, lN);
+    r1 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm_col, algo, epi, lM, gM, lN, K, d_A, lM, d_S, d_V, lN, lN);
     std::tie(N2, offset) = allgatherv_1dc(stream, comm_row, lM, r1, d_A, lM);
-    r2 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm_col, algo, epi, lM, gM, N2, K, d_A, lM, d_V, lN, lN, r1, offset);
+    r2 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm_col, algo, epi, lM, gM, N2, K, d_A, lM, d_S, d_V, lN, lN, r1, offset);
     cudaMemcpy(d_A, matA.data(), lM * lN * sizeof(T), cudaMemcpyHostToDevice);
     ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
     cudaStreamSynchronize(stream);
   }
   cudaEventRecord(start, stream);
 
-  r1 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm_col, algo, epi, lM, gM, lN, K, d_A, lM, d_V, lN, lN);
+  r1 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm_col, algo, epi, lM, gM, lN, K, d_A, lM, d_S, d_V, lN, lN);
   std::tie(N2, offset) = allgatherv_1dc(stream, comm_row, lM, r1, d_A, lM);
-  r2 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm_col, algo, epi, lM, gM, N2, K, d_A, lM, d_V, lN, lN, r1, offset);
+  r2 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm_col, algo, epi, lM, gM, N2, K, d_A, lM, d_S, d_V, lN, lN, r1, offset);
 
   if (time_kernel)
     ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
@@ -84,11 +85,13 @@ template <class T> inline void run(char prec, int64_t gM, int64_t gN, int64_t K,
   /* Timed region end */
   auto host_end = std::chrono::high_resolution_clock::now();
 
-  std::vector<T> matU(lM * K), matV(K * lN);
+  std::vector<T> matU(lM * K), matV(K * lN); std::vector<R> vecS(K);
   cudaMemcpy(matU.data(), d_A, lM * K * sizeof(T), cudaMemcpyDeviceToHost);
   cudaMemcpy(matV.data(), d_V, K * lN * sizeof(T), cudaMemcpyDeviceToHost);
+  cudaMemcpy(vecS.data(), d_S, K * sizeof(R), cudaMemcpyDeviceToHost);
   cudaFree(d_A);
   cudaFree(d_V);
+  cudaFree(d_S);
 
   double err = check_answer_svd(lM, lN, r2, &matU[0], lM, &matV[0], lN, &matA[0], lM);
   std::chrono::duration<double, std::milli> host_wtime = host_end - host_start;
@@ -136,10 +139,10 @@ int32_t main(int32_t argc, char* argv[]) {
   { std::cerr << cudaGetErrorString(cu_err) << std::endl; return -1; }
 
   switch(prec) {
-    case 'D': run<double>(prec, gM, gN, K, mb, nb, algo, epi, grid_row, grid_col, tile_m, tile_n, id, file); break;
-    case 'S': run<float>(prec, gM, gN, K, mb, nb, algo, epi, grid_row, grid_col, tile_m, tile_n, id, file); break;
-    case 'Z': run<std::complex<double>>(prec, gM, gN, K, mb, nb, algo, epi, grid_row, grid_col, tile_m, tile_n, id, file); break;
-    case 'C': run<std::complex<float>>(prec, gM, gN, K, mb, nb, algo, epi, grid_row, grid_col, tile_m, tile_n, id, file); break;
+    case 'D': run<double, double>(prec, gM, gN, K, mb, nb, algo, epi, grid_row, grid_col, tile_m, tile_n, id, file); break;
+    case 'S': run<float, float>(prec, gM, gN, K, mb, nb, algo, epi, grid_row, grid_col, tile_m, tile_n, id, file); break;
+    case 'Z': run<std::complex<double>, double>(prec, gM, gN, K, mb, nb, algo, epi, grid_row, grid_col, tile_m, tile_n, id, file); break;
+    case 'C': run<std::complex<float>, float>(prec, gM, gN, K, mb, nb, algo, epi, grid_row, grid_col, tile_m, tile_n, id, file); break;
     default: break;
   }
 
