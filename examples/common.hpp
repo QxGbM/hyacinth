@@ -343,7 +343,6 @@ int32_t svd_fit_transform_1dr(cudaStream_t stream, cublasHandle_t handle, cusolv
   hyacinSync_TimerSegments(stream, &kernel_time, &comm_time);
   cudaFree(gram); cudaFree(basis); cudaFree(S);
   cudaFree(dev_work); cudaFreeHost(pinned_work);
-  printf("SVD-fit-transform: kernel %.3lf ms, comm %.3lf ms.\n", kernel_time, comm_time);
   return rank;
 }
 
