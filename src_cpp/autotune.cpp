@@ -68,6 +68,6 @@ extern "C" void hyacinXGevPcsvd_autoTune(char* use_evd, int32_t N, int32_t K, hy
 
   int32_t f64_capable = int32_t(f64_capable_sm_list.end() != std::find(f64_capable_sm_list.begin(), f64_capable_sm_list.end(), device_sm));
   hyacinPrecision_t GTypeReal = real_type[int32_t(Gtype)];
-  int32_t pred = ((GTypeReal == HYACIN_F32) || ((GTypeReal == HYACIN_F64) && f64_capable)) && ((K << 1) <= N);
+  int32_t pred = ((GTypeReal == HYACIN_F32) || ((GTypeReal == HYACIN_F64) && f64_capable)) && (N <= (K << 1));
   *use_evd = pred ? 'Y' : 'N';
 }

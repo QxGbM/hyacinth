@@ -145,30 +145,6 @@ int32_t hyacinXGevPcsvd(
   uint64_t pinned_work_bytes
 );
 
-void hyacinXlqchol_bufferSize(
-  cusolverDnHandle_t s_handle,
-  cusolverDnParams_t params,
-  int32_t K,
-  hyacinPrecision_t AXtype,
-  uint64_t* dev_work_bytes,
-  uint64_t* pinned_work_bytes
-);
-
-void hyacinXlqchol(
-  cublasHandle_t handle,
-  cusolverDnHandle_t s_handle,
-  cusolverDnParams_t params,
-  int32_t K,
-  int32_t N,
-  hyacinPrecision_t AXtype,
-  void* X,
-  int32_t ldx,
-  void* dev_work,
-  uint64_t dev_work_bytes,
-  void* pinned_work,
-  uint64_t pinned_work_bytes
-);
-
 void hyacinXtransform_bufferSize(
   int32_t K,
   hyacinPrecision_t AXtype,

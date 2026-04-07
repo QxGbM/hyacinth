@@ -37,13 +37,11 @@ template <class T, class R> inline void run(char prec, int64_t M, int64_t N, int
 
   if (time_kernel) {
     svd_fit_transform(stream, cublasH, cusolverH, params, algo, epi, M, N, K, d_A, M, d_S, d_V, N, N);
-    //id_fit_transform(stream, cublasH, cusolverH, params, epi, M, N, K, d_A, M, d_V, N, N);
     cudaMemcpy(d_A, matA.data(), M * N * sizeof(T), cudaMemcpyHostToDevice);
   }
 
   cudaEventRecord(start, stream);
   int32_t rank = svd_fit_transform(stream, cublasH, cusolverH, params, algo, epi, M, N, K, d_A, M, d_S, d_V, N, N);
-  //int32_t rank = id_fit_transform(stream, cublasH, cusolverH, params, epi, M, N, K, d_A, M, d_V, N, N);
   cudaEventRecord(stop, stream);
 
   cudaDeviceSynchronize();
@@ -67,7 +65,7 @@ template <class T, class R> inline void run(char prec, int64_t M, int64_t N, int
   cudaFree(d_V);
   cudaFree(d_S);
 
-  double err = check_answer_svd(M, N, rank, &matU[0], M, &matV[0], N, &matA[0], M);
+  double err = std::sqrt(check_answer_svd(M, N, rank, &matU[0], M, &matV[0], N, &matA[0], M) / fnorm(M, N, &matA[0], M));
   std::chrono::duration<double, std::milli> host_wtime = host_end - host_start;
   double duration = time_kernel ? double(milliseconds) : host_wtime.count();
   int64_t flops = ((int64_t(M) + int64_t(N)) * int64_t(rank) * int64_t(2)) + (int64_t(M) * int64_t(N) * int64_t(rank) * int64_t(4));

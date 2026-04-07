@@ -86,7 +86,7 @@ template <class T, class R> inline void run(char prec, int64_t M, int64_t gN, in
   cudaFree(d_V);
   cudaFree(d_S);
 
-  double err = check_answer_svd(M, lN, r2, &matU[0], M, &matV[0], lN, &matA[0], M);
+  double err = std::sqrt(check_answer_svd(M, lN, r2, &matU[0], M, &matV[0], lN, &matA[0], M) / fnorm(M, lN, &matA[0], M));
   std::chrono::duration<double, std::milli> host_wtime = host_end - host_start;
   double duration = time_kernel ? double(milliseconds) : host_wtime.count();
   int64_t flops = ((int64_t(M) + int64_t(gN)) * int64_t(r2) * int64_t(2)) + (int64_t(M) * int64_t(gN) * int64_t(r2) * int64_t(4));

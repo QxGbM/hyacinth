@@ -45,13 +45,16 @@ template <class T, class R> inline void run(char prec, int64_t gM, int64_t N, in
     cudaMalloc((void**)(&d_barrier), sizeof(int32_t));
     cudaMemset(d_barrier, 0xDEADBEEF, sizeof(int32_t));
     svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm, algo, epi, lM, gM, N, K, d_A, lM, d_S, d_V, N, N);
+    //id_fit_transform_1dr(stream, cublasH, cusolverH, params, comm, epi, lM, gM, N, K, d_A, lM, d_V, N, N);
     cudaMemcpy(d_A, matA.data(), lM * N * sizeof(T), cudaMemcpyHostToDevice);
     ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
     cudaStreamSynchronize(stream);
+    kernel_time = comm_time = 0.;
   }
   cudaEventRecord(start, stream);
 
   int32_t rank = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm, algo, epi, lM, gM, N, K, d_A, lM, d_S, d_V, N, N);
+  //int32_t rank = id_fit_transform_1dr(stream, cublasH, cusolverH, params, comm, epi, lM, gM, N, K, d_A, lM, d_V, N, N);
 
   if (time_kernel)
     ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
@@ -80,19 +83,23 @@ template <class T, class R> inline void run(char prec, int64_t gM, int64_t N, in
   cudaFree(d_V);
   cudaFree(d_S);
 
-  double err = check_answer_svd(lM, N, rank, &matU[0], lM, &matV[0], N, &matA[0], lM);
+  double err = std::sqrt(check_answer_svd(lM, N, rank, &matU[0], lM, &matV[0], N, &matA[0], lM) / fnorm(lM, N, &matA[0], lM));
   std::chrono::duration<double, std::milli> host_wtime = host_end - host_start;
   double duration = time_kernel ? double(milliseconds) : host_wtime.count();
   int64_t flops = ((int64_t(gM) + int64_t(N)) * int64_t(rank) * int64_t(2)) + (int64_t(gM) * int64_t(N) * int64_t(rank) * int64_t(4));
   double gflops = double(flops) * 1.e-6 / double(duration);
 
   printf("%c-SVD#%d,%ld,%ld,%.1le,%.12le,%d,%lf,%lf\n", prec, grid_row, gM, N, epi, err, rank, duration, gflops);
+  if (grid_row == 0)
+    printf("%lf %lf\n", kernel_time, comm_time);
 
   if (!ref.empty() && grid_row == 0) {
     std::vector<T> ref_V(N * int64_t(rank));
     matrix_from_row_major_csv(N, rank, 512, 512, ref_V.data(), N, ref);
     printf("max-elementwise-relerr: %le\n", max_elementwise_relerr(N, rank, ref_V.data(), N, matV.data(), N));
   }
+
+  //write_matrix_to_csv(rank, 1, &vecS[0], rank, "sv.csv");
 }
 
 int32_t main(int32_t argc, char* argv[]) {

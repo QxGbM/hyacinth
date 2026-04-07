@@ -52,7 +52,7 @@ template <class T> inline void run(char prec, int64_t M, int64_t N, double epi, 
   cudaFree(d_A);
   cudaFree(d_X);
 
-  double err = check_answer_lra(rank, M, N, matA.data(), M, ipiv.data(), matX.data(), N);
+  double err = std::sqrt(check_answer_lra(rank, M, N, matA.data(), M, ipiv.data(), matX.data(), N) / fnorm(M, N, &matA[0], M));
   std::chrono::duration<double, std::milli> host_wtime = host_end - host_start;
   double duration = time_kernel ? double(milliseconds) : host_wtime.count();
   // QR flops = 2mnk - nk^2 + 1/3k^3 + k(n-k)
