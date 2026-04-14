@@ -50,15 +50,6 @@ void hyacinXsyherk_autoTune(
   hyacinAlgorithm_t* alg
 );
 
-void hyacinXsyherk_bufferSize(
-  int32_t M,
-  int32_t N,
-  int32_t umax,
-  hyacinPrecision_t Gtype,
-  hyacinAlgorithm_t alg,
-  uint64_t* dev_work_bytes
-);
-
 int32_t hyacinXsyherk(
   cublasHandle_t handle,
   int32_t M,
@@ -70,54 +61,13 @@ int32_t hyacinXsyherk(
   hyacinPrecision_t Gtype,
   void* G,
   int32_t ldg,
-  void* dev_work,
   hyacinAlgorithm_t alg
 );
 
-void hyacinXGinterp_bufferSize(
+char hyacinXGevPcsvd_autoTune(
   int32_t N,
   int32_t K,
-  hyacinPrecision_t AXtype,
   hyacinPrecision_t Gtype,
-  uint64_t* dev_work_bytes,
-  uint64_t* pinned_work_bytes
-);
-
-int32_t hyacinXGinterp(
-  cublasHandle_t handle,
-  char fillmode,
-  double epi,
-  int32_t N,
-  int32_t K,
-  int32_t p,
-  hyacinPrecision_t AXtype,
-  void* X,
-  int32_t ldx,
-  int32_t* jpiv,
-  hyacinPrecision_t Gtype,
-  void* G,
-  int32_t ldg,
-  void* pinned_work
-);
-
-void hyacinXGevPcsvd_autoTune(
-  char* use_evd,
-  int32_t N,
-  int32_t K,
-  hyacinPrecision_t Gtype
-);
-
-void hyacinXGevPcsvd_bufferSize(
-  cusolverDnHandle_t s_handle,
-  cusolverDnParams_t params,
-  char use_evd,
-  int32_t N,
-  int32_t K,
-  hyacinPrecision_t AXtype,
-  int32_t ldx,
-  hyacinPrecision_t Gtype,
-  int32_t ldg,
-  uint64_t* dev_work_bytes,
   uint64_t* pinned_work_bytes
 );
 
@@ -141,6 +91,23 @@ int32_t hyacinXGevPcsvd(
   void* pinned_work
 );
 
+int32_t hyacinXGinterp(
+  cublasHandle_t handle,
+  char fillmode,
+  double epi,
+  int32_t N,
+  int32_t K,
+  int32_t p,
+  hyacinPrecision_t AXtype,
+  void* X,
+  int32_t ldx,
+  int32_t* jpiv,
+  hyacinPrecision_t Gtype,
+  void* G,
+  int32_t ldg,
+  void* pinned_work
+);
+
 void hyacinXtransform(
   cublasHandle_t handle,
   int32_t M,
@@ -151,16 +118,6 @@ void hyacinXtransform(
   int32_t lda,
   const void* X,
   int32_t ldx
-);
-
-void hyacinXsyherk1Drow_bufferSize(
-  int32_t localM,
-  int32_t globalM,
-  int32_t N,
-  int32_t umax,
-  hyacinPrecision_t Gtype,
-  hyacinAlgorithm_t alg,
-  uint64_t* dev_work_bytes
 );
 
 #ifndef NO_NCCL
@@ -177,7 +134,6 @@ int32_t hyacinXsyherk1Drow(
   hyacinPrecision_t Gtype,
   void* G,
   int32_t ldg,
-  void* dev_work,
   hyacinAlgorithm_t alg,
   ncclComm_t col_comm
 );

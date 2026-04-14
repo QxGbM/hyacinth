@@ -61,8 +61,8 @@ __global__ void gemv_pp_nopiv_kernel(int32_t N, matrix_t sq, real_t rsq, matrix_
 
   thread_x = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce).Reduce(thread_x, cmp_max);
   if (threadIdx.x == 0) {
-    if (blockIdx.x == 0) A[0] = sq;
     idx[blockIdx.x] = thread_x;
+    if (blockIdx.x == 0) { A[0] = sq; }
   }
 }
 

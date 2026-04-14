@@ -32,27 +32,27 @@ inline void imax_dispatcher(cudaStream_t stream, int32_t N, const complex_double
 inline void imax_dispatcher(cudaStream_t stream, int32_t N, const complex_float4* X, int32_t incx, int32_t* jpiv, float4* D, float4* diag_piv)
 { internal::Cholesky::imax_cf128_qf(stream, N, X, incx, jpiv, D, diag_piv); }
 
-inline void gemv_dispatcher(cudaStream_t stream, cublasHandle_t handle, double* scale, int32_t j, int32_t M, int32_t N, double* A, int32_t lda, double* D)
-{ internal::Cholesky::gemv_cublas_f64(stream, handle, scale, j, M, N, A, lda, D); }
-inline void gemv_dispatcher(cudaStream_t stream, cublasHandle_t handle, float* scale, int32_t j, int32_t M, int32_t N, float* A, int32_t lda, float* D)
-{ internal::Cholesky::gemv_cublas_f32(stream, handle, scale, j, M, N, A, lda, D); }
-inline void gemv_dispatcher(cudaStream_t stream, cublasHandle_t, double2* scale, int32_t j, int32_t M, int32_t N, double2* A, int32_t lda, double2* D)
-{ internal::Cholesky::gemv_scal_f128_dd(stream, scale, j, M, N, A, lda, D); }
-inline void gemv_dispatcher(cudaStream_t stream, cublasHandle_t, float4* scale, int32_t j, int32_t M, int32_t N, float4* A, int32_t lda, float4* D)
-{ internal::Cholesky::gemv_scal_f128_qf(stream, scale, j, M, N, A, lda, D); }
-inline void gemv_dispatcher(cudaStream_t stream, cublasHandle_t handle, double* scale, int32_t j, int32_t M, int32_t N, cuDoubleComplex* A, int32_t lda, double* D)
-{ internal::Cholesky::gemv_cublas_cf64(stream, handle, scale, j, M, N, (std::complex<double>*)A, lda, D); }
-inline void gemv_dispatcher(cudaStream_t stream, cublasHandle_t handle, float* scale, int32_t j, int32_t M, int32_t N, cuComplex* A, int32_t lda, float* D)
-{ internal::Cholesky::gemv_cublas_cf32(stream, handle, scale, j, M, N, (std::complex<float>*)A, lda, D); }
-inline void gemv_dispatcher(cudaStream_t stream, cublasHandle_t, double2* scale, int32_t j, int32_t M, int32_t N, complex_double2* A, int32_t lda, double2* D)
-{ internal::Cholesky::gemv_scal_cf128_dd(stream, scale, j, M, N, A, lda, D); }
-inline void gemv_dispatcher(cudaStream_t stream, cublasHandle_t, float4* scale, int32_t j, int32_t M, int32_t N, complex_float4* A, int32_t lda, float4* D)
-{ internal::Cholesky::gemv_scal_cf128_qf(stream, scale, j, M, N, A, lda, D); }
+inline void gemv_dispatcher(cudaStream_t stream, cublasHandle_t handle, double* scale, int32_t j, int32_t M, int32_t N, double* A, int32_t lda, int32_t* jpiv, double* D)
+{ internal::Cholesky::gemv_cublas_f64(stream, handle, scale, j, M, N, A, lda, jpiv, D); }
+inline void gemv_dispatcher(cudaStream_t stream, cublasHandle_t handle, float* scale, int32_t j, int32_t M, int32_t N, float* A, int32_t lda, int32_t* jpiv, float* D)
+{ internal::Cholesky::gemv_cublas_f32(stream, handle, scale, j, M, N, A, lda, jpiv, D); }
+inline void gemv_dispatcher(cudaStream_t stream, cublasHandle_t, double2* scale, int32_t j, int32_t M, int32_t N, double2* A, int32_t lda, int32_t* jpiv, double2* D)
+{ internal::Cholesky::gemv_scal_f128_dd(stream, scale, j, M, N, A, lda, jpiv, D); }
+inline void gemv_dispatcher(cudaStream_t stream, cublasHandle_t, float4* scale, int32_t j, int32_t M, int32_t N, float4* A, int32_t lda, int32_t* jpiv, float4* D)
+{ internal::Cholesky::gemv_scal_f128_qf(stream, scale, j, M, N, A, lda, jpiv, D); }
+inline void gemv_dispatcher(cudaStream_t stream, cublasHandle_t handle, double* scale, int32_t j, int32_t M, int32_t N, cuDoubleComplex* A, int32_t lda, int32_t* jpiv, double* D)
+{ internal::Cholesky::gemv_cublas_cf64(stream, handle, scale, j, M, N, (std::complex<double>*)A, lda, jpiv, D); }
+inline void gemv_dispatcher(cudaStream_t stream, cublasHandle_t handle, float* scale, int32_t j, int32_t M, int32_t N, cuComplex* A, int32_t lda, int32_t* jpiv, float* D)
+{ internal::Cholesky::gemv_cublas_cf32(stream, handle, scale, j, M, N, (std::complex<float>*)A, lda, jpiv, D); }
+inline void gemv_dispatcher(cudaStream_t stream, cublasHandle_t, double2* scale, int32_t j, int32_t M, int32_t N, complex_double2* A, int32_t lda, int32_t* jpiv, double2* D)
+{ internal::Cholesky::gemv_scal_cf128_dd(stream, scale, j, M, N, A, lda, jpiv, D); }
+inline void gemv_dispatcher(cudaStream_t stream, cublasHandle_t, float4* scale, int32_t j, int32_t M, int32_t N, complex_float4* A, int32_t lda, int32_t* jpiv, float4* D)
+{ internal::Cholesky::gemv_scal_cf128_qf(stream, scale, j, M, N, A, lda, jpiv, D); }
 
 inline double conv_f64(double r) { return r; }
 inline double conv_f64(float r) { return double(r); }
-inline double conv_f64(double2 r) { return r.x; }
-inline double conv_f64(float4 r) { return double(r.x) + double(r.y) + double(r.z); }
+inline double conv_f64(double2 r) { return device::dd::dd2double(r); }
+inline double conv_f64(float4 r) { return device::qf::qf2double(r); }
 
 template <class real_t, class matrix_t>
 inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, matrix_t* A, int32_t lda, int32_t* jpiv, real_t* hvec, real_t* dvec) {
@@ -66,9 +66,8 @@ inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode,
     int32_t j = (*pivot_i) - 1;
     double diag_f64 = conv_f64(hvec[0]);
 
-    if ((!std::isnormal(diag_f64)) || (p < (s += int32_t(diag_f64 < epi))) || (j < 0)) return i;
-      else if (0 < j) std::iter_swap(&jpiv[i], &jpiv[i + j]);
-    gemv_dispatcher(stream, handle, hvec, j, N - i, i, &A[int64_t(i) * int64_t(lda)], lda, &dvec[i]);
+    if ((!std::isnormal(diag_f64)) || (p < (s += int32_t(diag_f64 < epi))) || (j < 0)) { return i; }
+    gemv_dispatcher(stream, handle, hvec, j, N - i, i, &A[int64_t(i) * int64_t(lda)], lda, &jpiv[i], &dvec[i]);
   }
   return iters;
 }

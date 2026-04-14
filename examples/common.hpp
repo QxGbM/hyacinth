@@ -229,24 +229,22 @@ int32_t id_hyac(cublasHandle_t handle, double epi, int32_t M, int32_t N, int32_t
     else if (algo == 'L') alg = HYACIN_ALG_LIMBS;
     else if (algo == 'F') { alg = CUBLAS_FLOAT_ND; precC = precA; }
 
-  uint64_t dev_work_bytes = 0, pinned_work_bytes = 0;
-  hyacinXsyherk_bufferSize(M, N, umax, precC, alg, &dev_work_bytes);
-  hyacinXGinterp_bufferSize(N, K, precA, precC, &dev_work_bytes, &pinned_work_bytes);
+  uint64_t pinned_work_bytes = 0;
+  hyacinXGevPcsvd_autoTune(N, K, precC, &pinned_work_bytes);
   int32_t c_bytes; hyacinXelem('A', precC, nullptr, &c_bytes, nullptr);
 
-  void* gram = nullptr, *piv = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
+  void* gram = nullptr, *piv = nullptr, *pinned_work = nullptr;
   cudaMalloc(&gram, int64_t(N) * int64_t(N) * int64_t(c_bytes));
   cudaMalloc(&piv, int64_t(N) * sizeof(int32_t));
-  cudaMalloc(&dev_work, dev_work_bytes);
   cudaMallocHost(&pinned_work, pinned_work_bytes);
 
-  hyacinXsyherk(handle, M, N, umax, precA, A, lda, precC, gram, N, dev_work, alg);
+  hyacinXsyherk(handle, M, N, umax, precA, A, lda, precC, gram, N, alg);
   int32_t rank = hyacinXGinterp(handle, alg == CUBLAS_FLOAT_ND ? 'U' : 'F', epi, N, K, oversampling, precA, R, ldr, (int32_t*)piv, precC, gram, N, pinned_work);
 
   hyacinSync_TimerSegments(stream, &kernel_time, &comm_time);
   cudaMemcpy(jpiv, piv, sizeof(int32_t) * N, cudaMemcpyDefault);
   cudaFree(gram); cudaFree(piv);
-  cudaFree(dev_work); cudaFreeHost(pinned_work);
+  cudaFreeHost(pinned_work);
   return rank;
 }
 
@@ -256,20 +254,16 @@ int32_t svd_fit_transform(cudaStream_t stream, cublasHandle_t handle, cusolverDn
   int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg;
   hyacinXsyherk_autoTune(epi, algo == 'N', u_extra, &umax, precA, &precC, &alg);
   if (algo == 'F') { alg = CUBLAS_FLOAT_ND; precC = precA; }
-  char use_evd; hyacinXGevPcsvd_autoTune(&use_evd, N, K, precC);
-
-  uint64_t dev_work_bytes = 0, pinned_work_bytes = 0;
-  hyacinXsyherk_bufferSize(M, N, umax, precC, alg, &dev_work_bytes);
-  hyacinXGevPcsvd_bufferSize(s_handle, params, use_evd, N, K, precA, N, precC, N, &dev_work_bytes, &pinned_work_bytes);
+  uint64_t pinned_work_bytes = 0;
+  char use_evd = hyacinXGevPcsvd_autoTune(N, K, precC, &pinned_work_bytes);
   int32_t c_bytes; hyacinXelem('A', precC, nullptr, &c_bytes, nullptr);
 
-  void* gram = nullptr, *basis = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
+  void* gram = nullptr, *basis = nullptr, *pinned_work = nullptr;
   cudaMalloc(&gram, int64_t(N) * int64_t(N) * int64_t(c_bytes));
   cudaMalloc(&basis, int64_t(N) * int64_t(K) * int64_t(sizeof(T)));
-  cudaMalloc(&dev_work, dev_work_bytes);
   cudaMallocHost(&pinned_work, pinned_work_bytes);
 
-  hyacinXsyherk(handle, M, N, umax, precA, A, lda, precC, gram, N, dev_work, alg);
+  hyacinXsyherk(handle, M, N, umax, precA, A, lda, precC, gram, N, alg);
   int32_t rank = 0;
   rank = hyacinXGevPcsvd(handle, s_handle, params, use_evd, alg == CUBLAS_FLOAT_ND ? 'U' : 'F', epi, N, K, oversampling, precA, S, basis, N, precC, gram, N, pinned_work);
   hyacinXtransform(handle, M, N, rank, precA, A, lda, basis, N);
@@ -277,7 +271,7 @@ int32_t svd_fit_transform(cudaStream_t stream, cublasHandle_t handle, cusolverDn
 
   hyacinSync_TimerSegments(stream, &kernel_time, &comm_time);
   cudaFree(gram); cudaFree(basis);
-  cudaFree(dev_work); cudaFreeHost(pinned_work);
+  cudaFreeHost(pinned_work);
   return rank;
 }
 
@@ -289,27 +283,23 @@ int32_t svd_fit_transform_1dr(cudaStream_t stream, cublasHandle_t handle, cusolv
   int32_t umax; hyacinPrecision_t precA = __precA<T>(), precC; hyacinAlgorithm_t alg;
   hyacinXsyherk_autoTune(epi, algo == 'N', u_extra, &umax, precA, &precC, &alg);
   if (algo == 'F') { alg = CUBLAS_FLOAT_ND; precC = precA; }
-  char use_evd; hyacinXGevPcsvd_autoTune(&use_evd, N, K, precC);
-
-  uint64_t dev_work_bytes = 0, pinned_work_bytes = 0;
-  hyacinXsyherk1Drow_bufferSize(M, gM, N, umax, precC, alg, &dev_work_bytes);
-  hyacinXGevPcsvd_bufferSize(s_handle, params, use_evd, N, K, precA, N, precC, N, &dev_work_bytes, &pinned_work_bytes);
+  uint64_t pinned_work_bytes = 0;
+  char use_evd = hyacinXGevPcsvd_autoTune(N, K, precC, &pinned_work_bytes);
   int32_t c_bytes; hyacinXelem('A', precC, nullptr, &c_bytes, nullptr);
 
-  void* gram = nullptr, *basis = nullptr, *dev_work = nullptr, *pinned_work = nullptr;
+  void* gram = nullptr, *basis = nullptr, *pinned_work = nullptr;
   cudaMalloc(&gram, int64_t(N) * int64_t(N) * int64_t(c_bytes));
   cudaMalloc(&basis, int64_t(N) * int64_t(K) * int64_t(sizeof(T)));
-  cudaMalloc(&dev_work, dev_work_bytes);
   cudaMallocHost(&pinned_work, pinned_work_bytes);
 
-  hyacinXsyherk1Drow(handle, M, gM, N, umax, precA, A, lda, precC, gram, N, dev_work, alg, comm);
+  hyacinXsyherk1Drow(handle, M, gM, N, umax, precA, A, lda, precC, gram, N, alg, comm);
   int32_t rank = hyacinXGevPcsvd(handle, s_handle, params, use_evd, alg == CUBLAS_FLOAT_ND ? 'U' : 'F', epi, N, K, oversampling, precA, S, basis, N, precC, gram, N, pinned_work);
   hyacinXtransform(handle, M, N, rank, precA, A, lda, basis, N);
   hyacinXtransform(handle, Mv, Nv, rank, precA, V, ldv, &((const T*)basis)[lcol_offset], N);
 
   hyacinSync_TimerSegments(stream, &kernel_time, &comm_time);
   cudaFree(gram); cudaFree(basis);
-  cudaFree(dev_work); cudaFreeHost(pinned_work);
+  cudaFreeHost(pinned_work);
   return rank;
 }
 

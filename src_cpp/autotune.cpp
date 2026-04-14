@@ -52,12 +52,15 @@ extern "C" void hyacinXsyherk_autoTune(double epi, int32_t use_nd_allreduce, int
   int32_t Complex = int32_t(Atype != ATypeReal), use_limbs = int32_t(u < umax_threshold);
   use_nd_allreduce = use_nd_allreduce && (auto_prec == HYACIN_F32 || auto_prec == HYACIN_F64);
 
-  *umax = std::min(umax_practical_limit, u);
-  *ComputeType = Complex ? complex_type[int32_t(auto_prec)] : auto_prec;
-  *alg = use_nd_allreduce ? (use_limbs ? HYACIN_ALG_LIMBS_ND : HYACIN_ALG_CRT_ND) : (use_limbs ? HYACIN_ALG_LIMBS : HYACIN_ALG_CRT);
+  if (umax)
+    *umax = std::min(umax_practical_limit, u);
+  if (ComputeType)
+    *ComputeType = Complex ? complex_type[int32_t(auto_prec)] : auto_prec;
+  if (alg)
+    *alg = use_nd_allreduce ? (use_limbs ? HYACIN_ALG_LIMBS_ND : HYACIN_ALG_CRT_ND) : (use_limbs ? HYACIN_ALG_LIMBS : HYACIN_ALG_CRT);
 }
 
-extern "C" void hyacinXGevPcsvd_autoTune(char* use_evd, int32_t N, int32_t K, hyacinPrecision_t Gtype) {
+extern "C" char hyacinXGevPcsvd_autoTune(int32_t N, int32_t K, hyacinPrecision_t Gtype, uint64_t* pinned_work_bytes) {
   if (device_sm == 0) {
     int32_t device, major, minor;
     cudaGetDevice(&device);
@@ -69,5 +72,7 @@ extern "C" void hyacinXGevPcsvd_autoTune(char* use_evd, int32_t N, int32_t K, hy
   int32_t f64_capable = int32_t(f64_capable_sm_list.end() != std::find(f64_capable_sm_list.begin(), f64_capable_sm_list.end(), device_sm));
   hyacinPrecision_t GTypeReal = real_type[int32_t(Gtype)];
   int32_t pred = ((GTypeReal == HYACIN_F32) || ((GTypeReal == HYACIN_F64) && f64_capable)) && (N <= (K << 1));
-  *use_evd = pred ? 'Y' : 'N';
+  if (pinned_work_bytes)
+    *pinned_work_bytes = uint64_t(type_bytes[int32_t(GTypeReal)]) * uint64_t(512);
+  return pred ? 'Y' : 'N';
 }

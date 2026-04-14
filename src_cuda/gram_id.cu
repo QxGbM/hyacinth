@@ -59,15 +59,13 @@ template<> inline int32_t potrfp<HYACIN_QF_COMPLEX>(cudaStream_t stream, cublasH
 
 template <hyacinPrecision_t precG, class Gtype>
 inline int32_t diag_piv_dispatcher(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t N, int32_t K, int32_t p, hyacinPrecision_t AXtype, int32_t* jpiv, void* X, int32_t ldx, Gtype* G, int32_t ldg, void* pinned_work) {
-  int32_t* hpiv = (int32_t*)(&((Gtype*)pinned_work)[512]);
   int32_t x_bytes, g_real_bytes = int32_t(sizeof(Gtype)); hyacinXelem('A', AXtype, nullptr, &x_bytes, nullptr);
   uint64_t dev_work_bytes = uint64_t(std::max(int64_t(x_bytes) * int64_t(N) * int64_t(std::min(N, K)), int64_t(g_real_bytes) * int64_t(N)));
   void* dev_work = nullptr; 
   if (cudaSuccess != cudaMallocAsync((void**)&dev_work, dev_work_bytes, stream))
     throw std::runtime_error("Workspace allocation failed at Interpolative decomposition.");
 
-  K = potrfp<precG>(stream, handle, fillmode, epi, K, p, N, G, ldg, hpiv, dev_work, pinned_work);
-  cudaMemcpyAsync(jpiv, hpiv, int64_t(N) * sizeof(int32_t), cudaMemcpyHostToDevice, stream);
+  K = potrfp<precG>(stream, handle, fillmode, epi, K, p, N, G, ldg, jpiv, dev_work, pinned_work);
   if (0 < K) {
     constexpr int32_t block_threads = 512;
     int64_t CK = int64_t(K) << 1, cldg = int64_t(ldg) << 1;
@@ -103,13 +101,6 @@ inline int32_t diag_piv_dispatcher(cudaStream_t stream, cublasHandle_t handle, c
   }
   cudaFreeAsync(dev_work, stream);
   return K;
-}
-
-extern "C" void hyacinXGinterp_bufferSize(int32_t N, int32_t K, hyacinPrecision_t AXtype, hyacinPrecision_t Gtype, uint64_t* dev_work_bytes, uint64_t* pinned_work_bytes) {
-  if (N <= 0 || K <= 0) { return; }
-  int32_t x_bytes, g_real_bytes; hyacinXelem('A', AXtype, nullptr, &x_bytes, nullptr); hyacinXelem('R', Gtype, nullptr, &g_real_bytes, nullptr);
-  *dev_work_bytes = std::max(*dev_work_bytes, uint64_t(std::max(int64_t(x_bytes) * int64_t(N) * int64_t(std::min(N, K)), int64_t(g_real_bytes) * int64_t(N))));
-  *pinned_work_bytes = std::max(*pinned_work_bytes, uint64_t(int64_t(g_real_bytes) * int64_t(512)) + uint64_t(sizeof(int32_t) * int64_t(N)));
 }
 
 extern "C" int32_t hyacinXGinterp(cublasHandle_t handle, char fillmode, double epi, int32_t N, int32_t K, int32_t p, hyacinPrecision_t AXtype, void* X, int32_t ldx, int32_t* jpiv, hyacinPrecision_t Gtype, void* G, int32_t ldg, void* pinned_work) {

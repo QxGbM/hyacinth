@@ -124,15 +124,13 @@ template<> inline int32_t potrfp<HYACIN_QF_COMPLEX>(cudaStream_t stream, cublasH
 template <hyacinPrecision_t precG, class Gtype>
 inline int32_t gsvd_dispatcher(cudaStream_t stream, cublasHandle_t handle, cusolverDnHandle_t s_handle, cusolverDnParams_t params, char fillmode,
   double epi, int32_t N, int32_t K, int32_t p, hyacinPrecision_t AXtype, void* S, void* X, int32_t ldx, Gtype* G, int32_t ldg, void* pinned_work) {
-  int32_t* hpiv = (int32_t*)(&((Gtype*)pinned_work)[512]);
   int32_t x_bytes, g_real_bytes = int32_t(sizeof(Gtype)); hyacinXelem('A', AXtype, nullptr, &x_bytes, nullptr);
   uint64_t dev_work_bytes = uint64_t(std::max(int64_t(x_bytes) * int64_t(N) * int64_t(std::min(N, K)), int64_t(g_real_bytes) * int64_t(N)));
   void* dev_work = nullptr; 
   if (cudaSuccess != cudaMallocAsync((void**)&dev_work, dev_work_bytes, stream))
     throw std::runtime_error("Workspace allocation failed at GESVD Preconditioning.");
 
-  K = potrfp<precG>(stream, handle, fillmode, epi, K, p, N, G, ldg, hpiv, dev_work, pinned_work);
-  cudaMemcpyAsync(X, hpiv, int64_t(N) * sizeof(int32_t), cudaMemcpyHostToDevice, stream);
+  K = potrfp<precG>(stream, handle, fillmode, epi, K, p, N, G, ldg, (int32_t*)X, dev_work, pinned_work);
   if (0 < K) {
     constexpr int32_t block_threads = 512;
     int64_t CK = int64_t(K) << 1, cldg = int64_t(ldg) << 1;
@@ -170,24 +168,6 @@ inline int32_t gsvd_dispatcher(cudaStream_t stream, cublasHandle_t handle, cusol
   }
   cudaFreeAsync(dev_work, stream);
   return K;
-}
-
-extern "C" void hyacinXGevPcsvd_bufferSize(cusolverDnHandle_t s_handle, cusolverDnParams_t params, char use_evd, int32_t N, int32_t K, hyacinPrecision_t AXtype, int32_t ldx, hyacinPrecision_t Gtype, int32_t ldg, uint64_t* dev_work_bytes, uint64_t* pinned_work_bytes) {
-  if (N <= 0 || K <= 0) { return; }
-  int32_t x_bytes, x_real_bytes, g_real_bytes; cudaDataType_t type_c, type_r;
-  hyacinXelem('A', AXtype, nullptr, &x_bytes, &type_c); hyacinXelem('R', AXtype, nullptr, &x_real_bytes, &type_r); hyacinXelem('R', Gtype, nullptr, &g_real_bytes, nullptr);
-
-  size_t workspaceInBytesOnDevice, workspaceInBytesOnHost; K = std::min(N, K);
-  if ((use_evd == 'Y' || use_evd == 'y') && (AXtype == Gtype)) {
-    cusolverDnXsyevd_bufferSize(s_handle, params, CUSOLVER_EIG_MODE_VECTOR, CUBLAS_FILL_MODE_UPPER, N, type_c, nullptr, ldg, type_r, nullptr, type_c, &workspaceInBytesOnDevice, &workspaceInBytesOnHost);
-    *dev_work_bytes = std::max(*dev_work_bytes, uint64_t(workspaceInBytesOnDevice) + uint64_t(int64_t(x_real_bytes) * int64_t(K)));
-    *pinned_work_bytes = std::max(*pinned_work_bytes, std::max(uint64_t(workspaceInBytesOnHost), uint64_t(int64_t(x_real_bytes) * int64_t(K))));
-  }
-  else {
-    cusolverDnXgesvd_bufferSize(s_handle, params, 'O', 'N', N, K, type_c, nullptr, ldx, type_r, nullptr, type_c, nullptr, ldx, type_c, nullptr, K, type_c, &workspaceInBytesOnDevice, &workspaceInBytesOnHost);
-    *dev_work_bytes = std::max(*dev_work_bytes, std::max(uint64_t(workspaceInBytesOnDevice), uint64_t(std::max(int64_t(x_bytes) * int64_t(N) * int64_t(K), int64_t(g_real_bytes) * int64_t(N)))));
-    *pinned_work_bytes = std::max(*pinned_work_bytes, std::max(uint64_t(workspaceInBytesOnHost), uint64_t(std::max(int64_t(g_real_bytes) * int64_t(512) + int64_t(sizeof(int32_t)) * int64_t(N), int64_t(x_real_bytes) * int64_t(K)))));
-  }
 }
 
 extern "C" int32_t hyacinXGevPcsvd(cublasHandle_t handle, cusolverDnHandle_t s_handle, cusolverDnParams_t params, char use_evd, char fillmode, double epi, int32_t N, int32_t K, int32_t p,
