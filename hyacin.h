@@ -97,7 +97,6 @@ int32_t hyacinXGinterp(
   hyacinPrecision_t Gtype,
   void* G,
   int32_t ldg,
-  void* dev_work,
   void* pinned_work
 );
 
@@ -139,21 +138,11 @@ int32_t hyacinXGevPcsvd(
   hyacinPrecision_t Gtype,
   void* G,
   int32_t ldg,
-  void* dev_work,
-  uint64_t dev_work_bytes,
-  void* pinned_work,
-  uint64_t pinned_work_bytes
-);
-
-void hyacinXtransform_bufferSize(
-  int32_t K,
-  hyacinPrecision_t AXtype,
-  uint64_t* dev_work_bytes
+  void* pinned_work
 );
 
 void hyacinXtransform(
   cublasHandle_t handle,
-  char transx,
   int32_t M,
   int32_t N,
   int32_t K,
@@ -161,9 +150,7 @@ void hyacinXtransform(
   void* A,
   int32_t lda,
   const void* X,
-  int32_t ldx,
-  void* dev_work,
-  uint64_t dev_work_bytes
+  int32_t ldx
 );
 
 void hyacinXsyherk1Drow_bufferSize(
@@ -174,14 +161,6 @@ void hyacinXsyherk1Drow_bufferSize(
   hyacinPrecision_t Gtype,
   hyacinAlgorithm_t alg,
   uint64_t* dev_work_bytes
-);
-
-void hyacinXAllGatherV1Dcol_bufferSize(
-  int32_t M,
-  int32_t comm_size,
-  hyacinPrecision_t Atype,
-  uint64_t* dev_work_bytes,
-  uint64_t* pinned_work_bytes
 );
 
 #ifndef NO_NCCL
@@ -210,9 +189,6 @@ int32_t hyacinXAllGatherV1Dcol(
   hyacinPrecision_t Atype,
   void* A,
   int32_t lda,
-  uint64_t dev_work_bytes,
-  void* dev_work,
-  void* pinned_work,
   ncclComm_t row_comm
 );
 

@@ -35,12 +35,12 @@ __global__ void dequantize_kernel(int64_t K, int64_t N, const uint64_t* __restri
     for (uint32_t limb = 0; limb < orderL; ++limb)
     { device::int8::add_shifted(acc, int64_t(A[iter]), shifts[limb]); iter += strideA; }
 
-    iter = y + N * lda;
+    iter = strideA + y - lda;
     #pragma unroll
     for (uint32_t limb = 0; limb < orderL; ++limb)
     { device::int8::add_shifted(acc, -int64_t(A[iter]), uint32_t(umax) + shifts[limb]); iter += strideA; }
 
-    iter = x + N * lda;
+    iter = strideA + x - lda;
     #pragma unroll
     for (uint32_t limb = 0; limb < orderL; ++limb)
     { device::int8::add_shifted(acc, -int64_t(A[iter]), uint32_t(umax) + shifts[limb]); iter += strideA; }

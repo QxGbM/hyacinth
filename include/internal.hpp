@@ -9,21 +9,21 @@ struct complex_float4;
 
 namespace internal::Cholesky {
 
-  void imax_f64(cudaStream_t stream, int32_t N, const double* X, int32_t incx, double* D, double* diag_piv);
+  void imax_f64(cudaStream_t stream, int32_t N, const double* X, int32_t incx, int32_t* jpiv, double* D, double* diag_piv);
 
-  void imax_f32(cudaStream_t stream, int32_t N, const float* X, int32_t incx, float* D, float* diag_piv);
+  void imax_f32(cudaStream_t stream, int32_t N, const float* X, int32_t incx, int32_t* jpiv, float* D, float* diag_piv);
 
-  void imax_f128_dd(cudaStream_t stream, int32_t N, const double2* X, int32_t incx, double2* D, double2* diag_piv);
+  void imax_f128_dd(cudaStream_t stream, int32_t N, const double2* X, int32_t incx, int32_t* jpiv, double2* D, double2* diag_piv);
 
-  void imax_f128_qf(cudaStream_t stream, int32_t N, const float4* X, int32_t incx, float4* D, float4* diag_piv);
+  void imax_f128_qf(cudaStream_t stream, int32_t N, const float4* X, int32_t incx, int32_t* jpiv, float4* D, float4* diag_piv);
 
-  void imax_cf64(cudaStream_t stream, int32_t N, const std::complex<double>* X, int32_t incx, double* D, double* scale);
+  void imax_cf64(cudaStream_t stream, int32_t N, const std::complex<double>* X, int32_t incx, int32_t* jpiv, double* D, double* scale);
 
-  void imax_cf32(cudaStream_t stream, int32_t N, const std::complex<float>* X, int32_t incx, float* D, float* scale);
+  void imax_cf32(cudaStream_t stream, int32_t N, const std::complex<float>* X, int32_t incx, int32_t* jpiv, float* D, float* scale);
 
-  void imax_cf128_dd(cudaStream_t stream, int32_t N, const complex_double2* X, int32_t incx, double2* D, double2* scale);
+  void imax_cf128_dd(cudaStream_t stream, int32_t N, const complex_double2* X, int32_t incx, int32_t* jpiv, double2* D, double2* scale);
 
-  void imax_cf128_qf(cudaStream_t stream, int32_t N, const complex_float4* X, int32_t incx, float4* D, float4* scale);
+  void imax_cf128_qf(cudaStream_t stream, int32_t N, const complex_float4* X, int32_t incx, int32_t* jpiv, float4* D, float4* scale);
 
   void imax_f64_host_sync(cudaStream_t stream, int32_t maxN, int32_t lenX, double* X);
 

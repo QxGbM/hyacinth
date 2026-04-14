@@ -45,7 +45,6 @@ template <class T, class R> inline void run(char prec, int64_t gM, int64_t N, in
     cudaMalloc((void**)(&d_barrier), sizeof(int32_t));
     cudaMemset(d_barrier, 0xDEADBEEF, sizeof(int32_t));
     svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm, algo, epi, lM, gM, N, K, d_A, lM, d_S, d_V, N, N);
-    //id_fit_transform_1dr(stream, cublasH, cusolverH, params, comm, epi, lM, gM, N, K, d_A, lM, d_V, N, N);
     cudaMemcpy(d_A, matA.data(), lM * N * sizeof(T), cudaMemcpyHostToDevice);
     ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
     cudaStreamSynchronize(stream);
@@ -54,7 +53,6 @@ template <class T, class R> inline void run(char prec, int64_t gM, int64_t N, in
   cudaEventRecord(start, stream);
 
   int32_t rank = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm, algo, epi, lM, gM, N, K, d_A, lM, d_S, d_V, N, N);
-  //int32_t rank = id_fit_transform_1dr(stream, cublasH, cusolverH, params, comm, epi, lM, gM, N, K, d_A, lM, d_V, N, N);
 
   if (time_kernel)
     ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);

@@ -15,12 +15,20 @@ struct add_f128 {
     return device::qf::make_complex_float4(operator()(a.real, b.real), operator()(a.imag, b.imag)); }
 };
 
-__device__ __forceinline__ double2 fma_func(double2 a, double2 b, double2 c) { return device::dd::add(c, device::dd::mul(a, b)); }
-__device__ __forceinline__ float4 fma_func(float4 a, float4 b, float4 c) { return device::qf::add(c, device::qf::mul(a, b)); }
-__device__ __forceinline__ complex_double2 fma_func(complex_double2 a, complex_double2 b, complex_double2 c) {
-  return device::dd::make_complex_double2(fma_func(a.real, b.real, fma_func(a.imag, b.imag, c.real)), fma_func(a.real, b.imag, fma_func(device::dd::negate(a.imag), b.real, c.imag))); }
-__device__ __forceinline__ complex_float4 fma_func(complex_float4 a, complex_float4 b, complex_float4 c) {
-  return device::qf::make_complex_float4(fma_func(a.real, b.real, fma_func(a.imag, b.imag, c.real)), fma_func(a.real, b.imag, fma_func(device::qf::negate(a.imag), b.real, c.imag))); }
+__device__ __forceinline__ double2 fma_func(const double2* a, const double2* b, double2 c) {
+  return device::dd::add(c, device::dd::mul(__ldg(a), __ldg(b))); }
+__device__ __forceinline__ float4 fma_func(const float4* a, const float4* b, float4 c) {
+  return device::qf::add(c, device::qf::mul(__ldg(a), __ldg(b))); }
+__device__ __forceinline__ complex_double2 fma_func(const complex_double2* a, const complex_double2* b, complex_double2 c) {
+  double2 a_rl = __ldg(&a->real), a_im = __ldg(&a->imag), b_rl = __ldg(&b->real), b_im = __ldg(&b->imag);
+  using device::dd::add, device::dd::mul, device::dd::negate, device::dd::make_complex_double2;
+  return make_complex_double2(add(mul(a_rl, b_rl), add(mul(a_im, b_im), c.real)), add(mul(a_rl, b_im), add(mul(negate(a_im), b_rl), c.imag)));
+}
+__device__ __forceinline__ complex_float4 fma_func(const complex_float4* a, const complex_float4* b, complex_float4 c) {
+  float4 a_rl = __ldg(&a->real), a_im = __ldg(&a->imag), b_rl = __ldg(&b->real), b_im = __ldg(&b->imag);
+  using device::qf::add, device::qf::mul, device::qf::negate, device::qf::make_complex_float4;
+  return make_complex_float4(add(mul(a_rl, b_rl), add(mul(a_im, b_im), c.real)), add(mul(a_rl, b_im), add(mul(negate(a_im), b_rl), c.imag)));
+}
 
 __device__ __forceinline__ double2 neg_func(double2 a) { return device::dd::negate(a); }
 __device__ __forceinline__ float4 neg_func(float4 a) { return device::qf::negate(a); }
@@ -29,18 +37,18 @@ __device__ __forceinline__ complex_double2 neg_func(complex_double2 a) {
 __device__ __forceinline__ complex_float4 neg_func(complex_float4 a) {
   return device::qf::make_complex_float4(device::qf::negate(a.real), device::qf::negate(a.imag)); }
 
-template <class matrix_t, class matrix_ptr, int32_t WARP_THREADS, int32_t BLOCK_WARPS>
-__global__ void gemv_kernel(int32_t M, int32_t N, matrix_ptr A, int64_t ldj, int64_t lda) {
+template <class matrix_t, int32_t WARP_THREADS, int32_t BLOCK_WARPS>
+__global__ void gemv_kernel(int32_t M, int32_t N, matrix_t* __restrict__ A, int64_t ldj, int64_t lda) {
   __shared__ typename cub::BlockReduce<matrix_t, WARP_THREADS>::TempStorage temp_reduce[BLOCK_WARPS];
 
   int32_t i = BLOCK_WARPS * blockIdx.x + threadIdx.y;
-  const matrix_ptr A_i = &A[int64_t(i) * lda], A_j = &A[ldj];
+  const matrix_t* A_i = &A[int64_t(i) * lda], *A_j = &A[ldj];
 
   if (i < M && A_i != A_j) {
     matrix_t threadB = matrix_t();
     
     for (int32_t k = threadIdx.x; k < N; k += WARP_THREADS)
-      threadB = fma_func(A_i[k], A_j[k], threadB);
+      threadB = fma_func(&A_i[k], &A_j[k], threadB);
 
     add_f128 add_func;
     threadB = cub::BlockReduce<matrix_t, WARP_THREADS>(temp_reduce[threadIdx.y]).Reduce(threadB, add_func);
@@ -59,34 +67,34 @@ inline void gemv_dispatcher(cudaStream_t stream, int32_t j, int32_t M, int32_t N
   int32_t grid[]{ (M + 511) >> 9, (M + 255) >> 8, (M + 127) >> 7, (M + 63) >> 6, (M + 31) >> 5, (M + 15) >> 4, (M + 7) >> 3, (M + 3) >> 2, (M + 1) >> 1 };
 
   if (target_blocks <= grid[0] || N <= warp_threads[0])
-    gemv_kernel<matrix_t, matrix_ptr, warp_threads[0], block_warps[0]>
+    gemv_kernel<matrix_t, warp_threads[0], block_warps[0]>
       <<< grid[0], dim3(warp_threads[0], block_warps[0], 1), 0, stream >>> (M, N, A, int64_t(j) * int64_t(lda), int64_t(lda));
   else if (target_blocks <= grid[1] || N <= warp_threads[1])
-    gemv_kernel<matrix_t, matrix_ptr, warp_threads[1], block_warps[1]>
+    gemv_kernel<matrix_t, warp_threads[1], block_warps[1]>
       <<< grid[1], dim3(warp_threads[1], block_warps[1], 1), 0, stream >>> (M, N, A, int64_t(j) * int64_t(lda), int64_t(lda));
   else if (target_blocks <= grid[2] || N <= warp_threads[2])
-    gemv_kernel<matrix_t, matrix_ptr, warp_threads[2], block_warps[2]>
+    gemv_kernel<matrix_t, warp_threads[2], block_warps[2]>
       <<< grid[2], dim3(warp_threads[2], block_warps[2], 1), 0, stream >>> (M, N, A, int64_t(j) * int64_t(lda), int64_t(lda));
   else if (target_blocks <= grid[3] || N <= warp_threads[3])
-    gemv_kernel<matrix_t, matrix_ptr, warp_threads[3], block_warps[3]>
+    gemv_kernel<matrix_t, warp_threads[3], block_warps[3]>
       <<< grid[3], dim3(warp_threads[3], block_warps[3], 1), 0, stream >>> (M, N, A, int64_t(j) * int64_t(lda), int64_t(lda));
   else if (target_blocks <= grid[4] || N <= warp_threads[4])
-    gemv_kernel<matrix_t, matrix_ptr, warp_threads[4], block_warps[4]>
+    gemv_kernel<matrix_t, warp_threads[4], block_warps[4]>
       <<< grid[4], dim3(warp_threads[4], block_warps[4], 1), 0, stream >>> (M, N, A, int64_t(j) * int64_t(lda), int64_t(lda));
   else if (target_blocks <= grid[5] || N <= warp_threads[5])
-    gemv_kernel<matrix_t, matrix_ptr, warp_threads[5], block_warps[5]>
+    gemv_kernel<matrix_t, warp_threads[5], block_warps[5]>
       <<< grid[5], dim3(warp_threads[5], block_warps[5], 1), 0, stream >>> (M, N, A, int64_t(j) * int64_t(lda), int64_t(lda));
   else if (target_blocks <= grid[6] || N <= warp_threads[6])
-    gemv_kernel<matrix_t, matrix_ptr, warp_threads[6], block_warps[6]>
+    gemv_kernel<matrix_t, warp_threads[6], block_warps[6]>
       <<< grid[6], dim3(warp_threads[6], block_warps[6], 1), 0, stream >>> (M, N, A, int64_t(j) * int64_t(lda), int64_t(lda));
   else if (target_blocks <= grid[7] || N <= warp_threads[7])
-    gemv_kernel<matrix_t, matrix_ptr, warp_threads[7], block_warps[7]>
+    gemv_kernel<matrix_t, warp_threads[7], block_warps[7]>
       <<< grid[7], dim3(warp_threads[7], block_warps[7], 1), 0, stream >>> (M, N, A, int64_t(j) * int64_t(lda), int64_t(lda));
   else if (target_blocks <= grid[8] || N <= warp_threads[8])
-    gemv_kernel<matrix_t, matrix_ptr, warp_threads[8], block_warps[8]>
+    gemv_kernel<matrix_t, warp_threads[8], block_warps[8]>
       <<< grid[8], dim3(warp_threads[8], block_warps[8], 1), 0, stream >>> (M, N, A, int64_t(j) * int64_t(lda), int64_t(lda));
   else
-    gemv_kernel<matrix_t, matrix_ptr, warp_threads[9], block_warps[9]>
+    gemv_kernel<matrix_t, warp_threads[9], block_warps[9]>
       <<< M, dim3(warp_threads[9], block_warps[9], 1), 0, stream >>> (M, N, A, int64_t(j) * int64_t(lda), int64_t(lda));
 }
 

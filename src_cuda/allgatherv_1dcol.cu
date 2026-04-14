@@ -1,18 +1,11 @@
 
+#ifndef NO_NCCL
+
 #include <hyacin.h>
 #include <internal.hpp>
 #include <vector>
 #include <numeric>
-
-extern "C" void hyacinXAllGatherV1Dcol_bufferSize(int32_t M, int32_t comm_size, hyacinPrecision_t Atype, uint64_t* dev_work_bytes, uint64_t* pinned_work_bytes) {
-  *pinned_work_bytes = std::max(*pinned_work_bytes, uint64_t(comm_size) * sizeof(int32_t));
-  if (0 < M) {
-    int32_t a_bytes; hyacinXelem('A', Atype, nullptr, &a_bytes, nullptr);
-    *dev_work_bytes = std::max(*dev_work_bytes, uint64_t(M) * uint64_t(2048) * uint64_t(comm_size) * uint64_t(a_bytes));
-  }
-}
-
-#ifndef NO_NCCL
+#include <stdexcept>
 
 __global__ void imatrix_copy(int64_t M, const int32_t* __restrict__ A, int64_t lda, int32_t* __restrict__ B, int64_t ldb) {
   int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x);
@@ -34,7 +27,7 @@ inline void matrix_move(cudaStream_t stream, int64_t M, int32_t N, int32_t j, in
   }
 }
 
-inline void allgather_iter(cudaStream_t stream, int32_t comm_rank, int64_t M, int32_t cols, int32_t* N, std::vector<int64_t>& iN, int32_t* A, int64_t lda, int32_t* W, ncclComm_t row_comm) {
+inline void allgather_iter(cudaStream_t stream, int32_t comm_rank, int64_t M, int32_t cols, std::vector<int32_t>& N, std::vector<int64_t>& iN, int32_t* A, int64_t lda, int32_t* W, ncclComm_t row_comm) {
   uint64_t stride = (uint64_t(M) * uint64_t(cols) + uint64_t(63)) & (~uint64_t(63));
   uint32_t grid_x = uint32_t((uint64_t(M) + uint64_t(511)) >> 9), grid_y = uint32_t(std::min(cols, N[comm_rank]));
   if (0 < grid_y)
@@ -50,30 +43,38 @@ inline void allgather_iter(cudaStream_t stream, int32_t comm_rank, int64_t M, in
   }
 }
 
-extern "C" int32_t hyacinXAllGatherV1Dcol(cudaStream_t stream, int32_t M, int32_t* K, hyacinPrecision_t Atype, void* A, int32_t lda, uint64_t dev_work_bytes, void* dev_work, void* pinned_work, ncclComm_t row_comm) {
+extern "C" int32_t hyacinXAllGatherV1Dcol(cudaStream_t stream, int32_t M, int32_t* K, hyacinPrecision_t Atype, void* A, int32_t lda, ncclComm_t row_comm) {
   int32_t a_bytes; hyacinXelem('A', Atype, nullptr, &a_bytes, nullptr);
+  const int32_t wcols = 2048;
   int64_t Mi = int64_t(M) * int64_t(a_bytes / int32_t(sizeof(int32_t))), LDAi = int64_t(lda) * int64_t(a_bytes / int32_t(sizeof(int32_t)));
 
-  int32_t comm_rank, comm_size; ncclCommUserRank(row_comm, &comm_rank); ncclCommCount(row_comm, &comm_size);
-  int32_t* N = (int32_t*)pinned_work; N[comm_rank] = *K;
   Timer::register_comm(stream);
-  ncclAllGather(&N[comm_rank], N, 1, ncclInt32, row_comm, stream);
-  cudaStreamSynchronize(stream);
-  int32_t offset_j = std::reduce(N, &N[comm_rank], 0); 
-  *K = std::reduce(&N[comm_rank], &N[comm_size], offset_j);
-  if (M <= 0) { return 0; }
+  int32_t comm_rank, comm_size; ncclCommUserRank(row_comm, &comm_rank); ncclCommCount(row_comm, &comm_size);
+  uint64_t work_bytes = std::max(uint64_t(Mi) * uint64_t(wcols), uint64_t(1)) * uint64_t(comm_size) * uint64_t(sizeof(int32_t));
+  int32_t* dev_k = nullptr;
+  if (cudaSuccess != cudaMallocAsync((void**)&dev_k, work_bytes, stream))
+    throw std::runtime_error("Workspace allocation failed at All-gather.");
 
-  std::vector<int64_t> iN(comm_size);
-  std::transform_exclusive_scan(N, &N[comm_size], iN.begin(), int64_t(0), std::plus<int64_t>(), [=](int32_t n) { return int64_t(n) * LDAi; });
+  std::vector<int32_t> local_k(comm_size);
+  cudaMemcpyAsync(&dev_k[comm_rank], K, sizeof(int32_t), cudaMemcpyHostToDevice, stream);
+  ncclAllGather(&dev_k[comm_rank], dev_k, 1, ncclInt32, row_comm, stream);
+  cudaMemcpyAsync(local_k.data(), dev_k, uint64_t(comm_size) * uint64_t(sizeof(int32_t)), cudaMemcpyDeviceToHost, stream);
 
-  int32_t* Aptr = (int32_t*)A, *Wptr = (int32_t*)dev_work;
-  int32_t wcols = int32_t(dev_work_bytes / uint64_t(Mi * sizeof(int32_t))) & (~63);
-  if (0 < N[comm_rank])
-    matrix_move(stream, Mi, N[comm_rank], offset_j, Aptr, LDAi, wcols, Wptr);
+  int32_t offset_j = std::reduce(local_k.begin(), local_k.begin() + comm_rank, 0);
+  *K = std::reduce(local_k.begin() + comm_rank, local_k.end(), offset_j);
+  if (0 < M) {
+    std::vector<int64_t> iN(comm_size);
+    std::transform_exclusive_scan(local_k.begin(), local_k.end(), iN.begin(), int64_t(0), std::plus<int64_t>(), [=](int32_t n) { return int64_t(n) * LDAi; });
 
-  int32_t maxK = std::reduce(N, &N[comm_size], 0, [](int32_t i, int32_t j) { return std::max(i, j); });
-  for (int32_t iter = maxK; iter > 0; iter -= wcols)
-    allgather_iter(stream, comm_rank, Mi, std::min(iter, wcols), N, iN, Aptr, LDAi, Wptr, row_comm);
+    int32_t* Aptr = (int32_t*)A;
+    if (0 < local_k[comm_rank])
+      matrix_move(stream, Mi, local_k[comm_rank], offset_j, Aptr, LDAi, wcols, dev_k);
+
+    int32_t maxK = std::reduce(local_k.begin(), local_k.end(), 0, [](int32_t i, int32_t j) { return std::max(i, j); });
+    for (int32_t iter = maxK; iter > 0; iter -= wcols)
+      allgather_iter(stream, comm_rank, Mi, std::min(iter, wcols), local_k, iN, Aptr, LDAi, dev_k, row_comm);
+  }
+  cudaFreeAsync(dev_k, stream);
   return offset_j;
 }
 
