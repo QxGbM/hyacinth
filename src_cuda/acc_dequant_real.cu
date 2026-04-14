@@ -3,7 +3,9 @@
 #include <int_fp_quantize.hpp>
 #include <double_double.hpp>
 #include <quad_float.hpp>
+#include <limits>
 
+constexpr int32_t int_min = std::numeric_limits<int32_t>::min();
 template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t (&a)[ORDER], int32_t e, double& f) { f = device::dd::conv_a63_f64(a, e); }
 template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t (&a)[ORDER], int32_t e, float& f) { f = float(device::dd::conv_a63_f64(a, e)); }
 template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t (&a)[ORDER], int32_t e, double2& f) { f = device::dd::conv_a63_dd(a, e); }
@@ -47,7 +49,7 @@ __global__ void dequantize_kernel(int64_t K, int64_t N, const uint64_t* __restri
 
     device::int8::add_shifted(acc, K, uint32_t(umax = (umax << 1) - 1));
     int32_t ex = vec_expon[x], ey = vec_expon[y]; iter = y + x * ldb;
-    if (ex == int32_t(device::int8::u31) || ey == int32_t(device::int8::u31)) B[iter] = real_t();
+    if (ex == int_min || ey == int_min) B[iter] = real_t();
       else fscal(acc, ex + ey - umax, B[iter]);
   }
 }

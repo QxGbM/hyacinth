@@ -4,10 +4,13 @@
 #include <crt_selector.hpp>
 
 __device__ __forceinline__ void quantize_f64_i8limbs(double x, int32_t expon, uint64_t lo, uint32_t hi, uint32_t (&code)[3]) {
+  constexpr uint64_t i63 = 0x7fffffffffffffffllu;
+  constexpr uint32_t i31 = 0x7fffffff;
+
   int64_t q = device::int8::round_f64(x, expon, expon);
-  lo += (uint64_t(q) << expon) & device::int8::i63;
+  lo += (uint64_t(q) << expon) & i63;
   hi += uint32_t(q >> (63 - expon)) + uint32_t(lo >> 63);
-  uint32_t lo_32 = uint32_t(lo), mi = (uint32_t(lo >> 32) & device::int8::i31) | (hi << 31), c = 0;
+  uint32_t lo_32 = uint32_t(lo), mi = (uint32_t(lo >> 32) & i31) | (hi << 31), c = 0;
 
   code[0] = device::int8::conv_u8i8(lo_32, c);
   code[1] = device::int8::conv_u8i8(mi, c);
@@ -19,11 +22,13 @@ __device__ __forceinline__ void quantize_f64_i8rems(double x, int32_t expon, uin
   constexpr uint32_t m_lo = uint32_t(MO), m_hi = uint32_t(MO >> 32);
   constexpr uint32_t r32_lo = uint32_t(R32), r32_hi = uint32_t(R32 >> 32);
   constexpr uint32_t r63_lo = uint32_t(R63), r63_hi = uint32_t(R63 >> 32);
+  constexpr uint64_t i63 = 0x7fffffffffffffffllu;
+  constexpr uint32_t i31 = 0x7fffffff;
 
   int64_t q = device::int8::round_f64(x, expon, expon);
-  lo += (uint64_t(q) << expon) & device::int8::i63;
+  lo += (uint64_t(q) << expon) & i63;
   hi += uint32_t(q >> (63 - expon)) + uint32_t(lo >> 63);
-  uint32_t lo_32 = uint32_t(lo), mi = uint32_t(lo >> 32) & device::int8::i31;
+  uint32_t lo_32 = uint32_t(lo), mi = uint32_t(lo >> 32) & i31;
 
   code[0] = device::int8::conv_u32i8_modular<m_lo, r32_lo, r63_lo>(lo_32, mi, hi);
   code[1] = device::int8::conv_u32i8_modular<m_hi, r32_hi, r63_hi>(lo_32, mi, hi);

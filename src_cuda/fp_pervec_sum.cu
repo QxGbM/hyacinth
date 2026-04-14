@@ -11,10 +11,13 @@ struct u64_add {
 };
 
 __device__ __forceinline__ void accumulate(double x, int32_t expon, uint64_t lo, uint32_t hi, uint64_t& acc_hi, uint64_t& acc_mi, uint64_t& acc_lo) {
+  constexpr uint64_t i63 = 0x7fffffffffffffffllu;
+  constexpr uint32_t i31 = 0x7fffffff;
+
   int64_t q = device::int8::round_f64(x, expon, expon);
-  lo += (uint64_t(q) << expon) & device::int8::i63;
+  lo += (uint64_t(q) << expon) & i63;
   hi += uint32_t(q >> (63 - expon)) + uint32_t(lo >> 63);
-  acc_hi += hi; acc_mi += uint32_t(lo >> 32) & device::int8::i31; acc_lo += uint32_t(lo);
+  acc_hi += hi; acc_mi += uint32_t(lo >> 32) & i31; acc_lo += uint32_t(lo);
 }
 
 template <class real_t, int32_t ORDER, int32_t COMPLEX, int32_t BLOCK_THREADS>

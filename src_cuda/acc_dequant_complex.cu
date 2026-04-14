@@ -4,7 +4,9 @@
 #include <double_double.hpp>
 #include <quad_float.hpp>
 #include <cuComplex.h>
+#include <limits>
 
+constexpr int32_t int_min = std::numeric_limits<int32_t>::min();
 template<uint32_t ORDER> __device__ __forceinline__ void cscal(uint64_t (&rl)[ORDER], uint64_t (&im)[ORDER], int32_t e, cuDoubleComplex& f) {
   f = make_cuDoubleComplex(device::dd::conv_a63_f64(rl, e - 1), device::dd::conv_a63_f64(im, e)); }
 template<uint32_t ORDER> __device__ __forceinline__ void cscal(uint64_t (&rl)[ORDER], uint64_t (&im)[ORDER], int32_t e, cuComplex& f) {
@@ -81,7 +83,7 @@ __global__ void dequantize_complex_kernel(int64_t K, int64_t N, const uint64_t* 
 
     device::int8::add_shifted(acc_rl, K, uint32_t((umax <<= 1) + 2));
     int32_t ex = vec_expon[x], ey = vec_expon[y]; iter = y + x * ldb;
-    if (ex == int32_t(device::int8::u31) || ey == int32_t(device::int8::u31)) B[iter] = complex_t();
+    if (ex == int_min || ey == int_min) B[iter] = complex_t();
       else cscal(acc_rl, acc_im, ex + ey - umax, B[iter]);
   }
 }

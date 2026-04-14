@@ -2,11 +2,10 @@
 #include <internal.hpp>
 #include <int_fp_quantize.hpp>
 #include <cub/cub.cuh>
+#include <limits>
 
-struct f64max {
-  __device__ __forceinline__ double operator()(double a, double b) { return fmax(a, b); }
-};
-
+constexpr int32_t int_min = std::numeric_limits<int32_t>::min();
+struct f64max {__device__ __forceinline__ double operator()(double a, double b) { return fmax(a, b); }};
 __device__ __forceinline__ double conv_abs(double a) { return fabs(a); }
 __device__ __forceinline__ double conv_abs(float a) { return double(fabsf(a)); }
 
@@ -24,7 +23,7 @@ __global__ void vector_exponent_kernel(int64_t M, const real_t* __restrict__ A, 
 
   thread_data = cub::BlockReduce<double, BLOCK_THREADS>(temp_reduce).Reduce(thread_data, max_func);
   if (threadIdx.x == 0) { 
-    if (thread_data == 0.) vec_expon[blockIdx.x] = int32_t(device::int8::u31);
+    if (thread_data == 0.) vec_expon[blockIdx.x] = int_min;
       else frexp(thread_data, &vec_expon[blockIdx.x]);
   }
 }

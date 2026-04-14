@@ -2,20 +2,15 @@
 
 #include <cstdint>
 #include <cmath>
-#include <cfloat>
-#include <cstring>
 #include <cuda_runtime.h>
 
 namespace device::int8 {
-
-  const uint64_t i63 = 0x7fffffffffffffffllu;
-  const uint32_t i31 = 0x7fffffffu;
-  const uint32_t u31 = 0x80000000u;
 
   template <uint32_t ORDER>
   __host__ __device__ __forceinline__ void add_shifted(uint64_t (&a)[ORDER], int64_t i, uint32_t expon) {
     static_assert(1 <= ORDER && ORDER <= 3, "Integer 64 accumulation order must be in [1,3]");
 
+    constexpr uint64_t i63 = 0x7fffffffffffffffllu;
     constexpr uint32_t bits = uint32_t(63);
     int32_t p0 = int32_t(expon < bits);
     int32_t p1 = int32_t((expon - uint32_t(63)) < bits);
