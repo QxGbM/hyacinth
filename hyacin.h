@@ -28,9 +28,27 @@ typedef enum {
   CUBLAS_FLOAT_ND = 4
 } hyacinAlgorithm_t;
 
+typedef struct {
+  cudaStream_t cudaStream;
+  cublasHandle_t cublasHandle;
+  cusolverDnHandle_t cusolverHandle;
+  cusolverDnParams_t cusolverParams;
+  void* pinnedWorkspace; // A 8192-byte pinned workspace on host for host reduction
+  void* timer;
+} hyacinHandle_t;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+void hyacinCreate(
+  hyacinHandle_t* handle,
+  int32_t create_timer
+);
+
+void hyacinDestroy(
+  hyacinHandle_t handle
+);
 
 void hyacinXelem(
   char sel,
@@ -51,7 +69,7 @@ void hyacinXsyherk_autoTune(
 );
 
 int32_t hyacinXsyherk(
-  cublasHandle_t handle,
+  hyacinHandle_t handle,
   int32_t M,
   int32_t N,
   int32_t umax,
@@ -67,14 +85,11 @@ int32_t hyacinXsyherk(
 char hyacinXGevPcsvd_autoTune(
   int32_t N,
   int32_t K,
-  hyacinPrecision_t Gtype,
-  uint64_t* pinned_work_bytes
+  hyacinPrecision_t Gtype
 );
 
 int32_t hyacinXGevPcsvd(
-  cublasHandle_t handle,
-  cusolverDnHandle_t s_handle,
-  cusolverDnParams_t params,
+  hyacinHandle_t handle,
   char use_evd,
   char fillmode,
   double epi,
@@ -87,12 +102,11 @@ int32_t hyacinXGevPcsvd(
   int32_t ldx,
   hyacinPrecision_t Gtype,
   void* G,
-  int32_t ldg,
-  void* pinned_work
+  int32_t ldg
 );
 
 int32_t hyacinXGinterp(
-  cublasHandle_t handle,
+  hyacinHandle_t handle,
   char fillmode,
   double epi,
   int32_t N,
@@ -104,12 +118,11 @@ int32_t hyacinXGinterp(
   int32_t* jpiv,
   hyacinPrecision_t Gtype,
   void* G,
-  int32_t ldg,
-  void* pinned_work
+  int32_t ldg
 );
 
 void hyacinXtransform(
-  cublasHandle_t handle,
+  hyacinHandle_t handle,
   int32_t M,
   int32_t N,
   int32_t K,
@@ -123,7 +136,7 @@ void hyacinXtransform(
 #ifndef NO_NCCL
 
 int32_t hyacinXsyherk1Drow(
-  cublasHandle_t handle,
+  hyacinHandle_t handle,
   int32_t localM,
   int32_t globalM,
   int32_t N,
@@ -139,7 +152,7 @@ int32_t hyacinXsyherk1Drow(
 );
 
 int32_t hyacinXAllGatherV1Dcol(
-  cudaStream_t stream,
+  hyacinHandle_t handle,
   int32_t M,
   int32_t* K,
   hyacinPrecision_t Atype,
@@ -151,9 +164,9 @@ int32_t hyacinXAllGatherV1Dcol(
 #endif
 
 void hyacinSync_TimerSegments(
-  cudaStream_t stream,
-  double* kernel_time,
-  double* comm_time
+  hyacinHandle_t handle,
+  double* kernelMs,
+  double* commMs
 );
 
 #ifdef __cplusplus

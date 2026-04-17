@@ -43,22 +43,22 @@ inline void allgather_iter(cudaStream_t stream, int32_t comm_rank, int64_t M, in
   }
 }
 
-extern "C" int32_t hyacinXAllGatherV1Dcol(cudaStream_t stream, int32_t M, int32_t* K, hyacinPrecision_t Atype, void* A, int32_t lda, ncclComm_t row_comm) {
+extern "C" int32_t hyacinXAllGatherV1Dcol(hyacinHandle_t handle, int32_t M, int32_t* K, hyacinPrecision_t Atype, void* A, int32_t lda, ncclComm_t row_comm) {
   int32_t a_bytes; hyacinXelem('A', Atype, nullptr, &a_bytes, nullptr);
   const int32_t wcols = 2048;
   int64_t Mi = int64_t(M) * int64_t(a_bytes / int32_t(sizeof(int32_t))), LDAi = int64_t(lda) * int64_t(a_bytes / int32_t(sizeof(int32_t)));
 
-  Timer::register_comm(stream);
+  Timer::register_comm(handle.cudaStream, handle.timer);
   int32_t comm_rank, comm_size; ncclCommUserRank(row_comm, &comm_rank); ncclCommCount(row_comm, &comm_size);
   uint64_t work_bytes = std::max(uint64_t(Mi) * uint64_t(wcols), uint64_t(1)) * uint64_t(comm_size) * uint64_t(sizeof(int32_t));
   int32_t* dev_k = nullptr;
-  if (cudaSuccess != cudaMallocAsync((void**)&dev_k, work_bytes, stream))
+  if (cudaSuccess != cudaMallocAsync((void**)&dev_k, work_bytes, handle.cudaStream))
     throw std::runtime_error("Workspace allocation failed at All-gather.");
 
   std::vector<int32_t> local_k(comm_size);
-  cudaMemcpyAsync(&dev_k[comm_rank], K, sizeof(int32_t), cudaMemcpyHostToDevice, stream);
-  ncclAllGather(&dev_k[comm_rank], dev_k, 1, ncclInt32, row_comm, stream);
-  cudaMemcpyAsync(local_k.data(), dev_k, uint64_t(comm_size) * uint64_t(sizeof(int32_t)), cudaMemcpyDeviceToHost, stream);
+  cudaMemcpyAsync(&dev_k[comm_rank], K, sizeof(int32_t), cudaMemcpyHostToDevice, handle.cudaStream);
+  ncclAllGather(&dev_k[comm_rank], dev_k, 1, ncclInt32, row_comm, handle.cudaStream);
+  cudaMemcpyAsync(local_k.data(), dev_k, uint64_t(comm_size) * uint64_t(sizeof(int32_t)), cudaMemcpyDeviceToHost, handle.cudaStream);
 
   int32_t offset_j = std::reduce(local_k.begin(), local_k.begin() + comm_rank, 0);
   *K = std::reduce(local_k.begin() + comm_rank, local_k.end(), offset_j);
@@ -68,13 +68,13 @@ extern "C" int32_t hyacinXAllGatherV1Dcol(cudaStream_t stream, int32_t M, int32_
 
     int32_t* Aptr = (int32_t*)A;
     if (0 < local_k[comm_rank])
-      matrix_move(stream, Mi, local_k[comm_rank], offset_j, Aptr, LDAi, wcols, dev_k);
+      matrix_move(handle.cudaStream, Mi, local_k[comm_rank], offset_j, Aptr, LDAi, wcols, dev_k);
 
     int32_t maxK = std::reduce(local_k.begin(), local_k.end(), 0, [](int32_t i, int32_t j) { return std::max(i, j); });
     for (int32_t iter = maxK; iter > 0; iter -= wcols)
-      allgather_iter(stream, comm_rank, Mi, std::min(iter, wcols), local_k, iN, Aptr, LDAi, dev_k, row_comm);
+      allgather_iter(handle.cudaStream, comm_rank, Mi, std::min(iter, wcols), local_k, iN, Aptr, LDAi, dev_k, row_comm);
   }
-  cudaFreeAsync(dev_k, stream);
+  cudaFreeAsync(dev_k, handle.cudaStream);
   return offset_j;
 }
 

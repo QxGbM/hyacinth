@@ -103,26 +103,26 @@ inline int32_t diag_piv_dispatcher(cudaStream_t stream, cublasHandle_t handle, c
   return K;
 }
 
-extern "C" int32_t hyacinXGinterp(cublasHandle_t handle, char fillmode, double epi, int32_t N, int32_t K, int32_t p, hyacinPrecision_t AXtype, void* X, int32_t ldx, int32_t* jpiv, hyacinPrecision_t Gtype, void* G, int32_t ldg, void* pinned_work) {
+extern "C" int32_t hyacinXGinterp(hyacinHandle_t handle, char fillmode, double epi, int32_t N, int32_t K, int32_t p, hyacinPrecision_t AXtype, void* X, int32_t ldx, int32_t* jpiv, hyacinPrecision_t Gtype, void* G, int32_t ldg) {
   if (N <= 0 || K <= 0) { return 0; }
-  cudaStream_t stream; cublasGetStream(handle, &stream); Timer::register_kernel(stream);
+  Timer::register_kernel(handle.cudaStream, handle.timer);
   switch (Gtype) {
     case HYACIN_F64:
-      return diag_piv_dispatcher<HYACIN_F64>(stream, handle, fillmode, epi, N, K, p, AXtype, jpiv, X, ldx, (double*)G, ldg, pinned_work);
+      return diag_piv_dispatcher<HYACIN_F64>(handle.cudaStream, handle.cublasHandle, fillmode, epi, N, K, p, AXtype, jpiv, X, ldx, (double*)G, ldg, handle.pinnedWorkspace);
     case HYACIN_F32:
-      return diag_piv_dispatcher<HYACIN_F32>(stream, handle, fillmode, epi, N, K, p, AXtype, jpiv, X, ldx, (float*)G, ldg, pinned_work);
+      return diag_piv_dispatcher<HYACIN_F32>(handle.cudaStream, handle.cublasHandle, fillmode, epi, N, K, p, AXtype, jpiv, X, ldx, (float*)G, ldg, handle.pinnedWorkspace);
     case HYACIN_DD:
-      return diag_piv_dispatcher<HYACIN_DD>(stream, handle, fillmode, epi, N, K, p, AXtype, jpiv, X, ldx, (double2*)G, ldg, pinned_work);
+      return diag_piv_dispatcher<HYACIN_DD>(handle.cudaStream, handle.cublasHandle, fillmode, epi, N, K, p, AXtype, jpiv, X, ldx, (double2*)G, ldg, handle.pinnedWorkspace);
     case HYACIN_QF:
-      return diag_piv_dispatcher<HYACIN_QF>(stream, handle, fillmode, epi, N, K, p, AXtype, jpiv, X, ldx, (float4*)G, ldg, pinned_work);
+      return diag_piv_dispatcher<HYACIN_QF>(handle.cudaStream, handle.cublasHandle, fillmode, epi, N, K, p, AXtype, jpiv, X, ldx, (float4*)G, ldg, handle.pinnedWorkspace);
     case HYACIN_F64_COMPLEX:
-      return diag_piv_dispatcher<HYACIN_F64_COMPLEX>(stream, handle, fillmode, epi, N, K, p, AXtype, jpiv, X, ldx, (double*)G, ldg, pinned_work);
+      return diag_piv_dispatcher<HYACIN_F64_COMPLEX>(handle.cudaStream, handle.cublasHandle, fillmode, epi, N, K, p, AXtype, jpiv, X, ldx, (double*)G, ldg, handle.pinnedWorkspace);
     case HYACIN_F32_COMPLEX:
-      return diag_piv_dispatcher<HYACIN_F32_COMPLEX>(stream, handle, fillmode, epi, N, K, p, AXtype, jpiv, X, ldx, (float*)G, ldg, pinned_work);
+      return diag_piv_dispatcher<HYACIN_F32_COMPLEX>(handle.cudaStream, handle.cublasHandle, fillmode, epi, N, K, p, AXtype, jpiv, X, ldx, (float*)G, ldg, handle.pinnedWorkspace);
     case HYACIN_DD_COMPLEX:
-      return diag_piv_dispatcher<HYACIN_DD_COMPLEX>(stream, handle, fillmode, epi, N, K, p, AXtype, jpiv, X, ldx, (double2*)G, ldg, pinned_work);
+      return diag_piv_dispatcher<HYACIN_DD_COMPLEX>(handle.cudaStream, handle.cublasHandle, fillmode, epi, N, K, p, AXtype, jpiv, X, ldx, (double2*)G, ldg, handle.pinnedWorkspace);
     case HYACIN_QF_COMPLEX:
-      return diag_piv_dispatcher<HYACIN_QF_COMPLEX>(stream, handle, fillmode, epi, N, K, p, AXtype, jpiv, X, ldx, (float4*)G, ldg, pinned_work);
+      return diag_piv_dispatcher<HYACIN_QF_COMPLEX>(handle.cudaStream, handle.cublasHandle, fillmode, epi, N, K, p, AXtype, jpiv, X, ldx, (float4*)G, ldg, handle.pinnedWorkspace);
     default: return 0;
   }
 }

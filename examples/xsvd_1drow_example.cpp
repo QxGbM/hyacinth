@@ -22,18 +22,10 @@ template <class T, class R> inline void run(char prec, int64_t gM, int64_t N, in
   /* Timed region start */
   auto host_start = std::chrono::high_resolution_clock::now();
 
-  cudaStream_t stream;
-  cublasHandle_t cublasH;
-  cusolverDnHandle_t cusolverH;
-  cusolverDnParams_t params;
+  hyacinHandle_t handle;
   ncclComm_t comm;
 
-  cudaStreamCreate(&stream);
-  cublasCreate(&cublasH);
-  cublasSetStream(cublasH, stream);
-  cusolverDnCreate(&cusolverH);
-  cusolverDnSetStream(cusolverH, stream);
-  cusolverDnCreateParams(&params);
+  hyacinCreate(&handle, 1);
   ncclCommInitRank(&comm, tile_m, id, grid_row);
 
   cudaEvent_t start, stop;
@@ -44,30 +36,27 @@ template <class T, class R> inline void run(char prec, int64_t gM, int64_t N, in
   if (time_kernel) {
     cudaMalloc((void**)(&d_barrier), sizeof(int32_t));
     cudaMemset(d_barrier, 0xDEADBEEF, sizeof(int32_t));
-    svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm, algo, epi, lM, gM, N, K, d_A, lM, d_S, d_V, N, N);
+    svd_fit_transform_1dr(handle, comm, algo, epi, lM, gM, N, K, d_A, lM, d_S, d_V, N, N);
     cudaMemcpy(d_A, matA.data(), lM * N * sizeof(T), cudaMemcpyHostToDevice);
-    ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
-    cudaStreamSynchronize(stream);
+    ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, handle.cudaStream);
+    cudaStreamSynchronize(handle.cudaStream);
     kernel_time = comm_time = 0.;
   }
-  cudaEventRecord(start, stream);
+  cudaEventRecord(start, handle.cudaStream);
 
-  int32_t rank = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm, algo, epi, lM, gM, N, K, d_A, lM, d_S, d_V, N, N);
+  int32_t rank = svd_fit_transform_1dr(handle, comm, algo, epi, lM, gM, N, K, d_A, lM, d_S, d_V, N, N);
 
   if (time_kernel)
-    ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
-  cudaEventRecord(stop, stream);
-  cudaStreamSynchronize(stream);
+    ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, handle.cudaStream);
+  cudaEventRecord(stop, handle.cudaStream);
+  cudaStreamSynchronize(handle.cudaStream);
   float milliseconds = 0.0f; cudaEventElapsedTime(&milliseconds, start, stop);
 
   if (time_kernel)
     cudaFree(d_barrier);
   cudaEventDestroy(start);
   cudaEventDestroy(stop);
-  cudaStreamDestroy(stream);
-  cublasDestroy(cublasH);
-  cusolverDnDestroy(cusolverH);
-  cusolverDnDestroyParams(params);
+  hyacinDestroy(handle);
   ncclCommDestroy(comm);
 
   /* Timed region end */

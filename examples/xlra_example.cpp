@@ -16,11 +16,8 @@ template <class T> inline void run(char prec, int64_t M, int64_t N, double epi, 
   /* Timed region start */
   auto host_start = std::chrono::high_resolution_clock::now();
 
-  cudaStream_t stream;
-  cublasHandle_t handle;
-  cudaStreamCreate(&stream);
-  cublasCreate(&handle);
-  cublasSetStream(handle, stream);
+  hyacinHandle_t handle;
+  hyacinCreate(&handle, 1);
 
   cudaEvent_t start, stop;
   cudaEventCreate(&start);
@@ -30,19 +27,19 @@ template <class T> inline void run(char prec, int64_t M, int64_t N, double epi, 
     id_hyac(handle, epi, M, N, N, d_A, M, ipiv.data(), d_X, N, algo);
     std::fill(ipiv.begin(), ipiv.end(), 0);
     cudaMemcpy(d_A, matA.data(), M * N * sizeof(T), cudaMemcpyHostToDevice);
+    kernel_time = comm_time = 0.;
   }
 
-  cudaEventRecord(start, stream);
+  cudaEventRecord(start, handle.cudaStream);
   int32_t rank = id_hyac(handle, epi, M, N, N, d_A, M, ipiv.data(), d_X, N, algo);
-  cudaEventRecord(stop, stream);
+  cudaEventRecord(stop, handle.cudaStream);
 
-  cudaStreamSynchronize(stream);
+  cudaStreamSynchronize(handle.cudaStream);
   float milliseconds = 0.0f; cudaEventElapsedTime(&milliseconds, start, stop);
 
   cudaEventDestroy(start);
   cudaEventDestroy(stop);
-  cudaStreamDestroy(stream);
-  cublasDestroy(handle);
+  hyacinDestroy(handle);
 
   /* Timed region end */
   auto host_end = std::chrono::high_resolution_clock::now();

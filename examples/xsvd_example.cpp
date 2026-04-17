@@ -19,40 +19,29 @@ template <class T, class R> inline void run(char prec, int64_t M, int64_t N, int
   /* Timed region start */
   auto host_start = std::chrono::high_resolution_clock::now();
 
-  cudaStream_t stream;
-  cublasHandle_t cublasH;
-  cusolverDnHandle_t cusolverH;
-  cusolverDnParams_t params;
-
-  cudaStreamCreate(&stream);
-  cublasCreate(&cublasH);
-  cublasSetStream(cublasH, stream);
-  cusolverDnCreate(&cusolverH);
-  cusolverDnSetStream(cusolverH, stream);
-  cusolverDnCreateParams(&params);
+  hyacinHandle_t handle;
+  hyacinCreate(&handle, 1);
 
   cudaEvent_t start, stop;
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
 
   if (time_kernel) {
-    svd_fit_transform(stream, cublasH, cusolverH, params, algo, epi, M, N, K, d_A, M, d_S, d_V, N, N);
+    svd_fit_transform(handle, algo, epi, M, N, K, d_A, M, d_S, d_V, N, N);
     cudaMemcpy(d_A, matA.data(), M * N * sizeof(T), cudaMemcpyHostToDevice);
+    kernel_time = comm_time = 0.;
   }
 
-  cudaEventRecord(start, stream);
-  int32_t rank = svd_fit_transform(stream, cublasH, cusolverH, params, algo, epi, M, N, K, d_A, M, d_S, d_V, N, N);
-  cudaEventRecord(stop, stream);
+  cudaEventRecord(start, handle.cudaStream);
+  int32_t rank = svd_fit_transform(handle, algo, epi, M, N, K, d_A, M, d_S, d_V, N, N);
+  cudaEventRecord(stop, handle.cudaStream);
 
   cudaDeviceSynchronize();
   float milliseconds = 0.0f; cudaEventElapsedTime(&milliseconds, start, stop);
 
   cudaEventDestroy(start);
   cudaEventDestroy(stop);
-  cudaStreamDestroy(stream);
-  cublasDestroy(cublasH);
-  cusolverDnDestroy(cusolverH);
-  cusolverDnDestroyParams(params);
+  hyacinDestroy(handle);
 
   /* Timed region end */
   auto host_end = std::chrono::high_resolution_clock::now();

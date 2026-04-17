@@ -26,18 +26,10 @@ template <class T, class R> inline void run(char prec, int64_t gM, int64_t gN, i
   /* Timed region start */
   auto host_start = std::chrono::high_resolution_clock::now();
 
-  cudaStream_t stream;
-  cublasHandle_t cublasH;
-  cusolverDnHandle_t cusolverH;
-  cusolverDnParams_t params;
+  hyacinHandle_t handle;
   ncclComm_t comm, comm_row, comm_col;
 
-  cudaStreamCreate(&stream);
-  cublasCreate(&cublasH);
-  cublasSetStream(cublasH, stream);
-  cusolverDnCreate(&cusolverH);
-  cusolverDnSetStream(cusolverH, stream);
-  cusolverDnCreateParams(&params);
+  hyacinCreate(&handle, 1);
   ncclCommInitRank(&comm, tile_m * tile_n, id, grid_row + grid_col * tile_m);
   ncclCommSplit(comm, grid_row, grid_col, &comm_row, nullptr);
   ncclCommSplit(comm, grid_col, grid_row, &comm_col, nullptr);
@@ -51,34 +43,31 @@ template <class T, class R> inline void run(char prec, int64_t gM, int64_t gN, i
   if (time_kernel) {
     cudaMalloc((void**)(&d_barrier), sizeof(int32_t));
     cudaMemset(d_barrier, 0xDEADBEEF, sizeof(int32_t));
-    r1 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm_col, algo, epi, lM, gM, lN, K, d_A, lM, d_S, d_V, lN, lN);
-    std::tie(N2, offset) = allgatherv_1dc(stream, comm_row, lM, r1, d_A, lM);
-    r2 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm_col, algo, epi, lM, gM, N2, K, d_A, lM, d_S, d_V, lN, lN, r1, offset);
+    r1 = svd_fit_transform_1dr(handle, comm_col, algo, epi, lM, gM, lN, K, d_A, lM, d_S, d_V, lN, lN);
+    std::tie(N2, offset) = allgatherv_1dc(handle, comm_row, lM, r1, d_A, lM);
+    r2 = svd_fit_transform_1dr(handle, comm_col, algo, epi, lM, gM, N2, K, d_A, lM, d_S, d_V, lN, lN, r1, offset);
     cudaMemcpy(d_A, matA.data(), lM * lN * sizeof(T), cudaMemcpyHostToDevice);
-    ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
-    cudaStreamSynchronize(stream);
+    ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, handle.cudaStream);
+    cudaStreamSynchronize(handle.cudaStream);
     kernel_time = comm_time = 0.;
   }
-  cudaEventRecord(start, stream);
+  cudaEventRecord(start, handle.cudaStream);
 
-  r1 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm_col, algo, epi, lM, gM, lN, K, d_A, lM, d_S, d_V, lN, lN);
-  std::tie(N2, offset) = allgatherv_1dc(stream, comm_row, lM, r1, d_A, lM);
-  r2 = svd_fit_transform_1dr(stream, cublasH, cusolverH, params, comm_col, algo, epi, lM, gM, N2, K, d_A, lM, d_S, d_V, lN, lN, r1, offset);
+  r1 = svd_fit_transform_1dr(handle, comm_col, algo, epi, lM, gM, lN, K, d_A, lM, d_S, d_V, lN, lN);
+  std::tie(N2, offset) = allgatherv_1dc(handle, comm_row, lM, r1, d_A, lM);
+  r2 = svd_fit_transform_1dr(handle, comm_col, algo, epi, lM, gM, N2, K, d_A, lM, d_S, d_V, lN, lN, r1, offset);
 
   if (time_kernel)
-    ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, stream);
-  cudaEventRecord(stop, stream);
-  cudaStreamSynchronize(stream);
+    ncclAllReduce(d_barrier, d_barrier, 1, ncclInt32, ncclMin, comm, handle.cudaStream);
+  cudaEventRecord(stop, handle.cudaStream);
+  cudaStreamSynchronize(handle.cudaStream);
   float milliseconds = 0.0f; cudaEventElapsedTime(&milliseconds, start, stop);
 
   if (time_kernel)
     cudaFree(d_barrier);
   cudaEventDestroy(start);
   cudaEventDestroy(stop);
-  cudaStreamDestroy(stream);
-  cublasDestroy(cublasH);
-  cusolverDnDestroy(cusolverH);
-  cusolverDnDestroyParams(params);
+  hyacinDestroy(handle);
   ncclCommDestroy(comm);
   ncclCommDestroy(comm_row);
   ncclCommDestroy(comm_col);

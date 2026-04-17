@@ -9,10 +9,11 @@ template <> __device__ __forceinline__ cuComplex conj(cuComplex a) { return make
 template <> __device__ __forceinline__ complex_double2 conj(complex_double2 a) { return device::dd::make_complex_double2(a.real, device::dd::negate(a.imag)); }
 template <> __device__ __forceinline__ complex_float4 conj(complex_float4 a) { return device::qf::make_complex_float4(a.real, device::qf::negate(a.imag)); }
 
-template <class matrix_t>
+template <char mode, class matrix_t>
 __global__ void matrix_fill_upper_to_full(matrix_t* __restrict__ A, int64_t lda) {
   int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
-  if (y < x) A[x + y * lda] = conj(A[y + x * lda]);
+  int32_t pred; if constexpr(mode == 'U') { pred = y < x; } else if constexpr(mode == 'L') { pred = x < y; } else { pred = 0; }
+  if (pred) A[x + y * lda] = conj(A[y + x * lda]);
 }
 
 inline void imax_dispatcher(cudaStream_t stream, int32_t N, const double* X, int32_t incx, int32_t* jpiv, double* D, double* diag_piv)
@@ -57,7 +58,9 @@ inline double conv_f64(float4 r) { return device::qf::qf2double(r); }
 template <class real_t, class matrix_t>
 inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, matrix_t* A, int32_t lda, int32_t* jpiv, real_t* hvec, real_t* dvec) {
   if (fillmode == 'U' || fillmode == 'u')
-    matrix_fill_upper_to_full<matrix_t> <<< dim3(uint32_t((N + 511) >> 9), uint32_t(N)), 512, 0, stream >>> (A, int64_t(lda));
+    matrix_fill_upper_to_full<'U', matrix_t> <<< dim3(uint32_t((N + 511) >> 9), uint32_t(N)), 512, 0, stream >>> (A, int64_t(lda));
+  else if (fillmode == 'L' || fillmode == 'l')
+    matrix_fill_upper_to_full<'L', matrix_t> <<< dim3(uint32_t((N + 511) >> 9), uint32_t(N)), 512, 0, stream >>> (A, int64_t(lda));
   imax_dispatcher(stream, N, A, lda + 1, jpiv, dvec, hvec);
   int32_t* pivot_i = (int32_t*)&hvec[2], iters = std::min(N, std::max(0, k)); iters = iters ? iters : N;
   epi = conv_f64(hvec[0]) * std::min(1., std::max(0., std::abs(epi)));

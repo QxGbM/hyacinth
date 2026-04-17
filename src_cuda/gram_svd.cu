@@ -63,19 +63,20 @@ template <> inline cudaDataType_t cuda_type<cuDoubleComplex>() { return CUDA_C_6
 template <> inline cudaDataType_t cuda_type<cuComplex>() { return CUDA_C_32F; }
 
 template <class real_t, class complex_t>
-inline int32_t tevd(cudaStream_t stream, cusolverDnHandle_t s_handle, cusolverDnParams_t params, double epi, int32_t N, int32_t K, int32_t p, complex_t* X, int32_t ldx, complex_t* G, int32_t ldg, real_t* S) {
+inline int32_t tevd(cudaStream_t stream, cusolverDnHandle_t s_handle, cusolverDnParams_t params, char fillmode, double epi, int32_t N, int32_t K, int32_t p, complex_t* X, int32_t ldx, complex_t* G, int32_t ldg, real_t* S) {
   cudaDataType_t type_c = cuda_type<complex_t>(), type_r = cuda_type<real_t>();
   K = std::min(K, N); uint64_t s_bytes = std::max(uint64_t(sizeof(int32_t)), uint64_t(sizeof(real_t)) * K);
+  cublasFillMode_t fill = (fillmode == 'U' || fillmode == 'u') ? CUBLAS_FILL_MODE_UPPER : CUBLAS_FILL_MODE_LOWER;
 
   size_t workspaceInBytesOnDevice, workspaceInBytesOnHost;
-  cusolverDnXsyevd_bufferSize(s_handle, params, CUSOLVER_EIG_MODE_VECTOR, CUBLAS_FILL_MODE_UPPER, N, type_c, G, ldg, type_r, nullptr, type_c, &workspaceInBytesOnDevice, &workspaceInBytesOnHost);
+  cusolverDnXsyevd_bufferSize(s_handle, params, CUSOLVER_EIG_MODE_VECTOR, fill, N, type_c, G, ldg, type_r, nullptr, type_c, &workspaceInBytesOnDevice, &workspaceInBytesOnHost);
   std::vector<uint8_t> workspaceOnHost(workspaceInBytesOnHost);
   uint8_t* workspaceOnDevice = nullptr, *workspaceOnHostPtr = workspaceOnHost.empty() ? nullptr : workspaceOnHost.data();
   if (cudaSuccess != cudaMallocAsync((void**)&workspaceOnDevice, workspaceInBytesOnDevice + s_bytes, stream))
     throw std::runtime_error("Workspace allocation failed at SYEVD.");
 
   real_t* dev_S = (real_t*)(&((int8_t*)workspaceOnDevice)[workspaceInBytesOnDevice]);
-  cusolverDnXsyevd(s_handle, params, CUSOLVER_EIG_MODE_VECTOR, CUBLAS_FILL_MODE_UPPER, N, type_c, G, ldg, type_r, dev_S, type_c, workspaceOnDevice, workspaceInBytesOnDevice, workspaceOnHostPtr, workspaceInBytesOnHost, nullptr);
+  cusolverDnXsyevd(s_handle, params, CUSOLVER_EIG_MODE_VECTOR, fill, N, type_c, G, ldg, type_r, dev_S, type_c, workspaceOnDevice, workspaceInBytesOnDevice, workspaceOnHostPtr, workspaceInBytesOnHost, nullptr);
 
   find_srank_kernel<1, real_t, 512> <<< 1, 512, 0, stream >>> (epi, K, &dev_S[N - K], S, (int32_t*)workspaceOnDevice);
   int32_t rank = 0; cudaMemcpyAsync(&rank, workspaceOnDevice, sizeof(int32_t), cudaMemcpyDeviceToHost, stream);
@@ -170,38 +171,38 @@ inline int32_t gsvd_dispatcher(cudaStream_t stream, cublasHandle_t handle, cusol
   return K;
 }
 
-extern "C" int32_t hyacinXGevPcsvd(cublasHandle_t handle, cusolverDnHandle_t s_handle, cusolverDnParams_t params, char use_evd, char fillmode, double epi, int32_t N, int32_t K, int32_t p,
-  hyacinPrecision_t AXtype, void* S, void* X, int32_t ldx, hyacinPrecision_t Gtype, void* G, int32_t ldg, void* pinned_work) {
+extern "C" int32_t hyacinXGevPcsvd(hyacinHandle_t handle, char use_evd, char fillmode, double epi, int32_t N, int32_t K, int32_t p,
+  hyacinPrecision_t AXtype, void* S, void* X, int32_t ldx, hyacinPrecision_t Gtype, void* G, int32_t ldg) {
   if (N <= 0 || K <= 0) { return 0; }
-  cudaStream_t stream; cublasGetStream(handle, &stream); Timer::register_kernel(stream);
+  Timer::register_kernel(handle.cudaStream, handle.timer);
   if ((use_evd == 'Y' || use_evd == 'y') && (AXtype == Gtype)) switch (AXtype) {
     case HYACIN_F64:
-      return tevd(stream, s_handle, params, epi, N, K, p, (double*)X, ldx, (double*)G, ldg, (double*)S);
+      return tevd(handle.cudaStream, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (double*)X, ldx, (double*)G, ldg, (double*)S);
     case HYACIN_F32:
-      return tevd(stream, s_handle, params, epi, N, K, p, (float*)X, ldx, (float*)G, ldg, (float*)S);
+      return tevd(handle.cudaStream, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (float*)X, ldx, (float*)G, ldg, (float*)S);
     case HYACIN_F64_COMPLEX:
-      return tevd(stream, s_handle, params, epi, N, K, p, (cuDoubleComplex*)X, ldx, (cuDoubleComplex*)G, ldg, (double*)S);
+      return tevd(handle.cudaStream, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (cuDoubleComplex*)X, ldx, (cuDoubleComplex*)G, ldg, (double*)S);
     case HYACIN_F32_COMPLEX:
-      return tevd(stream, s_handle, params, epi, N, K, p, (cuComplex*)X, ldx, (cuComplex*)G, ldg, (float*)S);
+      return tevd(handle.cudaStream, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (cuComplex*)X, ldx, (cuComplex*)G, ldg, (float*)S);
     default: return 0;
   }
   else switch(Gtype) {
     case HYACIN_F64: return gsvd_dispatcher<HYACIN_F64>
-      (stream, handle, s_handle, params, fillmode, epi, N, K, p, AXtype, S, X, ldx, (double*)G, ldg, pinned_work);
+      (handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, AXtype, S, X, ldx, (double*)G, ldg, handle.pinnedWorkspace);
     case HYACIN_F32: return gsvd_dispatcher<HYACIN_F32>
-      (stream, handle, s_handle, params, fillmode, epi, N, K, p, AXtype, S, X, ldx, (float*)G, ldg, pinned_work);
+      (handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, AXtype, S, X, ldx, (float*)G, ldg, handle.pinnedWorkspace);
     case HYACIN_DD: return gsvd_dispatcher<HYACIN_DD>
-      (stream, handle, s_handle, params, fillmode, epi, N, K, p, AXtype, S, X, ldx, (double2*)G, ldg, pinned_work);
+      (handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, AXtype, S, X, ldx, (double2*)G, ldg, handle.pinnedWorkspace);
     case HYACIN_QF: return gsvd_dispatcher<HYACIN_QF>
-      (stream, handle, s_handle, params, fillmode, epi, N, K, p, AXtype, S, X, ldx, (float4*)G, ldg, pinned_work);
+      (handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, AXtype, S, X, ldx, (float4*)G, ldg, handle.pinnedWorkspace);
     case HYACIN_F64_COMPLEX: return gsvd_dispatcher<HYACIN_F64_COMPLEX>
-      (stream, handle, s_handle, params, fillmode, epi, N, K, p, AXtype, S, X, ldx, (double*)G, ldg, pinned_work);
+      (handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, AXtype, S, X, ldx, (double*)G, ldg, handle.pinnedWorkspace);
     case HYACIN_F32_COMPLEX: return gsvd_dispatcher<HYACIN_F32_COMPLEX>
-      (stream, handle, s_handle, params, fillmode, epi, N, K, p, AXtype, S, X, ldx, (float*)G, ldg, pinned_work);
+      (handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, AXtype, S, X, ldx, (float*)G, ldg, handle.pinnedWorkspace);
     case HYACIN_DD_COMPLEX: return gsvd_dispatcher<HYACIN_DD_COMPLEX>
-      (stream, handle, s_handle, params, fillmode, epi, N, K, p, AXtype, S, X, ldx, (double2*)G, ldg, pinned_work);
+      (handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, AXtype, S, X, ldx, (double2*)G, ldg, handle.pinnedWorkspace);
     case HYACIN_QF_COMPLEX: return gsvd_dispatcher<HYACIN_QF_COMPLEX>
-      (stream, handle, s_handle, params, fillmode, epi, N, K, p, AXtype, S, X, ldx, (float4*)G, ldg, pinned_work);
+      (handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, AXtype, S, X, ldx, (float4*)G, ldg, handle.pinnedWorkspace);
     default: return 0;
   }
 }
