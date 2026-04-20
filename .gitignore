@@ -37,8 +37,10 @@ CMakeCache.txt
 CMakeFiles
 CMakeScripts
 Testing
-Makefile
+**/Makefile
+!/Makefile
 cmake_install.cmake
+*Config.cmake
 install_manifest.txt
 compile_commands.json
 CTestTestfile.cmake
