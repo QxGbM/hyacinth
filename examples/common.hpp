@@ -9,6 +9,7 @@
 #include <sstream>
 #include <string>
 #include <tuple>
+#include <stdexcept>
 
 using blas_int = int; // LP64 for blas
 const int32_t oversampling = 10; // increase for better LRA accuracy
@@ -300,41 +301,31 @@ std::pair<int32_t, int32_t> allgatherv_1dc(hyacinHandle_t handle, ncclComm_t com
   return std::make_pair(N, v_offset);
 }
 
-#ifdef BOOTSTRAP_POSIX
+#ifndef BOOTSTRAP_NO_POSIX
 #include <unistd.h>
-#include <fcntl.h>
 
-void __bootstrap(int32_t& world_rank, int32_t& world_size, int32_t& local_rank, ncclUniqueId& id) {
-  const char* slurm_rank = std::getenv("SLURM_PROCID"), *slurm_size = std::getenv("SLURM_NTASKS");
-  const char* slurm_local_rank = std::getenv("SLURM_LOCALID");
-  world_rank = std::stoi(std::string(slurm_rank ?: "0"));
-  world_size = std::stoi(std::string(slurm_size ?: "1"));
-  local_rank = std::stoi(std::string(slurm_local_rank ?: "0"));
+void __bootstrap_posix_fork(int32_t& local_rank, int32_t& world_size, ncclUniqueId& id) {
+  const char* devices = std::getenv("CUDA_VISIBLE_DEVICES");
+  if (devices == nullptr) { throw std::runtime_error("CUDA_VISIBLE_DEVICES is unset"); }
+  if (devices[0] == '\0') { throw std::runtime_error("No CUDA device visible"); }
 
-  std::string slurm_job_dir(std::getenv("SLURM_SUBMIT_DIR") ?: ".");
-  std::string slurm_job_id(std::getenv("SLURM_JOB_ID") ?: "0");
-  std::string hyac_job_id(std::getenv("HYACIN_JOB_ID") ?: "0");
-  std::string id_path = slurm_job_dir + "/" + slurm_job_id + "-" + hyac_job_id + ".id.out";
-  if (world_rank == 0) {
-    ncclGetUniqueId(&id); if (world_size == 1) return;
-    std::string tmp = id_path + ".tmp";
-    int fd = ::open(tmp.c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
-    if (fd != -1 && ::write(fd, &id, sizeof(ncclUniqueId)) == sizeof(ncclUniqueId))
-    { if (::fsync(fd) != -1) if (::close(fd) != -1) ::rename(tmp.c_str(), id_path.c_str()); }
-    else if (fd != -1) { ::close(fd); throw std::runtime_error("I/O error writing nccl unique ID."); }
+  std::string dev_str(devices);
+  world_size = 1 + std::count(dev_str.begin(), dev_str.end(), ',');
+  int32_t rank = 0;
+  ncclGetUniqueId(&id);
+  for (int32_t i = 1; i < world_size; ++i) if (rank == 0) {
+    int32_t pid = ::fork();
+    if (pid == -1) { throw std::runtime_error("POSIX Fork Failure"); }
+    rank = pid ? 0 : i;
   }
-  else {
-    int trials = 0; std::ifstream stream(id_path, std::ios::binary);
-    while (!stream.is_open() && ++trials <= 20) { ::sleep(1); stream.open(id_path, std::ios::binary); }
-    if (stream.is_open()) { stream.read((char*)&id, sizeof(ncclUniqueId)); stream.close(); }
-    else { throw std::runtime_error("Timeout reading nccl unique ID."); }
-  }
+  local_rank = rank;
 }
 
-#else
+#endif
+#ifndef BOOTSTRAP_NO_MPI
 #include <mpi.h>
 
-void __bootstrap(int32_t& world_rank, int32_t& world_size, int32_t& local_rank, ncclUniqueId& id) {
+void __bootstrap_mpi(int32_t& world_rank, int32_t& world_size, int32_t& local_rank, ncclUniqueId& id) {
   MPI_Init(nullptr, nullptr);
   MPI_Comm shmcomm; MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL, &shmcomm);
   MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);

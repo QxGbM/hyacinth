@@ -1,9 +1,10 @@
 
 #include <common.hpp>
 
-int32_t main(int32_t, char*[]) {
+int32_t main(int32_t, char* []) {
   int32_t world_rank, world_size, local_rank; ncclUniqueId id;
-  __bootstrap(world_rank, world_size, local_rank, id);
+  //__bootstrap_mpi(world_rank, world_size, local_rank, id);
+  __bootstrap_posix_fork(local_rank, world_size, id); world_rank = local_rank;
 
   int32_t device_count = 0; cudaGetDeviceCount(&device_count);
   int32_t device_picked = 1 < device_count ? local_rank : 0;

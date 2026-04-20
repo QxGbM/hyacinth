@@ -127,7 +127,8 @@ int32_t main(int32_t argc, char* argv[]) {
   gN = std::min(gM, gN); K = std::min(gN, K);
 
   int32_t world_rank, world_size, local_rank; ncclUniqueId id;
-  __bootstrap(world_rank, world_size, local_rank, id);
+  //__bootstrap_mpi(world_rank, world_size, local_rank, id);
+  __bootstrap_posix_fork(local_rank, world_size, id); world_rank = local_rank;
 
   if (world_size != tile_m * tile_n)
   { if (world_rank == 0) std::cerr << "Incorrect process grid launch configuration." << std::endl; return -1; }
