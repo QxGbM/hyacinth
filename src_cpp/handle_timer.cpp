@@ -10,7 +10,7 @@ struct EventTimer {
 };
 
 extern "C" void hyacinCreate(hyacinHandle_t* handle, int32_t create_timer) {
-  cudaStreamCreate(&handle->cudaStream);
+  cudaStreamCreateWithFlags(&handle->cudaStream, cudaStreamNonBlocking);
   cublasCreate(&handle->cublasHandle);
   cublasSetStream(handle->cublasHandle, handle->cudaStream);
   cusolverDnCreate(&handle->cusolverHandle);
