@@ -42,7 +42,7 @@ extern "C" {
 #endif
 
 void hyacinCreate(
-  hyacinHandle_t* handle,
+  hyacinHandle_t* handle, // host-pointer
   int32_t create_timer
 );
 
@@ -53,19 +53,19 @@ void hyacinDestroy(
 void hyacinXelem(
   char sel,
   hyacinPrecision_t Atype,
-  hyacinPrecision_t* type,
-  int32_t* bytes,
-  cudaDataType_t* cutype
+  hyacinPrecision_t* type, // host-pointer
+  int32_t* bytes, // host-pointer
+  cudaDataType_t* cutype // host-pointer
 );
 
 void hyacinXsyherk_autoTune(
   double epi,
   int32_t use_nd_allreduce,
   int32_t u_extra,
-  int32_t* umax,
+  int32_t* umax, // host-pointer
   hyacinPrecision_t Atype,
-  hyacinPrecision_t* ComputeType,
-  hyacinAlgorithm_t* alg
+  hyacinPrecision_t* ComputeType, // host-pointer
+  hyacinAlgorithm_t* alg // host-pointer
 );
 
 int32_t hyacinXsyherk(
@@ -74,10 +74,10 @@ int32_t hyacinXsyherk(
   int32_t N,
   int32_t umax,
   hyacinPrecision_t Atype,
-  const void* A,
+  const void* A, // device-pointer
   int32_t lda,
   hyacinPrecision_t Gtype,
-  void* G,
+  void* G, // device-pointer
   int32_t ldg,
   hyacinAlgorithm_t alg
 );
@@ -97,11 +97,11 @@ int32_t hyacinXGevPcsvd(
   int32_t K,
   int32_t p,
   hyacinPrecision_t AXtype,
-  void* S,
-  void* X,
+  void* S, // device-pointer
+  void* X, // device-pointer
   int32_t ldx,
   hyacinPrecision_t Gtype,
-  void* G,
+  void* G, // device-pointer
   int32_t ldg
 );
 
@@ -113,11 +113,11 @@ int32_t hyacinXGinterp(
   int32_t K,
   int32_t p,
   hyacinPrecision_t AXtype,
-  void* X,
+  void* X, // device-pointer
   int32_t ldx,
-  int32_t* jpiv,
+  int32_t* jpiv, // device-pointer
   hyacinPrecision_t Gtype,
-  void* G,
+  void* G, // device-pointer
   int32_t ldg
 );
 
@@ -127,9 +127,9 @@ void hyacinXtransform(
   int32_t N,
   int32_t K,
   hyacinPrecision_t AXtype,
-  void* A,
+  void* A, // device-pointer
   int32_t lda,
-  const void* X,
+  const void* X, // device-pointer
   int32_t ldx
 );
 
@@ -142,10 +142,10 @@ int32_t hyacinXsyherk1Drow(
   int32_t N,
   int32_t umax,
   hyacinPrecision_t Atype,
-  const void* A,
+  const void* A, // device-pointer
   int32_t lda,
   hyacinPrecision_t Gtype,
-  void* G,
+  void* G, // device-pointer
   int32_t ldg,
   hyacinAlgorithm_t alg,
   ncclComm_t col_comm
@@ -154,9 +154,9 @@ int32_t hyacinXsyherk1Drow(
 int32_t hyacinXAllGatherV1Dcol(
   hyacinHandle_t handle,
   int32_t M,
-  int32_t* K,
+  int32_t* K, // host-pointer
   hyacinPrecision_t Atype,
-  void* A,
+  void* A, // device-pointer
   int32_t lda,
   ncclComm_t row_comm
 );
@@ -165,8 +165,8 @@ int32_t hyacinXAllGatherV1Dcol(
 
 void hyacinSync_TimerSegments(
   hyacinHandle_t handle,
-  double* kernelMs,
-  double* commMs
+  double* kernelMs, // host-pointer
+  double* commMs // host-pointer
 );
 
 #ifdef __cplusplus
