@@ -3,7 +3,7 @@ cmake_minimum_required (VERSION 3.18)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_CUDA_ARCHITECTURES "80;86;89;90;100;120")
+set(CMAKE_CUDA_ARCHITECTURES "80;86;89;90a;100a;120")
 
 option(USE_NCCL "Enable NCCL backend" ON)
 project("hyacin" LANGUAGES CXX CUDA)
@@ -26,7 +26,6 @@ set(CU_SOURCES
   src_cuda/fp_exponent.cu
   src_cuda/fp_i8_quantize.cu
   src_cuda/fp_pervec_sum.cu
-  src_cuda/gemv_pp_nopiv.cu
   src_cuda/gemv_pp.cu
   src_cuda/gemv_scal_f128.cu
   src_cuda/gram_id.cu

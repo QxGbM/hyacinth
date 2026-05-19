@@ -11,40 +11,33 @@ for (i, a), (j, b) in combinations(enumerate(moduli_all), 2):
     print(f"gcd(moduli[{i}]={a}, moduli[{j}]={b}) = {g}")
     all_ok = False
 
-def pack_u8x8(a):
-  b = []
-  n = len(a)
-  for i in range(0, n, 8):
-    v = 0
-    for j in range(0, 8):
-      if i + j < n:
-        v |= (a[i + j] & 255) << (8 * j)
-    b.append(v)
-  return b
-
-def extract_limbs(x, limbs, sft):
+def extract_limbs(x, limbs, sft, limbs_pad):
   while x:
     limbs.append(x & ((1 << sft) - 1))
     x >>= sft
+    limbs_pad = limbs_pad - 1
+  while 0 < limbs_pad:
+    limbs.append(0)
+    limbs_pad = limbs_pad - 1
   return limbs
 
-def pd_print(suffix, pd):
+def pd_print(pd, sft, limbs_pad = 6, chunk_size = 18):
   limbs = []
   for x in pd:
-    extract_limbs(x, limbs, 31)
-  print(f"  constexpr int32_t pd{suffix}[{len(limbs)}] =" + " { " + ", ".join(f"{l}" for l in limbs) + " };")
+    extract_limbs(x, limbs, sft, limbs_pad)
+  str = ",\n      ".join(", ".join(f"{l}" for l in limbs[i:i+chunk_size]) for i in range(0, len(limbs), chunk_size))
+  print(f"    static constexpr int32_t pd[{len(limbs)}] =" + " {\n      " + str + " };")
 
 if all_ok:
-  moduli_simd = pack_u8x8(moduli_all)
-  rem_e32 = pack_u8x8([(1 << 32) % m for m in moduli_all])
-  rem_e63 = pack_u8x8([(1 << 63) % m for m in moduli_all])
+  rem_e32 = [(1 << 32) % m for m in moduli_all]
+  rem_e63 = [(1 << 63) % m for m in moduli_all]
+  padded_len = (len(moduli_all) + 7) & (~7)
 
-  print("#pragma once\n#include <cstdint>\n")
-  print("namespace CRT::Common {")
-  print(f"  constexpr uint64_t mo[{len(moduli_simd)}] =" + " { " + ", ".join(f"{m}llu" for m in moduli_simd) + " };")
-  print(f"  constexpr uint64_t rem_e32[{len(rem_e32)}] =" + " { " + ", ".join(f"{m}llu" for m in rem_e32) + " };")
-  print(f"  constexpr uint64_t rem_e63[{len(rem_e63)}] =" + " { " + ", ".join(f"{m}llu" for m in rem_e63) + " };")
-  print("};\n")
+  print("#pragma once\n#include <cstdint>\nnamespace U8CRT {\n")
+  print("  template <int32_t Moduli> struct Constants;")
+  print(f"  constexpr uint16_t mo[{padded_len}] =" + " { " + ", ".join(f"{m}" for m in moduli_all) + " };")
+  print(f"  constexpr uint16_t rem_e32[{padded_len}] =" + " { " + ", ".join(f"{m}" for m in rem_e32) + " };")
+  print(f"  constexpr uint16_t rem_e63[{padded_len}] =" + " { " + ", ".join(f"{m}" for m in rem_e63) + " };\n")
 
   for n in range(2, len(moduli_all)+1):
     moduli = moduli_all[:n:]
@@ -53,18 +46,16 @@ if all_ok:
       P *= m
 
     p_limbs = []
-    extract_limbs(P, p_limbs, 63)
+    extract_limbs(P, p_limbs, 63, 3)
     P_div = [P // m for m in moduli]
     inv = [pow(Pd % m, -1, m) for Pd, m in zip(P_div, moduli)]
     rem_e32 = [(i * (-(1 << 32))) % m for i, m in zip(inv, moduli)]
+    padded_len = (n + 7) & (~7)
 
-    inv = pack_u8x8(inv)
-    rem_e32 = pack_u8x8(rem_e32)
-
-    print(f"namespace CRT::Moduli{n}" + " {")
-    print(f"  constexpr uint64_t minv[{len(inv)}] =" + " { " + ", ".join(f"{m}llu" for m in inv) + " };")
-    print(f"  constexpr uint64_t rem_e32[{len(rem_e32)}] =" + " { " + ", ".join(f"{m}llu" for m in rem_e32) + " };")
-    print(f"  constexpr int64_t p[{len(p_limbs)}] =" + " { " + ", ".join(f"{l}ll" for l in p_limbs) + " };")
-    for i in range(0, n, 8):
-      pd_print((i//8)+1, P_div[i:min(i+8, n):])
-    print("};\n")
+    print(f"  template<> struct Constants<{n}>" + " {")
+    print(f"    static constexpr uint16_t minv[{padded_len}] =" + " { " + ", ".join(f"{m}" for m in inv) + " };")
+    print(f"    static constexpr uint16_t rem_e32[{padded_len}] =" + " { " + ", ".join(f"{m}" for m in rem_e32) + " };")
+    print(f"    static constexpr int64_t p[{len(p_limbs)}] =" + " { " + ", ".join(f"{l}ll" for l in p_limbs) + " };")
+    pd_print(P_div, 31)
+    print("  };\n")
+  print("};\n")

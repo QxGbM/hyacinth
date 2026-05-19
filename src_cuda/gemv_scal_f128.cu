@@ -45,13 +45,22 @@ __global__ void gemv_kernel(int32_t M, int32_t N, matrix_t* __restrict__ A, int6
   const matrix_t* A_i = &A[int64_t(i) * lda], *A_j = &A[ldj];
 
   if (i < M && A_i != A_j) {
-    matrix_t threadB = matrix_t();
-    
-    for (int32_t k = threadIdx.x; k < N; k += WARP_THREADS)
+    constexpr uint32_t N_mask = ~((uint32_t(WARP_THREADS) << 1) - uint32_t(1));
+    constexpr int32_t inck = WARP_THREADS << 1;
+
+    matrix_t threadB = matrix_t(), threadC = matrix_t();
+    int32_t N_align = N & N_mask, k = threadIdx.x, k2 = threadIdx.x + WARP_THREADS;
+    while (k < N_align) {
       threadB = fma_func(&A_i[k], &A_j[k], threadB);
+      threadC = fma_func(&A_i[k2], &A_j[k2], threadC);
+      k += inck; k2 += inck;
+    }
+    
+    while (k < N)
+    { threadB = fma_func(&A_i[k], &A_j[k], threadB); k += WARP_THREADS; }
 
     add_f128 add_func;
-    threadB = cub::BlockReduce<matrix_t, WARP_THREADS>(temp_reduce[threadIdx.y]).Reduce(threadB, add_func);
+    threadB = cub::BlockReduce<matrix_t, WARP_THREADS>(temp_reduce[threadIdx.y]).Reduce(add_func(threadB, threadC), add_func);
     A = &A[ldj + int64_t(i + N)];
 
     if (threadIdx.x == 0)

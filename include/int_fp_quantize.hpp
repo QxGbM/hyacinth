@@ -40,72 +40,79 @@ namespace device::int8 {
   }
 
   __host__ __device__ __forceinline__ uint32_t conv_u8i8(uint32_t code, uint32_t& carry) {
-    uint8_t* b = (uint8_t*)&code;
-    uint32_t a = uint32_t(carry) + uint32_t(b[0]);
-    b[0] = uint8_t(a); a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint32_t(b[1]);
-    b[1] = uint8_t(a); a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint32_t(b[2]);
-    b[2] = uint8_t(a); a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint32_t(b[3]);
-    b[3] = uint8_t(a); carry = uint32_t((a >> 8) + ((a >> 7) & uint32_t(1)));
-    return code;
+    constexpr uint32_t i8 = uint32_t(0xff), i7 = uint32_t(0x7f), r7 = uint32_t(0x80);
+    uint32_t a = carry + (code & i8), s = (a >> 7) & uint32_t(1), c = (r7 & (-s)) | (i7 & a);
+    a = (a >> 8) + s + ((code >> 8) & i8); s = (a >> 7) & uint32_t(1); c |= ((r7 & (-s)) | (i7 & a)) << 8;
+    a = (a >> 8) + s + ((code >> 16) & i8); s = (a >> 7) & uint32_t(1); c |= ((r7 & (-s)) | (i7 & a)) << 16;
+    a = (a >> 8) + s + ((code >> 24) & i8); s = (a >> 7) & uint32_t(1); c |= ((r7 & (-s)) | (i7 & a)) << 24;
+    carry = (a >> 8) + s;
+    return c;
   }
 
   template<uint32_t DIV>
   __host__ __device__ __forceinline__ uint32_t barrett_reduc(uint32_t x) {
-    if constexpr(DIV) {
-      constexpr uint32_t m_num = uint32_t((0x8000000000llu / uint64_t(DIV)));
 #ifdef __CUDA_ARCH__
-      return x - (__umulhi(x, m_num) >> 7) * DIV;
-#else
-      return x - uint32_t((uint64_t(x) * uint64_t(m_num)) >> 39) * DIV;
-#endif
-    }
-    return uint32_t(0);
-  }
-
-  template<uint32_t DIV>
-  __host__ __device__ __forceinline__ uint32_t u8u21_reduc(uint32_t x) {
     if constexpr(DIV) {
-      constexpr uint32_t i20 = uint32_t(0xfffff), m20 = uint32_t(0x100000) % DIV;
-      return m20 * (x >> 20) + (x & i20);
-    }
-    return uint32_t(0);
+      constexpr uint32_t d = uint32_t((0x100000000llu / uint64_t(DIV))), minus_div = -DIV;
+      x = x - (__umulhi(x, d) * DIV); return __viaddmin_u32(minus_div, x, x);
+    } else return uint32_t(0);
+#else
+    if constexpr(DIV) return x % DIV; else return uint32_t(0);
+#endif
   }
 
-  template<uint32_t MO, uint32_t R32, uint32_t R63>
+  template<uint32_t MUL, uint32_t DIV>
+  __host__ __device__ __forceinline__ uint32_t mulx_reduc(uint32_t x) {
+    if constexpr(MUL && DIV) {
+      static_assert(DIV <= 4096u, "Modular needs to be smaller than 4096");
+      constexpr uint32_t mul = MUL % DIV, mul_r16 = (mul << 16) % DIV;
+      return (mul_r16 * (x >> 16)) + (mul * (x & uint32_t(0xffff)));
+    } else return uint32_t(0);
+  }
+
+  template<uint64_t MO, uint64_t R32, uint64_t R63>
   __host__ __device__ __forceinline__ uint32_t conv_u32i8_modular(uint32_t lo, uint32_t mi, uint32_t hi) {
-    constexpr uint32_t m[4]{ uint8_t(MO) ? uint32_t(uint8_t(MO)) : uint32_t(256), uint8_t(MO >> 8), uint8_t(MO >> 16), uint8_t(MO >> 24) };
-    constexpr uint32_t r32[4]{ uint8_t(R32), uint8_t(R32 >> 8), uint8_t(R32 >> 16), uint8_t(R32 >> 24) };
-    constexpr uint32_t r63[4]{ uint8_t(R63), uint8_t(R63 >> 8), uint8_t(R63 >> 16), uint8_t(R63 >> 24) };
-    uint32_t r[4];
+    constexpr uint32_t m[4]{ uint16_t(MO), uint16_t(MO >> 16), uint16_t(MO >> 32), uint16_t(MO >> 48) };
+    constexpr uint32_t r32[4]{ uint16_t(R32), uint16_t(R32 >> 16), uint16_t(R32 >> 32), uint16_t(R32 >> 48) };
+    constexpr uint32_t r63[4]{ uint16_t(R63), uint16_t(R63 >> 16), uint16_t(R63 >> 32), uint16_t(R63 >> 48) };
+    union { uint2 u; short4 h; } x, cx;
 
-    r[0] = barrett_reduc<m[0]>(u8u21_reduc<m[0]>(lo) + u8u21_reduc<m[0]>(mi) * r32[0] + u8u21_reduc<m[0]>(hi) * r63[0]);
-    r[1] = barrett_reduc<m[1]>(u8u21_reduc<m[1]>(lo) + u8u21_reduc<m[1]>(mi) * r32[1] + u8u21_reduc<m[1]>(hi) * r63[1]);
-    r[2] = barrett_reduc<m[2]>(u8u21_reduc<m[2]>(lo) + u8u21_reduc<m[2]>(mi) * r32[2] + u8u21_reduc<m[2]>(hi) * r63[2]);
-    r[3] = barrett_reduc<m[3]>(u8u21_reduc<m[3]>(lo) + u8u21_reduc<m[3]>(mi) * r32[3] + u8u21_reduc<m[3]>(hi) * r63[3]);
+    x.h.x = int16_t(barrett_reduc<m[0]>(mulx_reduc<uint32_t(1), m[0]>(lo) + mulx_reduc<r32[0], m[0]>(mi) + mulx_reduc<r63[0], m[0]>(hi)));
+    x.h.y = int16_t(barrett_reduc<m[1]>(mulx_reduc<uint32_t(1), m[1]>(lo) + mulx_reduc<r32[1], m[1]>(mi) + mulx_reduc<r63[1], m[1]>(hi)));
+    x.h.z = int16_t(barrett_reduc<m[2]>(mulx_reduc<uint32_t(1), m[2]>(lo) + mulx_reduc<r32[2], m[2]>(mi) + mulx_reduc<r63[2], m[2]>(hi)));
+    x.h.w = int16_t(barrett_reduc<m[3]>(mulx_reduc<uint32_t(1), m[3]>(lo) + mulx_reduc<r32[3], m[3]>(mi) + mulx_reduc<r63[3], m[3]>(hi)));
 
-    r[0] = uint8_t(r[0] + ((-uint32_t(uint32_t(127) < r[0])) & (-m[0])));
-    r[1] = uint8_t(r[1] + ((-uint32_t(uint32_t(127) < r[1])) & (-m[1])));
-    r[2] = uint8_t(r[2] + ((-uint32_t(uint32_t(127) < r[2])) & (-m[2])));
-    r[3] = uint8_t(r[3] + ((-uint32_t(uint32_t(127) < r[3])) & (-m[3])));
-    return r[0] | (r[1] << 8) | (r[2] << 16) | (r[3] << 24);
+#ifdef __CUDA_ARCH__
+    constexpr uint32_t m12 = uint32_t(MO), m34 = uint32_t(MO >> 32);
+    cx.u.x = __vsub2(x.u.x, m12); cx.u.y = __vsub2(x.u.y, m34);
+    uint32_t mask_x = __vcmplts2(__vadd2(x.u.x, cx.u.x), uint32_t(0));
+    uint32_t mask_y = __vcmplts2(__vadd2(x.u.y, cx.u.y), uint32_t(0));
+    x.u.x = (mask_x & x.u.x) | ((~mask_x) & cx.u.x);
+    x.u.y = (mask_y & x.u.y) | ((~mask_y) & cx.u.y);
+#else
+    cx.h.x = int16_t(uint32_t(x.h.x) - m[0]);
+    cx.h.y = int16_t(uint32_t(x.h.y) - m[1]);
+    cx.h.z = int16_t(uint32_t(x.h.z) - m[2]);
+    cx.h.w = int16_t(uint32_t(x.h.w) - m[3]);
+
+    x.h.x = (int32_t(x.h.x) + int32_t(cx.h.x) < 0) ? x.h.x : cx.h.x;
+    x.h.y = (int32_t(x.h.y) + int32_t(cx.h.y) < 0) ? x.h.y : cx.h.y;
+    x.h.z = (int32_t(x.h.z) + int32_t(cx.h.z) < 0) ? x.h.z : cx.h.z;
+    x.h.w = (int32_t(x.h.w) + int32_t(cx.h.w) < 0) ? x.h.w : cx.h.w;
+#endif
+    return uint32_t(uint8_t(x.h.x)) | (uint32_t(uint8_t(x.h.y)) << 8) | (uint32_t(uint8_t(x.h.z)) << 16) | (uint32_t(uint8_t(x.h.w)) << 24);
   }
 
-  template<uint32_t MO, uint32_t MINV, uint32_t R32>
+  template<uint64_t MO, uint64_t MINV, uint64_t R32>
   __host__ __device__ __forceinline__ void crt_recover(int32_t (&r)[4]) {
-    constexpr uint32_t m[4]{ uint8_t(MO) ? uint32_t(uint8_t(MO)) : uint32_t(256), uint8_t(MO >> 8), uint8_t(MO >> 16), uint8_t(MO >> 24) };
-    constexpr uint32_t i[4]{ uint8_t(MINV), uint8_t(MINV >> 8), uint8_t(MINV >> 16), uint8_t(MINV >> 24) };
-    constexpr uint32_t r32[4]{ uint8_t(R32), uint8_t(R32 >> 8), uint8_t(R32 >> 16), uint8_t(R32 >> 24) };
+    constexpr uint32_t m[4]{ uint16_t(MO), uint16_t(MO >> 16), uint16_t(MO >> 32), uint16_t(MO >> 48) };
+    constexpr uint32_t i[4]{ uint16_t(MINV), uint16_t(MINV >> 16), uint16_t(MINV >> 32), uint16_t(MINV >> 48) };
+    constexpr uint32_t r32[4]{ uint16_t(R32), uint16_t(R32 >> 16), uint16_t(R32 >> 32), uint16_t(R32 >> 48) };
 
-    uint32_t rem[4];
-    rem[0] = barrett_reduc<m[0]>(u8u21_reduc<m[0]>(uint32_t(r[0])) * i[0] + ((-uint32_t(r[0] < 0)) & r32[0]));
-    rem[1] = barrett_reduc<m[1]>(u8u21_reduc<m[1]>(uint32_t(r[1])) * i[1] + ((-uint32_t(r[1] < 0)) & r32[1]));
-    rem[2] = barrett_reduc<m[2]>(u8u21_reduc<m[2]>(uint32_t(r[2])) * i[2] + ((-uint32_t(r[2] < 0)) & r32[2]));
-    rem[3] = barrett_reduc<m[3]>(u8u21_reduc<m[3]>(uint32_t(r[3])) * i[3] + ((-uint32_t(r[3] < 0)) & r32[3]));
-
-    r[0] = int32_t(__viaddmin_u32(rem[0], -m[0], rem[0]));
-    r[1] = int32_t(__viaddmin_u32(rem[1], -m[1], rem[1]));
-    r[2] = int32_t(__viaddmin_u32(rem[2], -m[2], rem[2]));
-    r[3] = int32_t(__viaddmin_u32(rem[3], -m[3], rem[3]));
+    r[0] = int32_t(barrett_reduc<m[0]>(mulx_reduc<i[0], m[0]>(uint32_t(r[0])) + ((-(uint32_t(r[0]) >> 31)) & r32[0])));
+    r[1] = int32_t(barrett_reduc<m[1]>(mulx_reduc<i[1], m[1]>(uint32_t(r[1])) + ((-(uint32_t(r[1]) >> 31)) & r32[1])));
+    r[2] = int32_t(barrett_reduc<m[2]>(mulx_reduc<i[2], m[2]>(uint32_t(r[2])) + ((-(uint32_t(r[2]) >> 31)) & r32[2])));
+    r[3] = int32_t(barrett_reduc<m[3]>(mulx_reduc<i[3], m[3]>(uint32_t(r[3])) + ((-(uint32_t(r[3]) >> 31)) & r32[3])));
   }
 
 };
