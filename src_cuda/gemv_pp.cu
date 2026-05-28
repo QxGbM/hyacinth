@@ -86,78 +86,7 @@ __global__ void gemv_pp_kernel(int32_t j, int32_t M, int32_t N, matrix_t sq, rea
   }
 }
 
-constexpr int32_t grid_blocks = 256;
-constexpr int32_t block_threads = 256;
-
-void internal::Cholesky::gemv_pp_f64(cudaStream_t stream, int32_t j, int32_t M, int32_t N, double* sq, double* A, int32_t lda, int32_t* jpiv, double* D) {
-  int32_t grid_n = std::min(grid_blocks, (N + block_threads - 1) / block_threads);
-  int32_t grid = std::max(grid_n, std::min(grid_blocks, (M + block_threads - 1) / block_threads));
-  gemv_pp_kernel<grid_blocks, block_threads>
-    <<< grid, block_threads, 0, stream >>> (j, M, N, sq[0], sq[1], A, int64_t(lda), jpiv, D, (double_idx*)sq);
-  imax_f64_host_sync(stream, N, grid_n, sq);
-}
-
-void internal::Cholesky::gemv_pp_f32(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float* sq, float* A, int32_t lda, int32_t* jpiv, float* D) {
-  int32_t grid_n = std::min(grid_blocks, (N + block_threads - 1) / block_threads);
-  int32_t grid = std::max(grid_n, std::min(grid_blocks, (M + block_threads - 1) / block_threads));
-  gemv_pp_kernel<grid_blocks, block_threads>
-    <<< grid, block_threads, 0, stream >>> (j, M, N, sq[0], sq[1], A, int64_t(lda), jpiv, D, (float_idx*)sq);
-  imax_f32_host_sync(stream, N, grid_n, sq);
-}
-
-void internal::Cholesky::gemv_pp_f128_dd(cudaStream_t stream, int32_t j, int32_t M, int32_t N, double2* sq, double2* A, int32_t lda, int32_t* jpiv, double2* D) {
-  int32_t grid_n = std::min(grid_blocks, (N + block_threads - 1) / block_threads);
-  int32_t grid = std::max(grid_n, std::min(grid_blocks, (M + block_threads - 1) / block_threads));
-  gemv_pp_kernel<grid_blocks, block_threads>
-    <<< grid, block_threads, 0, stream >>> (j, M, N, sq[0], sq[1], A, int64_t(lda), jpiv, D, (double2_idx*)sq);
-  imax_f128_dd_host_sync(stream, N, grid_n, sq);
-}
-
-void internal::Cholesky::gemv_pp_f128_qf(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float4* sq, float4* A, int32_t lda, int32_t* jpiv, float4* D) {
-  int32_t grid_n = std::min(grid_blocks, (N + block_threads - 1) / block_threads);
-  int32_t grid = std::max(grid_n, std::min(grid_blocks, (M + block_threads - 1) / block_threads));
-  gemv_pp_kernel<grid_blocks, block_threads>
-    <<< grid, block_threads, 0, stream >>> (j, M, N, sq[0], sq[1], A, int64_t(lda), jpiv, D, (float4_idx*)sq);
-  imax_f128_qf_host_sync(stream, N, grid_n, sq);
-}
-
-void internal::Cholesky::gemv_pp_cf64(cudaStream_t stream, int32_t j, int32_t M, int32_t N, double* sq, std::complex<double>* A, int32_t lda, int32_t* jpiv, double* D) {
-  int32_t grid_n = std::min(grid_blocks, (N + block_threads - 1) / block_threads);
-  int32_t grid = std::max(grid_n, std::min(grid_blocks, (M + block_threads - 1) / block_threads));
-  cuDoubleComplex sqc = make_cuDoubleComplex(*sq, 0.);
-  gemv_pp_kernel<grid_blocks, block_threads>
-    <<< grid, block_threads, 0, stream >>> (j, M, N, sqc, sq[1], (cuDoubleComplex*)A, int64_t(lda), jpiv, D, (double_idx*)sq);
-  imax_f64_host_sync(stream, N, grid_n, sq);
-}
-
-void internal::Cholesky::gemv_pp_cf32(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float* sq, std::complex<float>* A, int32_t lda, int32_t* jpiv, float* D) {
-  int32_t grid_n = std::min(grid_blocks, (N + block_threads - 1) / block_threads);
-  int32_t grid = std::max(grid_n, std::min(grid_blocks, (M + block_threads - 1) / block_threads));
-  cuComplex sqc = make_cuComplex(*sq, 0.f);
-  gemv_pp_kernel<grid_blocks, block_threads>
-    <<< grid, block_threads, 0, stream >>> (j, M, N, sqc, sq[1], (cuComplex*)A, int64_t(lda), jpiv, D, (float_idx*)sq);
-  imax_f32_host_sync(stream, N, grid_n, sq);
-}
-
-void internal::Cholesky::gemv_pp_cf128_dd(cudaStream_t stream, int32_t j, int32_t M, int32_t N, double2* sq, complex_double2* A, int32_t lda, int32_t* jpiv, double2* D) {
-  int32_t grid_n = std::min(grid_blocks, (N + block_threads - 1) / block_threads);
-  int32_t grid = std::max(grid_n, std::min(grid_blocks, (M + block_threads - 1) / block_threads));
-  complex_double2 sqc = device::dd::make_complex_double2(*sq, make_double2(0., 0.));
-  gemv_pp_kernel<grid_blocks, block_threads>
-    <<< grid, block_threads, 0, stream >>> (j, M, N, sqc, sq[1], A, int64_t(lda), jpiv, D, (double2_idx*)sq);
-  imax_f128_dd_host_sync(stream, N, grid_n, sq);
-}
-
-void internal::Cholesky::gemv_pp_cf128_qf(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float4* sq, complex_float4* A, int32_t lda, int32_t* jpiv, float4* D) {
-  int32_t grid_n = std::min(grid_blocks, (N + block_threads - 1) / block_threads);
-  int32_t grid = std::max(grid_n, std::min(grid_blocks, (M + block_threads - 1) / block_threads));
-  complex_float4 sqc = device::qf::make_complex_float4(*sq, make_float4(0.f, 0.f, 0.f, 0.f));
-  gemv_pp_kernel<grid_blocks, block_threads>
-    <<< grid, block_threads, 0, stream >>> (j, M, N, sqc, sq[1], A, int64_t(lda), jpiv, D, (float4_idx*)sq);
-  imax_f128_qf_host_sync(stream, N, grid_n, sq);
-}
-
-template <class idx_t, int32_t GRID_BLOCKS, int32_t BLOCK_THREADS, class real_t, class matrix_t>
+template <int32_t GRID_BLOCKS, int32_t BLOCK_THREADS, class real_t, class matrix_t, class idx_t>
 __global__ void gemv_pp_nopiv_kernel(int32_t N, matrix_t sq, real_t rsq, matrix_t* __restrict__ A, int64_t lda, real_t* __restrict__ D, idx_t* __restrict__ idx) {
   constexpr int32_t elements = GRID_BLOCKS * BLOCK_THREADS;
   int32_t offset = int32_t(blockIdx.x) * BLOCK_THREADS + int32_t(threadIdx.x) + 1;
@@ -180,62 +109,89 @@ __global__ void gemv_pp_nopiv_kernel(int32_t N, matrix_t sq, real_t rsq, matrix_
   }
 }
 
-void internal::Cholesky::gemv_pp_nopiv_f64(cudaStream_t stream, int32_t M, int32_t N, double* sq, double* A, int32_t lda, double* D) {
-  int32_t grid = std::min(grid_blocks, (N + block_threads - 2) / block_threads);
-  gemv_pp_nopiv_kernel<double_idx, grid_blocks, block_threads>
-    <<< grid, block_threads, 0, stream >>> (N, sq[0], sq[1], &A[M], int64_t(lda), D, (double_idx*)sq);
-  imax_f64_host_sync(stream, N, grid, sq);
+constexpr int32_t grid_blocks = 256;
+constexpr int32_t block_threads = 256;
+
+void internal::Cholesky::gemv_pp_f64(cudaStream_t stream, int32_t j, int32_t M, int32_t N, double* sq, double* A, int32_t lda, int32_t* jpiv, double* D) {
+  int32_t grid_n = std::min(grid_blocks, (N + block_threads - 2) / block_threads);
+  int32_t grid = std::max(grid_n, std::min(grid_blocks, (M + block_threads - 1) / block_threads));
+  if (j) gemv_pp_kernel<grid_blocks, block_threads>
+    <<< grid, block_threads, 0, stream >>> (j, M, N, sq[0], sq[1], A, int64_t(lda), jpiv, D, (double_idx*)sq);
+  else gemv_pp_nopiv_kernel<grid_blocks, block_threads>
+    <<< grid_n, block_threads, 0, stream >>> (N, sq[0], sq[1], &A[M], int64_t(lda), D, (double_idx*)sq);
+  imax_f64_host_sync(stream, N, grid_n, sq);
 }
 
-void internal::Cholesky::gemv_pp_nopiv_f32(cudaStream_t stream, int32_t M, int32_t N, float* sq, float* A, int32_t lda, float* D) {
-  int32_t grid = std::min(grid_blocks, (N + block_threads - 2) / block_threads);
-  gemv_pp_nopiv_kernel<float_idx, grid_blocks, block_threads>
-    <<< grid, block_threads, 0, stream >>> (N, sq[0], sq[1], &A[M], int64_t(lda), D, (float_idx*)sq);
-  imax_f32_host_sync(stream, N, grid, sq);
+void internal::Cholesky::gemv_pp_f32(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float* sq, float* A, int32_t lda, int32_t* jpiv, float* D) {
+  int32_t grid_n = std::min(grid_blocks, (N + block_threads - 2) / block_threads);
+  int32_t grid = std::max(grid_n, std::min(grid_blocks, (M + block_threads - 1) / block_threads));
+  if (j) gemv_pp_kernel<grid_blocks, block_threads>
+    <<< grid, block_threads, 0, stream >>> (j, M, N, sq[0], sq[1], A, int64_t(lda), jpiv, D, (float_idx*)sq);
+  else gemv_pp_nopiv_kernel<grid_blocks, block_threads>
+    <<< grid_n, block_threads, 0, stream >>> (N, sq[0], sq[1], &A[M], int64_t(lda), D, (float_idx*)sq);
+  imax_f32_host_sync(stream, N, grid_n, sq);
 }
 
-void internal::Cholesky::gemv_pp_nopiv_f128_dd(cudaStream_t stream, int32_t M, int32_t N, double2* sq, double2* A, int32_t lda, double2* D) {
-  int32_t grid = std::min(grid_blocks, (N + block_threads - 2) / block_threads);
-  gemv_pp_nopiv_kernel<double2_idx, grid_blocks, block_threads>
-    <<< grid, block_threads, 0, stream >>> (N, sq[0], sq[1], &A[M], int64_t(lda), D, (double2_idx*)sq);
-  imax_f128_dd_host_sync(stream, N, grid, sq);
+void internal::Cholesky::gemv_pp_f128_dd(cudaStream_t stream, int32_t j, int32_t M, int32_t N, double2* sq, double2* A, int32_t lda, int32_t* jpiv, double2* D) {
+  int32_t grid_n = std::min(grid_blocks, (N + block_threads - 2) / block_threads);
+  int32_t grid = std::max(grid_n, std::min(grid_blocks, (M + block_threads - 1) / block_threads));
+  if (j) gemv_pp_kernel<grid_blocks, block_threads>
+    <<< grid, block_threads, 0, stream >>> (j, M, N, sq[0], sq[1], A, int64_t(lda), jpiv, D, (double2_idx*)sq);
+  else gemv_pp_nopiv_kernel<grid_blocks, block_threads>
+    <<< grid_n, block_threads, 0, stream >>> (N, sq[0], sq[1], &A[M], int64_t(lda), D, (double2_idx*)sq);
+  imax_f128_dd_host_sync(stream, N, grid_n, sq);
 }
 
-void internal::Cholesky::gemv_pp_nopiv_f128_qf(cudaStream_t stream, int32_t M, int32_t N, float4* sq, float4* A, int32_t lda, float4* D) {
-  int32_t grid = std::min(grid_blocks, (N + block_threads - 2) / block_threads);
-  gemv_pp_nopiv_kernel<float4_idx, grid_blocks, block_threads>
-    <<< grid, block_threads, 0, stream >>> (N, sq[0], sq[1], &A[M], int64_t(lda), D, (float4_idx*)sq);
-  imax_f128_qf_host_sync(stream, N, grid, sq);
+void internal::Cholesky::gemv_pp_f128_qf(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float4* sq, float4* A, int32_t lda, int32_t* jpiv, float4* D) {
+  int32_t grid_n = std::min(grid_blocks, (N + block_threads - 2) / block_threads);
+  int32_t grid = std::max(grid_n, std::min(grid_blocks, (M + block_threads - 1) / block_threads));
+  if (j) gemv_pp_kernel<grid_blocks, block_threads>
+    <<< grid, block_threads, 0, stream >>> (j, M, N, sq[0], sq[1], A, int64_t(lda), jpiv, D, (float4_idx*)sq);
+  else gemv_pp_nopiv_kernel<grid_blocks, block_threads>
+    <<< grid_n, block_threads, 0, stream >>> (N, sq[0], sq[1], &A[M], int64_t(lda), D, (float4_idx*)sq);
+  imax_f128_qf_host_sync(stream, N, grid_n, sq);
 }
 
-void internal::Cholesky::gemv_pp_nopiv_cf64(cudaStream_t stream, int32_t M, int32_t N, double* sq, std::complex<double>* A, int32_t lda, double* D) {
-  int32_t grid = std::min(grid_blocks, (N + block_threads - 2) / block_threads);
+void internal::Cholesky::gemv_pp_cf64(cudaStream_t stream, int32_t j, int32_t M, int32_t N, double* sq, std::complex<double>* A, int32_t lda, int32_t* jpiv, double* D) {
+  int32_t grid_n = std::min(grid_blocks, (N + block_threads - 2) / block_threads);
+  int32_t grid = std::max(grid_n, std::min(grid_blocks, (M + block_threads - 1) / block_threads));
   cuDoubleComplex sqc = make_cuDoubleComplex(*sq, 0.);
-  gemv_pp_nopiv_kernel<double_idx, grid_blocks, block_threads>
-    <<< grid, block_threads, 0, stream >>> (N, sqc, sq[1], (cuDoubleComplex*)&A[M], int64_t(lda), D, (double_idx*)sq);
-  imax_f64_host_sync(stream, N, grid, sq);
+  if (j) gemv_pp_kernel<grid_blocks, block_threads>
+    <<< grid, block_threads, 0, stream >>> (j, M, N, sqc, sq[1], (cuDoubleComplex*)A, int64_t(lda), jpiv, D, (double_idx*)sq);
+  else gemv_pp_nopiv_kernel<grid_blocks, block_threads>
+    <<< grid_n, block_threads, 0, stream >>> (N, sqc, sq[1], (cuDoubleComplex*)&A[M], int64_t(lda), D, (double_idx*)sq);
+  imax_f64_host_sync(stream, N, grid_n, sq);
 }
 
-void internal::Cholesky::gemv_pp_nopiv_cf32(cudaStream_t stream, int32_t M, int32_t N, float* sq, std::complex<float>* A, int32_t lda, float* D) {
-  int32_t grid = std::min(grid_blocks, (N + block_threads - 2) / block_threads);
+void internal::Cholesky::gemv_pp_cf32(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float* sq, std::complex<float>* A, int32_t lda, int32_t* jpiv, float* D) {
+  int32_t grid_n = std::min(grid_blocks, (N + block_threads - 2) / block_threads);
+  int32_t grid = std::max(grid_n, std::min(grid_blocks, (M + block_threads - 1) / block_threads));
   cuComplex sqc = make_cuComplex(*sq, 0.f);
-  gemv_pp_nopiv_kernel<float_idx, grid_blocks, block_threads>
-    <<< grid, block_threads, 0, stream >>> (N, sqc, sq[1], (cuComplex*)&A[M], int64_t(lda), D, (float_idx*)sq);
-  imax_f32_host_sync(stream, N, grid, sq);
+  if (j) gemv_pp_kernel<grid_blocks, block_threads>
+    <<< grid, block_threads, 0, stream >>> (j, M, N, sqc, sq[1], (cuComplex*)A, int64_t(lda), jpiv, D, (float_idx*)sq);
+  else gemv_pp_nopiv_kernel<grid_blocks, block_threads>
+    <<< grid_n, block_threads, 0, stream >>> (N, sqc, sq[1], (cuComplex*)&A[M], int64_t(lda), D, (float_idx*)sq);
+  imax_f32_host_sync(stream, N, grid_n, sq);
 }
 
-void internal::Cholesky::gemv_pp_nopiv_cf128_dd(cudaStream_t stream, int32_t M, int32_t N, double2* sq, complex_double2* A, int32_t lda, double2* D) {
-  int32_t grid = std::min(grid_blocks, (N + block_threads - 2) / block_threads);
+void internal::Cholesky::gemv_pp_cf128_dd(cudaStream_t stream, int32_t j, int32_t M, int32_t N, double2* sq, complex_double2* A, int32_t lda, int32_t* jpiv, double2* D) {
+  int32_t grid_n = std::min(grid_blocks, (N + block_threads - 2) / block_threads);
+  int32_t grid = std::max(grid_n, std::min(grid_blocks, (M + block_threads - 1) / block_threads));
   complex_double2 sqc = device::dd::make_complex_double2(*sq, make_double2(0., 0.));
-  gemv_pp_nopiv_kernel<double2_idx, grid_blocks, block_threads>
-    <<< grid, block_threads, 0, stream >>> (N, sqc, sq[1], &A[M], int64_t(lda), D, (double2_idx*)sq);
-  imax_f128_dd_host_sync(stream, N, grid, sq);
+  if (j) gemv_pp_kernel<grid_blocks, block_threads>
+    <<< grid, block_threads, 0, stream >>> (j, M, N, sqc, sq[1], A, int64_t(lda), jpiv, D, (double2_idx*)sq);
+  else gemv_pp_nopiv_kernel<grid_blocks, block_threads>
+    <<< grid_n, block_threads, 0, stream >>> (N, sqc, sq[1], &A[M], int64_t(lda), D, (double2_idx*)sq);
+  imax_f128_dd_host_sync(stream, N, grid_n, sq);
 }
 
-void internal::Cholesky::gemv_pp_nopiv_cf128_qf(cudaStream_t stream, int32_t M, int32_t N, float4* sq, complex_float4* A, int32_t lda, float4* D) {
-  int32_t grid = std::min(grid_blocks, (N + block_threads - 2) / block_threads);
+void internal::Cholesky::gemv_pp_cf128_qf(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float4* sq, complex_float4* A, int32_t lda, int32_t* jpiv, float4* D) {
+  int32_t grid_n = std::min(grid_blocks, (N + block_threads - 2) / block_threads);
+  int32_t grid = std::max(grid_n, std::min(grid_blocks, (M + block_threads - 1) / block_threads));
   complex_float4 sqc = device::qf::make_complex_float4(*sq, make_float4(0.f, 0.f, 0.f, 0.f));
-  gemv_pp_nopiv_kernel<float4_idx, grid_blocks, block_threads>
-    <<< grid, block_threads, 0, stream >>> (N, sqc, sq[1], &A[M], int64_t(lda), D, (float4_idx*)sq);
-  imax_f128_qf_host_sync(stream, N, grid, sq);
+  if (j) gemv_pp_kernel<grid_blocks, block_threads>
+    <<< grid, block_threads, 0, stream >>> (j, M, N, sqc, sq[1], A, int64_t(lda), jpiv, D, (float4_idx*)sq);
+  else gemv_pp_nopiv_kernel<grid_blocks, block_threads>
+    <<< grid_n, block_threads, 0, stream >>> (N, sqc, sq[1], &A[M], int64_t(lda), D, (float4_idx*)sq);
+  imax_f128_qf_host_sync(stream, N, grid_n, sq);
 }

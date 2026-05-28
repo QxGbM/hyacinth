@@ -7,10 +7,7 @@ void internal::Cholesky::gemv_cublas_f64(cudaStream_t stream, cublasHandle_t han
     double one = 1., minus_one = -1.;
     if (1 <= N)
       cublasDgemv(handle, CUBLAS_OP_T, N, M, &minus_one, A, lda, &A[int64_t(j) * int64_t(lda)], 1, &one, &A[int64_t(N) + int64_t(j) * int64_t(lda)], 1);
-    if (j)
-      gemv_pp_f64(stream, j, N, M, scale, A, lda, jpiv, D);
-    else
-      gemv_pp_nopiv_f64(stream, N, M, scale, A, lda, D);
+    gemv_pp_f64(stream, j, N, M, scale, A, lda, jpiv, D);
   }
   else if (1 == M)
     cudaMemcpyAsync(&A[N], scale, sizeof(double), cudaMemcpyHostToDevice, stream);
@@ -21,10 +18,7 @@ void internal::Cholesky::gemv_cublas_f32(cudaStream_t stream, cublasHandle_t han
     float one = 1.f, minus_one = -1.f;
     if (1 <= N)
       cublasSgemv(handle, CUBLAS_OP_T, N, M, &minus_one, A, lda, &A[int64_t(j) * int64_t(lda)], 1, &one, &A[int64_t(N) + int64_t(j) * int64_t(lda)], 1);
-    if (j)
-      gemv_pp_f32(stream, j, N, M, scale, A, lda, jpiv, D);
-    else
-      gemv_pp_nopiv_f32(stream, N, M, scale, A, lda, D);
+    gemv_pp_f32(stream, j, N, M, scale, A, lda, jpiv, D);
   }
   else if (1 == M)
     cudaMemcpyAsync(&A[N], scale, sizeof(float), cudaMemcpyHostToDevice, stream);
@@ -36,10 +30,7 @@ void internal::Cholesky::gemv_cublas_cf64(cudaStream_t stream, cublasHandle_t ha
     if (1 <= N)
       cublasZgemv(handle, CUBLAS_OP_C, N, M, (cuDoubleComplex*)&minus_one, (cuDoubleComplex*)A, lda, 
         (cuDoubleComplex*)&A[int64_t(j) * int64_t(lda)], 1, (cuDoubleComplex*)&one, (cuDoubleComplex*)&A[int64_t(N) + int64_t(j) * int64_t(lda)], 1);
-    if (j)
-      gemv_pp_cf64(stream, j, N, M, scale, A, lda, jpiv, D);
-    else
-      gemv_pp_nopiv_cf64(stream, N, M, scale, A, lda, D);
+    gemv_pp_cf64(stream, j, N, M, scale, A, lda, jpiv, D);
   }
   else if (1 == M) {
     scale[1] = 0.;
@@ -53,10 +44,7 @@ void internal::Cholesky::gemv_cublas_cf32(cudaStream_t stream, cublasHandle_t ha
     if (1 <= N)
       cublasCgemv(handle, CUBLAS_OP_C, N, M, (cuComplex*)&minus_one, (cuComplex*)A, lda, 
         (cuComplex*)&A[int64_t(j) * int64_t(lda)], 1, (cuComplex*)&one, (cuComplex*)&A[int64_t(N) + int64_t(j) * int64_t(lda)], 1);
-    if (j)
-      gemv_pp_cf32(stream, j, N, M, scale, A, lda, jpiv, D);
-    else
-      gemv_pp_nopiv_cf32(stream, N, M, scale, A, lda, D);
+    gemv_pp_cf32(stream, j, N, M, scale, A, lda, jpiv, D);
   }
   else if (1 == M) {
     scale[1] = 0.f;

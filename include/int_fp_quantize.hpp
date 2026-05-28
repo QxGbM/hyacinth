@@ -54,7 +54,7 @@ namespace device::int8 {
 #ifdef __CUDA_ARCH__
     if constexpr(DIV) {
       constexpr uint32_t d = uint32_t((0x100000000llu / uint64_t(DIV))), minus_div = -DIV;
-      x = x - (__umulhi(x, d) * DIV); return __viaddmin_u32(minus_div, x, x);
+      x += __umulhi(x, d) * minus_div; return __viaddmin_u32(minus_div, x, x);
     } else return uint32_t(0);
 #else
     if constexpr(DIV) return x % DIV; else return uint32_t(0);
