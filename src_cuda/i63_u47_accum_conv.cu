@@ -47,15 +47,15 @@ void internal::int8::accumulate_conv_i63_u47(cudaStream_t stream, int32_t orderA
   constexpr int32_t block_threads = 512;
   int32_t grid = int32_t((N + int64_t(511)) >> 9);
   if (Complex) switch (orderA) {
-    case 1: limbs_convert_kernel<3> <<< grid, block_threads, 0, stream >>> (N, A); break;
-    case 2: limbs_convert_kernel<4> <<< grid, block_threads, 0, stream >>> (N, A); break;
-    case 3: limbs_convert_kernel<5> <<< grid, block_threads, 0, stream >>> (N, A); break;
-    default: break;
+    case 1: limbs_convert_kernel<3> <<< grid, block_threads, 0, stream >>> (N, A); return;
+    case 2: limbs_convert_kernel<4> <<< grid, block_threads, 0, stream >>> (N, A); return;
+    case 3: limbs_convert_kernel<5> <<< grid, block_threads, 0, stream >>> (N, A); return;
+    default: return;
   }
   else switch (orderA) {
-    case 1: limbs_convert_kernel<0> <<< grid, block_threads, 0, stream >>> (N, A); break;
-    case 2: limbs_convert_kernel<1> <<< grid, block_threads, 0, stream >>> (N, A); break;
-    case 3: limbs_convert_kernel<2> <<< grid, block_threads, 0, stream >>> (N, A); break;
-    default: break;
+    case 1: limbs_convert_kernel<0> <<< grid, block_threads, 0, stream >>> (N, A); return;
+    case 2: limbs_convert_kernel<1> <<< grid, block_threads, 0, stream >>> (N, A); return;
+    case 3: limbs_convert_kernel<2> <<< grid, block_threads, 0, stream >>> (N, A); return;
+    default: return;
   }
 }

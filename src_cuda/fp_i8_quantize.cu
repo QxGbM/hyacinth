@@ -103,19 +103,19 @@ inline void quantize_dispatcher(cudaStream_t stream, int64_t M, int64_t N, const
   uint32_t hi = 63 <= umax ? (uint32_t(1) << (umax - 63)) : uint32_t(0);
 
   switch (dimZ) {
-    case 1: quantize_kernel<1, matrix_t, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, int64_t(dimX), strideA); break;
-    case 2: quantize_kernel<2, matrix_t, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, int64_t(dimX), strideA); break;
-    case 3: quantize_kernel<3, matrix_t, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, int64_t(dimX), strideA); break;
-    case 4: quantize_kernel<4, matrix_t, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, int64_t(dimX), strideA); break;
-    case 5: quantize_kernel<5, matrix_t, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, int64_t(dimX), strideA); break;
-    case 6: quantize_kernel<6, matrix_t, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, int64_t(dimX), strideA); break;
-    case 7: quantize_kernel<7, matrix_t, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, int64_t(dimX), strideA); break;
-    case 8: quantize_kernel<8, matrix_t, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, int64_t(dimX), strideA); break;
-    case 9: quantize_kernel<9, matrix_t, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, int64_t(dimX), strideA); break;
-    case 10: quantize_kernel<10, matrix_t, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, int64_t(dimX), strideA); break;
-    case 11: quantize_kernel<11, matrix_t, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, int64_t(dimX), strideA); break;
-    case 12: quantize_kernel<12, matrix_t, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, int64_t(dimX), strideA); break;
-    default: break;
+    case 1: quantize_kernel<1, matrix_t, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, int64_t(dimX), strideA); return;
+    case 2: quantize_kernel<2, matrix_t, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, int64_t(dimX), strideA); return;
+    case 3: quantize_kernel<3, matrix_t, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, int64_t(dimX), strideA); return;
+    case 4: quantize_kernel<4, matrix_t, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, int64_t(dimX), strideA); return;
+    case 5: quantize_kernel<5, matrix_t, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, int64_t(dimX), strideA); return;
+    case 6: quantize_kernel<6, matrix_t, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, int64_t(dimX), strideA); return;
+    case 7: quantize_kernel<7, matrix_t, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, int64_t(dimX), strideA); return;
+    case 8: quantize_kernel<8, matrix_t, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, int64_t(dimX), strideA); return;
+    case 9: quantize_kernel<9, matrix_t, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, int64_t(dimX), strideA); return;
+    case 10: quantize_kernel<10, matrix_t, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, int64_t(dimX), strideA); return;
+    case 11: quantize_kernel<11, matrix_t, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, int64_t(dimX), strideA); return;
+    case 12: quantize_kernel<12, matrix_t, op> <<< grid, block_threads, 0, stream >>> (M, N, C, ldc, lo, hi, umax, vec_expon, A, int64_t(dimX), strideA); return;
+    default: return;
   }
 }
 
