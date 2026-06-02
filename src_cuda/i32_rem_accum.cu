@@ -35,7 +35,7 @@ __device__ __forceinline__ void add_pd(uint64_t (&a)[ORDER], int32_t i) {
 }
 
 template<int32_t orderX, int32_t iterX, int32_t orderA, int32_t option>
-__global__ void i32_crt_accum_kernel(int64_t N, const int32_t* __restrict__ X, int64_t ldx, int64_t strideX, uint64_t* __restrict__ A, int64_t lda, int64_t strideA) {
+__global__ void i32_crt_accum_kernel(int64_t N, const int32_t* __restrict__ X, int64_t ldx, int64_t strideX, uint64_t* __restrict__ A, int64_t strideA) {
   int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x);
   if (y < N) {
     constexpr int32_t beta = int32_t((option & 1) == 1), iterX8 = iterX << 3;
@@ -43,7 +43,7 @@ __global__ void i32_crt_accum_kernel(int64_t N, const int32_t* __restrict__ X, i
       U8CRT::mo[iterX8 + 4], U8CRT::mo[iterX8 + 5], U8CRT::mo[iterX8 + 6], U8CRT::mo[iterX8 + 7] };
 
     uint64_t acc[orderA]; int32_t rem[4]; int64_t x = int64_t(blockIdx.y);
-    A = &A[y + x * lda]; X = &X[y + x * ldx];
+    A = &A[y + x * N]; X = &X[y + x * ldx];
 
     if constexpr(beta) {
       if constexpr(uint32_t(0) < orderA) { acc[0] = A[0]; }
@@ -96,79 +96,79 @@ __global__ void i32_crt_accum_kernel(int64_t N, const int32_t* __restrict__ X, i
 }
 
 template <int32_t orderX, int32_t iter, int32_t orderA>
-inline void crt_acc_dispatcher(cudaStream_t stream, int32_t option, int64_t N, const int32_t* X, int64_t ldx, uint64_t* A, int64_t lda) {
+inline void crt_acc_dispatcher(cudaStream_t stream, int32_t option, int64_t N, const int32_t* X, int64_t ldx, uint64_t* A) {
   constexpr int32_t block_threads = 512;
   dim3 grid(uint32_t(N + 511) >> 9, uint32_t(N), uint32_t(1));
-  int64_t strideX = ldx * N, strideA = lda * N + lda;
+  int64_t strideX = ldx * N, strideA = N * N + N;
   switch(option) {
-    case 0: i32_crt_accum_kernel<orderX, iter, orderA, 0> <<< grid, block_threads, 0, stream >>> (N, X, ldx, strideX, A, lda, strideA); return;
-    case 1: i32_crt_accum_kernel<orderX, iter, orderA, 1> <<< grid, block_threads, 0, stream >>> (N, X, ldx, strideX, A, lda, strideA); return;
+    case 0: i32_crt_accum_kernel<orderX, iter, orderA, 0> <<< grid, block_threads, 0, stream >>> (N, X, ldx, strideX, A, strideA); return;
+    case 1: i32_crt_accum_kernel<orderX, iter, orderA, 1> <<< grid, block_threads, 0, stream >>> (N, X, ldx, strideX, A, strideA); return;
     default: return;
   }
 }
 
 template <int32_t orderA>
-inline void crt_acc_dispatcher(cudaStream_t stream, int32_t option, int64_t N, int32_t orderX, int32_t iter, const int32_t* X, int64_t ldx, uint64_t* A, int64_t lda) {
+inline void crt_acc_dispatcher(cudaStream_t stream, int32_t option, int64_t N, int32_t orderX, int32_t iter, const int32_t* X, int64_t ldx, uint64_t* A) {
   if (iter == 0) switch (orderX) {
-    case 2: crt_acc_dispatcher<2, 0, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 3: crt_acc_dispatcher<3, 0, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 4: crt_acc_dispatcher<4, 0, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 5: crt_acc_dispatcher<5, 0, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 6: crt_acc_dispatcher<6, 0, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 7: crt_acc_dispatcher<7, 0, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 8: crt_acc_dispatcher<8, 0, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 9: crt_acc_dispatcher<9, 0, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 10: crt_acc_dispatcher<10, 0, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 11: crt_acc_dispatcher<11, 0, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 12: crt_acc_dispatcher<12, 0, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 13: crt_acc_dispatcher<13, 0, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 14: crt_acc_dispatcher<14, 0, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 15: crt_acc_dispatcher<15, 0, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 16: crt_acc_dispatcher<16, 0, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 17: crt_acc_dispatcher<17, 0, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 18: crt_acc_dispatcher<18, 0, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 19: crt_acc_dispatcher<19, 0, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 20: crt_acc_dispatcher<20, 0, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 21: crt_acc_dispatcher<21, 0, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 22: crt_acc_dispatcher<22, 0, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 23: crt_acc_dispatcher<23, 0, orderA>(stream, option, N, X, ldx, A, lda); return;
+    case 2: crt_acc_dispatcher<2, 0, orderA>(stream, option, N, X, ldx, A); return;
+    case 3: crt_acc_dispatcher<3, 0, orderA>(stream, option, N, X, ldx, A); return;
+    case 4: crt_acc_dispatcher<4, 0, orderA>(stream, option, N, X, ldx, A); return;
+    case 5: crt_acc_dispatcher<5, 0, orderA>(stream, option, N, X, ldx, A); return;
+    case 6: crt_acc_dispatcher<6, 0, orderA>(stream, option, N, X, ldx, A); return;
+    case 7: crt_acc_dispatcher<7, 0, orderA>(stream, option, N, X, ldx, A); return;
+    case 8: crt_acc_dispatcher<8, 0, orderA>(stream, option, N, X, ldx, A); return;
+    case 9: crt_acc_dispatcher<9, 0, orderA>(stream, option, N, X, ldx, A); return;
+    case 10: crt_acc_dispatcher<10, 0, orderA>(stream, option, N, X, ldx, A); return;
+    case 11: crt_acc_dispatcher<11, 0, orderA>(stream, option, N, X, ldx, A); return;
+    case 12: crt_acc_dispatcher<12, 0, orderA>(stream, option, N, X, ldx, A); return;
+    case 13: crt_acc_dispatcher<13, 0, orderA>(stream, option, N, X, ldx, A); return;
+    case 14: crt_acc_dispatcher<14, 0, orderA>(stream, option, N, X, ldx, A); return;
+    case 15: crt_acc_dispatcher<15, 0, orderA>(stream, option, N, X, ldx, A); return;
+    case 16: crt_acc_dispatcher<16, 0, orderA>(stream, option, N, X, ldx, A); return;
+    case 17: crt_acc_dispatcher<17, 0, orderA>(stream, option, N, X, ldx, A); return;
+    case 18: crt_acc_dispatcher<18, 0, orderA>(stream, option, N, X, ldx, A); return;
+    case 19: crt_acc_dispatcher<19, 0, orderA>(stream, option, N, X, ldx, A); return;
+    case 20: crt_acc_dispatcher<20, 0, orderA>(stream, option, N, X, ldx, A); return;
+    case 21: crt_acc_dispatcher<21, 0, orderA>(stream, option, N, X, ldx, A); return;
+    case 22: crt_acc_dispatcher<22, 0, orderA>(stream, option, N, X, ldx, A); return;
+    case 23: crt_acc_dispatcher<23, 0, orderA>(stream, option, N, X, ldx, A); return;
     default: return;
   }
   else if (iter == 1) switch (orderX) {
-    case 9: crt_acc_dispatcher<9, 1, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 10: crt_acc_dispatcher<10, 1, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 11: crt_acc_dispatcher<11, 1, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 12: crt_acc_dispatcher<12, 1, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 13: crt_acc_dispatcher<13, 1, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 14: crt_acc_dispatcher<14, 1, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 15: crt_acc_dispatcher<15, 1, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 16: crt_acc_dispatcher<16, 1, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 17: crt_acc_dispatcher<17, 1, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 18: crt_acc_dispatcher<18, 1, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 19: crt_acc_dispatcher<19, 1, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 20: crt_acc_dispatcher<20, 1, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 21: crt_acc_dispatcher<21, 1, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 22: crt_acc_dispatcher<22, 1, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 23: crt_acc_dispatcher<23, 1, orderA>(stream, option, N, X, ldx, A, lda); return;
+    case 9: crt_acc_dispatcher<9, 1, orderA>(stream, option, N, X, ldx, A); return;
+    case 10: crt_acc_dispatcher<10, 1, orderA>(stream, option, N, X, ldx, A); return;
+    case 11: crt_acc_dispatcher<11, 1, orderA>(stream, option, N, X, ldx, A); return;
+    case 12: crt_acc_dispatcher<12, 1, orderA>(stream, option, N, X, ldx, A); return;
+    case 13: crt_acc_dispatcher<13, 1, orderA>(stream, option, N, X, ldx, A); return;
+    case 14: crt_acc_dispatcher<14, 1, orderA>(stream, option, N, X, ldx, A); return;
+    case 15: crt_acc_dispatcher<15, 1, orderA>(stream, option, N, X, ldx, A); return;
+    case 16: crt_acc_dispatcher<16, 1, orderA>(stream, option, N, X, ldx, A); return;
+    case 17: crt_acc_dispatcher<17, 1, orderA>(stream, option, N, X, ldx, A); return;
+    case 18: crt_acc_dispatcher<18, 1, orderA>(stream, option, N, X, ldx, A); return;
+    case 19: crt_acc_dispatcher<19, 1, orderA>(stream, option, N, X, ldx, A); return;
+    case 20: crt_acc_dispatcher<20, 1, orderA>(stream, option, N, X, ldx, A); return;
+    case 21: crt_acc_dispatcher<21, 1, orderA>(stream, option, N, X, ldx, A); return;
+    case 22: crt_acc_dispatcher<22, 1, orderA>(stream, option, N, X, ldx, A); return;
+    case 23: crt_acc_dispatcher<23, 1, orderA>(stream, option, N, X, ldx, A); return;
     default: return;
   }
   else if (iter == 2) switch (orderX) {
-    case 17: crt_acc_dispatcher<17, 2, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 18: crt_acc_dispatcher<18, 2, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 19: crt_acc_dispatcher<19, 2, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 20: crt_acc_dispatcher<20, 2, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 21: crt_acc_dispatcher<21, 2, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 22: crt_acc_dispatcher<22, 2, orderA>(stream, option, N, X, ldx, A, lda); return;
-    case 23: crt_acc_dispatcher<23, 2, orderA>(stream, option, N, X, ldx, A, lda); return;
+    case 17: crt_acc_dispatcher<17, 2, orderA>(stream, option, N, X, ldx, A); return;
+    case 18: crt_acc_dispatcher<18, 2, orderA>(stream, option, N, X, ldx, A); return;
+    case 19: crt_acc_dispatcher<19, 2, orderA>(stream, option, N, X, ldx, A); return;
+    case 20: crt_acc_dispatcher<20, 2, orderA>(stream, option, N, X, ldx, A); return;
+    case 21: crt_acc_dispatcher<21, 2, orderA>(stream, option, N, X, ldx, A); return;
+    case 22: crt_acc_dispatcher<22, 2, orderA>(stream, option, N, X, ldx, A); return;
+    case 23: crt_acc_dispatcher<23, 2, orderA>(stream, option, N, X, ldx, A); return;
     default: return;
   }
 }
 
-void internal::int8::accumulate_remainder_i32tensor(cudaStream_t stream, int32_t option, int32_t N, int32_t orderX, int32_t iter, const int32_t* X, int32_t ldx, int32_t orderA, uint64_t* A, int32_t lda) {
+void internal::int8::accumulate_remainder_i32tensor(cudaStream_t stream, int32_t option, int32_t N, int32_t orderX, int32_t iter, const int32_t* X, int32_t ldx, int32_t orderA, uint64_t* A) {
   switch (orderA) {
-    case 1: crt_acc_dispatcher<1>(stream, option, int64_t(N), orderX, iter, X, int64_t(ldx), A, int64_t(lda)); return;
-    case 2: crt_acc_dispatcher<2>(stream, option, int64_t(N), orderX, iter, X, int64_t(ldx), A, int64_t(lda)); return;
-    case 3: crt_acc_dispatcher<3>(stream, option, int64_t(N), orderX, iter, X, int64_t(ldx), A, int64_t(lda)); return;
+    case 1: crt_acc_dispatcher<1>(stream, option, int64_t(N), orderX, iter, X, int64_t(ldx), A); return;
+    case 2: crt_acc_dispatcher<2>(stream, option, int64_t(N), orderX, iter, X, int64_t(ldx), A); return;
+    case 3: crt_acc_dispatcher<3>(stream, option, int64_t(N), orderX, iter, X, int64_t(ldx), A); return;
     default: return;
   }
 }

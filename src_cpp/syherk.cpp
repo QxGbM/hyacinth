@@ -49,49 +49,49 @@ inline void vexp_dispatcher(cudaStream_t stream, int32_t M, int32_t N, hyacinPre
 }
 
 inline void igemm_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, 
-  int32_t umax, const int32_t* vexp, int32_t algnM, int32_t orderA, int32_t orderC, uint64_t* acc, int32_t algnN, int8_t* iA, hyacinAlgorithm_t alg) {
+  int32_t umax, const int32_t* vexp, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* acc, int8_t* iA, hyacinAlgorithm_t alg) {
   if (alg == HYACIN_ALG_LIMBS || alg == HYACIN_ALG_LIMBS_ND) switch(Atype) {
     case HYACIN_F64:
-      internal::int8::i63ATA_f64_limbs(stream, handle, M, N, (const double*)A, lda, umax, vexp, algnM, orderA, orderC, acc, algnN, iA); return;
+      internal::int8::i63ATA_f64_limbs(stream, handle, M, N, (const double*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
     case HYACIN_F32:
-      internal::int8::i63ATA_f32_limbs(stream, handle, M, N, (const float*)A, lda, umax, vexp, algnM, orderA, orderC, acc, algnN, iA); return;
+      internal::int8::i63ATA_f32_limbs(stream, handle, M, N, (const float*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
     case HYACIN_F64_COMPLEX:
-      internal::int8::i63AHA_cf64_limbs(stream, handle, M, N, (const std::complex<double>*)A, lda, umax, vexp, algnM, orderA, orderC, acc, algnN, iA); return;
+      internal::int8::i63AHA_cf64_limbs(stream, handle, M, N, (const std::complex<double>*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
     case HYACIN_F32_COMPLEX:
-      internal::int8::i63AHA_cf32_limbs(stream, handle, M, N, (const std::complex<float>*)A, lda, umax, vexp, algnM, orderA, orderC, acc, algnN, iA); return;
+      internal::int8::i63AHA_cf32_limbs(stream, handle, M, N, (const std::complex<float>*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
     default: return;
   }
   else if (alg == HYACIN_ALG_CRT || alg == HYACIN_ALG_CRT_ND) switch(Atype) {
     case HYACIN_F64:
-      internal::int8::i63ATA_f64_crt(stream, handle, M, N, (const double*)A, lda, umax, vexp, algnM, orderA, orderC, acc, algnN, iA); return;
+      internal::int8::i63ATA_f64_crt(stream, handle, M, N, (const double*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
     case HYACIN_F32:
-      internal::int8::i63ATA_f32_crt(stream, handle, M, N, (const float*)A, lda, umax, vexp, algnM, orderA, orderC, acc, algnN, iA); return;
+      internal::int8::i63ATA_f32_crt(stream, handle, M, N, (const float*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
     case HYACIN_F64_COMPLEX:
-      internal::int8::i63AHA_cf64_crt(stream, handle, M, N, (const std::complex<double>*)A, lda, umax, vexp, algnM, orderA, orderC, acc, algnN, iA); return;
+      internal::int8::i63AHA_cf64_crt(stream, handle, M, N, (const std::complex<double>*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
     case HYACIN_F32_COMPLEX:
-      internal::int8::i63AHA_cf32_crt(stream, handle, M, N, (const std::complex<float>*)A, lda, umax, vexp, algnM, orderA, orderC, acc, algnN, iA); return;
+      internal::int8::i63AHA_cf32_crt(stream, handle, M, N, (const std::complex<float>*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
     default: return;
   }
 }
 
-inline void deq_dispatcher(cudaStream_t stream, int32_t M, int32_t N, int32_t algnN, int32_t umax, const uint64_t* acc, int32_t bits, int32_t order, void* G, int32_t ldg, const int32_t* vexp, hyacinPrecision_t Gtype) {
+inline void deq_dispatcher(cudaStream_t stream, int32_t M, int32_t N, int32_t umax, const uint64_t* acc, int32_t bits, int32_t order, void* G, int32_t ldg, const int32_t* vexp, hyacinPrecision_t Gtype) {
   switch (Gtype) {
     case HYACIN_F64:
-      internal::int8::dequantize_i63_f64(stream, bits, order, M, N, acc, algnN, umax, vexp, (double*)G, ldg); return;
+      internal::int8::dequantize_i63_f64(stream, bits, order, M, N, acc, umax, vexp, (double*)G, ldg); return;
     case HYACIN_F32:
-      internal::int8::dequantize_i63_f32(stream, bits, order, M, N, acc, algnN, umax, vexp, (float*)G, ldg); return;
+      internal::int8::dequantize_i63_f32(stream, bits, order, M, N, acc, umax, vexp, (float*)G, ldg); return;
     case HYACIN_DD:
-      internal::int8::dequantize_i63_f128_dd(stream, bits, order, M, N, acc, algnN, umax, vexp, (double2*)G, ldg); return;
+      internal::int8::dequantize_i63_f128_dd(stream, bits, order, M, N, acc, umax, vexp, (double2*)G, ldg); return;
     case HYACIN_QF:
-      internal::int8::dequantize_i63_f128_qf(stream, bits, order, M, N, acc, algnN, umax, vexp, (float4*)G, ldg); return;
+      internal::int8::dequantize_i63_f128_qf(stream, bits, order, M, N, acc, umax, vexp, (float4*)G, ldg); return;
     case HYACIN_F64_COMPLEX:
-      internal::int8::dequantize_i63_cf64(stream, bits, order, M, N, acc, algnN, umax, vexp, (std::complex<double>*)G, ldg); return;
+      internal::int8::dequantize_i63_cf64(stream, bits, order, M, N, acc, umax, vexp, (std::complex<double>*)G, ldg); return;
     case HYACIN_F32_COMPLEX:
-      internal::int8::dequantize_i63_cf32(stream, bits, order, M, N, acc, algnN, umax, vexp, (std::complex<float>*)G, ldg); return;
+      internal::int8::dequantize_i63_cf32(stream, bits, order, M, N, acc, umax, vexp, (std::complex<float>*)G, ldg); return;
     case HYACIN_DD_COMPLEX:
-      internal::int8::dequantize_i63_cf128_dd(stream, bits, order, M, N, acc, algnN, umax, vexp, (complex_double2*)G, ldg); return;
+      internal::int8::dequantize_i63_cf128_dd(stream, bits, order, M, N, acc, umax, vexp, (complex_double2*)G, ldg); return;
     case HYACIN_QF_COMPLEX:
-      internal::int8::dequantize_i63_cf128_qf(stream, bits, order, M, N, acc, algnN, umax, vexp, (complex_float4*)G, ldg); return;
+      internal::int8::dequantize_i63_cf128_qf(stream, bits, order, M, N, acc, umax, vexp, (complex_float4*)G, ldg); return;
     default: return;
   }
 }
@@ -124,8 +124,8 @@ extern "C" int32_t hyacinXsyherk(hyacinHandle_t handle, int32_t M, int32_t N, in
     throw std::runtime_error("Workspace allocation failed at Integer SY/HERK.");
   int8_t* iA = (int8_t*)(dev_work), *acc = &iA[i8_bytes], *vexp = &acc[acc_bytes];
   vexp_dispatcher(handle.cudaStream, M, N, Atype, A, lda, (int32_t*)vexp);
-  igemm_dispatcher(handle.cudaStream, handle.cublasHandle, M, N, Atype, A, lda, umax, (const int32_t*)vexp, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA, alg);
-  deq_dispatcher(handle.cudaStream, M, N, algnN, umax, (uint64_t*)acc, 63, orderC, G, ldg, (const int32_t*)vexp, Gtype);
+  igemm_dispatcher(handle.cudaStream, handle.cublasHandle, M, N, Atype, A, lda, umax, (const int32_t*)vexp, algnM, algnN, orderA, orderC, (uint64_t*)acc, iA, alg);
+  deq_dispatcher(handle.cudaStream, M, N, umax, (uint64_t*)acc, 63, orderC, G, ldg, (const int32_t*)vexp, Gtype);
   cudaFreeAsync(dev_work, handle.cudaStream);
   return umax;
 }
@@ -152,20 +152,20 @@ inline void all_reduce_in_place(cudaStream_t stream, cublasHandle_t handle, int3
   if (pred) { cuComplex one = make_cuComplex(1.f, 0.f), zero = make_cuComplex(0.f, 0.f); cublasCgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, N, N, &one, C, N, &zero, A, lda, A, lda); }
 }
 
-inline void deq_nd_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t algnN, int32_t umax, const uint64_t* acc, int32_t bits, int32_t order, void* G, int32_t ldg, const int32_t* vexp, hyacinPrecision_t type, void* dev_work, ncclComm_t col_comm, void* timer) {
+inline void deq_nd_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t umax, const uint64_t* acc, int32_t bits, int32_t order, void* G, int32_t ldg, const int32_t* vexp, hyacinPrecision_t type, void* dev_work, ncclComm_t col_comm, void* timer) {
   int32_t pred = (ldg != N); void* data = pred ? dev_work : G;
   switch (type) {
     case HYACIN_F64:
-      internal::int8::dequantize_i63_f64(stream, bits, order, M, N, acc, algnN, umax, vexp, (double*)data, N);
+      internal::int8::dequantize_i63_f64(stream, bits, order, M, N, acc, umax, vexp, (double*)data, N);
       all_reduce_in_place(stream, handle, pred, N, (double*)G, ldg, (double*)data, col_comm, timer); return;
     case HYACIN_F32:
-      internal::int8::dequantize_i63_f32(stream, bits, order, M, N, acc, algnN, umax, vexp, (float*)data, N);
+      internal::int8::dequantize_i63_f32(stream, bits, order, M, N, acc, umax, vexp, (float*)data, N);
       all_reduce_in_place(stream, handle, pred, N, (float*)G, ldg, (float*)data, col_comm, timer); return;
     case HYACIN_F64_COMPLEX:
-      internal::int8::dequantize_i63_cf64(stream, bits, order, M, N, acc, algnN, umax, vexp, (std::complex<double>*)data, N);
+      internal::int8::dequantize_i63_cf64(stream, bits, order, M, N, acc, umax, vexp, (std::complex<double>*)data, N);
       all_reduce_in_place(stream, handle, pred, N, (cuDoubleComplex*)G, ldg, (cuDoubleComplex*)data, col_comm, timer); return;
     case HYACIN_F32_COMPLEX:
-      internal::int8::dequantize_i63_cf32(stream, bits, order, M, N, acc, algnN, umax, vexp, (std::complex<float>*)data, N);
+      internal::int8::dequantize_i63_cf32(stream, bits, order, M, N, acc, umax, vexp, (std::complex<float>*)data, N);
       all_reduce_in_place(stream, handle, pred, N, (cuComplex*)G, ldg, (cuComplex*)data, col_comm, timer); return;
     default: return;
   }
@@ -217,24 +217,24 @@ extern "C" int32_t hyacinXsyherk1Drow(hyacinHandle_t handle, int32_t localM, int
   vexp_dispatcher(handle.cudaStream, localM, N, Atype, A, lda, (int32_t*)vexp);
 
   if (det_reduc) {
-    int64_t stride = int64_t(algnN) * int64_t(N) + int64_t(algnN), acc_len = stride * (int64_t(orderC + 1) << Complex);
+    int64_t stride = int64_t(N) * int64_t(N + 1), acc_len = stride * (int64_t(orderC + 1) << Complex);
     Timer::register_comm(handle.cudaStream, handle.timer);
     ncclAllReduce(vexp, vexp, int64_t(N), ncclInt32, ncclMax, col_comm, handle.cudaStream);
     if (0 < localM) {
       Timer::register_kernel(handle.cudaStream, handle.timer);
-      igemm_dispatcher(handle.cudaStream, handle.cublasHandle, localM, N, Atype, A, lda, umax, (const int32_t*)vexp, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA, alg);
+      igemm_dispatcher(handle.cudaStream, handle.cublasHandle, localM, N, Atype, A, lda, umax, (const int32_t*)vexp, algnM, algnN, orderA, orderC, (uint64_t*)acc, iA, alg);
       internal::int8::accumulate_conv_i63_u47(handle.cudaStream, orderC, Complex, stride, (uint64_t*)acc);
     }
     else { cudaMemsetAsync(acc, 0, acc_bytes, handle.cudaStream); }
     Timer::register_comm(handle.cudaStream, handle.timer);
     ncclAllReduce(acc, acc, acc_len, ncclUint64, ncclSum, col_comm, handle.cudaStream);
     Timer::register_kernel(handle.cudaStream, handle.timer);
-    deq_dispatcher(handle.cudaStream, globalM, N, algnN, umax, (uint64_t*)acc, 47, orderC, G, ldg, (const int32_t*)vexp, Gtype);
+    deq_dispatcher(handle.cudaStream, globalM, N, umax, (uint64_t*)acc, 47, orderC, G, ldg, (const int32_t*)vexp, Gtype);
   }
   else {
     if (0 < localM)
-      igemm_dispatcher(handle.cudaStream, handle.cublasHandle, localM, N, Atype, A, lda, umax, (const int32_t*)vexp, algnM, orderA, orderC, (uint64_t*)acc, algnN, iA, alg);
-    deq_nd_dispatcher(handle.cudaStream, handle.cublasHandle, localM, N, algnN, umax, (uint64_t*)acc, 63, orderC, G, ldg, (const int32_t*)vexp, Gtype, iA, col_comm, handle.timer);
+      igemm_dispatcher(handle.cudaStream, handle.cublasHandle, localM, N, Atype, A, lda, umax, (const int32_t*)vexp, algnM, algnN, orderA, orderC, (uint64_t*)acc, iA, alg);
+    deq_nd_dispatcher(handle.cudaStream, handle.cublasHandle, localM, N, umax, (uint64_t*)acc, 63, orderC, G, ldg, (const int32_t*)vexp, Gtype, iA, col_comm, handle.timer);
   }
   cudaFreeAsync(dev_work, handle.cudaStream);
   return umax;
