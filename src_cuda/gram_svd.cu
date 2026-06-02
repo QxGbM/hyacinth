@@ -104,23 +104,22 @@ inline int32_t ge_tsvd(cudaStream_t stream, cusolverDnHandle_t s_handle, cusolve
   return std::min(K, p + rank);
 }
 
-template <hyacinPrecision_t precG> inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, void* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work);
-template<> inline int32_t potrfp<HYACIN_F64>(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, void* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
-{ return internal::Cholesky::potrfp_f64(stream, handle, fillmode, epi, k, p, N, (double*)A, lda, jpiv, dev_work, pinned_work); }
-template<> inline int32_t potrfp<HYACIN_F32>(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, void* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
-{ return internal::Cholesky::potrfp_f32(stream, handle, fillmode, epi, k, p, N, (float*)A, lda, jpiv, dev_work, pinned_work); }
-template<> inline int32_t potrfp<HYACIN_DD>(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, void* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
-{ return internal::Cholesky::potrfp_f128_dd(stream, handle, fillmode, epi, k, p, N, (double2*)A, lda, jpiv, dev_work, pinned_work); }
-template<> inline int32_t potrfp<HYACIN_QF>(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, void* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
-{ return internal::Cholesky::potrfp_f128_qf(stream, handle, fillmode, epi, k, p, N, (float4*)A, lda, jpiv, dev_work, pinned_work); }
-template<> inline int32_t potrfp<HYACIN_F64_COMPLEX>(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, void* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
-{ return internal::Cholesky::potrfp_cf64(stream, handle, fillmode, epi, k, p, N, (std::complex<double>*)A, lda, jpiv, dev_work, pinned_work); }
-template<> inline int32_t potrfp<HYACIN_F32_COMPLEX>(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, void* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
-{ return internal::Cholesky::potrfp_cf32(stream, handle, fillmode, epi, k, p, N, (std::complex<float>*)A, lda, jpiv, dev_work, pinned_work); }
-template<> inline int32_t potrfp<HYACIN_DD_COMPLEX>(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, void* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
-{ return internal::Cholesky::potrfp_cf128_dd(stream, handle, fillmode, epi, k, p, N, (complex_double2*)A, lda, jpiv, dev_work, pinned_work); }
-template<> inline int32_t potrfp<HYACIN_QF_COMPLEX>(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, void* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
-{ return internal::Cholesky::potrfp_cf128_qf(stream, handle, fillmode, epi, k, p, N, (complex_float4*)A, lda, jpiv, dev_work, pinned_work); }
+inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, double* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
+{ return internal::Cholesky::potrfp_f64(stream, handle, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, pinned_work); }
+inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, float* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
+{ return internal::Cholesky::potrfp_f32(stream, handle, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, pinned_work); }
+inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, double2* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
+{ return internal::Cholesky::potrfp_f128_dd(stream, handle, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, pinned_work); }
+inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, float4* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
+{ return internal::Cholesky::potrfp_f128_qf(stream, handle, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, pinned_work); }
+inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, std::complex<double>* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
+{ return internal::Cholesky::potrfp_cf64(stream, handle, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, pinned_work); }
+inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, std::complex<float>* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
+{ return internal::Cholesky::potrfp_cf32(stream, handle, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, pinned_work); }
+inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, complex_double2* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
+{ return internal::Cholesky::potrfp_cf128_dd(stream, handle, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, pinned_work); }
+inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, complex_float4* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
+{ return internal::Cholesky::potrfp_cf128_qf(stream, handle, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, pinned_work); }
 
 template <hyacinPrecision_t precG, class Gtype>
 inline int32_t gsvd_dispatcher(cudaStream_t stream, cublasHandle_t handle, cusolverDnHandle_t s_handle, cusolverDnParams_t params, char fillmode,
@@ -131,11 +130,11 @@ inline int32_t gsvd_dispatcher(cudaStream_t stream, cublasHandle_t handle, cusol
   if (cudaSuccess != cudaMallocAsync((void**)&dev_work, dev_work_bytes, stream))
     throw std::runtime_error("Workspace allocation failed at GESVD Preconditioning.");
 
-  K = potrfp<precG>(stream, handle, fillmode, epi, K, p, N, G, ldg, (int32_t*)X, dev_work, pinned_work);
+  K = potrfp(stream, handle, fillmode, epi, K, p, N, G, ldg, (int32_t*)X, dev_work, pinned_work);
   if (0 < K) {
     constexpr int32_t block_threads = 512;
     int64_t CK = int64_t(K) << 1, cldg = int64_t(ldg) << 1;
-    uint32_t grid_x = uint32_t(K + 511) >> 9, grid_cx = uint32_t(uint64_t(CK) + uint64_t(511) >> 9);
+    uint32_t grid_x = uint32_t(K + 511) >> 9, grid_cx = uint32_t((uint64_t(CK) + uint64_t(511)) >> 9);
     if (AXtype == HYACIN_F64) {
       double* Xptr = (double*)X, *Wptr = (double*)dev_work;
       scatter_cvcpy_kernel<0, Gtype, double> <<< dim3(grid_x, N), block_threads, 0, stream >>> (int64_t(K), (const int32_t*)X, G, int64_t(ldg), Wptr, int64_t(K));
