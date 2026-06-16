@@ -70,7 +70,7 @@ inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode,
     double diag_f64 = conv_f64(hvec[0]);
 
     if ((!std::isnormal(diag_f64)) || (p < (s += int32_t(diag_f64 < epi))) || (j < 0)) { return i; }
-    gemv_dispatcher(stream, handle, hvec, j, N - i, i, &A[int64_t(i) * int64_t(lda)], lda, &jpiv[i], &dvec[i]);
+    gemv_dispatcher(stream, handle, hvec, j, N - i, i, &A[int64_t(i) * int64_t(lda)], lda, jpiv, dvec);
   }
   return iters;
 }

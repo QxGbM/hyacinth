@@ -43,9 +43,8 @@ set_source_files_properties(${CU_SOURCES} PROPERTIES COMPILE_OPTIONS
   "-Xcompiler=-march=native;-Xcompiler=-Wall;-Xcompiler=-Wextra;-Xcompiler=-fexceptions;--use_fast_math")
 
 add_library(hyacin SHARED ${CPP_SOURCES} ${CU_SOURCES})
-
 target_include_directories(hyacin PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}> $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:${CMAKE_INSTALL_PREFIX}/include>)
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:${CMAKE_INSTALL_PREFIX}/include>)
 target_link_libraries(hyacin PUBLIC CUDA::cudart CUDA::cublas CUDA::cusolver)
 
 if(USE_NCCL)
@@ -76,9 +75,10 @@ else()
 endif()
 
 message(STATUS "Will install to: ${CMAKE_INSTALL_PREFIX}")
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/include/hyacin.h DESTINATION include)
 install(TARGETS hyacin EXPORT HyacinTargets LIBRARY DESTINATION lib ARCHIVE DESTINATION lib)
 install(EXPORT HyacinTargets FILE HyacinTargets.cmake NAMESPACE Hyacin:: DESTINATION lib/cmake)
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/hyacin.h DESTINATION include)
+export(EXPORT HyacinTargets FILE HyacinTargets.cmake NAMESPACE Hyacin::)
 
 include(CMakePackageConfigHelpers)
 configure_package_config_file("${CMAKE_CURRENT_SOURCE_DIR}/HyacinConfig.cmake.in" "${CMAKE_CURRENT_BINARY_DIR}/HyacinConfig.cmake"
