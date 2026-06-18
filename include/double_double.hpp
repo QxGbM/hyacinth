@@ -4,10 +4,7 @@
 #include <cmath>
 #include <cuda_runtime.h>
 
-struct __align__(32) complex_double2 {
-  double2 real;
-  double2 imag;
-};
+struct __align__(32) complex_double2 { double2 real, imag; };
 
 namespace device::dd {
 
@@ -60,21 +57,22 @@ namespace device::dd {
     return make_double2(ldexp(a.x, e), ldexp(a.y, e));
   }
 
-  __host__ __device__ __forceinline__ double2 frsqrt(double2 a) {
+  __host__ __device__ __forceinline__ void frsqrt(double2 a, double2& sq, double2& rsq) {
     int32_t p;
 #ifndef __CUDA_ARCH__
     using std::frexp;
-    double rsq = 1. / std::sqrt(a.x);
+    double r = 1. / std::sqrt(a.x);
 #else
-    double rsq = rsqrt(a.x);
+    double r = rsqrt(a.x);
 #endif
-    double2 x = make_double2(frexp(rsq, &p), 0.);
+    double2 x = make_double2(frexp(r, &p), 0.);
     double2 c = make_double2(1.5, 0.);
-    a = fldexp(negate(a), (p << 1) - 1);
+    double2 s = fldexp(negate(a), (p << 1) - 1);
 
-    x = mul(x, add(mul(x, mul(a, x)), c));
-    x = mul(x, add(mul(x, mul(a, x)), c));
-    return fldexp(x, p);
+    x = mul(x, add(mul(x, mul(s, x)), c));
+    x = mul(x, add(mul(x, mul(s, x)), c));
+    rsq = (x = fldexp(x, p));
+    sq = mul(a, x);
   }
 
   __host__ __device__ __forceinline__ double2 conv_i64_dd(uint64_t i) {

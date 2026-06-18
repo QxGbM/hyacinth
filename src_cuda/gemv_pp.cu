@@ -8,13 +8,6 @@
 #include <cub/cub.cuh>
 #include <cooperative_groups.h>
 
-struct real_max {
-  __device__ __forceinline__ double_idx operator()(double_idx a, double_idx b) { return device::cmp::double_max(a, b); }
-  __device__ __forceinline__ float_idx operator()(float_idx a, float_idx b) { return device::cmp::float_max(a, b); }
-  __device__ __forceinline__ double2_idx operator()(double2_idx a, double2_idx b) { return device::cmp::double2_max(a, b); }
-  __device__ __forceinline__ float4_idx operator()(float4_idx a, float4_idx b) { return device::cmp::float4_max(a, b); }
-};
-
 __device__ __forceinline__ double pp_func(double rsq, double c, double& d) {
   c = rsq * c; d = fma(-c, c, d); return c;
 }
@@ -49,6 +42,25 @@ __device__ __forceinline__ cuComplex conj(cuComplex a) { return make_cuComplex(a
 __device__ __forceinline__ complex_double2 conj(complex_double2 a) { return device::dd::make_complex_double2(a.real, device::dd::negate(a.imag)); }
 __device__ __forceinline__ complex_float4 conj(complex_float4 a) { return device::qf::make_complex_float4(a.real, device::qf::negate(a.imag)); }
 
+__device__ __forceinline__ void real_sqrt(double epi, double_idx x, double_idx& sq, double_idx& rsq) {
+  double sqx = sqrt(x.real);
+  sq = double_idx({ sqx, x.idx }); rsq = double_idx({ 1. / sqx, int32_t(sqx < epi) });
+}
+__device__ __forceinline__ void real_sqrt(float epi, float_idx x, float_idx& sq, float_idx& rsq) {
+  float sqx = sqrtf(x.real);
+  sq = float_idx({ sqx, x.idx }); rsq = float_idx({ 1.f / sqx, int32_t(sqx < epi) });
+}
+__device__ __forceinline__ void real_sqrt(double2 epi, double2_idx x, double2_idx& sq, double2_idx& rsq) {
+  double2 sqx, rsqx; device::dd::frsqrt(x.real, sqx, rsqx);
+  bool less, par; device::cmp::cmp_double2(sqx, epi, less, par);
+  sq = double2_idx({ sqx, x.idx }); rsq = double2_idx({ rsqx, int32_t(less) });
+}
+__device__ __forceinline__ void real_sqrt(float4 epi, float4_idx x, float4_idx& sq, float4_idx& rsq) {
+  float4 sqx, rsqx; device::qf::frsqrt(x.real, sqx, rsqx);
+  bool less, par; device::cmp::cmp_float4(sqx, epi, less, par);
+  sq = float4_idx({ sqx, x.idx }); rsq = float4_idx({ rsqx, int32_t(less) });
+}
+
 template <int32_t BLOCK_THREADS, class real_t, class matrix_t, class idx_t>
 __global__ void gemv_pp_kernel(int32_t j, int32_t M, int32_t N, matrix_t sq, real_t rsq, matrix_t* __restrict__ A, int64_t lda, int32_t* __restrict__ jpiv, real_t* __restrict__ D, idx_t* __restrict__ idx) {
   const int32_t offset = int32_t(blockIdx.x) * BLOCK_THREADS + int32_t(threadIdx.x) + 1, elements = int32_t(gridDim.x) * BLOCK_THREADS;
@@ -59,7 +71,7 @@ __global__ void gemv_pp_kernel(int32_t j, int32_t M, int32_t N, matrix_t sq, rea
   A = &A[M]; A_col_j = &A_col_j[M];
 
   __shared__ typename cub::BlockReduce<idx_t, BLOCK_THREADS>::TempStorage temp_reduce[2];
-  real_max cmp_max;
+  device::cmp::idx_max cmp_max;
   idx_t thread_x = idx_t();
 
   for (int32_t i = offset; i < N; i += elements) {
@@ -96,7 +108,7 @@ template <int32_t BLOCK_THREADS, class real_t, class matrix_t, class idx_t>
 __global__ void gemv_pp_nopiv_kernel(int32_t N, matrix_t sq, real_t rsq, matrix_t* __restrict__ A, int64_t lda, real_t* __restrict__ D, idx_t* __restrict__ idx) {
   const int32_t offset = int32_t(blockIdx.x) * BLOCK_THREADS + int32_t(threadIdx.x) + 1, elements = int32_t(gridDim.x) * BLOCK_THREADS;
   __shared__ typename cub::BlockReduce<idx_t, BLOCK_THREADS>::TempStorage temp_reduce[2];
-  real_max cmp_max;
+  device::cmp::idx_max cmp_max;
   idx_t thread_x = idx_t();
 
   for (int32_t i = offset; i < N; i += elements) {
@@ -143,54 +155,46 @@ inline void gemv_pp_dispatcher(cudaStream_t stream, int32_t j, int32_t M, int32_
   }
 }
 
-void internal::Cholesky::gemv_pp_f64(cudaStream_t stream, int32_t j, int32_t M, int32_t N, double* sq, double* A, int32_t lda, int32_t* jpiv, double* D) {
-  int32_t grid = std::min(grid_blocks, std::max(N + block_threads - 2, j ? (M + block_threads - 1) : 0) / block_threads);
-  gemv_pp_dispatcher(stream, j, M, N, sq[0], sq[1], A, int64_t(lda), jpiv, D, (double_idx*)sq);
-  imax_f64_host_sync(stream, N, grid, sq);
+void internal::Cholesky::gemv_pp_f64(cudaStream_t stream, double_idx* scale, int32_t j, int32_t M, int32_t N, double* A, int32_t lda, int32_t* jpiv, double* D) {
+  gemv_pp_dispatcher(stream, j, M, N, scale[0].real, scale[1].real, A, int64_t(lda), jpiv, D, scale);
+  imax_f64_host_sync(stream, scale);
 }
 
-void internal::Cholesky::gemv_pp_f32(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float* sq, float* A, int32_t lda, int32_t* jpiv, float* D) {
-  int32_t grid = std::min(grid_blocks, std::max(N + block_threads - 2, j ? (M + block_threads - 1) : 0) / block_threads);
-  gemv_pp_dispatcher(stream, j, M, N, sq[0], sq[1], A, int64_t(lda), jpiv, D, (float_idx*)sq);
-  imax_f32_host_sync(stream, N, grid, sq);
+void internal::Cholesky::gemv_pp_f32(cudaStream_t stream, float_idx* scale, int32_t j, int32_t M, int32_t N, float* A, int32_t lda, int32_t* jpiv, float* D) {
+  gemv_pp_dispatcher(stream, j, M, N, scale[0].real, scale[1].real, A, int64_t(lda), jpiv, D, scale);
+  imax_f32_host_sync(stream, scale);
 }
 
-void internal::Cholesky::gemv_pp_f128_dd(cudaStream_t stream, int32_t j, int32_t M, int32_t N, double2* sq, double2* A, int32_t lda, int32_t* jpiv, double2* D) {
-  int32_t grid = std::min(grid_blocks, std::max(N + block_threads - 2, j ? (M + block_threads - 1) : 0) / block_threads);
-  gemv_pp_dispatcher(stream, j, M, N, sq[0], sq[1], A, int64_t(lda), jpiv, D, (double2_idx*)sq);
-  imax_f128_dd_host_sync(stream, N, grid, sq);
+void internal::Cholesky::gemv_pp_f128_dd(cudaStream_t stream, double2_idx* scale, int32_t j, int32_t M, int32_t N, double2* A, int32_t lda, int32_t* jpiv, double2* D) {
+  gemv_pp_dispatcher(stream, j, M, N, scale[0].real, scale[1].real, A, int64_t(lda), jpiv, D, scale);
+  imax_f128_dd_host_sync(stream, scale);
 }
 
-void internal::Cholesky::gemv_pp_f128_qf(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float4* sq, float4* A, int32_t lda, int32_t* jpiv, float4* D) {
-  int32_t grid = std::min(grid_blocks, std::max(N + block_threads - 2, j ? (M + block_threads - 1) : 0) / block_threads);
-  gemv_pp_dispatcher(stream, j, M, N, sq[0], sq[1], A, int64_t(lda), jpiv, D, (float4_idx*)sq);
-  imax_f128_qf_host_sync(stream, N, grid, sq);
+void internal::Cholesky::gemv_pp_f128_qf(cudaStream_t stream, float4_idx* scale, int32_t j, int32_t M, int32_t N, float4* A, int32_t lda, int32_t* jpiv, float4* D) {
+  gemv_pp_dispatcher(stream, j, M, N, scale[0].real, scale[1].real, A, int64_t(lda), jpiv, D, scale);
+  imax_f128_qf_host_sync(stream, scale);
 }
 
-void internal::Cholesky::gemv_pp_cf64(cudaStream_t stream, int32_t j, int32_t M, int32_t N, double* sq, std::complex<double>* A, int32_t lda, int32_t* jpiv, double* D) {
-  int32_t grid = std::min(grid_blocks, std::max(N + block_threads - 2, j ? (M + block_threads - 1) : 0) / block_threads);
-  cuDoubleComplex sqc = make_cuDoubleComplex(*sq, 0.);
-  gemv_pp_dispatcher(stream, j, M, N, sqc, sq[1], (cuDoubleComplex*)A, int64_t(lda), jpiv, D, (double_idx*)sq);
-  imax_f64_host_sync(stream, N, grid, sq);
+void internal::Cholesky::gemv_pp_cf64(cudaStream_t stream, double_idx* scale, int32_t j, int32_t M, int32_t N, std::complex<double>* A, int32_t lda, int32_t* jpiv, double* D) {
+  cuDoubleComplex sqc = make_cuDoubleComplex(scale[0].real, 0.);
+  gemv_pp_dispatcher(stream, j, M, N, sqc, scale[1].real, (cuDoubleComplex*)A, int64_t(lda), jpiv, D, scale);
+  imax_f64_host_sync(stream, scale);
 }
 
-void internal::Cholesky::gemv_pp_cf32(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float* sq, std::complex<float>* A, int32_t lda, int32_t* jpiv, float* D) {
-  int32_t grid = std::min(grid_blocks, std::max(N + block_threads - 2, j ? (M + block_threads - 1) : 0) / block_threads);
-  cuComplex sqc = make_cuComplex(*sq, 0.f);
-  gemv_pp_dispatcher(stream, j, M, N, sqc, sq[1], (cuComplex*)A, int64_t(lda), jpiv, D, (float_idx*)sq);
-  imax_f32_host_sync(stream, N, grid, sq);
+void internal::Cholesky::gemv_pp_cf32(cudaStream_t stream, float_idx* scale, int32_t j, int32_t M, int32_t N, std::complex<float>* A, int32_t lda, int32_t* jpiv, float* D) {
+  cuComplex sqc = make_cuComplex(scale[0].real, 0.f);
+  gemv_pp_dispatcher(stream, j, M, N, sqc, scale[1].real, (cuComplex*)A, int64_t(lda), jpiv, D, scale);
+  imax_f32_host_sync(stream, scale);
 }
 
-void internal::Cholesky::gemv_pp_cf128_dd(cudaStream_t stream, int32_t j, int32_t M, int32_t N, double2* sq, complex_double2* A, int32_t lda, int32_t* jpiv, double2* D) {
-  int32_t grid = std::min(grid_blocks, std::max(N + block_threads - 2, j ? (M + block_threads - 1) : 0) / block_threads);
-  complex_double2 sqc = device::dd::make_complex_double2(*sq, make_double2(0., 0.));
-  gemv_pp_dispatcher(stream, j, M, N, sqc, sq[1], A, int64_t(lda), jpiv, D, (double2_idx*)sq);
-  imax_f128_dd_host_sync(stream, N, grid, sq);
+void internal::Cholesky::gemv_pp_cf128_dd(cudaStream_t stream, double2_idx* scale, int32_t j, int32_t M, int32_t N, complex_double2* A, int32_t lda, int32_t* jpiv, double2* D) {
+  complex_double2 sqc = device::dd::make_complex_double2(scale[0].real, make_double2(0., 0.));
+  gemv_pp_dispatcher(stream, j, M, N, sqc, scale[1].real, A, int64_t(lda), jpiv, D, scale);
+  imax_f128_dd_host_sync(stream, scale);
 }
 
-void internal::Cholesky::gemv_pp_cf128_qf(cudaStream_t stream, int32_t j, int32_t M, int32_t N, float4* sq, complex_float4* A, int32_t lda, int32_t* jpiv, float4* D) {
-  int32_t grid = std::min(grid_blocks, std::max(N + block_threads - 2, j ? (M + block_threads - 1) : 0) / block_threads);
-  complex_float4 sqc = device::qf::make_complex_float4(*sq, make_float4(0.f, 0.f, 0.f, 0.f));
-  gemv_pp_dispatcher(stream, j, M, N, sqc, sq[1], A, int64_t(lda), jpiv, D, (float4_idx*)sq);
-  imax_f128_qf_host_sync(stream, N, grid, sq);
+void internal::Cholesky::gemv_pp_cf128_qf(cudaStream_t stream, float4_idx* scale, int32_t j, int32_t M, int32_t N, complex_float4* A, int32_t lda, int32_t* jpiv, float4* D) {
+  complex_float4 sqc = device::qf::make_complex_float4(scale[0].real, make_float4(0.f, 0.f, 0.f, 0.f));
+  gemv_pp_dispatcher(stream, j, M, N, sqc, scale[1].real, A, int64_t(lda), jpiv, D, scale);
+  imax_f128_qf_host_sync(stream, scale);
 }
