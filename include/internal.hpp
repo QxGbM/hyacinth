@@ -29,14 +29,6 @@ namespace internal::Cholesky {
 
   void imax_cf128_qf(cudaStream_t stream, double epi, int32_t N, const complex_float4* X, int32_t incx, int32_t* jpiv, float4* D, float4_idx* scale);
 
-  void imax_f64_host_sync(cudaStream_t stream, double_idx* X);
-
-  void imax_f32_host_sync(cudaStream_t stream, float_idx* X);
-
-  void imax_f128_dd_host_sync(cudaStream_t stream, double2_idx* X);
-
-  void imax_f128_qf_host_sync(cudaStream_t stream, float4_idx* X);
-
   void gemv_cublas_f64(cudaStream_t stream, cublasHandle_t handle, double_idx* scale, int32_t j, int32_t M, int32_t N, double* A, int32_t lda, int32_t* jpiv, double* D);
 
   void gemv_cublas_f32(cudaStream_t stream, cublasHandle_t handle, float_idx* scale, int32_t j, int32_t M, int32_t N, float* A, int32_t lda, int32_t* jpiv, float* D);

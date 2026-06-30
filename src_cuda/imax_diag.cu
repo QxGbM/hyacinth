@@ -10,27 +10,27 @@
 
 __device__ __forceinline__ void real_sqrt(double epi, double& epi_d, double_idx x, double_idx& sq, double_idx& rsq) {
   double sqx = sqrt(x.real); epi_d = epi = epi * sqx;
-  sq = double_idx({ sqx, x.idx }); rsq = double_idx({ 1. / sqx, int32_t(sqx < epi) });
+  sq = double_idx({ sqx, x.idx }); rsq = double_idx({ 1. / sqx, int32_t(!(epi <= sqx)) });
 }
 __device__ __forceinline__ void real_sqrt(float epi, float& epi_d, float_idx x, float_idx& sq, float_idx& rsq) {
   float sqx = sqrtf(x.real); epi_d = epi = epi * sqx;
-  sq = float_idx({ sqx, x.idx }); rsq = float_idx({ 1.f / sqx, int32_t(sqx < epi) });
+  sq = float_idx({ sqx, x.idx }); rsq = float_idx({ 1.f / sqx, int32_t(!(epi <= sqx)) });
 }
 __device__ __forceinline__ void real_sqrt(double2 epi, double2& epi_d, double2_idx x, double2_idx& sq, double2_idx& rsq) {
   double2 sqx, rsqx; device::dd::frsqrt(x.real, sqx, rsqx);
   epi_d = epi = device::dd::mul(epi, sqx);
-  bool less, par; device::cmp::cmp_double2(sqx, epi, less, par);
-  sq = double2_idx({ sqx, x.idx }); rsq = double2_idx({ rsqx, int32_t(less) });
+  bool less, par; device::cmp::cmp_double2(epi, sqx, less, par);
+  sq = double2_idx({ sqx, x.idx }); rsq = double2_idx({ rsqx, int32_t(!(less || par)) });
 }
 __device__ __forceinline__ void real_sqrt(float4 epi, float4& epi_d, float4_idx x, float4_idx& sq, float4_idx& rsq) {
   float4 sqx, rsqx; device::qf::frsqrt(x.real, sqx, rsqx);
   epi_d = epi = device::qf::mul(epi, sqx);
-  bool less, par; device::cmp::cmp_float4(sqx, epi, less, par);
-  sq = float4_idx({ sqx, x.idx }); rsq = float4_idx({ rsqx, int32_t(less) });
+  bool less, par; device::cmp::cmp_float4(epi, sqx, less, par);
+  sq = float4_idx({ sqx, x.idx }); rsq = float4_idx({ rsqx, int32_t(!(less || par)) });
 }
 
 template <int32_t BLOCK_THREADS, class real_t, class idx_t>
-__global__ void imax_kernel(real_t epi, int32_t N, const real_t* __restrict__ X, int64_t incx, int32_t* __restrict__ jpiv, real_t* __restrict__ D, idx_t* __restrict__ idx) {
+__global__ void imax_kernel(real_t epi, int32_t N, const real_t* __restrict__ X, int64_t incx, int32_t* __restrict__ jpiv, real_t* __restrict__ D, idx_t* __restrict__ work, idx_t* __restrict__ idx) {
   const int32_t block_offset = int32_t(blockIdx.x) * BLOCK_THREADS, elements = int32_t(gridDim.x) * BLOCK_THREADS;
   idx_t thread_x = idx_t();
 
@@ -41,15 +41,15 @@ __global__ void imax_kernel(real_t epi, int32_t N, const real_t* __restrict__ X,
     thread_x = cmp_max(thread_x, idx_t({ D[i] = X[int64_t(i) * incx], jpiv[i] = i + 1 }));
 
   thread_x = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce[0]).Reduce(thread_x, cmp_max);
-  if (int32_t(gridDim.x) == 1)
+  if (gridDim.x == 1)
   { if (threadIdx.x == 0) real_sqrt(epi, D[0], thread_x, idx[0], idx[1]); return; }
 
-  if (threadIdx.x == 0) idx[blockIdx.x] = thread_x;
+  if (threadIdx.x == 0) work[blockIdx.x] = thread_x;
     else thread_x = idx_t();
   cooperative_groups::this_grid().sync();
   if (blockIdx.x == 0) {
-    for (int32_t i = threadIdx.x; i < int32_t(gridDim.x); i += BLOCK_THREADS)
-      thread_x = cmp_max(thread_x, idx[i]);
+    for (int32_t i = threadIdx.x; i < gridDim.x; i += BLOCK_THREADS)
+      thread_x = cmp_max(thread_x, work[i]);
     thread_x = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce[1]).Reduce(thread_x, cmp_max);
     if (threadIdx.x == 0) { real_sqrt(epi, D[0], thread_x, idx[0], idx[1]); }
   }
@@ -65,7 +65,8 @@ inline void imax_dispatcher(cudaStream_t stream, real_t epi, int32_t N, const re
   int32_t maxBlocksPerSM = 0;
   cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, imax_kernel<block_threads, real_t, idx_t>, block_threads, 0);
   int32_t grid = std::min(std::min(grid_blocks, device_sms * maxBlocksPerSM), (N + block_threads - 1) / block_threads);
-  void* kernelArgs[]{ &epi, &N, &X, &incx, &jpiv, &D, &idx };
+  uint8_t* diag = &((uint8_t*)D)[8192];
+  void* kernelArgs[]{ &epi, &N, &X, &incx, &jpiv, &diag, &D, &idx };
   cudaLaunchCooperativeKernel(imax_kernel<block_threads, real_t, idx_t>, grid, block_threads, kernelArgs, 0, stream);
   cudaStreamSynchronize(stream);
 }

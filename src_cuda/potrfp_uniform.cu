@@ -51,11 +51,6 @@ inline void gemv_dispatcher(cudaStream_t stream, cublasHandle_t, double2_idx* sc
 inline void gemv_dispatcher(cudaStream_t stream, cublasHandle_t, float4_idx* scale, int32_t j, int32_t M, int32_t N, complex_float4* A, int32_t lda, int32_t* jpiv, float4* D)
 { internal::Cholesky::gemv_scal_cf128_qf(stream, scale, j, M, N, A, lda, jpiv, D); }
 
-inline double conv_f64(double r) { return r; }
-inline double conv_f64(float r) { return double(r); }
-inline double conv_f64(double2 r) { return device::dd::dd2double(r); }
-inline double conv_f64(float4 r) { return device::qf::qf2double(r); }
-
 template <class real_t, class matrix_t, class idx_t>
 inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, matrix_t* A, int32_t lda, int32_t* jpiv, real_t* dvec, idx_t* hvec) {
   if (fillmode == 'U' || fillmode == 'u')
@@ -63,14 +58,11 @@ inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode,
   else if (fillmode == 'L' || fillmode == 'l')
     matrix_fill_upper_to_full<'L', matrix_t> <<< dim3(uint32_t(N + 511) >> 9, uint32_t(N)), 512, 0, stream >>> (A, int64_t(lda));
   imax_dispatcher(stream, epi, N, A, lda + 1, jpiv, dvec, hvec);
-  int32_t* pivot_i = &hvec->idx, iters = std::min(N, std::max(0, k)); iters = iters ? iters : N;
-  epi = conv_f64(hvec[0].real) * std::min(1., std::max(0., std::abs(epi)));
+  int32_t iters = std::min(N, std::max(0, k)); iters = iters ? iters : N;
 
   for (int32_t i = 0, s = 0; i < iters; ++i) {
-    int32_t j = (*pivot_i) - 1;
-    double diag_f64 = conv_f64(hvec[0].real);
-
-    if ((!std::isnormal(diag_f64)) || (p < (s += int32_t(diag_f64 < epi))) || (j < 0)) { return i; }
+    int32_t j = hvec[0].idx - 1;
+    if ((p < (s += hvec[1].idx)) || (j < 0)) { return i; }
     gemv_dispatcher(stream, handle, hvec, j, N - i, i, &A[int64_t(i) * int64_t(lda)], lda, jpiv, dvec);
   }
   return iters;

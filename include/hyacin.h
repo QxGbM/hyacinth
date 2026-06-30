@@ -33,7 +33,7 @@ typedef struct {
   cublasHandle_t cublasHandle;
   cusolverDnHandle_t cusolverHandle;
   cusolverDnParams_t cusolverParams;
-  void* pinnedWorkspace; // A 8192-byte pinned workspace on host for host reduction
+  void* pinnedWorkspace; // A 128-byte pinned workspace on host for host reduction
   void* timer;
 } hyacinHandle_t;
 
