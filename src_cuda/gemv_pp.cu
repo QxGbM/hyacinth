@@ -8,6 +8,56 @@
 #include <cub/cub.cuh>
 #include <cooperative_groups.h>
 
+__device__ __forceinline__ void real_sqrt(double epi, double_idx x, double_idx& sq, double_idx& rsq) {
+  double sqx = sqrt(x.real);
+  sq = double_idx({ sqx, x.idx - 1 }); rsq = double_idx({ 1. / sqx, int32_t(!(epi <= x.real)) });
+}
+__device__ __forceinline__ void real_sqrt(float epi, float_idx x, float_idx& sq, float_idx& rsq) {
+  float sqx = sqrtf(x.real);
+  sq = float_idx({ sqx, x.idx - 1 }); rsq = float_idx({ 1.f / sqx, int32_t(!(epi <= x.real)) });
+}
+__device__ __forceinline__ void real_sqrt(double2 epi, double2_idx x, double2_idx& sq, double2_idx& rsq) {
+  double2 sqx, rsqx; device::dd::frsqrt(x.real, sqx, rsqx);
+  bool less, par; device::cmp::cmp_double2(epi, x.real, less, par);
+  sq = double2_idx({ sqx, x.idx - 1 }); rsq = double2_idx({ rsqx, int32_t(!(less || par)) });
+}
+__device__ __forceinline__ void real_sqrt(float4 epi, float4_idx x, float4_idx& sq, float4_idx& rsq) {
+  float4 sqx, rsqx; device::qf::frsqrt(x.real, sqx, rsqx);
+  bool less, par; device::cmp::cmp_float4(epi, x.real, less, par);
+  sq = float4_idx({ sqx, x.idx - 1 }); rsq = float4_idx({ rsqx, int32_t(!(less || par)) });
+}
+
+__device__ __forceinline__ double _mul(double a, double b) { return a * b; }
+__device__ __forceinline__ float _mul(float a, float b) { return a * b; }
+__device__ __forceinline__ double2 _mul(double2 a, double2 b) { return device::dd::mul(a, b); }
+__device__ __forceinline__ float4 _mul(float4 a, float4 b) { return device::qf::mul(a, b); }
+
+template <int32_t BLOCK_THREADS, class real_t, class idx_t>
+__global__ void imax_kernel(real_t epi, int32_t N, const real_t* __restrict__ X, int64_t incx, int32_t* __restrict__ jpiv, real_t* __restrict__ D, idx_t* __restrict__ work, idx_t* __restrict__ idx) {
+  const int32_t block_offset = int32_t(blockIdx.x) * BLOCK_THREADS, elements = int32_t(gridDim.x) * BLOCK_THREADS;
+  idx_t thread_x = idx_t();
+
+  __shared__ typename cub::BlockReduce<idx_t, BLOCK_THREADS>::TempStorage temp_reduce[2];
+  device::cmp::idx_max cmp_max;
+
+  for (int32_t i = block_offset + int32_t(threadIdx.x); i < N; i += elements)
+    thread_x = cmp_max(thread_x, idx_t({ D[i] = X[int64_t(i) * incx], jpiv[i] = i + 1 }));
+
+  thread_x = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce[0]).Reduce(thread_x, cmp_max);
+  if (gridDim.x == 1)
+  { if (threadIdx.x == 0) real_sqrt(D[0] = _mul(epi, thread_x.real), thread_x, idx[0], idx[1]); return; }
+
+  if (threadIdx.x == 0) work[blockIdx.x] = thread_x;
+    else thread_x = idx_t();
+  cooperative_groups::this_grid().sync();
+  if (blockIdx.x == 0) {
+    for (int32_t i = threadIdx.x; i < gridDim.x; i += BLOCK_THREADS)
+      thread_x = cmp_max(thread_x, work[i]);
+    thread_x = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce[1]).Reduce(thread_x, cmp_max);
+    if (threadIdx.x == 0) { real_sqrt(D[0] = _mul(epi, thread_x.real), thread_x, idx[0], idx[1]); }
+  }
+}
+
 __device__ __forceinline__ double pp_func(double rsq, double c, double& d) {
   c = rsq * c; d = fma(-c, c, d); return c;
 }
@@ -41,25 +91,6 @@ __device__ __forceinline__ cuDoubleComplex conj(cuDoubleComplex a) { return make
 __device__ __forceinline__ cuComplex conj(cuComplex a) { return make_cuComplex(a.x, -a.y); }
 __device__ __forceinline__ complex_double2 conj(complex_double2 a) { return device::dd::make_complex_double2(a.real, device::dd::negate(a.imag)); }
 __device__ __forceinline__ complex_float4 conj(complex_float4 a) { return device::qf::make_complex_float4(a.real, device::qf::negate(a.imag)); }
-
-__device__ __forceinline__ void real_sqrt(double epi, double_idx x, double_idx& sq, double_idx& rsq) {
-  double sqx = sqrt(x.real);
-  sq = double_idx({ sqx, x.idx }); rsq = double_idx({ 1. / sqx, int32_t(!(epi <= sqx)) });
-}
-__device__ __forceinline__ void real_sqrt(float epi, float_idx x, float_idx& sq, float_idx& rsq) {
-  float sqx = sqrtf(x.real);
-  sq = float_idx({ sqx, x.idx }); rsq = float_idx({ 1.f / sqx, int32_t(!(epi <= sqx)) });
-}
-__device__ __forceinline__ void real_sqrt(double2 epi, double2_idx x, double2_idx& sq, double2_idx& rsq) {
-  double2 sqx, rsqx; device::dd::frsqrt(x.real, sqx, rsqx);
-  bool less, par; device::cmp::cmp_double2(epi, sqx, less, par);
-  sq = double2_idx({ sqx, x.idx }); rsq = double2_idx({ rsqx, int32_t(!(less || par)) });
-}
-__device__ __forceinline__ void real_sqrt(float4 epi, float4_idx x, float4_idx& sq, float4_idx& rsq) {
-  float4 sqx, rsqx; device::qf::frsqrt(x.real, sqx, rsqx);
-  bool less, par; device::cmp::cmp_float4(epi, sqx, less, par);
-  sq = float4_idx({ sqx, x.idx }); rsq = float4_idx({ rsqx, int32_t(!(less || par)) });
-}
 
 template <int32_t BLOCK_THREADS, class real_t, class matrix_t, class idx_t>
 __global__ void gemv_pp_kernel(int32_t j, int32_t M, int32_t N, matrix_t sq, real_t rsq, matrix_t* __restrict__ A, int64_t lda, int32_t* __restrict__ jpiv, real_t* __restrict__ D, idx_t* __restrict__ work, idx_t* __restrict__ idx) {
@@ -140,19 +171,66 @@ constexpr int32_t grid_blocks = 256;
 constexpr int32_t block_threads = 256;
 
 template <class real_t, class matrix_t, class idx_t>
-inline void gemv_pp_dispatcher(cudaStream_t stream, int32_t j, int32_t M, int32_t N, matrix_t sq, real_t rsq, matrix_t* A, int64_t lda, int32_t* jpiv, real_t* D, idx_t* idx) {
-  int32_t device_sms = 0, device = -1; cudaGetDevice(&device); cudaDeviceGetAttribute(&device_sms, cudaDevAttrMultiProcessorCount, device);
+inline void imax_dispatcher(cudaStream_t stream, real_t epi, int32_t N, const matrix_t* X, int64_t incx, int32_t* jpiv, real_t* D, idx_t* idx) {
+  int32_t device_sms = 0, device = -1;
+  cudaGetDevice(&device); cudaDeviceGetAttribute(&device_sms, cudaDevAttrMultiProcessorCount, device);
   int32_t maxBlocksPerSM = 0;
+  cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, imax_kernel<block_threads, real_t, idx_t>, block_threads, 0);
+  int32_t grid = std::min(std::min(grid_blocks, device_sms * maxBlocksPerSM), (N + block_threads - 1) / block_threads);
+  uint8_t* diag = &((uint8_t*)D)[8192];
+  void* kernelArgs[]{ &epi, &N, &X, &incx, &jpiv, &diag, &D, &idx };
+  cudaLaunchCooperativeKernel(imax_kernel<block_threads, real_t, idx_t>, grid, block_threads, kernelArgs, 0, stream);
+
+  int32_t blocks_p = 0, blocks_np = 0;
+  cudaOccupancyMaxActiveBlocksPerMultiprocessor(&blocks_p, gemv_pp_kernel<block_threads, real_t, matrix_t, idx_t>, block_threads, 0);
+  cudaOccupancyMaxActiveBlocksPerMultiprocessor(&blocks_np, gemv_pp_nopiv_kernel<block_threads, real_t, matrix_t, idx_t>, block_threads, 0);
+  idx[2].idx = std::min(grid_blocks, device_sms * blocks_p);
+  idx[3].idx = std::min(grid_blocks, device_sms * blocks_np);
+  cudaStreamSynchronize(stream);
+}
+
+void internal::Cholesky::imax_f64(cudaStream_t stream, double epi, int32_t N, const double* X, int32_t incx, int32_t* jpiv, double* D, double_idx* scale) {
+  imax_dispatcher(stream, std::min(1., std::max(0., std::pow(epi, 2))), N, X, int64_t(incx), jpiv, D, scale);
+}
+
+void internal::Cholesky::imax_f32(cudaStream_t stream, double epi, int32_t N, const float* X, int32_t incx, int32_t* jpiv, float* D, float_idx* scale) {
+  imax_dispatcher(stream, float(std::min(1., std::max(0., std::pow(epi, 2)))), N, X, int64_t(incx), jpiv, D, scale);
+}
+
+void internal::Cholesky::imax_f128_dd(cudaStream_t stream, double epi, int32_t N, const double2* X, int32_t incx, int32_t* jpiv, double2* D, double2_idx* scale) {
+  imax_dispatcher(stream, device::dd::double2dd(std::min(1., std::max(0., std::pow(epi, 2)))), N, X, int64_t(incx), jpiv, D, scale);
+}
+
+void internal::Cholesky::imax_f128_qf(cudaStream_t stream, double epi, int32_t N, const float4* X, int32_t incx, int32_t* jpiv, float4* D, float4_idx* scale) {
+  imax_dispatcher(stream, device::qf::double2qf(std::min(1., std::max(0., std::pow(epi, 2)))), N, X, int64_t(incx), jpiv, D, scale);
+}
+
+void internal::Cholesky::imax_cf64(cudaStream_t stream, double epi, int32_t N, const std::complex<double>* X, int32_t incx, int32_t* jpiv, double* D, double_idx* scale) {
+  imax_dispatcher(stream, std::min(1., std::max(0., std::pow(epi, 2))), N, (const cuDoubleComplex*)X, int64_t(incx) << 1, jpiv, D, scale);
+}
+
+void internal::Cholesky::imax_cf32(cudaStream_t stream, double epi, int32_t N, const std::complex<float>* X, int32_t incx, int32_t* jpiv, float* D, float_idx* scale) {
+  imax_dispatcher(stream, float(std::min(1., std::max(0., std::pow(epi, 2)))), N, (const cuComplex*)X, int64_t(incx) << 1, jpiv, D, scale);
+}
+
+void internal::Cholesky::imax_cf128_dd(cudaStream_t stream, double epi, int32_t N, const complex_double2* X, int32_t incx, int32_t* jpiv, double2* D, double2_idx* scale) {
+  imax_dispatcher(stream, device::dd::double2dd(std::min(1., std::max(0., std::pow(epi, 2)))), N, X, int64_t(incx) << 1, jpiv, D, scale);
+}
+
+void internal::Cholesky::imax_cf128_qf(cudaStream_t stream, double epi, int32_t N, const complex_float4* X, int32_t incx, int32_t* jpiv, float4* D, float4_idx* scale) {
+  imax_dispatcher(stream, device::qf::double2qf(std::min(1., std::max(0., std::pow(epi, 2)))), N, X, int64_t(incx) << 1, jpiv, D, scale);
+}
+
+template <class real_t, class matrix_t, class idx_t>
+inline void gemv_pp_dispatcher(cudaStream_t stream, int32_t j, int32_t M, int32_t N, matrix_t sq, real_t rsq, matrix_t* A, int64_t lda, int32_t* jpiv, real_t* D, idx_t* idx) {
   uint8_t* diag = &((uint8_t*)D)[int64_t(8192) + int64_t(M) * sizeof(real_t)]; A = &A[M]; jpiv = &jpiv[M];
   if (j) {
-    cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, gemv_pp_kernel<block_threads, real_t, matrix_t, idx_t>, block_threads, 0);
-    int32_t grid = std::min(std::min(grid_blocks, device_sms * maxBlocksPerSM), std::max(N + block_threads - 2, M + block_threads - 1) / block_threads);
+    int32_t grid = std::min(idx[2].idx, std::max(N + block_threads - 2, M + block_threads - 1) / block_threads);
     void* kernelArgs[]{ &j, &M, &N, &sq, &rsq, &A, &lda, &jpiv, &diag, &D, &idx };
     cudaLaunchCooperativeKernel(gemv_pp_kernel<block_threads, real_t, matrix_t, idx_t>, grid, block_threads, kernelArgs, 0, stream);
   }
   else {
-    cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, gemv_pp_nopiv_kernel<block_threads, real_t, matrix_t, idx_t>, block_threads, 0);
-    int32_t grid = std::min(std::min(grid_blocks, device_sms * maxBlocksPerSM), (N + block_threads - 2) / block_threads);
+    int32_t grid = std::min(idx[3].idx, (N + block_threads - 2) / block_threads);
     void* kernelArgs[]{ &M, &N, &sq, &rsq, &A, &lda, &diag, &D, &idx };
     cudaLaunchCooperativeKernel(gemv_pp_nopiv_kernel<block_threads, real_t, matrix_t, idx_t>, grid, block_threads, kernelArgs, 0, stream);
   }

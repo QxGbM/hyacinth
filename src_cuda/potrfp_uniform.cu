@@ -58,10 +58,10 @@ inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode,
   else if (fillmode == 'L' || fillmode == 'l')
     matrix_fill_upper_to_full<'L', matrix_t> <<< dim3(uint32_t(N + 511) >> 9, uint32_t(N)), 512, 0, stream >>> (A, int64_t(lda));
   imax_dispatcher(stream, epi, N, A, lda + 1, jpiv, dvec, hvec);
-  int32_t iters = std::min(N, std::max(0, k)); iters = iters ? iters : N;
+  int32_t iters = std::min(N, std::max(0, k)); iters = iters ? iters : N; p = std::max(0, p);
 
   for (int32_t i = 0, s = 0; i < iters; ++i) {
-    int32_t j = hvec[0].idx - 1;
+    int32_t j = hvec[0].idx;
     if ((p < (s += hvec[1].idx)) || (j < 0)) { return i; }
     gemv_dispatcher(stream, handle, hvec, j, N - i, i, &A[int64_t(i) * int64_t(lda)], lda, jpiv, dvec);
   }
