@@ -44,11 +44,12 @@ __global__ void imax_kernel(real_t epi, int32_t N, const real_t* __restrict__ X,
     thread_x = cmp_max(thread_x, idx_t({ D[i] = X[int64_t(i) * incx], jpiv[i] = i + 1 }));
 
   thread_x = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce[0]).Reduce(thread_x, cmp_max);
-  if (gridDim.x == 1)
-  { if (threadIdx.x == 0) real_sqrt(D[0] = _mul(epi, thread_x.real), thread_x, idx[0], idx[1]); return; }
+  if (gridDim.x == 1) {
+    if (threadIdx.x == 0) { real_sqrt(D[0] = _mul(epi, thread_x.real), thread_x, idx[0], idx[1]); }
+    return;
+  }
 
-  if (threadIdx.x == 0) work[blockIdx.x] = thread_x;
-    else thread_x = idx_t();
+  if (threadIdx.x == 0) { work[blockIdx.x] = thread_x; } else { thread_x = idx_t(); }
   cooperative_groups::this_grid().sync();
   if (blockIdx.x == 0) {
     for (int32_t i = threadIdx.x; i < gridDim.x; i += BLOCK_THREADS)
@@ -87,10 +88,11 @@ __device__ __forceinline__ complex_float4 pp_func(float4 rsq, complex_float4 c, 
   d = add(d, negate(add(square(c.real), square(c.imag)))); return c;
 }
 
-__device__ __forceinline__ cuDoubleComplex conj(cuDoubleComplex a) { return make_cuDoubleComplex(a.x, -a.y); }
-__device__ __forceinline__ cuComplex conj(cuComplex a) { return make_cuComplex(a.x, -a.y); }
-__device__ __forceinline__ complex_double2 conj(complex_double2 a) { return device::dd::make_complex_double2(a.real, device::dd::negate(a.imag)); }
-__device__ __forceinline__ complex_float4 conj(complex_float4 a) { return device::qf::make_complex_float4(a.real, device::qf::negate(a.imag)); }
+template <class real_t, class matrix_t> __device__ __forceinline__ matrix_t conj(matrix_t a) { return a; }
+template <> __device__ __forceinline__ cuDoubleComplex conj<double, cuDoubleComplex>(cuDoubleComplex a) { return make_cuDoubleComplex(a.x, -a.y); }
+template <> __device__ __forceinline__ cuComplex conj<float, cuComplex>(cuComplex a) { return make_cuComplex(a.x, -a.y); }
+template <> __device__ __forceinline__ complex_double2 conj<double2, complex_double2>(complex_double2 a) { return device::dd::make_complex_double2(a.real, device::dd::negate(a.imag)); }
+template <> __device__ __forceinline__ complex_float4 conj<float4, complex_float4>(complex_float4 a) { return device::qf::make_complex_float4(a.real, device::qf::negate(a.imag)); }
 
 template <int32_t BLOCK_THREADS, class real_t, class matrix_t, class idx_t>
 __global__ void gemv_pp_kernel(int32_t j, int32_t M, int32_t N, matrix_t sq, real_t rsq, matrix_t* __restrict__ A, int64_t lda, int32_t* __restrict__ jpiv, real_t* __restrict__ D, idx_t* __restrict__ work, idx_t* __restrict__ idx) {
@@ -108,30 +110,24 @@ __global__ void gemv_pp_kernel(int32_t j, int32_t M, int32_t N, matrix_t sq, rea
     bool prec = i == j;
     idx_t thread_c = idx_t({ prec ? D[0] : D[i], i });
     A_col_i[0] = pp_func(rsq, prec ? A_col_j[0] : A_col_j[i], thread_c.real);
-    if constexpr(sizeof(real_t) < sizeof(matrix_t))
-      A_col_i[j] = conj(A_col_j[i] = A[i]);
-    else
-      A_col_i[j] = A_col_j[i] = A[i];
+    A_col_i[j] = conj<real_t>(A_col_j[i] = A[i]);
     thread_x = cmp_max(thread_x, thread_c);
     D[i] = thread_c.real;
   }
 
   thread_x = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce[0]).Reduce(thread_x, cmp_max);
-  if (gridDim.x == 1)
-  { if (threadIdx.x == 0) real_sqrt(D[-M], thread_x, idx[0], idx[1]); return; }
+  if (gridDim.x == 1) { 
+    if (threadIdx.x == 0) { real_sqrt(D[-M], thread_x, idx[0], idx[1]); A[0] = sq; int32_t p = jpiv[0]; jpiv[0] = jpiv[j]; jpiv[j] = p; }
+    return;
+  }
 
-  if (threadIdx.x == 0) {
-    work[blockIdx.x] = thread_x;
-    if (blockIdx.x == 0)
-    { A[0] = sq; int32_t p = jpiv[0]; jpiv[0] = jpiv[j]; jpiv[j] = p; }
-  } else { thread_x = idx_t(); }
-
+  if (threadIdx.x == 0) { work[blockIdx.x] = thread_x; } else { thread_x = idx_t(); }
   cooperative_groups::this_grid().sync();
   if (blockIdx.x == 0) {
     for (int32_t i = threadIdx.x; i < gridDim.x; i += BLOCK_THREADS)
       thread_x = cmp_max(thread_x, work[i]);
     thread_x = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce[1]).Reduce(thread_x, cmp_max);
-    if (threadIdx.x == 0) { real_sqrt(D[-M], thread_x, idx[0], idx[1]); }
+    if (threadIdx.x == 0) { real_sqrt(D[-M], thread_x, idx[0], idx[1]); A[0] = sq; int32_t p = jpiv[0]; jpiv[0] = jpiv[j]; jpiv[j] = p; }
   }
 }
 
@@ -150,20 +146,18 @@ __global__ void gemv_pp_nopiv_kernel(int32_t M, int32_t N, matrix_t sq, real_t r
   }
 
   thread_x = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce[0]).Reduce(thread_x, cmp_max);
-  if (gridDim.x == 1)
-  { if (threadIdx.x == 0) real_sqrt(D[-M], thread_x, idx[0], idx[1]); return; }
-
-  if (threadIdx.x == 0) {
-    work[blockIdx.x] = thread_x;
-    if (blockIdx.x == 0) { A[0] = sq; }
+  if (gridDim.x == 1) {
+    if (threadIdx.x == 0) { real_sqrt(D[-M], thread_x, idx[0], idx[1]); A[0] = sq; }
+    return;
   }
 
+  if (threadIdx.x == 0) { work[blockIdx.x] = thread_x; } else { thread_x = idx_t(); }
   cooperative_groups::this_grid().sync();
   if (blockIdx.x == 0) {
     for (int32_t i = threadIdx.x; i < gridDim.x; i += BLOCK_THREADS)
       thread_x = cmp_max(thread_x, work[i]);
     thread_x = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce[1]).Reduce(thread_x, cmp_max);
-    if (threadIdx.x == 0) { real_sqrt(D[-M], thread_x, idx[0], idx[1]); }
+    if (threadIdx.x == 0) { real_sqrt(D[-M], thread_x, idx[0], idx[1]); A[0] = sq; }
   }
 }
 
