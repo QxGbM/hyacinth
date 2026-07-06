@@ -96,10 +96,8 @@ int32_t hyacinXGevPcsvd(
   int32_t N,
   int32_t K,
   int32_t p,
-  hyacinPrecision_t AXtype,
+  hyacinPrecision_t Xtype,
   void* S, // device-pointer
-  void* X, // device-pointer
-  int32_t ldx,
   hyacinPrecision_t Gtype,
   void* G, // device-pointer
   int32_t ldg
@@ -112,7 +110,7 @@ int32_t hyacinXGinterp(
   int32_t N,
   int32_t K,
   int32_t p,
-  hyacinPrecision_t AXtype,
+  hyacinPrecision_t Atype,
   void* X, // device-pointer
   int32_t ldx,
   int32_t* jpiv, // device-pointer
