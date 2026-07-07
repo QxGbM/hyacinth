@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cmath>
 #include <cuda_runtime.h>
+#include <cuda_fp16.h>
 
 namespace device::int8 {
 
@@ -28,15 +29,25 @@ namespace device::int8 {
       } else { a[1] += ((q1 & m0) | (q0 & m1)) + (a[0] >> bits); a[0] &= i63; }
     } else { a[0] += q0 & m0; }
   }
-  
-  __host__ __device__ __forceinline__ int64_t round_f64(double x, int32_t expon, int32_t& e) {
+
+  __host__ __device__ __forceinline__ int64_t round_i64(double x, int32_t expon, int32_t& e) {
 #ifndef __CUDA_ARCH__
-    using std::scalbn, std::llrint;
-    e = std::max(std::ilogb(x) + expon - 62, 0);
+    return std::llrint(std::scalbn(x, (62 + expon) - (e = std::max(std::ilogb(x) + expon, 0))));
 #else
-    e = __viaddmax_s32(ilogb(x), expon - 62, 0);
+    return llrint(scalbn(x, (62 + expon) - (e = __viaddmax_s32(ilogb(x), expon, 0))));
 #endif
-    return llrint(scalbn(x, expon - e));
+  }
+  
+  __host__ __device__ __forceinline__ int64_t round_i64(float x, int32_t expon, int32_t& e) {
+#ifndef __CUDA_ARCH__
+    return std::llrint(std::scalbn(x, (62 + expon) - (e = std::max(std::ilogb(x) + expon, 0))));
+#else
+    return llrintf(scalbnf(x, (62 + expon) - (e = __viaddmax_s32(ilogbf(x), expon, 0))));
+#endif
+  }
+
+  __host__ __device__ __forceinline__ int64_t round_i64(half x, int32_t expon, int32_t& e) {
+    return round_i64(__half2float(x), expon, e);
   }
 
   __host__ __device__ __forceinline__ uint32_t conv_u8i8(uint32_t code, uint32_t& carry) {
