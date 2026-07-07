@@ -126,7 +126,7 @@ void hyacinXtransform(
   int32_t M,
   int32_t N,
   int32_t K,
-  hyacinPrecision_t AXtype,
+  hyacinPrecision_t Atype,
   void* A, // device-pointer
   int32_t lda,
   const void* X, // device-pointer

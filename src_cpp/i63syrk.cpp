@@ -99,6 +99,14 @@ void internal::int8::i63ATA_f32_limbs(cudaStream_t stream, cublasHandle_t handle
   vsum_f32(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideC - int64_t(N)], strideC);
 }
 
+void internal::int8::i63ATA_f16_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const half* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C, int8_t* workspace) {
+  int64_t strideA = int64_t(algnM) * int64_t(N) * int64_t(orderA), strideC = int64_t(N) * int64_t(N + 1);
+  int32_t* scratch = (int32_t*)&workspace[strideA];
+  quantize_f16(stream, M, N, A, lda, umax, vec_expon, orderA, N, algnM, workspace);
+  i8GemmT(stream, handle, algnN, N, algnM, workspace, orderA, 0, C, orderC, scratch);
+  vsum_f16(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideC - int64_t(N)], strideC);
+}
+
 void internal::int8::i63AHA_cf64_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C, int8_t* workspace) {
   int64_t strideA = int64_t(algnM) * int64_t(N) * int64_t(orderA), strideC = int64_t(N) * int64_t(N + 1), strideIm = strideC * int64_t(orderC);
   int32_t* scratch = (int32_t*)&workspace[strideA << 1];
@@ -117,6 +125,16 @@ void internal::int8::i63AHA_cf32_limbs(cudaStream_t stream, cublasHandle_t handl
   i8GemmT(stream, handle, algnN, N, algnM, &workspace[strideA], orderA, 1, C, orderC, scratch);
   i8GemmF(stream, handle, algnN, N, algnM, workspace, &workspace[strideA], orderA, 0, &C[strideIm], orderC, scratch);
   vsum_cf32(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideC - int64_t(N)], strideC);
+}
+
+void internal::int8::i63AHA_cf16_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const std::complex<half>* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C, int8_t* workspace) {
+  int64_t strideA = int64_t(algnM) * int64_t(N) * int64_t(orderA), strideC = int64_t(N) * int64_t(N + 1), strideIm = strideC * int64_t(orderC);
+  int32_t* scratch = (int32_t*)&workspace[strideA << 1];
+  quantize_cf16(stream, M, N, A, lda, umax, vec_expon, orderA, N, algnM, workspace);
+  i8GemmT(stream, handle, algnN, N, algnM, workspace, orderA, 0, C, orderC, scratch);
+  i8GemmT(stream, handle, algnN, N, algnM, &workspace[strideA], orderA, 1, C, orderC, scratch);
+  i8GemmF(stream, handle, algnN, N, algnM, workspace, &workspace[strideA], orderA, 0, &C[strideIm], orderC, scratch);
+  vsum_cf16(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideC - int64_t(N)], strideC);
 }
 
 inline void gemm_accumulate_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, int32_t moduli, const int8_t* AT, const int8_t* A, int32_t orderA, int32_t iter, int32_t accum, uint64_t* C, int32_t orderC, int32_t* workspace) {
@@ -184,6 +202,19 @@ void internal::int8::i63ATA_f32_crt(cudaStream_t stream, cublasHandle_t handle, 
   vsum_f32(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideC - int64_t(N)], strideC);
 }
 
+void internal::int8::i63ATA_f16_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const half* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C, int8_t* workspace) {
+  int64_t strideA = int64_t(algnM) * int64_t(N), strideC = int64_t(N) * int64_t(N + 1);
+  int32_t* scratch = (int32_t*)&workspace[strideA << 3];
+
+  for (int32_t i = 0; (i << 3) < orderA; ++i) {
+    int32_t moduli = std::min(orderA - (i << 3), 8);
+    int32_t accum = int32_t(0 < i);
+    quantize_f16_modular(stream, M, N, i, A, lda, umax, vec_expon, moduli, N, algnM, workspace);
+    gemm_accumulate_crt(stream, handle, algnN, N, algnM, moduli, workspace, workspace, orderA, i, accum, C, orderC, scratch);
+  }
+  vsum_f16(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideC - int64_t(N)], strideC);
+}
+
 void internal::int8::i63AHA_cf64_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const std::complex<double>* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C, int8_t* workspace) {
   int64_t strideA = int64_t(algnM) * int64_t(N), strideC = int64_t(N) * int64_t(N + 1), strideIm = strideC * int64_t(orderC);
   int32_t* scratch = (int32_t*)&workspace[strideA << 4];
@@ -216,4 +247,21 @@ void internal::int8::i63AHA_cf32_crt(cudaStream_t stream, cublasHandle_t handle,
     gemm_accumulate_crt(stream, handle, algnN, N, algnM, moduli, workspace, &workspace[stride], orderA, i, accum, &C[strideIm], orderC, scratch);
   }
   vsum_cf32(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideC - int64_t(N)], strideC);
+}
+
+void internal::int8::i63AHA_cf16_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const std::complex<half>* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C, int8_t* workspace) {
+  int64_t strideA = int64_t(algnM) * int64_t(N), strideC = int64_t(N) * int64_t(N + 1), strideIm = strideC * int64_t(orderC);
+  int32_t* scratch = (int32_t*)&workspace[strideA << 4];
+
+  for (int32_t i = 0; (i << 3) < orderA; ++i) {
+    int32_t moduli = std::min(orderA - (i << 3), 8);
+    int32_t accum = int32_t(0 < i);
+    quantize_cf16_modular(stream, M, N, i, A, lda, umax, vec_expon, moduli, N, algnM, workspace);
+
+    int64_t stride = int64_t(moduli) * strideA;
+    gemm_accumulate_crt(stream, handle, algnN, N, algnM, moduli, workspace, workspace, orderA, i, accum, C, orderC, scratch);
+    gemm_accumulate_crt(stream, handle, algnN, N, algnM, moduli, &workspace[stride], &workspace[stride], orderA, i, 1, C, orderC, scratch);
+    gemm_accumulate_crt(stream, handle, algnN, N, algnM, moduli, workspace, &workspace[stride], orderA, i, accum, &C[strideIm], orderC, scratch);
+  }
+  vsum_cf16(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideC - int64_t(N)], strideC);
 }

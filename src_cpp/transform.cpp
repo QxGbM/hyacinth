@@ -37,17 +37,17 @@ inline void ax_transform(cudaStream_t stream, cublasHandle_t handle, int32_t M, 
   cudaFreeAsync(dev_work, stream);
 }
 
-extern "C" void hyacinXtransform(hyacinHandle_t handle, int32_t M, int32_t N, int32_t K, hyacinPrecision_t AXtype, void* A, int32_t lda, const void* X, int32_t ldx) {
+extern "C" void hyacinXtransform(hyacinHandle_t handle, int32_t M, int32_t N, int32_t K, hyacinPrecision_t Atype, void* A, int32_t lda, const void* X, int32_t ldx) {
   if ((M <= 0) || (K <= 0)) return;
   Timer::register_kernel(handle.cudaStream, handle.timer);
-  if (N <= 0) switch(AXtype) {
+  if (N <= 0) switch(Atype) {
     case HYACIN_F64: matcopy(handle.cublasHandle, M, K, (const double*)X, ldx, (double*)A, lda); return;
     case HYACIN_F32: matcopy(handle.cublasHandle, M, K, (const float*)X, ldx, (float*)A, lda); return;
     case HYACIN_F64_COMPLEX: matcopy(handle.cublasHandle, M, K, (const cuDoubleComplex*)X, ldx, (cuDoubleComplex*)A, lda); return;
     case HYACIN_F32_COMPLEX: matcopy(handle.cublasHandle, M, K, (const cuComplex*)X, ldx, (cuComplex*)A, lda); return;
     default: return;
   }
-  else switch(AXtype) {
+  else switch(Atype) {
     case HYACIN_F64: ax_transform(handle.cudaStream, handle.cublasHandle, M, N, K, (double*)A, lda, (const double*)X, ldx); return;
     case HYACIN_F32: ax_transform(handle.cudaStream, handle.cublasHandle, M, N, K, (float*)A, lda, (const float*)X, ldx); return;
     case HYACIN_F64_COMPLEX: ax_transform(handle.cudaStream, handle.cublasHandle, M, N, K, (cuDoubleComplex*)A, lda, (const cuDoubleComplex*)X, ldx); return;

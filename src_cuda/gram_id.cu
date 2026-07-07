@@ -6,16 +6,13 @@
 #include <cuComplex.h>
 #include <stdexcept>
 
-template<class TGT, class SRC> __device__ __forceinline__ TGT conv(SRC a);
-template <> __device__ __forceinline__ double conv<double, double>(double a) { return a; }
-template <> __device__ __forceinline__ double conv<double, float>(float a) { return double(a); }
+template<class TGT, class SRC> __device__ __forceinline__ TGT conv(SRC a) { return TGT(a); }
 template <> __device__ __forceinline__ double conv<double, double2>(double2 a) { return device::dd::dd2double(a); }
 template <> __device__ __forceinline__ double conv<double, float4>(float4 a) { return device::qf::qf2double(a); }
-
-template <> __device__ __forceinline__ float conv<float, double>(double a) { return float(a); }
-template <> __device__ __forceinline__ float conv<float, float>(float a) { return a; }
 template <> __device__ __forceinline__ float conv<float, double2>(double2 a) { return float(a.x); }
 template <> __device__ __forceinline__ float conv<float, float4>(float4 a) { return a.x; }
+template <> __device__ __forceinline__ half conv<half, float>(float a) { return __float2half(a); }
+template <> __device__ __forceinline__ half2 conv<half2, float2>(float2 a) { return __float22half2_rn(a); }
 
 template <class Atype, class Btype>
 __global__ void cvcpy_kernel(int64_t M, const Atype* __restrict__ A, int64_t lda, Btype* __restrict__ B, int64_t ldb) {
@@ -26,16 +23,18 @@ __global__ void cvcpy_kernel(int64_t M, const Atype* __restrict__ A, int64_t lda
 template <class T> __device__ __forceinline__ T float_one();
 template <> __device__ __forceinline__ double float_one<double>() { return 1.; };
 template <> __device__ __forceinline__ float float_one<float>() { return 1.f; };
+template <> __device__ __forceinline__ half float_one<half>() { return CUDART_ONE_FP16; };
 template <> __device__ __forceinline__ cuDoubleComplex float_one<cuDoubleComplex>() { return make_cuDoubleComplex(1., 0.); };
 template <> __device__ __forceinline__ cuComplex float_one<cuComplex>() { return make_cuComplex(1.f, 0.f); };
+template <> __device__ __forceinline__ half2 float_one<half2>() { return make_half2(CUDART_ONE_FP16, CUDART_ZERO_FP16); };
 
-template <class real_t>
-__global__ void scatter_cpy_kernel(int64_t M, const int32_t* __restrict__ jpiv, const real_t* __restrict__ A, int64_t lda, real_t* __restrict__ B, int64_t ldb) {
+template <class Atype, class Btype>
+__global__ void scatter_cpy_kernel(int64_t M, const int32_t* __restrict__ jpiv, const Atype* __restrict__ A, int64_t lda, Btype* __restrict__ B, int64_t ldb) {
   int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
   if (y < M) {
     A = &A[y + x * lda]; B = &B[y + int64_t(jpiv[x] - 1) * ldb];
-    if (x < M) { *B = (y == x) ? float_one<real_t>() : real_t(); }
-      else *B = *A;
+    if (x < M) { *B = (y == x) ? float_one<Btype>() : Btype(); }
+      else *B = conv<Btype, Atype>(*A);
   }
 };
 
@@ -76,12 +75,13 @@ inline int32_t diag_piv_dispatcher(cudaStream_t stream, cublasHandle_t handle, c
       { double one = 1.; cublasDtrsm(handle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, K, N - K, &one, Bptr, K, &Bptr[int64_t(K) * int64_t(K)], K); };
       scatter_cpy_kernel <<< dim3(grid_x, N), block_threads, 0, stream >>> (int64_t(K), jpiv, Bptr, int64_t(K), (double*)X, int64_t(ldx));
     }
-    else if (Atype == HYACIN_F32) {
+    else if (Atype == HYACIN_F32 || Atype == HYACIN_F16) {
       float* Bptr = (float*)dev_work;
       cvcpy_kernel<Rtype, float> <<< dim3(grid_x, N), block_threads, 0, stream >>> (int64_t(K), (const Rtype*)G, int64_t(ldg), Bptr, int64_t(K));
       if (K < N)
       { float one = 1.f; cublasStrsm(handle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, K, N - K, &one, Bptr, K, &Bptr[int64_t(K) * int64_t(K)], K); };
-      scatter_cpy_kernel <<< dim3(grid_x, N), block_threads, 0, stream >>> (int64_t(K), jpiv, Bptr, int64_t(K), (float*)X, int64_t(ldx));
+      if (Atype == HYACIN_F32) { scatter_cpy_kernel <<< dim3(grid_x, N), block_threads, 0, stream >>> (int64_t(K), jpiv, Bptr, int64_t(K), (float*)X, int64_t(ldx)); }
+        else { scatter_cpy_kernel <<< dim3(grid_x, N), block_threads, 0, stream >>> (int64_t(K), jpiv, Bptr, int64_t(K), (half*)X, int64_t(ldx)); }
     }
     else if (Atype == HYACIN_F64_COMPLEX) {
       cuDoubleComplex* Bptr = (cuDoubleComplex*)dev_work;
@@ -90,12 +90,13 @@ inline int32_t diag_piv_dispatcher(cudaStream_t stream, cublasHandle_t handle, c
       { cuDoubleComplex one = make_cuDoubleComplex(1., 0.); cublasZtrsm(handle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, K, N - K, &one, Bptr, K, &Bptr[int64_t(K) * int64_t(K)], K); };
       scatter_cpy_kernel <<< dim3(grid_x, N), block_threads, 0, stream >>> (int64_t(K), jpiv, Bptr, int64_t(K), (cuDoubleComplex*)X, int64_t(ldx));
     }
-    else if (Atype == HYACIN_F32_COMPLEX) {
+    else if (Atype == HYACIN_F32_COMPLEX || Atype == HYACIN_F16_COMPLEX) {
       cuComplex* Bptr = (cuComplex*)dev_work;
       cvcpy_kernel<Rtype, float> <<< dim3(grid_cx, N), block_threads, 0, stream >>> (CK, (const Rtype*)G, cldg, (float*)Bptr, CK);
       if (K < N)
       { cuComplex one = make_cuComplex(1.f, 0.f); cublasCtrsm(handle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, K, N - K, &one, Bptr, K, &Bptr[int64_t(K) * int64_t(K)], K); };
-      scatter_cpy_kernel <<< dim3(grid_x, N), block_threads, 0, stream >>> (int64_t(K), jpiv, Bptr, int64_t(K), (cuComplex*)X, int64_t(ldx));
+      if (Atype == HYACIN_F32_COMPLEX) { scatter_cpy_kernel <<< dim3(grid_x, N), block_threads, 0, stream >>> (int64_t(K), jpiv, Bptr, int64_t(K), (cuComplex*)X, int64_t(ldx)); }
+        else { scatter_cpy_kernel <<< dim3(grid_x, N), block_threads, 0, stream >>> (int64_t(K), jpiv, Bptr, int64_t(K), (half2*)X, int64_t(ldx)); }
     }
   }
   cudaFreeAsync(dev_work, stream);

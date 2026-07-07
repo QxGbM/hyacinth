@@ -9,14 +9,9 @@
 #include <vector>
 #include <stdexcept>
 
-template<class TGT, class SRC> __device__ __forceinline__ TGT conv(SRC a);
-template <> __device__ __forceinline__ double conv<double, double>(double a) { return a; }
-template <> __device__ __forceinline__ double conv<double, float>(float a) { return double(a); }
+template<class TGT, class SRC> __device__ __forceinline__ TGT conv(SRC a) { return TGT(a); }
 template <> __device__ __forceinline__ double conv<double, double2>(double2 a) { return device::dd::dd2double(a); }
 template <> __device__ __forceinline__ double conv<double, float4>(float4 a) { return device::qf::qf2double(a); }
-
-template <> __device__ __forceinline__ float conv<float, double>(double a) { return float(a); }
-template <> __device__ __forceinline__ float conv<float, float>(float a) { return a; }
 template <> __device__ __forceinline__ float conv<float, double2>(double2 a) { return float(a.x); }
 template <> __device__ __forceinline__ float conv<float, float4>(float4 a) { return a.x; }
 
@@ -147,7 +142,7 @@ inline int32_t gsvd_dispatcher(cudaStream_t stream, cublasHandle_t handle, cusol
       cudaFreeAsync(dev_work, stream);
       return ge_tsvd(stream, s_handle, params, epi, N, K, p, Xptr, ldx, (double*)S);
     }
-    else if (Atype == HYACIN_F32) {
+    else if (Atype == HYACIN_F32 || Atype == HYACIN_F16) {
       float* Xptr = (float*)G, *Wptr = (float*)dev_work;
       scatter_cvcpy_kernel<0, Rtype, float> <<< dim3(grid_x, N), block_threads, 0, stream >>> (int64_t(K), piv, (const Rtype*)G, int64_t(ldg), Wptr, int64_t(K));
       float one = 1., zero = 0.; cublasSgeam(handle, CUBLAS_OP_T, CUBLAS_OP_N, N, K, &one, Wptr, K, &zero, Xptr, ldx, Xptr, ldx);
@@ -162,7 +157,7 @@ inline int32_t gsvd_dispatcher(cudaStream_t stream, cublasHandle_t handle, cusol
       cudaFreeAsync(dev_work, stream);
       return ge_tsvd(stream, s_handle, params, epi, N, K, p, Xptr, ldx, (double*)S);
     }
-    else if (Atype == HYACIN_F32_COMPLEX) {
+    else if (Atype == HYACIN_F32_COMPLEX || Atype == HYACIN_F16_COMPLEX) {
       cuComplex* Xptr = (cuComplex*)G, *Wptr = (cuComplex*)dev_work;
       scatter_cvcpy_kernel<1, Rtype, float> <<< dim3(grid_cx, N), block_threads, 0, stream >>> (CK, piv, (const Rtype*)G, cldg, (float*)Wptr, CK);
       cuComplex one = make_cuComplex(1.f, 0.f), zero = make_cuComplex(0.f, 0.f);
@@ -180,13 +175,13 @@ extern "C" int32_t hyacinXGevPcsvd(hyacinHandle_t handle, char use_evd, char fil
   Timer::register_kernel(handle.cudaStream, handle.timer);
   if (use_evd == 'Y' || use_evd == 'y') switch (Gtype) {
     case HYACIN_F64:
-      return Atype == HYACIN_F64 ? tevd(handle.cudaStream, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (double*)G, ldg, (double*)S) : 0;
+      return tevd(handle.cudaStream, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (double*)G, ldg, (double*)S);
     case HYACIN_F32:
-      return (Atype == HYACIN_F32) ? tevd(handle.cudaStream, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (float*)G, ldg, (float*)S) : 0;
+      return tevd(handle.cudaStream, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (float*)G, ldg, (float*)S);
     case HYACIN_F64_COMPLEX:
-      return Atype == HYACIN_F64_COMPLEX ? tevd(handle.cudaStream, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (cuDoubleComplex*)G, ldg, (double*)S) : 0;
+      return tevd(handle.cudaStream, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (cuDoubleComplex*)G, ldg, (double*)S);
     case HYACIN_F32_COMPLEX:
-      return (Atype == HYACIN_F32_COMPLEX) ? tevd(handle.cudaStream, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (cuComplex*)G, ldg, (float*)S) : 0;
+      return tevd(handle.cudaStream, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (cuComplex*)G, ldg, (float*)S);
     default: return 0;
   }
   else switch(Gtype) {
