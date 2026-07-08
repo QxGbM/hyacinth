@@ -78,31 +78,31 @@ inline void gemv_dispatcher(cudaStream_t stream, int32_t j, int32_t M, int32_t N
       <<< M, dim3(warp_threads[4], block_warps[4], 1), 0, stream >>> (M, N, A, int64_t(j) * int64_t(lda), int64_t(lda));
 }
 
-void internal::Cholesky::gemv_scal_f128_dd(cudaStream_t stream, double2_idx* scale, int32_t j, int32_t M, int32_t N, double2* A, int32_t lda, int32_t* jpiv, double2* D) {
+void internal::Cholesky::gemv_scal(cudaStream_t stream, cublasHandle_t, double2_idx* scale, int32_t j, int32_t M, int32_t N, double2* A, int32_t lda, int32_t* jpiv, double2* D) {
   if (2 <= M) {
     if (1 <= N)
-      gemv_dispatcher<double2>(stream, j, M, N, A, lda);
-    gemv_pp_f128_dd(stream, scale, j, N, M, A, lda, jpiv, D);
+      gemv_dispatcher(stream, j, M, N, A, lda);
+    gemv_pp(stream, scale, j, N, M, A, lda, jpiv, D);
   }
   else if (1 == M)
     cudaMemcpyAsync(&A[N], scale, sizeof(double2), cudaMemcpyHostToDevice, stream);
 }
 
-void internal::Cholesky::gemv_scal_f128_qf(cudaStream_t stream, float4_idx* scale, int32_t j, int32_t M, int32_t N, float4* A, int32_t lda, int32_t* jpiv, float4* D) {
+void internal::Cholesky::gemv_scal(cudaStream_t stream, cublasHandle_t, float4_idx* scale, int32_t j, int32_t M, int32_t N, float4* A, int32_t lda, int32_t* jpiv, float4* D) {
   if (2 <= M) {
     if (1 <= N)
-      gemv_dispatcher<float4>(stream, j, M, N, A, lda);
-    gemv_pp_f128_qf(stream, scale, j, N, M, A, lda, jpiv, D);
+      gemv_dispatcher(stream, j, M, N, A, lda);
+    gemv_pp(stream, scale, j, N, M, A, lda, jpiv, D);
   }
   else if (1 == M)
     cudaMemcpyAsync(&A[N], scale, sizeof(float4), cudaMemcpyHostToDevice, stream);
 }
 
-void internal::Cholesky::gemv_scal_cf128_dd(cudaStream_t stream, double2_idx* scale, int32_t j, int32_t M, int32_t N, complex_double2* A, int32_t lda, int32_t* jpiv, double2* D) {
+void internal::Cholesky::gemv_scal(cudaStream_t stream, cublasHandle_t, double2_idx* scale, int32_t j, int32_t M, int32_t N, complex_double2* A, int32_t lda, int32_t* jpiv, double2* D) {
   if (2 <= M) {
     if (1 <= N)
-      gemv_dispatcher<complex_double2>(stream, j, M, N, A, lda);
-    gemv_pp_cf128_dd(stream, scale, j, N, M, A, lda, jpiv, D);
+      gemv_dispatcher(stream, j, M, N, A, lda);
+    gemv_pp(stream, scale, j, N, M, A, lda, jpiv, D);
   }
   else if (1 == M) {
     cudaMemsetAsync(&((double2*)scale)[1], 0, sizeof(double), stream);
@@ -110,11 +110,11 @@ void internal::Cholesky::gemv_scal_cf128_dd(cudaStream_t stream, double2_idx* sc
   }
 }
 
-void internal::Cholesky::gemv_scal_cf128_qf(cudaStream_t stream, float4_idx* scale, int32_t j, int32_t M, int32_t N, complex_float4* A, int32_t lda, int32_t* jpiv, float4* D) {
+void internal::Cholesky::gemv_scal(cudaStream_t stream, cublasHandle_t, float4_idx* scale, int32_t j, int32_t M, int32_t N, complex_float4* A, int32_t lda, int32_t* jpiv, float4* D) {
   if (2 <= M) {
     if (1 <= N)
-      gemv_dispatcher<complex_float4>(stream, j, M, N, A, lda);
-    gemv_pp_cf128_qf(stream, scale, j, N, M, A, lda, jpiv, D);
+      gemv_dispatcher(stream, j, M, N, A, lda);
+    gemv_pp(stream, scale, j, N, M, A, lda, jpiv, D);
   }
   else if (1 == M) {
     cudaMemsetAsync(&((float4*)scale)[1], 0, sizeof(double), stream);

@@ -46,7 +46,7 @@ namespace device::int8 {
 #endif
   }
 
-  __host__ __device__ __forceinline__ int64_t round_i64(half x, int32_t expon, int32_t& e) {
+  __host__ __device__ __forceinline__ int64_t round_i64(__half x, int32_t expon, int32_t& e) {
     return round_i64(__half2float(x), expon, e);
   }
 

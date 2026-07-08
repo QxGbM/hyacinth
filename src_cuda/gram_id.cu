@@ -11,8 +11,8 @@ template <> __device__ __forceinline__ double conv<double, double2>(double2 a) {
 template <> __device__ __forceinline__ double conv<double, float4>(float4 a) { return device::qf::qf2double(a); }
 template <> __device__ __forceinline__ float conv<float, double2>(double2 a) { return float(a.x); }
 template <> __device__ __forceinline__ float conv<float, float4>(float4 a) { return a.x; }
-template <> __device__ __forceinline__ half conv<half, float>(float a) { return __float2half(a); }
-template <> __device__ __forceinline__ half2 conv<half2, float2>(float2 a) { return __float22half2_rn(a); }
+template <> __device__ __forceinline__ __half conv<__half, float>(float a) { return __float2half(a); }
+template <> __device__ __forceinline__ __half2 conv<__half2, float2>(float2 a) { return __float22half2_rn(a); }
 
 template <class Atype, class Btype>
 __global__ void cvcpy_kernel(int64_t M, const Atype* __restrict__ A, int64_t lda, Btype* __restrict__ B, int64_t ldb) {
@@ -23,10 +23,10 @@ __global__ void cvcpy_kernel(int64_t M, const Atype* __restrict__ A, int64_t lda
 template <class T> __device__ __forceinline__ T float_one();
 template <> __device__ __forceinline__ double float_one<double>() { return 1.; };
 template <> __device__ __forceinline__ float float_one<float>() { return 1.f; };
-template <> __device__ __forceinline__ half float_one<half>() { return CUDART_ONE_FP16; };
+template <> __device__ __forceinline__ __half float_one<__half>() { return CUDART_ONE_FP16; };
 template <> __device__ __forceinline__ cuDoubleComplex float_one<cuDoubleComplex>() { return make_cuDoubleComplex(1., 0.); };
 template <> __device__ __forceinline__ cuComplex float_one<cuComplex>() { return make_cuComplex(1.f, 0.f); };
-template <> __device__ __forceinline__ half2 float_one<half2>() { return make_half2(CUDART_ONE_FP16, CUDART_ZERO_FP16); };
+template <> __device__ __forceinline__ __half2 float_one<__half2>() { return make_half2(CUDART_ONE_FP16, CUDART_ZERO_FP16); };
 
 template <class Atype, class Btype>
 __global__ void scatter_cpy_kernel(int64_t M, const int32_t* __restrict__ jpiv, const Atype* __restrict__ A, int64_t lda, Btype* __restrict__ B, int64_t ldb) {
@@ -38,23 +38,6 @@ __global__ void scatter_cpy_kernel(int64_t M, const int32_t* __restrict__ jpiv, 
   }
 };
 
-inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, double* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
-{ return internal::Cholesky::potrfp_f64(stream, handle, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, pinned_work); }
-inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, float* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
-{ return internal::Cholesky::potrfp_f32(stream, handle, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, pinned_work); }
-inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, double2* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
-{ return internal::Cholesky::potrfp_f128_dd(stream, handle, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, pinned_work); }
-inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, float4* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
-{ return internal::Cholesky::potrfp_f128_qf(stream, handle, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, pinned_work); }
-inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, std::complex<double>* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
-{ return internal::Cholesky::potrfp_cf64(stream, handle, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, pinned_work); }
-inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, std::complex<float>* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
-{ return internal::Cholesky::potrfp_cf32(stream, handle, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, pinned_work); }
-inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, complex_double2* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
-{ return internal::Cholesky::potrfp_cf128_dd(stream, handle, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, pinned_work); }
-inline int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, complex_float4* A, int32_t lda, int32_t* jpiv, void* dev_work, void* pinned_work)
-{ return internal::Cholesky::potrfp_cf128_qf(stream, handle, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, pinned_work); }
-
 template <class Rtype, class Gtype>
 inline int32_t diag_piv_dispatcher(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t N, int32_t K, int32_t p, hyacinPrecision_t Atype, int32_t* jpiv, void* X, int32_t ldx, Gtype* G, int32_t ldg, void* pinned_work) {
   int32_t x_bytes, g_real_bytes = int32_t(sizeof(Rtype)); hyacinXelem('A', Atype, nullptr, &x_bytes, nullptr);
@@ -63,7 +46,7 @@ inline int32_t diag_piv_dispatcher(cudaStream_t stream, cublasHandle_t handle, c
   if (cudaSuccess != cudaMallocAsync((void**)&dev_work, dev_work_bytes, stream))
     throw std::runtime_error("Workspace allocation failed at Interpolative decomposition.");
 
-  K = potrfp(stream, handle, fillmode, epi, K, p, N, G, ldg, jpiv, dev_work, pinned_work);
+  K = internal::Cholesky::potrfp(stream, handle, fillmode, epi, K, p, N, G, ldg, jpiv, (Rtype*)dev_work, pinned_work);
   if (0 < K) {
     constexpr int32_t block_threads = 512;
     int64_t CK = int64_t(K) << 1, cldg = int64_t(ldg) << 1;
@@ -81,7 +64,7 @@ inline int32_t diag_piv_dispatcher(cudaStream_t stream, cublasHandle_t handle, c
       if (K < N)
       { float one = 1.f; cublasStrsm(handle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, K, N - K, &one, Bptr, K, &Bptr[int64_t(K) * int64_t(K)], K); };
       if (Atype == HYACIN_F32) { scatter_cpy_kernel <<< dim3(grid_x, N), block_threads, 0, stream >>> (int64_t(K), jpiv, Bptr, int64_t(K), (float*)X, int64_t(ldx)); }
-        else { scatter_cpy_kernel <<< dim3(grid_x, N), block_threads, 0, stream >>> (int64_t(K), jpiv, Bptr, int64_t(K), (half*)X, int64_t(ldx)); }
+        else { scatter_cpy_kernel <<< dim3(grid_x, N), block_threads, 0, stream >>> (int64_t(K), jpiv, Bptr, int64_t(K), (__half*)X, int64_t(ldx)); }
     }
     else if (Atype == HYACIN_F64_COMPLEX) {
       cuDoubleComplex* Bptr = (cuDoubleComplex*)dev_work;
@@ -96,7 +79,7 @@ inline int32_t diag_piv_dispatcher(cudaStream_t stream, cublasHandle_t handle, c
       if (K < N)
       { cuComplex one = make_cuComplex(1.f, 0.f); cublasCtrsm(handle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, K, N - K, &one, Bptr, K, &Bptr[int64_t(K) * int64_t(K)], K); };
       if (Atype == HYACIN_F32_COMPLEX) { scatter_cpy_kernel <<< dim3(grid_x, N), block_threads, 0, stream >>> (int64_t(K), jpiv, Bptr, int64_t(K), (cuComplex*)X, int64_t(ldx)); }
-        else { scatter_cpy_kernel <<< dim3(grid_x, N), block_threads, 0, stream >>> (int64_t(K), jpiv, Bptr, int64_t(K), (half2*)X, int64_t(ldx)); }
+        else { scatter_cpy_kernel <<< dim3(grid_x, N), block_threads, 0, stream >>> (int64_t(K), jpiv, Bptr, int64_t(K), (__half2*)X, int64_t(ldx)); }
     }
   }
   cudaFreeAsync(dev_work, stream);
@@ -116,9 +99,9 @@ extern "C" int32_t hyacinXGinterp(hyacinHandle_t handle, char fillmode, double e
     case HYACIN_QF:
       return diag_piv_dispatcher<float4>(handle.cudaStream, handle.cublasHandle, fillmode, epi, N, K, p, Atype, jpiv, X, ldx, (float4*)G, ldg, handle.pinnedWorkspace);
     case HYACIN_F64_COMPLEX:
-      return diag_piv_dispatcher<double>(handle.cudaStream, handle.cublasHandle, fillmode, epi, N, K, p, Atype, jpiv, X, ldx, (std::complex<double>*)G, ldg, handle.pinnedWorkspace);
+      return diag_piv_dispatcher<double>(handle.cudaStream, handle.cublasHandle, fillmode, epi, N, K, p, Atype, jpiv, X, ldx, (cuDoubleComplex*)G, ldg, handle.pinnedWorkspace);
     case HYACIN_F32_COMPLEX:
-      return diag_piv_dispatcher<float>(handle.cudaStream, handle.cublasHandle, fillmode, epi, N, K, p, Atype, jpiv, X, ldx, (std::complex<float>*)G, ldg, handle.pinnedWorkspace);
+      return diag_piv_dispatcher<float>(handle.cudaStream, handle.cublasHandle, fillmode, epi, N, K, p, Atype, jpiv, X, ldx, (cuComplex*)G, ldg, handle.pinnedWorkspace);
     case HYACIN_DD_COMPLEX:
       return diag_piv_dispatcher<double2>(handle.cudaStream, handle.cublasHandle, fillmode, epi, N, K, p, Atype, jpiv, X, ldx, (complex_double2*)G, ldg, handle.pinnedWorkspace);
     case HYACIN_QF_COMPLEX:

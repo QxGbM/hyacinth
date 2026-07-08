@@ -99,7 +99,7 @@ void internal::int8::i63ATA_f32_limbs(cudaStream_t stream, cublasHandle_t handle
   vsum_f32(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideC - int64_t(N)], strideC);
 }
 
-void internal::int8::i63ATA_f16_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const half* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C, int8_t* workspace) {
+void internal::int8::i63ATA_f16_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const __half* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C, int8_t* workspace) {
   int64_t strideA = int64_t(algnM) * int64_t(N) * int64_t(orderA), strideC = int64_t(N) * int64_t(N + 1);
   int32_t* scratch = (int32_t*)&workspace[strideA];
   quantize_f16(stream, M, N, A, lda, umax, vec_expon, orderA, N, algnM, workspace);
@@ -127,7 +127,7 @@ void internal::int8::i63AHA_cf32_limbs(cudaStream_t stream, cublasHandle_t handl
   vsum_cf32(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideC - int64_t(N)], strideC);
 }
 
-void internal::int8::i63AHA_cf16_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const std::complex<half>* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C, int8_t* workspace) {
+void internal::int8::i63AHA_cf16_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const std::complex<__half>* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C, int8_t* workspace) {
   int64_t strideA = int64_t(algnM) * int64_t(N) * int64_t(orderA), strideC = int64_t(N) * int64_t(N + 1), strideIm = strideC * int64_t(orderC);
   int32_t* scratch = (int32_t*)&workspace[strideA << 1];
   quantize_cf16(stream, M, N, A, lda, umax, vec_expon, orderA, N, algnM, workspace);
@@ -202,7 +202,7 @@ void internal::int8::i63ATA_f32_crt(cudaStream_t stream, cublasHandle_t handle, 
   vsum_f32(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideC - int64_t(N)], strideC);
 }
 
-void internal::int8::i63ATA_f16_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const half* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C, int8_t* workspace) {
+void internal::int8::i63ATA_f16_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const __half* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C, int8_t* workspace) {
   int64_t strideA = int64_t(algnM) * int64_t(N), strideC = int64_t(N) * int64_t(N + 1);
   int32_t* scratch = (int32_t*)&workspace[strideA << 3];
 
@@ -249,7 +249,7 @@ void internal::int8::i63AHA_cf32_crt(cudaStream_t stream, cublasHandle_t handle,
   vsum_cf32(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideC - int64_t(N)], strideC);
 }
 
-void internal::int8::i63AHA_cf16_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const std::complex<half>* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C, int8_t* workspace) {
+void internal::int8::i63AHA_cf16_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const std::complex<__half>* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C, int8_t* workspace) {
   int64_t strideA = int64_t(algnM) * int64_t(N), strideC = int64_t(N) * int64_t(N + 1), strideIm = strideC * int64_t(orderC);
   int32_t* scratch = (int32_t*)&workspace[strideA << 4];
 

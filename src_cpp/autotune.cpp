@@ -17,7 +17,7 @@ const std::vector<int32_t> f64_capable_sm_list({ 800, 900, 1000 }); // sm80,sm90
 // mappings vector for datatypes
 const std::vector<hyacinPrecision_t> real_type({ HYACIN_F64, HYACIN_F32, HYACIN_F16, HYACIN_DD, HYACIN_QF, HYACIN_F64, HYACIN_F32, HYACIN_F16, HYACIN_DD, HYACIN_QF });
 const std::vector<hyacinPrecision_t> complex_type({ HYACIN_F64_COMPLEX, HYACIN_F32_COMPLEX, HYACIN_F16_COMPLEX, HYACIN_DD_COMPLEX, HYACIN_QF_COMPLEX, HYACIN_F64_COMPLEX, HYACIN_F32_COMPLEX, HYACIN_F16_COMPLEX, HYACIN_DD_COMPLEX, HYACIN_QF_COMPLEX });
-const std::vector<int32_t> type_bytes({ sizeof(double), sizeof(float), sizeof(half), sizeof(double2), sizeof(float4), sizeof(cuDoubleComplex), sizeof(cuComplex), sizeof(half2), sizeof(complex_double2), sizeof(complex_float4) });
+const std::vector<int32_t> type_bytes({ sizeof(double), sizeof(float), sizeof(__half), sizeof(double2), sizeof(float4), sizeof(cuDoubleComplex), sizeof(cuComplex), sizeof(half2), sizeof(complex_double2), sizeof(complex_float4) });
 const std::vector<int32_t> type_mantissa({ 52, 23, 10, 0, 0, 52, 23, 10, 0, 0 });
 const std::vector<cudaDataType_t> cuda_type({ CUDA_R_64F, CUDA_R_32F, CUDA_R_16F, cudaDataType_t(), cudaDataType_t(), CUDA_C_64F, CUDA_C_32F, CUDA_C_16F, cudaDataType_t(), cudaDataType_t() });
 

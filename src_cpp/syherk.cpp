@@ -38,10 +38,10 @@ inline void vexp_dispatcher(cudaStream_t stream, int32_t M, int32_t N, hyacinPre
   switch(Atype) {
     case HYACIN_F64: internal::int8::vexp_f64(stream, M, N, (const double*)A, lda, vexp); return;
     case HYACIN_F32: internal::int8::vexp_f32(stream, M, N, (const float*)A, lda, vexp); return;
-    case HYACIN_F16: internal::int8::vexp_f16(stream, M, N, (const half*)A, lda, vexp); return;
+    case HYACIN_F16: internal::int8::vexp_f16(stream, M, N, (const __half*)A, lda, vexp); return;
     case HYACIN_F64_COMPLEX: internal::int8::vexp_cf64(stream, M, N, (const std::complex<double>*)A, lda, vexp); return;
     case HYACIN_F32_COMPLEX: internal::int8::vexp_cf32(stream, M, N, (const std::complex<float>*)A, lda, vexp); return;
-    case HYACIN_F16_COMPLEX: internal::int8::vexp_cf16(stream, M, N, (const std::complex<half>*)A, lda, vexp); return;
+    case HYACIN_F16_COMPLEX: internal::int8::vexp_cf16(stream, M, N, (const std::complex<__half>*)A, lda, vexp); return;
     default: return;
   }
 }
@@ -51,19 +51,19 @@ inline void igemm_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t
   if (alg == HYACIN_ALG_LIMBS || alg == HYACIN_ALG_LIMBS_ND) switch(Atype) {
     case HYACIN_F64: internal::int8::i63ATA_f64_limbs(stream, handle, M, N, (const double*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
     case HYACIN_F32: internal::int8::i63ATA_f32_limbs(stream, handle, M, N, (const float*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
-    case HYACIN_F16: internal::int8::i63ATA_f16_limbs(stream, handle, M, N, (const half*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
+    case HYACIN_F16: internal::int8::i63ATA_f16_limbs(stream, handle, M, N, (const __half*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
     case HYACIN_F64_COMPLEX: internal::int8::i63AHA_cf64_limbs(stream, handle, M, N, (const std::complex<double>*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
     case HYACIN_F32_COMPLEX: internal::int8::i63AHA_cf32_limbs(stream, handle, M, N, (const std::complex<float>*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
-    case HYACIN_F16_COMPLEX: internal::int8::i63AHA_cf16_limbs(stream, handle, M, N, (const std::complex<half>*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
+    case HYACIN_F16_COMPLEX: internal::int8::i63AHA_cf16_limbs(stream, handle, M, N, (const std::complex<__half>*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
     default: return;
   }
   else if (alg == HYACIN_ALG_CRT || alg == HYACIN_ALG_CRT_ND) switch(Atype) {
     case HYACIN_F64: internal::int8::i63ATA_f64_crt(stream, handle, M, N, (const double*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
     case HYACIN_F32: internal::int8::i63ATA_f32_crt(stream, handle, M, N, (const float*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
-    case HYACIN_F16: internal::int8::i63ATA_f16_crt(stream, handle, M, N, (const half*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
+    case HYACIN_F16: internal::int8::i63ATA_f16_crt(stream, handle, M, N, (const __half*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
     case HYACIN_F64_COMPLEX: internal::int8::i63AHA_cf64_crt(stream, handle, M, N, (const std::complex<double>*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
     case HYACIN_F32_COMPLEX: internal::int8::i63AHA_cf32_crt(stream, handle, M, N, (const std::complex<float>*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
-    case HYACIN_F16_COMPLEX: internal::int8::i63AHA_cf16_crt(stream, handle, M, N, (const std::complex<half>*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
+    case HYACIN_F16_COMPLEX: internal::int8::i63AHA_cf16_crt(stream, handle, M, N, (const std::complex<__half>*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
     default: return;
   }
 }

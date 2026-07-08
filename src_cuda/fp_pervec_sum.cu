@@ -93,7 +93,7 @@ void internal::int8::vsum_f32(cudaStream_t stream, int32_t M, int32_t N, const f
   vsum_dispatcher<0>(stream, int64_t(M), N, A, int64_t(lda), umax, vec_expon, order, vec_sum, incv);
 }
 
-void internal::int8::vsum_f16(cudaStream_t stream, int32_t M, int32_t N, const half* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t order, uint64_t* vec_sum, int64_t incv) {
+void internal::int8::vsum_f16(cudaStream_t stream, int32_t M, int32_t N, const __half* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t order, uint64_t* vec_sum, int64_t incv) {
   vsum_dispatcher<0>(stream, int64_t(M), N, A, int64_t(lda), umax, vec_expon, order, vec_sum, incv);
 }
 
@@ -105,6 +105,6 @@ void internal::int8::vsum_cf32(cudaStream_t stream, int32_t M, int32_t N, const 
   vsum_dispatcher<1>(stream, int64_t(M) << 1, N, (const float*)A, int64_t(lda) << 1, umax, vec_expon, order, vec_sum, incv);
 }
 
-void internal::int8::vsum_cf16(cudaStream_t stream, int32_t M, int32_t N, const std::complex<half>* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t order, uint64_t* vec_sum, int64_t incv) {
-  vsum_dispatcher<1>(stream, int64_t(M) << 1, N, (const half*)A, int64_t(lda) << 1, umax, vec_expon, order, vec_sum, incv);
+void internal::int8::vsum_cf16(cudaStream_t stream, int32_t M, int32_t N, const std::complex<__half>* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t order, uint64_t* vec_sum, int64_t incv) {
+  vsum_dispatcher<1>(stream, int64_t(M) << 1, N, (const __half*)A, int64_t(lda) << 1, umax, vec_expon, order, vec_sum, incv);
 }
