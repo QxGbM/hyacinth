@@ -118,31 +118,31 @@ inline void quantize_dispatcher(cudaStream_t stream, int64_t M, int64_t N, const
   }
 }
 
-void internal::int8::quantize_f64(cudaStream_t stream, int32_t M, int32_t N, const double* C, int32_t ldc, int32_t umax, const int32_t* vec_expon, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
+void internal::int8::quantize(cudaStream_t stream, int32_t M, int32_t N, const double* C, int32_t ldc, int32_t umax, const int32_t* vec_expon, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
   quantize_dispatcher<0>(stream, int64_t(M), int64_t(N), C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A);
 }
 
-void internal::int8::quantize_f32(cudaStream_t stream, int32_t M, int32_t N, const float* C, int32_t ldc, int32_t umax, const int32_t* vec_expon, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
+void internal::int8::quantize(cudaStream_t stream, int32_t M, int32_t N, const float* C, int32_t ldc, int32_t umax, const int32_t* vec_expon, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
   quantize_dispatcher<0>(stream, int64_t(M), int64_t(N), C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A);
 }
 
-void internal::int8::quantize_f16(cudaStream_t stream, int32_t M, int32_t N, const __half* C, int32_t ldc, int32_t umax, const int32_t* vec_expon, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
+void internal::int8::quantize(cudaStream_t stream, int32_t M, int32_t N, const __half* C, int32_t ldc, int32_t umax, const int32_t* vec_expon, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
   quantize_dispatcher<0>(stream, int64_t(M), int64_t(N), C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A);
 }
 
-void internal::int8::quantize_cf64(cudaStream_t stream, int32_t M, int32_t N, const std::complex<double>* C, int32_t ldc, int32_t umax, const int32_t* vec_expon, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
-  quantize_dispatcher<8>(stream, int64_t(M), int64_t(N), (double2*)C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A);
+void internal::int8::quantize(cudaStream_t stream, int32_t M, int32_t N, const cuDoubleComplex* C, int32_t ldc, int32_t umax, const int32_t* vec_expon, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
+  quantize_dispatcher<8>(stream, int64_t(M), int64_t(N), C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A);
 }
 
-void internal::int8::quantize_cf32(cudaStream_t stream, int32_t M, int32_t N, const std::complex<float>* C, int32_t ldc, int32_t umax, const int32_t* vec_expon, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
-  quantize_dispatcher<8>(stream, int64_t(M), int64_t(N), (float2*)C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A);
+void internal::int8::quantize(cudaStream_t stream, int32_t M, int32_t N, const cuComplex* C, int32_t ldc, int32_t umax, const int32_t* vec_expon, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
+  quantize_dispatcher<8>(stream, int64_t(M), int64_t(N), C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A);
 }
 
-void internal::int8::quantize_cf16(cudaStream_t stream, int32_t M, int32_t N, const std::complex<__half>* C, int32_t ldc, int32_t umax, const int32_t* vec_expon, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
-  quantize_dispatcher<8>(stream, int64_t(M), int64_t(N), (__half2*)C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A);
+void internal::int8::quantize(cudaStream_t stream, int32_t M, int32_t N, const __half2* C, int32_t ldc, int32_t umax, const int32_t* vec_expon, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
+  quantize_dispatcher<8>(stream, int64_t(M), int64_t(N), C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A);
 }
 
-void internal::int8::quantize_f64_modular(cudaStream_t stream, int32_t M, int32_t N, int32_t iter, const double* C, int32_t ldc, int32_t umax, const int32_t* vec_expon, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
+void internal::int8::quantize_modular(cudaStream_t stream, int32_t M, int32_t N, int32_t iter, const double* C, int32_t ldc, int32_t umax, const int32_t* vec_expon, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
   switch (iter) {
     case 0: quantize_dispatcher<1>(stream, int64_t(M), int64_t(N), C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A); return;
     case 1: quantize_dispatcher<2>(stream, int64_t(M), int64_t(N), C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A); return;
@@ -151,7 +151,7 @@ void internal::int8::quantize_f64_modular(cudaStream_t stream, int32_t M, int32_
   }
 }
 
-void internal::int8::quantize_f32_modular(cudaStream_t stream, int32_t M, int32_t N, int32_t iter, const float* C, int32_t ldc, int32_t umax, const int32_t* vec_expon, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
+void internal::int8::quantize_modular(cudaStream_t stream, int32_t M, int32_t N, int32_t iter, const float* C, int32_t ldc, int32_t umax, const int32_t* vec_expon, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
   switch (iter) {
     case 0: quantize_dispatcher<1>(stream, int64_t(M), int64_t(N), C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A); return;
     case 1: quantize_dispatcher<2>(stream, int64_t(M), int64_t(N), C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A); return;
@@ -160,7 +160,7 @@ void internal::int8::quantize_f32_modular(cudaStream_t stream, int32_t M, int32_
   }
 }
 
-void internal::int8::quantize_f16_modular(cudaStream_t stream, int32_t M, int32_t N, int32_t iter, const __half* C, int32_t ldc, int32_t umax, const int32_t* vec_expon, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
+void internal::int8::quantize_modular(cudaStream_t stream, int32_t M, int32_t N, int32_t iter, const __half* C, int32_t ldc, int32_t umax, const int32_t* vec_expon, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
   switch (iter) {
     case 0: quantize_dispatcher<1>(stream, int64_t(M), int64_t(N), C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A); return;
     case 1: quantize_dispatcher<2>(stream, int64_t(M), int64_t(N), C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A); return;
@@ -169,29 +169,29 @@ void internal::int8::quantize_f16_modular(cudaStream_t stream, int32_t M, int32_
   }
 }
 
-void internal::int8::quantize_cf64_modular(cudaStream_t stream, int32_t M, int32_t N, int32_t iter, const std::complex<double>* C, int32_t ldc, int32_t umax, const int32_t* vec_expon, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
+void internal::int8::quantize_modular(cudaStream_t stream, int32_t M, int32_t N, int32_t iter, const cuDoubleComplex* C, int32_t ldc, int32_t umax, const int32_t* vec_expon, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
   switch (iter) {
-    case 0: quantize_dispatcher<9>(stream, int64_t(M), int64_t(N), (double2*)C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A); return;
-    case 1: quantize_dispatcher<10>(stream, int64_t(M), int64_t(N), (double2*)C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A); return;
-    case 2: quantize_dispatcher<11>(stream, int64_t(M), int64_t(N), (double2*)C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A); return;
+    case 0: quantize_dispatcher<9>(stream, int64_t(M), int64_t(N), C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A); return;
+    case 1: quantize_dispatcher<10>(stream, int64_t(M), int64_t(N), C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A); return;
+    case 2: quantize_dispatcher<11>(stream, int64_t(M), int64_t(N), C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A); return;
     default: return;
   }
 }
 
-void internal::int8::quantize_cf32_modular(cudaStream_t stream, int32_t M, int32_t N, int32_t iter, const std::complex<float>* C, int32_t ldc, int32_t umax, const int32_t* vec_expon, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
+void internal::int8::quantize_modular(cudaStream_t stream, int32_t M, int32_t N, int32_t iter, const cuComplex* C, int32_t ldc, int32_t umax, const int32_t* vec_expon, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
   switch (iter) {
-    case 0: quantize_dispatcher<9>(stream, int64_t(M), int64_t(N), (float2*)C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A); return;
-    case 1: quantize_dispatcher<10>(stream, int64_t(M), int64_t(N), (float2*)C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A); return;
-    case 2: quantize_dispatcher<11>(stream, int64_t(M), int64_t(N), (float2*)C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A); return;
+    case 0: quantize_dispatcher<9>(stream, int64_t(M), int64_t(N), C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A); return;
+    case 1: quantize_dispatcher<10>(stream, int64_t(M), int64_t(N), C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A); return;
+    case 2: quantize_dispatcher<11>(stream, int64_t(M), int64_t(N), C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A); return;
     default: return;
   }
 }
 
-void internal::int8::quantize_cf16_modular(cudaStream_t stream, int32_t M, int32_t N, int32_t iter, const std::complex<__half>* C, int32_t ldc, int32_t umax, const int32_t* vec_expon, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
+void internal::int8::quantize_modular(cudaStream_t stream, int32_t M, int32_t N, int32_t iter, const __half2* C, int32_t ldc, int32_t umax, const int32_t* vec_expon, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
   switch (iter) {
-    case 0: quantize_dispatcher<9>(stream, int64_t(M), int64_t(N), (__half2*)C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A); return;
-    case 1: quantize_dispatcher<10>(stream, int64_t(M), int64_t(N), (__half2*)C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A); return;
-    case 2: quantize_dispatcher<11>(stream, int64_t(M), int64_t(N), (__half2*)C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A); return;
+    case 0: quantize_dispatcher<9>(stream, int64_t(M), int64_t(N), C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A); return;
+    case 1: quantize_dispatcher<10>(stream, int64_t(M), int64_t(N), C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A); return;
+    case 2: quantize_dispatcher<11>(stream, int64_t(M), int64_t(N), C, int64_t(ldc), umax, vec_expon, dimZ, dimY, dimX, A); return;
     default: return;
   }
 }
