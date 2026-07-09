@@ -12,6 +12,7 @@ find_package(CUDAToolkit REQUIRED)
 set(CPP_SOURCES
   src_cpp/autotune.cpp
   src_cpp/gemv_cublas.cpp
+  src_cpp/gram_id.cpp
   src_cpp/handle_timer.cpp
   src_cpp/i63syrk.cpp
   src_cpp/syherk.cpp
@@ -27,7 +28,6 @@ set(CU_SOURCES
   src_cuda/fp_pervec_sum.cu
   src_cuda/gemv_pp.cu
   src_cuda/gemv_scal_f128.cu
-  src_cuda/gram_id.cu
   src_cuda/gram_svd.cu
   src_cuda/i32_accum.cu
   src_cuda/i32_rem_accum.cu

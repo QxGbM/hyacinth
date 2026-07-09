@@ -3,11 +3,14 @@
 #include <double_double.hpp>
 #include <quad_float.hpp>
 
-template<class T, class S> __device__ __forceinline__ T conv(S a) { return T(a); }
-template <> __device__ __forceinline__ double conv<double, double2>(double2 a) { return device::dd::dd2double(a); }
-template <> __device__ __forceinline__ double conv<double, float4>(float4 a) { return device::qf::qf2double(a); }
-template <> __device__ __forceinline__ float conv<float, __half>(__half a) { return __half2float(a); }
-template <> __device__ __forceinline__ __half conv<__half, float>(float a) { return __float2half(a); }
+template<class T, class S> __device__ __forceinline__ T conv(S a) {
+  if constexpr(std::is_same_v<T, S>) { return a; } else 
+  if constexpr(std::is_same_v<T, __half>) { return __float2half(conv<float, S>(a)); } else
+  if constexpr(std::is_same_v<S, __half>) { return conv<T, float>(__half2float(a)); } else
+  if constexpr(std::is_same_v<S, double2>) { return conv<T, double>(device::dd::dd2double(a)); } else
+  if constexpr(std::is_same_v<S, float4>) { return conv<T, double>(device::qf::qf2double(a)); } else
+  { return T(a); }
+}
 
 template <class Atype, class Btype>
 __global__ void cvcpy_kernel(int64_t M, const Atype* __restrict__ A, int64_t lda, Btype* __restrict__ B, int64_t ldb) {
@@ -45,18 +48,42 @@ inline void matcopy_dispatcher(cudaStream_t stream, char mode, int32_t M, int32_
     else { cvcpy_kernel<Atype, Btype> <<< grid_x, 512, 0, stream >>> (M64, A, lda64, B, ldb64); }
 }
 
-void internal::Cholesky::scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const double* A, int32_t lda, double* B, int32_t ldb) { matcopy_dispatcher<0>(stream, mode, M, N, jpiv, A, lda, B, ldb); }
-void internal::Cholesky::scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const double2* A, int32_t lda, double* B, int32_t ldb) { matcopy_dispatcher<0>(stream, mode, M, N, jpiv, A, lda, B, ldb); }
-void internal::Cholesky::scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const float4* A, int32_t lda, double* B, int32_t ldb) { matcopy_dispatcher<0>(stream, mode, M, N, jpiv, A, lda, B, ldb); }
-void internal::Cholesky::scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const double* A, int32_t lda, float* B, int32_t ldb) { matcopy_dispatcher<0>(stream, mode, M, N, jpiv, A, lda, B, ldb); }
-void internal::Cholesky::scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const float* A, int32_t lda, float* B, int32_t ldb) { matcopy_dispatcher<0>(stream, mode, M, N, jpiv, A, lda, B, ldb); }
-void internal::Cholesky::scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const __half* A, int32_t lda, float* B, int32_t ldb) { matcopy_dispatcher<0>(stream, mode, M, N, jpiv, A, lda, B, ldb); }
-void internal::Cholesky::scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const float* A, int32_t lda, __half* B, int32_t ldb) { matcopy_dispatcher<0>(stream, mode, M, N, jpiv, A, lda, B, ldb); }
+namespace internal::Cholesky {
 
-void internal::Cholesky::scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const cuDoubleComplex* A, int32_t lda, cuDoubleComplex* B, int32_t ldb) { matcopy_dispatcher<1>(stream, mode, M, N, jpiv, (const double*)A, lda, (double*)B, ldb); }
-void internal::Cholesky::scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const complex_double2* A, int32_t lda, cuDoubleComplex* B, int32_t ldb) { matcopy_dispatcher<1>(stream, mode, M, N, jpiv, (const double2*)A, lda, (double*)B, ldb); }
-void internal::Cholesky::scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const complex_float4* A, int32_t lda, cuDoubleComplex* B, int32_t ldb) { matcopy_dispatcher<1>(stream, mode, M, N, jpiv, (const float4*)A, lda, (double*)B, ldb); }
-void internal::Cholesky::scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const cuDoubleComplex* A, int32_t lda, cuComplex* B, int32_t ldb) { matcopy_dispatcher<1>(stream, mode, M, N, jpiv, (const double*)A, lda, (float*)B, ldb); }
-void internal::Cholesky::scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const cuComplex* A, int32_t lda, cuComplex* B, int32_t ldb) { matcopy_dispatcher<1>(stream, mode, M, N, jpiv, (const float*)A, lda, (float*)B, ldb); }
-void internal::Cholesky::scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const __half2* A, int32_t lda, cuComplex* B, int32_t ldb) { matcopy_dispatcher<1>(stream, mode, M, N, jpiv, (const __half*)A, lda, (float*)B, ldb); }
-void internal::Cholesky::scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const cuComplex* A, int32_t lda, __half2* B, int32_t ldb) { matcopy_dispatcher<1>(stream, mode, M, N, jpiv, (const float*)A, lda, (__half*)B, ldb); }
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const double* A, int32_t lda, double* B, int32_t ldb) { matcopy_dispatcher<0>(stream, mode, M, N, jpiv, A, lda, B, ldb); }
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const float* A, int32_t lda, double* B, int32_t ldb) { matcopy_dispatcher<0>(stream, mode, M, N, jpiv, A, lda, B, ldb); }
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const __half* A, int32_t lda, double* B, int32_t ldb) { matcopy_dispatcher<0>(stream, mode, M, N, jpiv, A, lda, B, ldb); }
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const double2* A, int32_t lda, double* B, int32_t ldb) { matcopy_dispatcher<0>(stream, mode, M, N, jpiv, A, lda, B, ldb); }
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const float4* A, int32_t lda, double* B, int32_t ldb) { matcopy_dispatcher<0>(stream, mode, M, N, jpiv, A, lda, B, ldb); }
+
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const double* A, int32_t lda, float* B, int32_t ldb) { matcopy_dispatcher<0>(stream, mode, M, N, jpiv, A, lda, B, ldb); }
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const float* A, int32_t lda, float* B, int32_t ldb) { matcopy_dispatcher<0>(stream, mode, M, N, jpiv, A, lda, B, ldb); }
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const __half* A, int32_t lda, float* B, int32_t ldb) { matcopy_dispatcher<0>(stream, mode, M, N, jpiv, A, lda, B, ldb); }
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const double2* A, int32_t lda, float* B, int32_t ldb) { matcopy_dispatcher<0>(stream, mode, M, N, jpiv, A, lda, B, ldb); }
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const float4* A, int32_t lda, float* B, int32_t ldb) { matcopy_dispatcher<0>(stream, mode, M, N, jpiv, A, lda, B, ldb); }
+
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const double* A, int32_t lda, __half* B, int32_t ldb) { matcopy_dispatcher<0>(stream, mode, M, N, jpiv, A, lda, B, ldb); }
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const float* A, int32_t lda, __half* B, int32_t ldb) { matcopy_dispatcher<0>(stream, mode, M, N, jpiv, A, lda, B, ldb); }
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const __half* A, int32_t lda, __half* B, int32_t ldb) { matcopy_dispatcher<0>(stream, mode, M, N, jpiv, A, lda, B, ldb); }
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const double2* A, int32_t lda, __half* B, int32_t ldb) { matcopy_dispatcher<0>(stream, mode, M, N, jpiv, A, lda, B, ldb); }
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const float4* A, int32_t lda, __half* B, int32_t ldb) { matcopy_dispatcher<0>(stream, mode, M, N, jpiv, A, lda, B, ldb); }
+
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const cuDoubleComplex* A, int32_t lda, cuDoubleComplex* B, int32_t ldb) { matcopy_dispatcher<1>(stream, mode, M, N, jpiv, (const double*)A, lda, (double*)B, ldb); }
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const cuComplex* A, int32_t lda, cuDoubleComplex* B, int32_t ldb) { matcopy_dispatcher<1>(stream, mode, M, N, jpiv, (const float*)A, lda, (double*)B, ldb); }
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const __half2* A, int32_t lda, cuDoubleComplex* B, int32_t ldb) { matcopy_dispatcher<1>(stream, mode, M, N, jpiv, (const __half*)A, lda, (double*)B, ldb); }
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const complex_double2* A, int32_t lda, cuDoubleComplex* B, int32_t ldb) { matcopy_dispatcher<1>(stream, mode, M, N, jpiv, (const double2*)A, lda, (double*)B, ldb); }
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const complex_float4* A, int32_t lda, cuDoubleComplex* B, int32_t ldb) { matcopy_dispatcher<1>(stream, mode, M, N, jpiv, (const float4*)A, lda, (double*)B, ldb); }
+
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const cuDoubleComplex* A, int32_t lda, cuComplex* B, int32_t ldb) { matcopy_dispatcher<1>(stream, mode, M, N, jpiv, (const double*)A, lda, (float*)B, ldb); }
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const cuComplex* A, int32_t lda, cuComplex* B, int32_t ldb) { matcopy_dispatcher<1>(stream, mode, M, N, jpiv, (const float*)A, lda, (float*)B, ldb); }
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const __half2* A, int32_t lda, cuComplex* B, int32_t ldb) { matcopy_dispatcher<1>(stream, mode, M, N, jpiv, (const __half*)A, lda, (float*)B, ldb); }
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const complex_double2* A, int32_t lda, cuComplex* B, int32_t ldb) { matcopy_dispatcher<1>(stream, mode, M, N, jpiv, (const double2*)A, lda, (float*)B, ldb); }
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const complex_float4* A, int32_t lda, cuComplex* B, int32_t ldb) { matcopy_dispatcher<1>(stream, mode, M, N, jpiv, (const float4*)A, lda, (float*)B, ldb); }
+
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const cuDoubleComplex* A, int32_t lda, __half2* B, int32_t ldb) { matcopy_dispatcher<1>(stream, mode, M, N, jpiv, (const double*)A, lda, (__half*)B, ldb); }
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const cuComplex* A, int32_t lda, __half2* B, int32_t ldb) { matcopy_dispatcher<1>(stream, mode, M, N, jpiv, (const float*)A, lda, (__half*)B, ldb); }
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const __half2* A, int32_t lda, __half2* B, int32_t ldb) { matcopy_dispatcher<1>(stream, mode, M, N, jpiv, (const __half*)A, lda, (__half*)B, ldb); }
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const complex_double2* A, int32_t lda, __half2* B, int32_t ldb) { matcopy_dispatcher<1>(stream, mode, M, N, jpiv, (const double2*)A, lda, (__half*)B, ldb); }
+  void scatter_matcopy(cudaStream_t stream, char mode, int32_t M, int32_t N, const int32_t* jpiv, const complex_float4* A, int32_t lda, __half2* B, int32_t ldb) { matcopy_dispatcher<1>(stream, mode, M, N, jpiv, (const float4*)A, lda, (__half*)B, ldb); }
+
+};

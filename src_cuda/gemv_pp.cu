@@ -183,38 +183,6 @@ inline void imax_dispatcher(cudaStream_t stream, real_t epi, int32_t N, const ma
   cudaStreamSynchronize(stream);
 }
 
-void internal::Cholesky::imax_initializer(cudaStream_t stream, double epi, int32_t N, const double* X, int32_t incx, int32_t* jpiv, double* D, double_idx* scale) {
-  imax_dispatcher(stream, std::min(1., std::max(0., std::pow(epi, 2))), N, X, int64_t(incx), jpiv, D, scale);
-}
-
-void internal::Cholesky::imax_initializer(cudaStream_t stream, double epi, int32_t N, const float* X, int32_t incx, int32_t* jpiv, float* D, float_idx* scale) {
-  imax_dispatcher(stream, float(std::min(1., std::max(0., std::pow(epi, 2)))), N, X, int64_t(incx), jpiv, D, scale);
-}
-
-void internal::Cholesky::imax_initializer(cudaStream_t stream, double epi, int32_t N, const double2* X, int32_t incx, int32_t* jpiv, double2* D, double2_idx* scale) {
-  imax_dispatcher(stream, device::dd::double2dd(std::min(1., std::max(0., std::pow(epi, 2)))), N, X, int64_t(incx), jpiv, D, scale);
-}
-
-void internal::Cholesky::imax_initializer(cudaStream_t stream, double epi, int32_t N, const float4* X, int32_t incx, int32_t* jpiv, float4* D, float4_idx* scale) {
-  imax_dispatcher(stream, device::qf::double2qf(std::min(1., std::max(0., std::pow(epi, 2)))), N, X, int64_t(incx), jpiv, D, scale);
-}
-
-void internal::Cholesky::imax_initializer(cudaStream_t stream, double epi, int32_t N, const cuDoubleComplex* X, int32_t incx, int32_t* jpiv, double* D, double_idx* scale) {
-  imax_dispatcher(stream, std::min(1., std::max(0., std::pow(epi, 2))), N, X, int64_t(incx) << 1, jpiv, D, scale);
-}
-
-void internal::Cholesky::imax_initializer(cudaStream_t stream, double epi, int32_t N, const cuComplex* X, int32_t incx, int32_t* jpiv, float* D, float_idx* scale) {
-  imax_dispatcher(stream, float(std::min(1., std::max(0., std::pow(epi, 2)))), N, X, int64_t(incx) << 1, jpiv, D, scale);
-}
-
-void internal::Cholesky::imax_initializer(cudaStream_t stream, double epi, int32_t N, const complex_double2* X, int32_t incx, int32_t* jpiv, double2* D, double2_idx* scale) {
-  imax_dispatcher(stream, device::dd::double2dd(std::min(1., std::max(0., std::pow(epi, 2)))), N, X, int64_t(incx) << 1, jpiv, D, scale);
-}
-
-void internal::Cholesky::imax_initializer(cudaStream_t stream, double epi, int32_t N, const complex_float4* X, int32_t incx, int32_t* jpiv, float4* D, float4_idx* scale) {
-  imax_dispatcher(stream, device::qf::double2qf(std::min(1., std::max(0., std::pow(epi, 2)))), N, X, int64_t(incx) << 1, jpiv, D, scale);
-}
-
 template <class real_t, class matrix_t, class idx_t>
 inline void gemv_pp_dispatcher(cudaStream_t stream, int32_t j, int32_t M, int32_t N, matrix_t sq, real_t rsq, matrix_t* A, int64_t lda, int32_t* jpiv, real_t* D, idx_t* idx) {
   uint8_t* diag = &((uint8_t*)D)[int64_t(8192) + int64_t(M) * sizeof(real_t)]; A = &A[M]; jpiv = &jpiv[M];
@@ -230,46 +198,82 @@ inline void gemv_pp_dispatcher(cudaStream_t stream, int32_t j, int32_t M, int32_
   }
 }
 
-void internal::Cholesky::gemv_pp(cudaStream_t stream, double_idx* scale, int32_t j, int32_t M, int32_t N, double* A, int32_t lda, int32_t* jpiv, double* D) {
-  gemv_pp_dispatcher(stream, j, M, N, scale[0].real, scale[1].real, A, int64_t(lda), jpiv, D, scale);
-  cudaStreamSynchronize(stream);
-}
+namespace internal::Cholesky {
 
-void internal::Cholesky::gemv_pp(cudaStream_t stream, float_idx* scale, int32_t j, int32_t M, int32_t N, float* A, int32_t lda, int32_t* jpiv, float* D) {
-  gemv_pp_dispatcher(stream, j, M, N, scale[0].real, scale[1].real, A, int64_t(lda), jpiv, D, scale);
-  cudaStreamSynchronize(stream);
-}
+  void imax_initializer(cudaStream_t stream, double epi, int32_t N, const double* X, int32_t incx, int32_t* jpiv, double* D, double_idx* scale) {
+    imax_dispatcher(stream, std::min(1., std::max(0., std::pow(epi, 2))), N, X, int64_t(incx), jpiv, D, scale);
+  }
 
-void internal::Cholesky::gemv_pp(cudaStream_t stream, double2_idx* scale, int32_t j, int32_t M, int32_t N, double2* A, int32_t lda, int32_t* jpiv, double2* D) {
-  gemv_pp_dispatcher(stream, j, M, N, scale[0].real, scale[1].real, A, int64_t(lda), jpiv, D, scale);
-  cudaStreamSynchronize(stream);
-}
+  void imax_initializer(cudaStream_t stream, double epi, int32_t N, const float* X, int32_t incx, int32_t* jpiv, float* D, float_idx* scale) {
+    imax_dispatcher(stream, float(std::min(1., std::max(0., std::pow(epi, 2)))), N, X, int64_t(incx), jpiv, D, scale);
+  }
 
-void internal::Cholesky::gemv_pp(cudaStream_t stream, float4_idx* scale, int32_t j, int32_t M, int32_t N, float4* A, int32_t lda, int32_t* jpiv, float4* D) {
-  gemv_pp_dispatcher(stream, j, M, N, scale[0].real, scale[1].real, A, int64_t(lda), jpiv, D, scale);
-  cudaStreamSynchronize(stream);
-}
+  void imax_initializer(cudaStream_t stream, double epi, int32_t N, const double2* X, int32_t incx, int32_t* jpiv, double2* D, double2_idx* scale) {
+    imax_dispatcher(stream, device::dd::double2dd(std::min(1., std::max(0., std::pow(epi, 2)))), N, X, int64_t(incx), jpiv, D, scale);
+  }
 
-void internal::Cholesky::gemv_pp(cudaStream_t stream, double_idx* scale, int32_t j, int32_t M, int32_t N, cuDoubleComplex* A, int32_t lda, int32_t* jpiv, double* D) {
-  cuDoubleComplex sqc = make_cuDoubleComplex(scale[0].real, 0.);
-  gemv_pp_dispatcher(stream, j, M, N, sqc, scale[1].real, A, int64_t(lda), jpiv, D, scale);
-  cudaStreamSynchronize(stream);
-}
+  void imax_initializer(cudaStream_t stream, double epi, int32_t N, const float4* X, int32_t incx, int32_t* jpiv, float4* D, float4_idx* scale) {
+    imax_dispatcher(stream, device::qf::double2qf(std::min(1., std::max(0., std::pow(epi, 2)))), N, X, int64_t(incx), jpiv, D, scale);
+  }
 
-void internal::Cholesky::gemv_pp(cudaStream_t stream, float_idx* scale, int32_t j, int32_t M, int32_t N, cuComplex* A, int32_t lda, int32_t* jpiv, float* D) {
-  cuComplex sqc = make_cuComplex(scale[0].real, 0.f);
-  gemv_pp_dispatcher(stream, j, M, N, sqc, scale[1].real, A, int64_t(lda), jpiv, D, scale);
-  cudaStreamSynchronize(stream);
-}
+  void imax_initializer(cudaStream_t stream, double epi, int32_t N, const cuDoubleComplex* X, int32_t incx, int32_t* jpiv, double* D, double_idx* scale) {
+    imax_dispatcher(stream, std::min(1., std::max(0., std::pow(epi, 2))), N, X, int64_t(incx) << 1, jpiv, D, scale);
+  }
 
-void internal::Cholesky::gemv_pp(cudaStream_t stream, double2_idx* scale, int32_t j, int32_t M, int32_t N, complex_double2* A, int32_t lda, int32_t* jpiv, double2* D) {
-  complex_double2 sqc = device::dd::make_complex_double2(scale[0].real, make_double2(0., 0.));
-  gemv_pp_dispatcher(stream, j, M, N, sqc, scale[1].real, A, int64_t(lda), jpiv, D, scale);
-  cudaStreamSynchronize(stream);
-}
+  void imax_initializer(cudaStream_t stream, double epi, int32_t N, const cuComplex* X, int32_t incx, int32_t* jpiv, float* D, float_idx* scale) {
+    imax_dispatcher(stream, float(std::min(1., std::max(0., std::pow(epi, 2)))), N, X, int64_t(incx) << 1, jpiv, D, scale);
+  }
 
-void internal::Cholesky::gemv_pp(cudaStream_t stream, float4_idx* scale, int32_t j, int32_t M, int32_t N, complex_float4* A, int32_t lda, int32_t* jpiv, float4* D) {
-  complex_float4 sqc = device::qf::make_complex_float4(scale[0].real, make_float4(0.f, 0.f, 0.f, 0.f));
-  gemv_pp_dispatcher(stream, j, M, N, sqc, scale[1].real, A, int64_t(lda), jpiv, D, scale);
-  cudaStreamSynchronize(stream);
+  void imax_initializer(cudaStream_t stream, double epi, int32_t N, const complex_double2* X, int32_t incx, int32_t* jpiv, double2* D, double2_idx* scale) {
+    imax_dispatcher(stream, device::dd::double2dd(std::min(1., std::max(0., std::pow(epi, 2)))), N, X, int64_t(incx) << 1, jpiv, D, scale);
+  }
+
+  void imax_initializer(cudaStream_t stream, double epi, int32_t N, const complex_float4* X, int32_t incx, int32_t* jpiv, float4* D, float4_idx* scale) {
+    imax_dispatcher(stream, device::qf::double2qf(std::min(1., std::max(0., std::pow(epi, 2)))), N, X, int64_t(incx) << 1, jpiv, D, scale);
+  }
+
+  void gemv_pp(cudaStream_t stream, double_idx* scale, int32_t j, int32_t M, int32_t N, double* A, int32_t lda, int32_t* jpiv, double* D) {
+    gemv_pp_dispatcher(stream, j, M, N, scale[0].real, scale[1].real, A, int64_t(lda), jpiv, D, scale);
+    cudaStreamSynchronize(stream);
+  }
+
+  void gemv_pp(cudaStream_t stream, float_idx* scale, int32_t j, int32_t M, int32_t N, float* A, int32_t lda, int32_t* jpiv, float* D) {
+    gemv_pp_dispatcher(stream, j, M, N, scale[0].real, scale[1].real, A, int64_t(lda), jpiv, D, scale);
+    cudaStreamSynchronize(stream);
+  }
+
+  void gemv_pp(cudaStream_t stream, double2_idx* scale, int32_t j, int32_t M, int32_t N, double2* A, int32_t lda, int32_t* jpiv, double2* D) {
+    gemv_pp_dispatcher(stream, j, M, N, scale[0].real, scale[1].real, A, int64_t(lda), jpiv, D, scale);
+    cudaStreamSynchronize(stream);
+  }
+
+  void gemv_pp(cudaStream_t stream, float4_idx* scale, int32_t j, int32_t M, int32_t N, float4* A, int32_t lda, int32_t* jpiv, float4* D) {
+    gemv_pp_dispatcher(stream, j, M, N, scale[0].real, scale[1].real, A, int64_t(lda), jpiv, D, scale);
+    cudaStreamSynchronize(stream);
+  }
+
+  void gemv_pp(cudaStream_t stream, double_idx* scale, int32_t j, int32_t M, int32_t N, cuDoubleComplex* A, int32_t lda, int32_t* jpiv, double* D) {
+    cuDoubleComplex sqc = make_cuDoubleComplex(scale[0].real, 0.);
+    gemv_pp_dispatcher(stream, j, M, N, sqc, scale[1].real, A, int64_t(lda), jpiv, D, scale);
+    cudaStreamSynchronize(stream);
+  }
+
+  void gemv_pp(cudaStream_t stream, float_idx* scale, int32_t j, int32_t M, int32_t N, cuComplex* A, int32_t lda, int32_t* jpiv, float* D) {
+    cuComplex sqc = make_cuComplex(scale[0].real, 0.f);
+    gemv_pp_dispatcher(stream, j, M, N, sqc, scale[1].real, A, int64_t(lda), jpiv, D, scale);
+    cudaStreamSynchronize(stream);
+  }
+
+  void gemv_pp(cudaStream_t stream, double2_idx* scale, int32_t j, int32_t M, int32_t N, complex_double2* A, int32_t lda, int32_t* jpiv, double2* D) {
+    complex_double2 sqc = device::dd::make_complex_double2(scale[0].real, make_double2(0., 0.));
+    gemv_pp_dispatcher(stream, j, M, N, sqc, scale[1].real, A, int64_t(lda), jpiv, D, scale);
+    cudaStreamSynchronize(stream);
+  }
+
+  void gemv_pp(cudaStream_t stream, float4_idx* scale, int32_t j, int32_t M, int32_t N, complex_float4* A, int32_t lda, int32_t* jpiv, float4* D) {
+    complex_float4 sqc = device::qf::make_complex_float4(scale[0].real, make_float4(0.f, 0.f, 0.f, 0.f));
+    gemv_pp_dispatcher(stream, j, M, N, sqc, scale[1].real, A, int64_t(lda), jpiv, D, scale);
+    cudaStreamSynchronize(stream);
+  }
+
 }
