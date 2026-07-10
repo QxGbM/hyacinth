@@ -8,7 +8,7 @@
 #include <stdexcept>
 
 inline std::tuple<int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int64_t, int64_t, int64_t> ext_params(int32_t localM, int32_t globalM, int32_t N, int32_t& umax, int32_t distribute, hyacinPrecision_t Gtype, hyacinAlgorithm_t alg) {
-  hyacinPrecision_t GtypeReal; hyacinXelem('R', Gtype, &GtypeReal, nullptr, nullptr);
+  hyacinPrecision_t GtypeReal = Gtype; hyacinXelem('R', &GtypeReal);
   int32_t Complex = int32_t(Gtype != GtypeReal);
   int32_t use_limbs = int32_t(alg == HYACIN_ALG_LIMBS || alg == HYACIN_ALG_LIMBS_ND);
   int32_t det_reduc = distribute && (alg == HYACIN_ALG_LIMBS || alg == HYACIN_ALG_CRT);
@@ -23,7 +23,7 @@ inline std::tuple<int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int64_t,
   int32_t orderA = ((use_limbs ? umax : bits) + 8) >> 3;
   int64_t i8_bytes = int64_t(N) * int64_t(use_limbs ? orderA : 8) * ((int64_t(algnM) << Complex) + (int64_t(algnN) * sizeof(int32_t)));
   if (distribute && (alg == HYACIN_ALG_LIMBS_ND || alg == HYACIN_ALG_CRT_ND)) {
-    int32_t em_bytes; hyacinXelem('A', Gtype, nullptr, &em_bytes, nullptr);
+    int32_t em_bytes = hyacinXelem('A', &Gtype);
     i8_bytes = std::max(i8_bytes, (int64_t(N) * int64_t(N) * int64_t(em_bytes) + int64_t(255)) & int64_t(~255));
   }
 
@@ -157,7 +157,7 @@ inline int32_t cublas_nd_dispatcher(cudaStream_t stream, cublasHandle_t handle, 
   double one_f64 = 1., zero_f64 = 0.; float one_f32 = 1.f, zero_f32 = 0.f;
   int32_t pred = (ldg != N); void* data = G;
   if (pred) {
-    int32_t em_bytes; hyacinXelem('A', Gtype, nullptr, &em_bytes, nullptr);
+    int32_t em_bytes = hyacinXelem('A', &Gtype);
     uint64_t work_bytes = uint64_t(N) * uint64_t(N) * uint64_t(em_bytes);
     if (cudaSuccess != cudaMallocAsync(&data, work_bytes, stream))
       throw std::runtime_error("Workspace allocation failed at 1-D row Float SY/HERK.");

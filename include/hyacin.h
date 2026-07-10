@@ -52,12 +52,9 @@ void hyacinDestroy(
   hyacinHandle_t handle
 );
 
-void hyacinXelem(
+int32_t hyacinXelem(
   char sel,
-  hyacinPrecision_t Atype,
-  hyacinPrecision_t* type, // host-pointer
-  int32_t* bytes, // host-pointer
-  cudaDataType_t* cutype // host-pointer
+  hyacinPrecision_t* Atype // host-pointer
 );
 
 void hyacinXsyherk_autoTune(

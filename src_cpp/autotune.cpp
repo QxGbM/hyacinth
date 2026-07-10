@@ -19,11 +19,11 @@ const std::vector<hyacinPrecision_t> real_type({ HYACIN_F64, HYACIN_F32, HYACIN_
 const std::vector<hyacinPrecision_t> complex_type({ HYACIN_F64_COMPLEX, HYACIN_F32_COMPLEX, HYACIN_F16_COMPLEX, HYACIN_DD_COMPLEX, HYACIN_QF_COMPLEX, HYACIN_F64_COMPLEX, HYACIN_F32_COMPLEX, HYACIN_F16_COMPLEX, HYACIN_DD_COMPLEX, HYACIN_QF_COMPLEX });
 const std::vector<int32_t> type_bytes({ sizeof(double), sizeof(float), sizeof(__half), sizeof(double2), sizeof(float4), sizeof(cuDoubleComplex), sizeof(cuComplex), sizeof(half2), sizeof(complex_double2), sizeof(complex_float4) });
 const std::vector<int32_t> type_mantissa({ 52, 23, 10, 0, 0, 52, 23, 10, 0, 0 });
-const std::vector<cudaDataType_t> cuda_type({ CUDA_R_64F, CUDA_R_32F, CUDA_R_16F, cudaDataType_t(), cudaDataType_t(), CUDA_C_64F, CUDA_C_32F, CUDA_C_16F, cudaDataType_t(), cudaDataType_t() });
 
-extern "C" void hyacinXelem(char sel, hyacinPrecision_t Atype, hyacinPrecision_t* type, int32_t* bytes, cudaDataType_t* cutype) {
-  hyacinPrecision_t prec = ((sel == 'R') || (sel == 'r')) ? real_type[int32_t(Atype)] : (((sel == 'C') || (sel == 'c')) ? complex_type[int32_t(Atype)] : Atype);
-  if (type) { *type = prec; } if (bytes) { *bytes = type_bytes[int32_t(prec)]; } if (cutype) { *cutype = cuda_type[int32_t(prec)]; }
+extern "C" int32_t hyacinXelem(char sel, hyacinPrecision_t* Atype) {
+  int32_t type = int32_t(*Atype);
+  *Atype = ((sel == 'R') || (sel == 'r')) ? real_type[type] : (((sel == 'C') || (sel == 'c')) ? complex_type[type] : hyacinPrecision_t(type));
+  return type_bytes[int32_t(*Atype)];
 }
 
 extern "C" void hyacinXsyherk_autoTune(double epi, int32_t use_nd_allreduce, int32_t u_extra, int32_t* umax, hyacinPrecision_t Atype, hyacinPrecision_t* ComputeType, hyacinAlgorithm_t* alg) {
