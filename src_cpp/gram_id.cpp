@@ -14,8 +14,7 @@ inline void ltrsm(cublasHandle_t handle, int32_t Mb, int32_t Nb, cuComplex* R, i
 
 template <class Btype, class Rtype, class Xtype, class Gtype>
 inline int32_t diag_piv_dispatcher(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t N, int32_t K, int32_t p, int32_t* jpiv, Xtype* X, int32_t ldx, Gtype* G, int32_t ldg, void* pinned_work) {
-  int32_t x_bytes = int32_t(sizeof(Xtype)), g_real_bytes = int32_t(sizeof(Rtype));
-  uint64_t dev_work_bytes = uint64_t(std::max(int64_t(x_bytes) * int64_t(N) * int64_t(std::min(N, K)), int64_t(8192) + int64_t(g_real_bytes) * int64_t(N)));
+  uint64_t dev_work_bytes = uint64_t(std::max(int64_t(sizeof(Xtype)) * int64_t(N) * int64_t(std::min(N, K)), int64_t(8192) + int64_t(sizeof(Rtype)) * int64_t(N)));
   void* dev_work = nullptr; 
   if (cudaSuccess != cudaMallocAsync((void**)&dev_work, dev_work_bytes, stream))
     throw std::runtime_error("Workspace allocation failed at Interpolative decomposition.");

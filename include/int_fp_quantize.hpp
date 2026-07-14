@@ -51,13 +51,13 @@ namespace device::int8 {
   }
 
   __host__ __device__ __forceinline__ uint32_t conv_u8i8(uint32_t code, uint32_t& carry) {
-    constexpr uint32_t i8 = uint32_t(0xff), i7 = uint32_t(0x7f), r7 = uint32_t(0x80);
-    uint32_t a = carry + (code & i8), s = (a >> 7) & uint32_t(1), c = (r7 & (-s)) | (i7 & a);
-    a = (a >> 8) + s + ((code >> 8) & i8); s = (a >> 7) & uint32_t(1); c |= ((r7 & (-s)) | (i7 & a)) << 8;
-    a = (a >> 8) + s + ((code >> 16) & i8); s = (a >> 7) & uint32_t(1); c |= ((r7 & (-s)) | (i7 & a)) << 16;
-    a = (a >> 8) + s + ((code >> 24) & i8); s = (a >> 7) & uint32_t(1); c |= ((r7 & (-s)) | (i7 & a)) << 24;
-    carry = (a >> 8) + s;
-    return c;
+    uint8_t* b = (uint8_t*)&code;
+    uint32_t a = uint32_t(carry) + uint32_t(b[0]);
+    b[0] = uint8_t(a); a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint32_t(b[1]);
+    b[1] = uint8_t(a); a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint32_t(b[2]);
+    b[2] = uint8_t(a); a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint32_t(b[3]);
+    b[3] = uint8_t(a); carry = uint32_t((a >> 8) + ((a >> 7) & uint32_t(1)));
+    return code;
   }
 
   template<uint32_t DIV>
