@@ -18,13 +18,13 @@ template <class T, class S> __device__ __forceinline__ S conv(S a, T& b) {
 }
 
 template <int32_t EVD, int32_t BLOCK_THREADS, class real_t, class Stype>
-__global__ void find_srank_kernel(double epi, int32_t N, const real_t* __restrict__ X, Stype* __restrict__ reX, int32_t* __restrict__ rank) {
-  int32_t thread_x = 0, N_minus_one = N - 1; double s0;
-  if (0 < N) { if constexpr(EVD) s0 = epi * double(sqrt_relu(X[N_minus_one])); else s0 = epi * double(X[0]); }
+__global__ void find_srank_kernel(double epi, int32_t N_minus_one, const real_t* __restrict__ X, Stype* __restrict__ reX, int32_t* __restrict__ rank) {
+  int32_t thread_x = 0; double s0;
+  if (0 <= N_minus_one) { if constexpr(EVD) s0 = epi * double(sqrt_relu(X[N_minus_one])); else s0 = epi * double(X[0]); }
     else { s0 = 0.; }
   __shared__ typename cub::BlockReduce<int32_t, BLOCK_THREADS>::TempStorage temp_reduce;
 
-  for (int32_t i = int32_t(threadIdx.x); i < N; i += BLOCK_THREADS)
+  for (int32_t i = int32_t(threadIdx.x); i <= N_minus_one; i += BLOCK_THREADS)
     if constexpr(EVD) { thread_x += int32_t(s0 <= double(reX[N_minus_one - i] = sqrt_relu(X[i]))); }
       else { thread_x += int32_t(s0 <= double(conv(X[i], reX[i]))); }
 
@@ -63,7 +63,7 @@ inline int32_t tevd(cudaStream_t stream, cusolverDnHandle_t s_handle, cusolverDn
 
   real_t* dev_S = (real_t*)(&workspaceOnDevice[workspaceInBytesOnDevice]);
   cusolverDnXsyevd(s_handle, params, CUSOLVER_EIG_MODE_VECTOR, fill, N, type_c, G, ldg, type_r, dev_S, type_c, workspaceOnDevice, workspaceInBytesOnDevice, workspaceOnHostPtr, workspaceInBytesOnHost, nullptr);
-  find_srank_kernel<1, 512> <<< 1, 512, 0, stream >>> (epi, K, &dev_S[N - K], S, (int32_t*)workspaceOnDevice);
+  find_srank_kernel<1, 512> <<< 1, 512, 0, stream >>> (epi, K - 1, &dev_S[N - K], S, (int32_t*)workspaceOnDevice);
   int32_t rank = 0; cudaMemcpyAsync(&rank, workspaceOnDevice, sizeof(int32_t), cudaMemcpyDeviceToHost, stream);
   cudaFreeAsync(workspaceOnDevice, stream);
   K = std::min(K, p + rank);
@@ -85,7 +85,7 @@ inline int32_t ge_tsvd(cudaStream_t stream, cusolverDnHandle_t s_handle, cusolve
 
   real_t* dev_S = (real_t*)(&workspaceOnDevice[workspaceInBytesOnDevice]);
   cusolverDnXgesvd(s_handle, params, 'O', 'N', N, K, type_c, X, ldx, type_r, dev_S, type_c, X, ldx, type_c, nullptr, K, type_c, workspaceOnDevice, workspaceInBytesOnDevice, workspaceOnHostPtr, workspaceInBytesOnHost, nullptr);
-  find_srank_kernel<0, 512> <<< 1, 512, 0, stream >>> (epi, K, dev_S, S, (int32_t*)workspaceOnDevice);
+  find_srank_kernel<0, 512> <<< 1, 512, 0, stream >>> (epi, K - 1, dev_S, S, (int32_t*)workspaceOnDevice);
   int32_t rank = 0; cudaMemcpyAsync(&rank, workspaceOnDevice, sizeof(int32_t), cudaMemcpyDeviceToHost, stream);
   cudaFreeAsync(workspaceOnDevice, stream);
   return std::min(K, p + rank);
