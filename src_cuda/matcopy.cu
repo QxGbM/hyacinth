@@ -33,14 +33,19 @@ template <> __device__ __forceinline__ cuDoubleComplex float_one<cuDoubleComplex
 template <> __device__ __forceinline__ cuComplex float_one<cuComplex>() { return make_cuComplex(1.f, 0.f); };
 template <> __device__ __forceinline__ __half2 float_one<__half2>() { return make_half2(CUDART_ONE_FP16, CUDART_ZERO_FP16); };
 
+template <class T> __device__ __forceinline__ T conj(T a) { return a; }
+template <> __device__ __forceinline__ cuDoubleComplex conj<cuDoubleComplex>(cuDoubleComplex a) { return make_cuDoubleComplex(a.x, -a.y); };
+template <> __device__ __forceinline__ cuComplex conj<cuComplex>(cuComplex a) { return make_cuComplex(a.x, -a.y); };
+template <> __device__ __forceinline__ __half2 conj<__half2>(__half2 a) { return make_half2(a.x, -a.y); };
+
 template <char mode, class Atype, class Btype>
-__global__ void scatter_cvcpy_kernel(int64_t M, const int32_t* __restrict__ jpiv, const Atype* __restrict__ A, int64_t lda, Btype* __restrict__ B, int64_t ldb) {
+__global__ void scatter_conj_cvcpy_kernel(int64_t M, const int32_t* __restrict__ jpiv, const Atype* __restrict__ A, int64_t lda, Btype* __restrict__ B, int64_t ldb) {
   int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
   int32_t pred; if constexpr(mode == 'I') { pred = int32_t(x < M) + int32_t(x == y); } else { pred = int32_t(x < y); }
   if (y < M) {
-    A = &A[y + x * lda]; B = &B[y + int64_t(jpiv[x] - 1) * ldb];
+    A = &A[y + x * lda]; B = &B[int64_t(jpiv[x] - 1) + (y * ldb)];
     if (pred) { if constexpr(mode == 'I') { *B = (pred == 2) ? float_one<Btype>() : Btype(); } else { *B = Btype(); }}
-      else { *B = conv<Btype>(*A); }
+      else { *B = conj(conv<Btype>(*A)); }
   }
 };
 
@@ -49,8 +54,8 @@ inline void matcopy_dispatcher(cudaStream_t stream, char mode, int32_t M, int32_
   int64_t M64 = int64_t(M), lda64 = int64_t(lda), ldb64 = int64_t(ldb);
   dim3 grid_x(uint32_t((uint64_t(M64) + uint64_t(511)) >> 9), uint32_t(N));
   if (jpiv) {
-    if (mode == 'I') { scatter_cvcpy_kernel<'I'> <<< grid_x, 512, 0, stream >>> (M64, jpiv, A, lda64, B, ldb64); }
-      else { scatter_cvcpy_kernel<'U'> <<< grid_x, 512, 0, stream >>> (M64, jpiv, A, lda64, B, ldb64); }
+    if (mode == 'I') { scatter_conj_cvcpy_kernel<'I'> <<< grid_x, 512, 0, stream >>> (M64, jpiv, A, lda64, B, ldb64); }
+      else { scatter_conj_cvcpy_kernel<'U'> <<< grid_x, 512, 0, stream >>> (M64, jpiv, A, lda64, B, ldb64); }
   }
     else { cvcpy_kernel <<< grid_x, 512, 0, stream >>> (M64, A, lda64, B, ldb64); }
 }
