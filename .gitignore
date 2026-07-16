@@ -41,6 +41,7 @@ Testing
 !/Makefile
 cmake_install.cmake
 *Config.cmake
+*Targets.cmake
 install_manifest.txt
 compile_commands.json
 CTestTestfile.cmake

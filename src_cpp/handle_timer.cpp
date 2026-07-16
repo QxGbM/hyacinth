@@ -16,7 +16,7 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle, int32_t create_timer) {
   cusolverDnCreate(&handle->cusolverHandle);
   cusolverDnSetStream(handle->cusolverHandle, handle->cudaStream);
   cusolverDnCreateParams(&handle->cusolverParams);
-  cudaMallocHost(&handle->pinnedWorkspace, size_t(8192));
+  cudaMallocHost(&handle->pinnedWorkspace, size_t(128));
   handle->timer = create_timer ? (new EventTimer()) : nullptr;
 }
 

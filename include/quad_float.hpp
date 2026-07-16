@@ -4,10 +4,7 @@
 #include <cmath>
 #include <cuda_runtime.h>
 
-struct __align__(32) complex_float4 {
-  float4 real;
-  float4 imag;
-};
+struct __align__(32) complex_float4 { float4 real, imag; };
 
 namespace device::qf {
 
@@ -117,22 +114,23 @@ namespace device::qf {
 #endif
   }
 
-  __host__ __device__ __forceinline__ float4 frsqrt(float4 a) {
+  __host__ __device__ __forceinline__ void frsqrt(float4 a, float4& sq, float4& rsq) {
     int32_t p;
 #ifndef __CUDA_ARCH__
-    float rsq = 1. / std::sqrt(a.x);
-    float4 x = make_float4(std::frexp(rsq, &p), 0.f, 0.f, 0.f);
+    float r = 1. / std::sqrt(a.x);
+    float4 x = make_float4(std::frexp(r, &p), 0.f, 0.f, 0.f);
 #else
-    float rsq = rsqrtf(a.x);
-    float4 x = make_float4(frexpf(rsq, &p), 0.f, 0.f, 0.f);
+    float r = rsqrtf(a.x);
+    float4 x = make_float4(frexpf(r, &p), 0.f, 0.f, 0.f);
 #endif
     float4 c = make_float4(1.5f, 0.f, 0.f, 0.f);
-    a = fldexp(negate(a), (p << 1) - 1);
+    float4 s = fldexp(negate(a), (p << 1) - 1);
 
-    x = mul(x, add(mul(x, mul(a, x)), c));
-    x = mul(x, add(mul(x, mul(a, x)), c));
-    x = mul(x, add(mul(x, mul(a, x)), c));
-    return fldexp(x, p);
+    x = mul(x, add(mul(x, mul(s, x)), c));
+    x = mul(x, add(mul(x, mul(s, x)), c));
+    x = mul(x, add(mul(x, mul(s, x)), c));
+    rsq = (x = fldexp(x, p));
+    sq = mul(a, x);
   }
 
   __host__ __device__ __forceinline__ float4 conv_i64_qf_m126(uint64_t i) {

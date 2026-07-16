@@ -44,8 +44,7 @@ inline void allgather_iter(cudaStream_t stream, int32_t comm_rank, int64_t M, in
 }
 
 extern "C" int32_t hyacinXAllGatherV1Dcol(hyacinHandle_t handle, int32_t M, int32_t* K, hyacinPrecision_t Atype, void* A, int32_t lda, ncclComm_t row_comm) {
-  int32_t a_bytes; hyacinXelem('A', Atype, nullptr, &a_bytes, nullptr);
-  const int32_t wcols = 2048;
+  const int32_t wcols = 2048, a_bytes = hyacinXelem('A', &Atype);
   int64_t Mi = int64_t(M) * int64_t(a_bytes / int32_t(sizeof(int32_t))), LDAi = int64_t(lda) * int64_t(a_bytes / int32_t(sizeof(int32_t)));
 
   Timer::register_comm(handle.cudaStream, handle.timer);
