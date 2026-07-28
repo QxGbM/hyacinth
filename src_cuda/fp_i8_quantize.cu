@@ -48,29 +48,30 @@ __device__ __forceinline__ void quantize_i8rems(real_t x, int32_t expon, uint64_
 
 template <uint32_t ORDER>
 __device__ __forceinline__ void write_i8(const uint32_t (&code)[3], int8_t* A, int64_t strideA) {
-  if constexpr(uint32_t(0) < ORDER) { A[0] = uint8_t(code[0]); }
-  if constexpr(uint32_t(1) < ORDER) { A[strideA] = uint8_t(code[0] >> 8); }
-  if constexpr(uint32_t(2) < ORDER) { A[strideA * int64_t(2)] = uint8_t(code[0] >> 16); }
-  if constexpr(uint32_t(3) < ORDER) { A[strideA * int64_t(3)] = uint8_t(code[0] >> 24); }
-  if constexpr(uint32_t(4) < ORDER) { A[strideA * int64_t(4)] = uint8_t(code[1]); }
-  if constexpr(uint32_t(5) < ORDER) { A[strideA * int64_t(5)] = uint8_t(code[1] >> 8); }
-  if constexpr(uint32_t(6) < ORDER) { A[strideA * int64_t(6)] = uint8_t(code[1] >> 16); }
-  if constexpr(uint32_t(7) < ORDER) { A[strideA * int64_t(7)] = uint8_t(code[1] >> 24); }
-  if constexpr(uint32_t(8) < ORDER) { A[strideA * int64_t(8)] = uint8_t(code[2]); }
-  if constexpr(uint32_t(9) < ORDER) { A[strideA * int64_t(9)] = uint8_t(code[2] >> 8); }
-  if constexpr(uint32_t(10) < ORDER) { A[strideA * int64_t(10)] = uint8_t(code[2] >> 16); }
-  if constexpr(uint32_t(11) < ORDER) { A[strideA * int64_t(11)] = uint8_t(code[2] >> 24); }
+  if constexpr(uint32_t(0) < ORDER) { *A = uint8_t(code[0]); }
+  if constexpr(uint32_t(1) < ORDER) { *(A += strideA) = uint8_t(code[0] >> 8); }
+  if constexpr(uint32_t(2) < ORDER) { *(A += strideA) = uint8_t(code[0] >> 16); }
+  if constexpr(uint32_t(3) < ORDER) { *(A += strideA) = uint8_t(code[0] >> 24); }
+  if constexpr(uint32_t(4) < ORDER) { *(A += strideA) = uint8_t(code[1]); }
+  if constexpr(uint32_t(5) < ORDER) { *(A += strideA) = uint8_t(code[1] >> 8); }
+  if constexpr(uint32_t(6) < ORDER) { *(A += strideA) = uint8_t(code[1] >> 16); }
+  if constexpr(uint32_t(7) < ORDER) { *(A += strideA) = uint8_t(code[1] >> 24); }
+  if constexpr(uint32_t(8) < ORDER) { *(A += strideA) = uint8_t(code[2]); }
+  if constexpr(uint32_t(9) < ORDER) { *(A += strideA) = uint8_t(code[2] >> 8); }
+  if constexpr(uint32_t(10) < ORDER) { *(A += strideA) = uint8_t(code[2] >> 16); }
+  if constexpr(uint32_t(11) < ORDER) { *(A += strideA) = uint8_t(code[2] >> 24); }
 }
 
 template <uint32_t ORDER, class matrix_t, int32_t op>
 __global__ void quantize_kernel(int64_t M, int64_t N, const matrix_t* __restrict__ A, int64_t lda, uint64_t lo, uint32_t hi, int32_t umax_m62, const int32_t* __restrict__ vec_expon, int8_t* __restrict__ B, int64_t ldb, int64_t strideB) {
+  constexpr int32_t op_complex = op & 8, op_iter = (op & 7) - 1;
   int64_t y = (int64_t(blockIdx.x) << 8) + int64_t(threadIdx.x), iter = y + (int64_t(blockIdx.y) * lda);
   int32_t expon = umax_m62 - vec_expon[blockIdx.y], invalidA = int32_t(M <= y || N <= int64_t(blockIdx.y));
   matrix_t A_i = invalidA ? matrix_t() : A[iter];
   uint32_t code[3];
 
-  constexpr int32_t op_complex = op & 8, op_iter = (op & 7) - 1;
-  if constexpr(op_iter == -1) {
+  if (invalidA) { code[0] = code[1] = code[2] = uint32_t(0); }
+  else if constexpr(op_iter == -1) {
     if constexpr(op_complex) quantize_i8limbs<ORDER>(A_i.x, expon, lo, hi, code);
       else quantize_i8limbs<ORDER>(A_i, expon, lo, hi, code);
   }
@@ -78,17 +79,14 @@ __global__ void quantize_kernel(int64_t M, int64_t N, const matrix_t* __restrict
     if constexpr(op_complex) quantize_i8rems<op_iter, ORDER>(A_i.x, expon, lo, hi, code);
       else quantize_i8rems<op_iter, ORDER>(A_i, expon, lo, hi, code);
   }
-
-  if (invalidA)
-    code[0] = code[1] = code[2] = uint32_t(0);
   write_i8<ORDER>(code, &B[y + (int64_t(blockIdx.y) * ldb)], strideB);
 
   if constexpr(op_complex) {
-    if constexpr(op_iter == -1) quantize_i8limbs<ORDER>(A_i.y, expon, lo, hi, code);
-      else quantize_i8rems<op_iter, ORDER>(A_i.y, expon, lo, hi, code);
-
-    if (invalidA)
-      code[0] = code[1] = code[2] = uint32_t(0);
+    if (invalidA) { code[0] = code[1] = code[2] = uint32_t(0); }
+    else {
+      if constexpr(op_iter == -1) quantize_i8limbs<ORDER>(A_i.y, expon, lo, hi, code);
+        else quantize_i8rems<op_iter, ORDER>(A_i.y, expon, lo, hi, code);
+    }
     write_i8<ORDER>(code, &B[y + (int64_t(blockIdx.y) * ldb) + (int64_t(ORDER) * strideB)], strideB);
   }
 };
