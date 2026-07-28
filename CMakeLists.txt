@@ -31,7 +31,7 @@ set(CU_SOURCES
   src_cuda/gram_svd.cu
   src_cuda/i32_accum.cu
   src_cuda/i32_rem_accum.cu
-  src_cuda/i63_u47_accum_conv.cu
+  src_cuda/i63_accum_conv.cu
   src_cuda/matcopy.cu
   src_cuda/potrfp_uniform.cu
 )
