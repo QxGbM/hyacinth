@@ -127,8 +127,8 @@ namespace internal::int8 {
   void dequantize_complex(cudaStream_t stream, int32_t orderA, int32_t LimbCount, int32_t K, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vec_expon, complex_double2* B, int32_t ldb);
   void dequantize_complex(cudaStream_t stream, int32_t orderA, int32_t LimbCount, int32_t K, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vec_expon, complex_float4* B, int32_t ldb);
 
-  void accumulate_i32tensor(cudaStream_t stream, int32_t beta, int32_t N, int32_t sft, uint32_t sft_iter, int32_t orderX, const int32_t* X, int32_t ldx, int32_t orderA, uint64_t* A);
-  void accumulate_remainder_i32tensor(cudaStream_t stream, int32_t beta, int32_t N, int32_t orderX, int32_t iter, const int32_t* X, int32_t ldx, int32_t orderA, uint64_t* A);
+  void accumulate_i32tensor(cudaStream_t stream, char mode, int32_t beta, int32_t N, int32_t sft, uint32_t sft_iter, int32_t orderX, const int32_t* X, int32_t ldx, int32_t orderA, uint64_t* A);
+  void accumulate_remainder_i32tensor(cudaStream_t stream, char mode, int32_t beta, int32_t N, int32_t orderX, int32_t iter, const int32_t* X, int32_t ldx, int32_t orderA, uint64_t* A);
   void accumulate_conv_i63(cudaStream_t stream, int32_t orderA, int32_t LimbCount, int32_t Complex, int64_t N, uint64_t* A);
 
   void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const double* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C, int8_t* workspace);

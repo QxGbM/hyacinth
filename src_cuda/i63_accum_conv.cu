@@ -55,14 +55,14 @@ template <int32_t mode, int32_t ORDER> __global__ void limbs_convert_kernel(int6
   int64_t i = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x); A = &A[i];
   if (i < N) {
     uint64_t a[ORDER];
-    if constexpr(mode == 0) { load_i(a, A, N); conv_u32(a, A, N); }
-    else if constexpr(mode == 1) { load_i(a, A, N); conv_u43(a, A, N); }
-    else if constexpr(mode == 2) { load_i(a, A, N); conv_u48(a, A, N); }
-    else if constexpr(mode == 3) { load_i(a, A, N); conv_u38(a, A, N); }
-    else if constexpr(mode == 4) { load_i(a, &A[N * ORDER], N); conv_u32(a, &A[N * int64_t(2 * ORDER)], N); load_i(a, A, N); conv_u32(a, A, N); }
-    else if constexpr(mode == 5) { load_i(a, &A[N * int64_t(2)], N); conv_u43(a, &A[N * int64_t(3)], N); load_i(a, A, N); conv_u43(a, A, N); }
-    else if constexpr(mode == 6) { load_i(a, &A[N * int64_t(3)], N); conv_u48(a, &A[N * int64_t(4)], N); load_i(a, A, N); conv_u48(a, A, N); }
-    else if constexpr(mode == 7) { load_i(a, &A[N * int64_t(3)], N); conv_u38(a, &A[N * int64_t(5)], N); load_i(a, A, N); conv_u38(a, A, N); }
+    if constexpr(mode == 0) { load_i(a, A, N); conv_u32(a, A, N); } else
+    if constexpr(mode == 1) { load_i(a, A, N); conv_u43(a, A, N); } else
+    if constexpr(mode == 2) { load_i(a, A, N); conv_u48(a, A, N); } else
+    if constexpr(mode == 3) { load_i(a, A, N); conv_u38(a, A, N); } else
+    if constexpr(mode == 4) { load_i(a, &A[N * int64_t(ORDER)], N); conv_u32(a, &A[N * int64_t(2 * ORDER)], N); load_i(a, A, N); conv_u32(a, A, N); } else
+    if constexpr(mode == 5) { load_i(a, &A[N * int64_t(2)], N); conv_u43(a, &A[N * int64_t(3)], N); load_i(a, A, N); conv_u43(a, A, N); } else
+    if constexpr(mode == 6) { load_i(a, &A[N * int64_t(3)], N); conv_u48(a, &A[N * int64_t(4)], N); load_i(a, A, N); conv_u48(a, A, N); } else
+    if constexpr(mode == 7) { load_i(a, &A[N * int64_t(3)], N); conv_u38(a, &A[N * int64_t(5)], N); load_i(a, A, N); conv_u38(a, A, N); }
   }
 }
 
