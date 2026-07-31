@@ -52,9 +52,9 @@ __device__ __forceinline__ void conv_u38(const uint64_t (&a)[3], uint64_t* out, 
 }
 
 template <int32_t mode, int32_t ORDER> __global__ void limbs_convert_kernel(int64_t N, uint64_t* __restrict__ A) {
-  int64_t i = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x); A = &A[i];
+  int64_t i = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x);
   if (i < N) {
-    uint64_t a[ORDER];
+    uint64_t a[ORDER]; A = &A[i];
     if constexpr(mode == 0) { load_i(a, A, N); conv_u32(a, A, N); } else
     if constexpr(mode == 1) { load_i(a, A, N); conv_u43(a, A, N); } else
     if constexpr(mode == 2) { load_i(a, A, N); conv_u48(a, A, N); } else

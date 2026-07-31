@@ -33,7 +33,7 @@ __device__ __forceinline__ float4 neg_func(float4 a) { return device::qf::negate
 __device__ __forceinline__ complex_double2 neg_func(complex_double2 a) { return device::dd::make_complex_double2(device::dd::negate(a.real), device::dd::negate(a.imag)); }
 __device__ __forceinline__ complex_float4 neg_func(complex_float4 a) { return device::qf::make_complex_float4(device::qf::negate(a.real), device::qf::negate(a.imag)); }
 
-template <class matrix_t, int32_t WARP_THREADS, int32_t BLOCK_WARPS>
+template <int32_t WARP_THREADS, int32_t BLOCK_WARPS, class matrix_t>
 __global__ void gemv_kernel(int32_t M, int32_t N, matrix_t* __restrict__ A, int64_t ldj, int64_t lda) {
   __shared__ typename cub::BlockReduce<matrix_t, WARP_THREADS>::TempStorage temp_reduce[BLOCK_WARPS];
 
@@ -56,26 +56,17 @@ __global__ void gemv_kernel(int32_t M, int32_t N, matrix_t* __restrict__ A, int6
 
 template <class matrix_t>
 inline void gemv_dispatcher(cudaStream_t stream, int32_t j, int32_t M, int32_t N, matrix_t* A, int32_t lda) {
-  constexpr int32_t warp_threads[]{ 32, 64, 128, 256, 512 };
-  constexpr int32_t block_warps[]{ 16, 8, 4, 2, 1 };
+  constexpr int32_t wthreads[]{ 32, 64, 128, 256, 512 };
+  constexpr int32_t bwarps[]{ 16, 8, 4, 2, 1 };
   constexpr int32_t target_blocks = 512;
   int32_t grid[]{ (M + 15) >> 4, (M + 7) >> 3, (M + 3) >> 2, (M + 1) >> 1 };
+  int64_t lda64 = int64_t(lda), ldj = int64_t(j) * lda64;
 
-  if (target_blocks <= grid[0] || N <= warp_threads[0])
-    gemv_kernel<matrix_t, warp_threads[0], block_warps[0]>
-      <<< grid[0], dim3(warp_threads[0], block_warps[0], 1), 0, stream >>> (M, N, A, int64_t(j) * int64_t(lda), int64_t(lda));
-  else if (target_blocks <= grid[1] || N <= warp_threads[1])
-    gemv_kernel<matrix_t, warp_threads[1], block_warps[1]>
-      <<< grid[1], dim3(warp_threads[1], block_warps[1], 1), 0, stream >>> (M, N, A, int64_t(j) * int64_t(lda), int64_t(lda));
-  else if (target_blocks <= grid[2] || N <= warp_threads[2])
-    gemv_kernel<matrix_t, warp_threads[2], block_warps[2]>
-      <<< grid[2], dim3(warp_threads[2], block_warps[2], 1), 0, stream >>> (M, N, A, int64_t(j) * int64_t(lda), int64_t(lda));
-  else if (target_blocks <= grid[3] || N <= warp_threads[3])
-    gemv_kernel<matrix_t, warp_threads[3], block_warps[3]>
-      <<< grid[3], dim3(warp_threads[3], block_warps[3], 1), 0, stream >>> (M, N, A, int64_t(j) * int64_t(lda), int64_t(lda));
-  else
-    gemv_kernel<matrix_t, warp_threads[4], block_warps[4]>
-      <<< M, dim3(warp_threads[4], block_warps[4], 1), 0, stream >>> (M, N, A, int64_t(j) * int64_t(lda), int64_t(lda));
+  if (target_blocks <= grid[0] || N <= wthreads[0]) { gemv_kernel<wthreads[0], bwarps[0]> <<< grid[0], dim3(wthreads[0], bwarps[0], 1), 0, stream >>> (M, N, A, ldj, lda64); } else
+  if (target_blocks <= grid[1] || N <= wthreads[1]) { gemv_kernel<wthreads[1], bwarps[1]> <<< grid[1], dim3(wthreads[1], bwarps[1], 1), 0, stream >>> (M, N, A, ldj, lda64); } else
+  if (target_blocks <= grid[2] || N <= wthreads[2]) { gemv_kernel<wthreads[2], bwarps[2]> <<< grid[2], dim3(wthreads[2], bwarps[2], 1), 0, stream >>> (M, N, A, ldj, lda64); } else
+  if (target_blocks <= grid[3] || N <= wthreads[3]) { gemv_kernel<wthreads[3], bwarps[3]> <<< grid[3], dim3(wthreads[3], bwarps[3], 1), 0, stream >>> (M, N, A, ldj, lda64); } else
+  { gemv_kernel<wthreads[4], bwarps[4]> <<< M, dim3(wthreads[4], bwarps[4], 1), 0, stream >>> (M, N, A, ldj, lda64); }
 }
 
 namespace internal::Cholesky {

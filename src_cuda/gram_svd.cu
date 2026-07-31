@@ -37,8 +37,8 @@ template <class complex_t>
 __global__ void evd_reorder_kernel(int64_t M, int64_t N_minus_one, complex_t* __restrict__ A, int64_t lda) {
   int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x);
   if (y < M) {
-    int64_t lx = int64_t(blockIdx.y) * lda, e1 = y + lx, e2 = y + N_minus_one - lx;
-    complex_t e = A[e1]; A[e1] = A[e2]; A[e2] = e;
+    A = &A[y]; int64_t lx = int64_t(blockIdx.y) * lda, ly = N_minus_one - lx;
+    complex_t e = A[lx]; A[lx] = A[ly]; A[ly] = e;
   }
 };
 
@@ -129,24 +129,24 @@ extern "C" int32_t hyacinXGevPcsvd(hyacinHandle_t handle, char use_evd, char fil
   }
   else switch(Gtype) {
     case HYACIN_F64: if (Atype == HYACIN_F64)
-    { return gsvd<double, double, double, double>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (double*)S, (double*)G, ldg, handle.pinnedWorkspace); }
-    else if (Atype == HYACIN_F32)
+    { return gsvd<double, double, double, double>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (double*)S, (double*)G, ldg, handle.pinnedWorkspace); } else
+    if (Atype == HYACIN_F32)
     { return gsvd<float, float, float, double>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (float*)S, (double*)G, ldg, handle.pinnedWorkspace); } else { return 0; }
     case HYACIN_F32: if (Atype == HYACIN_F32)
-    { return gsvd<float, float, float, float>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (float*)S, (float*)G, ldg, handle.pinnedWorkspace); }
-    else if (Atype == HYACIN_F16) 
+    { return gsvd<float, float, float, float>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (float*)S, (float*)G, ldg, handle.pinnedWorkspace); } else
+    if (Atype == HYACIN_F16) 
     { return gsvd<float, float, __half, float>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (__half*)S, (float*)G, ldg, handle.pinnedWorkspace); } else { return 0; }
     case HYACIN_DD: if (Atype == HYACIN_F64)
     { return gsvd<double, double, double, double2>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (double*)S, (double2*)G, ldg, handle.pinnedWorkspace); } else { return 0; }
     case HYACIN_QF: if (Atype == HYACIN_F64)
     { return gsvd<double, double, double, float4>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (double*)S, (float4*)G, ldg, handle.pinnedWorkspace); } else { return 0; }
     case HYACIN_F64_COMPLEX: if (Atype == HYACIN_F64_COMPLEX)
-    { return gsvd<double, cuDoubleComplex, cuDoubleComplex, double>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (double*)S, (cuDoubleComplex*)G, ldg, handle.pinnedWorkspace); }
-    else if (Atype == HYACIN_F32_COMPLEX)
+    { return gsvd<double, cuDoubleComplex, cuDoubleComplex, double>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (double*)S, (cuDoubleComplex*)G, ldg, handle.pinnedWorkspace); } else
+    if (Atype == HYACIN_F32_COMPLEX)
     { return gsvd<float, cuComplex, cuComplex, double>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (float*)S, (cuDoubleComplex*)G, ldg, handle.pinnedWorkspace); } else { return 0; }
     case HYACIN_F32_COMPLEX: if (Atype == HYACIN_F32_COMPLEX)
-    { return gsvd<float, cuComplex, cuComplex, float>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (float*)S, (cuComplex*)G, ldg, handle.pinnedWorkspace); }
-    else if (Atype == HYACIN_F16_COMPLEX)
+    { return gsvd<float, cuComplex, cuComplex, float>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (float*)S, (cuComplex*)G, ldg, handle.pinnedWorkspace); } else
+    if (Atype == HYACIN_F16_COMPLEX)
     { return gsvd<float, cuComplex, __half2, float>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (__half*)S, (cuComplex*)G, ldg, handle.pinnedWorkspace); } else { return 0; }
     case HYACIN_DD_COMPLEX: if (Atype == HYACIN_F64_COMPLEX)
     { return gsvd<double, cuDoubleComplex, cuDoubleComplex, double2>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (double*)S, (complex_double2*)G, ldg, handle.pinnedWorkspace); } else { return 0; }
