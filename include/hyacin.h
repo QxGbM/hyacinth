@@ -67,7 +67,7 @@ void hyacinXsyherk_autoTune(
   hyacinAlgorithm_t* alg // host-pointer
 );
 
-int32_t hyacinXsyherk(
+void hyacinXsyherk(
   hyacinHandle_t handle,
   int32_t M,
   int32_t N,
@@ -132,7 +132,7 @@ void hyacinXtransform(
 
 #ifndef NO_NCCL
 
-int32_t hyacinXsyherk1Drow(
+void hyacinXsyherk1Drow(
   hyacinHandle_t handle,
   int32_t localM,
   int32_t globalM,

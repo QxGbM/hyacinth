@@ -189,7 +189,7 @@ void internal::int8::i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, in
   quantize(stream, M, N, A, lda, umax, vec_expon, orderA, N, algnM, workspace);
   i8GemmU(stream, handle, algnN, N, algnM, workspace, orderA, C, orderC, scratch);
   gemm_accum_diag(stream, handle, algnN, N, algnM, orderA, workspace, C, orderC, scratch);
-  vector_sums(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideC - int64_t(N)], strideC);
+  cudaMemset2DAsync(&C[strideC - int64_t(N)], strideC * sizeof(uint64_t), 0, N * sizeof(uint64_t), orderC, stream);
 }
 
 void internal::int8::i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const float* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C, int8_t* workspace) {
@@ -198,7 +198,7 @@ void internal::int8::i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, in
   quantize(stream, M, N, A, lda, umax, vec_expon, orderA, N, algnM, workspace);
   i8GemmU(stream, handle, algnN, N, algnM, workspace, orderA, C, orderC, scratch);
   gemm_accum_diag(stream, handle, algnN, N, algnM, orderA, workspace, C, orderC, scratch);
-  vector_sums(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideC - int64_t(N)], strideC);
+  cudaMemset2DAsync(&C[strideC - int64_t(N)], strideC * sizeof(uint64_t), 0, N * sizeof(uint64_t), orderC, stream);
 }
 
 void internal::int8::i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const __half* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C, int8_t* workspace) {
@@ -207,7 +207,7 @@ void internal::int8::i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, in
   quantize(stream, M, N, A, lda, umax, vec_expon, orderA, N, algnM, workspace);
   i8GemmU(stream, handle, algnN, N, algnM, workspace, orderA, C, orderC, scratch);
   gemm_accum_diag(stream, handle, algnN, N, algnM, orderA, workspace, C, orderC, scratch);
-  vector_sums(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideC - int64_t(N)], strideC);
+  cudaMemset2DAsync(&C[strideC - int64_t(N)], strideC * sizeof(uint64_t), 0, N * sizeof(uint64_t), orderC, stream);
 }
 
 void internal::int8::i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const cuDoubleComplex* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C, int8_t* workspace) {
@@ -217,7 +217,7 @@ void internal::int8::i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, in
   i8GemmU(stream, handle, algnN, N, algnM, workspace, &workspace[strideA], orderA, C, orderC, scratch);
   gemm_accum_diag(stream, handle, algnN, N, algnM, orderA, workspace, &workspace[strideA], C, orderC, scratch);
   i8GemmF(stream, handle, algnN, N, algnM, workspace, &workspace[strideA], orderA, &C[strideC * int64_t(orderC)], orderC, scratch);
-  vector_sums(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideC - int64_t(N)], strideC);
+  cudaMemset2DAsync(&C[strideC - int64_t(N)], strideC * sizeof(uint64_t), 0, N * sizeof(uint64_t), 2 * orderC, stream);
 }
 
 void internal::int8::i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const cuComplex* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C, int8_t* workspace) {
@@ -227,7 +227,7 @@ void internal::int8::i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, in
   i8GemmU(stream, handle, algnN, N, algnM, workspace, &workspace[strideA], orderA, C, orderC, scratch);
   gemm_accum_diag(stream, handle, algnN, N, algnM, orderA, workspace, &workspace[strideA], C, orderC, scratch);
   i8GemmF(stream, handle, algnN, N, algnM, workspace, &workspace[strideA], orderA, &C[strideC * int64_t(orderC)], orderC, scratch);
-  vector_sums(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideC - int64_t(N)], strideC);
+  cudaMemset2DAsync(&C[strideC - int64_t(N)], strideC * sizeof(uint64_t), 0, N * sizeof(uint64_t), 2 * orderC, stream);
 }
 
 void internal::int8::i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const __half2* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C, int8_t* workspace) {
@@ -237,5 +237,5 @@ void internal::int8::i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, in
   i8GemmU(stream, handle, algnN, N, algnM, workspace, &workspace[strideA], orderA, C, orderC, scratch);
   gemm_accum_diag(stream, handle, algnN, N, algnM, orderA, workspace, &workspace[strideA], C, orderC, scratch);
   i8GemmF(stream, handle, algnN, N, algnM, workspace, &workspace[strideA], orderA, &C[strideC * int64_t(orderC)], orderC, scratch);
-  vector_sums(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideC - int64_t(N)], strideC);
+  cudaMemset2DAsync(&C[strideC - int64_t(N)], strideC * sizeof(uint64_t), 0, N * sizeof(uint64_t), 2 * orderC, stream);
 }

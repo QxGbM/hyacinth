@@ -7,7 +7,7 @@
 #include <tuple>
 #include <stdexcept>
 
-inline std::tuple<int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int64_t, int64_t, int64_t> ext_params(int32_t localM, int32_t globalM, int32_t N, int32_t& umax, int32_t distribute, hyacinPrecision_t Gtype, hyacinAlgorithm_t alg) {
+inline std::tuple<int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int64_t, int64_t, int64_t> ext_params(int32_t localM, int32_t globalM, int32_t N, int32_t umax, int32_t distribute, hyacinPrecision_t Gtype, hyacinAlgorithm_t alg) {
   hyacinPrecision_t GtypeReal = Gtype; hyacinXelem('R', &GtypeReal);
   int32_t Complex = int32_t(Gtype != GtypeReal);
   int32_t use_limbs = int32_t(alg == HYACIN_ALG_LIMBS || alg == HYACIN_ALG_LIMBS_ND);
@@ -17,10 +17,9 @@ inline std::tuple<int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int64_t,
   int32_t algnN = (N + 63) & (~63);
   int32_t bits_M = std::max(1, det_reduc ? globalM : localM);
   int32_t bits_E = int32_t(std::ceil(std::log2(double(bits_M)))) + (Complex ? 6 : 4);
-  umax = use_limbs ? (((umax + 10) & (~7)) - 3) : ((((bits_E + (umax << 1)) | 7) - bits_E) / 2);
   int32_t bits = bits_E + (umax << 1);
 
-  int32_t orderA = ((use_limbs ? umax : bits) + 8) >> 3;
+  int32_t orderA = (use_limbs ? (umax + 9) : (bits + 8)) >> 3;
   int64_t i8_bytes = int64_t(N) * int64_t(use_limbs ? orderA : 8) * ((int64_t(algnM) << Complex) + (int64_t(algnN) * sizeof(int32_t)));
   if (distribute && (alg == HYACIN_ALG_LIMBS_ND || alg == HYACIN_ALG_CRT_ND)) {
     int32_t em_bytes = hyacinXelem('A', &Gtype);
@@ -82,22 +81,22 @@ inline void deq_dispatcher(cudaStream_t stream, int32_t M, int32_t N, int32_t um
   }
 }
 
-inline int32_t cublas_dispatcher(cublasHandle_t handle, int32_t M, int32_t N, const void* A, int32_t lda, void* G, int32_t ldg, hyacinPrecision_t type) {
+inline void cublas_dispatcher(cublasHandle_t handle, int32_t M, int32_t N, const void* A, int32_t lda, void* G, int32_t ldg, hyacinPrecision_t type) {
   double one_f64 = 1., zero_f64 = 0.; float one_f32 = 1.f, zero_f32 = 0.f;
   switch (type) {
-    case HYACIN_F64: cublasDsyrk(handle, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_T, N, M, &one_f64, (const double*)A, lda, &zero_f64, (double*)G, ldg); return 0;
-    case HYACIN_F32: cublasSsyrk(handle, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_T, N, M, &one_f32, (const float*)A, lda, &zero_f32, (float*)G, ldg); return 0;
-    case HYACIN_F64_COMPLEX: cublasZherk(handle, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_C, N, M, &one_f64, (const cuDoubleComplex*)A, lda, &zero_f64, (cuDoubleComplex*)G, ldg); return 0;
-    case HYACIN_F32_COMPLEX: cublasCherk(handle, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_C, N, M, &one_f32, (const cuComplex*)A, lda, &zero_f32, (cuComplex*)G, ldg); return 0;
-    default: return 0;
+    case HYACIN_F64: cublasDsyrk(handle, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_T, N, M, &one_f64, (const double*)A, lda, &zero_f64, (double*)G, ldg); return;
+    case HYACIN_F32: cublasSsyrk(handle, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_T, N, M, &one_f32, (const float*)A, lda, &zero_f32, (float*)G, ldg); return;
+    case HYACIN_F64_COMPLEX: cublasZherk(handle, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_C, N, M, &one_f64, (const cuDoubleComplex*)A, lda, &zero_f64, (cuDoubleComplex*)G, ldg); return;
+    case HYACIN_F32_COMPLEX: cublasCherk(handle, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_C, N, M, &one_f32, (const cuComplex*)A, lda, &zero_f32, (cuComplex*)G, ldg); return;
+    default: return;
   }
 }
 
-extern "C" int32_t hyacinXsyherk(hyacinHandle_t handle, int32_t M, int32_t N, int32_t umax, hyacinPrecision_t Atype, const void* A, int32_t lda, hyacinPrecision_t Gtype, void* G, int32_t ldg, hyacinAlgorithm_t alg) {
-  if (M <= 0 || N <= 0) { return -1; }
+extern "C" void hyacinXsyherk(hyacinHandle_t handle, int32_t M, int32_t N, int32_t umax, hyacinPrecision_t Atype, const void* A, int32_t lda, hyacinPrecision_t Gtype, void* G, int32_t ldg, hyacinAlgorithm_t alg) {
+  if (M <= 0 || N <= 0) { return; }
   Timer::register_kernel(handle.cudaStream, handle.timer);
 
-  if (alg == CUBLAS_FLOAT_ND) { return cublas_dispatcher(handle.cublasHandle, M, N, A, lda, G, ldg, Atype); }
+  if (alg == CUBLAS_FLOAT_ND) { cublas_dispatcher(handle.cublasHandle, M, N, A, lda, G, ldg, Atype); return; }
   int32_t Complex, det_reduc, algnM, algnN, orderA, orderC; int64_t i8_bytes, acc_bytes, vec_bytes;
   std::tie(Complex, det_reduc, algnM, algnN, orderA, orderC, i8_bytes, acc_bytes, vec_bytes) = ext_params(M, M, N, umax, 0, Gtype, alg);
 
@@ -109,7 +108,6 @@ extern "C" int32_t hyacinXsyherk(hyacinHandle_t handle, int32_t M, int32_t N, in
   igemm_dispatcher(handle.cudaStream, handle.cublasHandle, M, N, Atype, A, lda, umax, (const int32_t*)vexp, algnM, algnN, orderA, orderC, (uint64_t*)acc, iA, alg);
   deq_dispatcher(handle.cudaStream, M, N, umax, (uint64_t*)acc, orderC, orderC, G, ldg, (const int32_t*)vexp, Gtype);
   cudaFreeAsync(dev_work, handle.cudaStream);
-  return umax;
 }
 
 #ifndef NO_NCCL
@@ -153,7 +151,7 @@ inline void deq_nd_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_
   }
 }
 
-inline int32_t cublas_nd_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const void* A, int32_t lda, void* G, int32_t ldg, hyacinPrecision_t Gtype, ncclComm_t col_comm, void* timer) {
+inline void cublas_nd_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const void* A, int32_t lda, void* G, int32_t ldg, hyacinPrecision_t Gtype, ncclComm_t col_comm, void* timer) {
   double one_f64 = 1., zero_f64 = 0.; float one_f32 = 1.f, zero_f32 = 0.f;
   int32_t pred = (ldg != N); void* data = G;
   if (pred) {
@@ -181,14 +179,13 @@ inline int32_t cublas_nd_dispatcher(cudaStream_t stream, cublasHandle_t handle, 
 
   if (pred)
     cudaFreeAsync(data, stream);
-  return 0;
 }
 
-extern "C" int32_t hyacinXsyherk1Drow(hyacinHandle_t handle, int32_t localM, int32_t globalM, int32_t N, int32_t umax, hyacinPrecision_t Atype, const void* A, int32_t lda, hyacinPrecision_t Gtype, void* G, int32_t ldg, hyacinAlgorithm_t alg, ncclComm_t col_comm) {
-  if (globalM <= 0 || N <= 0) { return -1; }
+extern "C" void hyacinXsyherk1Drow(hyacinHandle_t handle, int32_t localM, int32_t globalM, int32_t N, int32_t umax, hyacinPrecision_t Atype, const void* A, int32_t lda, hyacinPrecision_t Gtype, void* G, int32_t ldg, hyacinAlgorithm_t alg, ncclComm_t col_comm) {
+  if (globalM <= 0 || N <= 0) { return; }
   Timer::register_kernel(handle.cudaStream, handle.timer);
 
-  if (alg == CUBLAS_FLOAT_ND) { return cublas_nd_dispatcher(handle.cudaStream, handle.cublasHandle, localM, N, A, lda, G, ldg, Atype, col_comm, handle.timer); }
+  if (alg == CUBLAS_FLOAT_ND) { cublas_nd_dispatcher(handle.cudaStream, handle.cublasHandle, localM, N, A, lda, G, ldg, Atype, col_comm, handle.timer); return; }
   int32_t Complex, det_reduc, algnM, algnN, orderA, orderC; int64_t i8_bytes, acc_bytes, vec_bytes;
   std::tie(Complex, det_reduc, algnM, algnN, orderA, orderC, i8_bytes, acc_bytes, vec_bytes) = ext_params(localM, globalM, N, umax, 1, Gtype, alg);
 
@@ -219,7 +216,6 @@ extern "C" int32_t hyacinXsyherk1Drow(hyacinHandle_t handle, int32_t localM, int
     deq_nd_dispatcher(handle.cudaStream, handle.cublasHandle, localM, N, umax, (uint64_t*)acc, orderC, G, ldg, (const int32_t*)vexp, Gtype, iA, col_comm, handle.timer);
   }
   cudaFreeAsync(dev_work, handle.cudaStream);
-  return umax;
 }
 
 #endif

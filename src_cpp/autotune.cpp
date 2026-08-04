@@ -49,14 +49,13 @@ extern "C" void hyacinXsyherk_autoTune(double epi, int32_t use_nd_allreduce, int
 
   int32_t u = std::min(umax_practical_limit, u_extra + int32_t(std::ceil(-std::log2(epi_nrm))));
   int32_t use_limbs = int32_t(u < umax_threshold);
-  use_nd_allreduce = use_nd_allreduce && (auto_prec == HYACIN_F64 || auto_prec == HYACIN_F32);
 
   if (umax)
     *umax = u;
   if (ComputeType)
     *ComputeType = (Atype != ATypeReal) ? complex_type[int32_t(auto_prec)] : auto_prec;
   if (alg)
-    *alg = use_nd_allreduce ? (use_limbs ? HYACIN_ALG_LIMBS_ND : HYACIN_ALG_CRT_ND) : (use_limbs ? HYACIN_ALG_LIMBS : HYACIN_ALG_CRT);
+    *alg = use_nd_allreduce && (auto_prec == HYACIN_F64 || auto_prec == HYACIN_F32) ? (use_limbs ? HYACIN_ALG_LIMBS_ND : HYACIN_ALG_CRT_ND) : (use_limbs ? HYACIN_ALG_LIMBS : HYACIN_ALG_CRT);
 }
 
 extern "C" char hyacinXGevPcsvd_autoTune(int32_t N, int32_t K, hyacinPrecision_t Gtype) {

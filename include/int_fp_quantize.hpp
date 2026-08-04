@@ -32,17 +32,17 @@ namespace device::int8 {
 
   __host__ __device__ __forceinline__ int64_t round_i64(double x, int32_t expon, int32_t& e) {
 #ifndef __CUDA_ARCH__
-    return std::llrint(std::scalbn(x, (62 + expon) - (e = std::max(std::ilogb(x) + expon, 0))));
+    return std::llrint(std::scalbn(x, expon - (e = std::max(std::ilogb(x) + (expon - 62), 0))));
 #else
-    return llrint(scalbn(x, (62 + expon) - (e = __viaddmax_s32(ilogb(x), expon, 0))));
+    return llrint(scalbn(x, expon - (e = __viaddmax_s32(ilogb(x), expon - 62, 0))));
 #endif
   }
   
   __host__ __device__ __forceinline__ int64_t round_i64(float x, int32_t expon, int32_t& e) {
 #ifndef __CUDA_ARCH__
-    return std::llrint(std::scalbn(x, (62 + expon) - (e = std::max(std::ilogb(x) + expon, 0))));
+    return std::llrint(std::scalbn(x, expon - (e = std::max(std::ilogb(x) + (expon - 62), 0))));
 #else
-    return llrintf(scalbnf(x, (62 + expon) - (e = __viaddmax_s32(ilogbf(x), expon, 0))));
+    return llrintf(scalbnf(x, expon - (e = __viaddmax_s32(ilogbf(x), expon - 62, 0))));
 #endif
   }
 
