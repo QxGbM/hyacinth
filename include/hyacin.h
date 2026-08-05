@@ -24,10 +24,7 @@ typedef enum {
 
 typedef enum {
   HYACIN_ALG_LIMBS = 0,
-  HYACIN_ALG_CRT = 1,
-  HYACIN_ALG_LIMBS_ND = 2,
-  HYACIN_ALG_CRT_ND = 3,
-  CUBLAS_FLOAT_ND = 4
+  HYACIN_ALG_CRT = 1
 } hyacinAlgorithm_t;
 
 typedef struct {
@@ -59,7 +56,6 @@ int32_t hyacinXelem(
 
 void hyacinXsyherk_autoTune(
   double epi,
-  int32_t use_nd_allreduce,
   int32_t u_extra,
   int32_t* umax, // host-pointer
   hyacinPrecision_t Atype,
@@ -145,6 +141,15 @@ void hyacinXsyherk1Drow(
   void* G, // device-pointer
   int32_t ldg,
   hyacinAlgorithm_t alg,
+  ncclComm_t col_comm
+);
+
+void hyacinXAllReduce1Drow(
+  hyacinHandle_t handle,
+  int32_t orderA,
+  int32_t Complex,
+  int64_t N,
+  uint64_t* A, // device-pointer
   ncclComm_t col_comm
 );
 

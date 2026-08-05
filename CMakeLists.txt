@@ -24,6 +24,7 @@ set(CU_SOURCES
   src_cuda/acc_dequant_complex.cu
   src_cuda/acc_dequant_real.cu
   src_cuda/allgatherv_1dcol.cu
+  src_cuda/allreduce_1drow.cu
   src_cuda/fp_exponent.cu
   src_cuda/fp_i8_quantize.cu
   src_cuda/fp_pervec_sum.cu
@@ -32,7 +33,6 @@ set(CU_SOURCES
   src_cuda/gram_svd.cu
   src_cuda/i32_accum.cu
   src_cuda/i32_rem_accum.cu
-  src_cuda/i63_accum_conv.cu
   src_cuda/matcopy.cu
   src_cuda/potrfp_uniform.cu
 )

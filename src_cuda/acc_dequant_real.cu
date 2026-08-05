@@ -13,11 +13,11 @@ template<uint32_t ORDER> __device__ __forceinline__ void fscal(uint64_t (&a)[ORD
 
 template<int32_t orderA, int32_t LimbCount, int32_t LimbSpace, class real_t>
 __global__ void dequantize_kernel(int64_t K, int64_t N, const uint64_t* __restrict__ A, int64_t strideA, int32_t umax, const int32_t* __restrict__ vec_expon, real_t* __restrict__ B, int64_t ldb) {
-  int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x);
+  int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
 
-  if (y < N) {
+  if (y <= x) {
     constexpr uint32_t shifts[]{ uint32_t(0), uint32_t(LimbSpace), uint32_t(LimbSpace * 2), uint32_t(LimbSpace * 3), uint32_t(LimbSpace * 4), uint32_t(LimbSpace * 5) };
-    int64_t x = int64_t(blockIdx.y), iter = x < y ? (x + y * N) : (y + x * N);
+    int64_t iter = y + x * N;
 
     uint64_t acc[orderA] { A[iter] };
     if constexpr(orderA == LimbCount) {

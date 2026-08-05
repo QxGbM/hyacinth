@@ -26,7 +26,7 @@ extern "C" int32_t hyacinXelem(char sel, hyacinPrecision_t* Atype) {
   return type_bytes[int32_t(*Atype)];
 }
 
-extern "C" void hyacinXsyherk_autoTune(double epi, int32_t use_nd_allreduce, int32_t u_extra, int32_t* umax, hyacinPrecision_t Atype, hyacinPrecision_t* ComputeType, hyacinAlgorithm_t* alg) {
+extern "C" void hyacinXsyherk_autoTune(double epi, int32_t u_extra, int32_t* umax, hyacinPrecision_t Atype, hyacinPrecision_t* ComputeType, hyacinAlgorithm_t* alg) {
   if (device_sm == 0) {
     int32_t device, major, minor;
     cudaGetDevice(&device);
@@ -48,14 +48,12 @@ extern "C" void hyacinXsyherk_autoTune(double epi, int32_t use_nd_allreduce, int
     (epi_qf <= epi_nrm && f64_incapable) ? HYACIN_QF : HYACIN_DD));
 
   int32_t u = std::min(umax_practical_limit, u_extra + int32_t(std::ceil(-std::log2(epi_nrm))));
-  int32_t use_limbs = int32_t(u < umax_threshold);
-
   if (umax)
     *umax = u;
   if (ComputeType)
     *ComputeType = (Atype != ATypeReal) ? complex_type[int32_t(auto_prec)] : auto_prec;
   if (alg)
-    *alg = use_nd_allreduce && (auto_prec == HYACIN_F64 || auto_prec == HYACIN_F32) ? (use_limbs ? HYACIN_ALG_LIMBS_ND : HYACIN_ALG_CRT_ND) : (use_limbs ? HYACIN_ALG_LIMBS : HYACIN_ALG_CRT);
+    *alg = u < umax_threshold ? HYACIN_ALG_LIMBS : HYACIN_ALG_CRT;
 }
 
 extern "C" char hyacinXGevPcsvd_autoTune(int32_t N, int32_t K, hyacinPrecision_t Gtype) {
