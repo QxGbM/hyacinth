@@ -71,24 +71,24 @@ __device__ __forceinline__ void conv_u38(uint64_t (&a)[5]) {
   a[0] = b0; a[1] = b1; a[2] = b2; a[3] = b3; a[4] = b4;
 }
 
-template <int32_t mode> __global__ void limbs_convert_kernel(int64_t N, uint64_t* __restrict__ A, uint64_t* __restrict__ E) {
+template <int32_t op> __global__ void limbs_convert_kernel(int64_t N, uint64_t* __restrict__ A, uint64_t* __restrict__ E) {
   int64_t i = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x);
   if (i < N) {
     constexpr int32_t LimbCount_lis[] = { 2, 3, 4, 4, 5, 6, 2, 3, 4, 4, 5, 6 };
-    constexpr int32_t LimbCount = LimbCount_lis[mode];
+    constexpr int32_t LimbCount = LimbCount_lis[op];
     uint64_t a[LimbCount]; A = &A[i]; E = &E[i];
-    if constexpr(mode == 0) { load_i<1>(a, A, N); conv_u32(a); store_i<0, 1>(a, A, N); store_i<1, 1>(a, E, N); } else
-    if constexpr(mode == 1) { load_i<2>(a, A, N); conv_u43(a); store_i<0, 2>(a, A, N); store_i<2, 1>(a, E, N); } else
-    if constexpr(mode == 2) { load_i<2>(a, A, N); conv_u32(a); store_i<0, 2>(a, A, N); store_i<2, 2>(a, E, N); } else
-    if constexpr(mode == 3) { load_i<3>(a, A, N); conv_u48(a); store_i<0, 3>(a, A, N); store_i<3, 1>(a, E, N); } else
-    if constexpr(mode == 4) { load_i<3>(a, A, N); conv_u38(a); store_i<0, 3>(a, A, N); store_i<3, 2>(a, E, N); } else
-    if constexpr(mode == 5) { load_i<3>(a, A, N); conv_u32(a); store_i<0, 3>(a, A, N); store_i<3, 2>(a, E, N); } else
-    if constexpr(mode == 6) { load_i<1>(a, &A[N], N); conv_u32(a); store_i<0, 2>(a, E, N); load_i<1>(a, A, N); conv_u32(a); store_i<0, 2>(a, A, N); } else
-    if constexpr(mode == 7) { load_i<2>(a, &A[N * int64_t(2)], N); conv_u43(a); store_i<0, 1>(a, &A[N * int64_t(3)], N); store_i<1, 2>(a, E, N); load_i<2>(a, A, N); conv_u43(a); store_i<0, 3>(a, A, N); } else
-    if constexpr(mode == 8) { load_i<2>(a, &A[N * int64_t(2)], N); conv_u32(a); store_i<0, 4>(a, E, N); load_i<2>(a, A, N); conv_u32(a); store_i<0, 4>(a, A, N); } else
-    if constexpr(mode == 9) { load_i<3>(a, &A[N * int64_t(3)], N); conv_u48(a); store_i<0, 2>(a, &A[N * int64_t(4)], N); store_i<2, 2>(a, E, N); load_i<3>(a, A, N); conv_u48(a); store_i<0, 4>(a, A, N); } else
-    if constexpr(mode == 10) { load_i<3>(a, &A[N * int64_t(3)], N); conv_u38(a); store_i<0, 1>(a, &A[N * int64_t(5)], N); store_i<1, 4>(a, E, N); load_i<3>(a, A, N); conv_u38(a); store_i<0, 5>(a, A, N); } else
-    if constexpr(mode == 11) { load_i<3>(a, &A[N * int64_t(3)], N); conv_u32(a); store_i<0, 6>(a, E, N); load_i<3>(a, A, N); conv_u32(a); store_i<0, 6>(a, A, N); }
+    if constexpr(op == 0) { load_i<1>(a, A, N); conv_u32(a); store_i<0, 1>(a, A, N); store_i<1, 1>(a, E, N); } else
+    if constexpr(op == 1) { load_i<2>(a, A, N); conv_u43(a); store_i<0, 2>(a, A, N); store_i<2, 1>(a, E, N); } else
+    if constexpr(op == 2) { load_i<2>(a, A, N); conv_u32(a); store_i<0, 2>(a, A, N); store_i<2, 2>(a, E, N); } else
+    if constexpr(op == 3) { load_i<3>(a, A, N); conv_u48(a); store_i<0, 3>(a, A, N); store_i<3, 1>(a, E, N); } else
+    if constexpr(op == 4) { load_i<3>(a, A, N); conv_u38(a); store_i<0, 3>(a, A, N); store_i<3, 2>(a, E, N); } else
+    if constexpr(op == 5) { load_i<3>(a, A, N); conv_u32(a); store_i<0, 3>(a, A, N); store_i<3, 2>(a, E, N); } else
+    if constexpr(op == 6) { load_i<1>(a, &A[N], N); conv_u32(a); store_i<0, 2>(a, E, N); load_i<1>(a, A, N); conv_u32(a); store_i<0, 2>(a, A, N); } else
+    if constexpr(op == 7) { load_i<2>(a, &A[N * int64_t(2)], N); conv_u43(a); store_i<0, 1>(a, &A[N * int64_t(3)], N); store_i<1, 2>(a, E, N); load_i<2>(a, A, N); conv_u43(a); store_i<0, 3>(a, A, N); } else
+    if constexpr(op == 8) { load_i<2>(a, &A[N * int64_t(2)], N); conv_u32(a); store_i<0, 4>(a, E, N); load_i<2>(a, A, N); conv_u32(a); store_i<0, 4>(a, A, N); } else
+    if constexpr(op == 9) { load_i<3>(a, &A[N * int64_t(3)], N); conv_u48(a); store_i<0, 2>(a, &A[N * int64_t(4)], N); store_i<2, 2>(a, E, N); load_i<3>(a, A, N); conv_u48(a); store_i<0, 4>(a, A, N); } else
+    if constexpr(op == 10) { load_i<3>(a, &A[N * int64_t(3)], N); conv_u38(a); store_i<0, 1>(a, &A[N * int64_t(5)], N); store_i<1, 4>(a, E, N); load_i<3>(a, A, N); conv_u38(a); store_i<0, 5>(a, A, N); } else
+    if constexpr(op == 11) { load_i<3>(a, &A[N * int64_t(3)], N); conv_u32(a); store_i<0, 6>(a, E, N); load_i<3>(a, A, N); conv_u32(a); store_i<0, 6>(a, A, N); }
   }
 }
 
@@ -102,36 +102,36 @@ template <int32_t SFT, int32_t OFF, int32_t LEN, int32_t ORDER> __device__ __for
   if constexpr(5 < LEN) { constexpr uint32_t s = uint32_t(SFT * (OFF + 5)); device::int8::add_shifted(a, int64_t(*(in += stride)), s); }
 }
 
-template <int32_t mode> __global__ void limbs_accum_kernel(int64_t N, uint64_t* __restrict__ A, const uint64_t* __restrict__ E) {
+template <int32_t op> __global__ void limbs_accum_kernel(int64_t N, uint64_t* __restrict__ A, const uint64_t* __restrict__ E) {
   int64_t i = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x);
   if (i < N) {
     constexpr int32_t orderA_lis[] = { 1, 2, 2, 3, 3, 3, 1, 2, 2, 3, 3, 3 };
-    constexpr int32_t orderA = orderA_lis[mode];
+    constexpr int32_t orderA = orderA_lis[op];
     uint64_t a[orderA]; A = &A[i]; E = &E[i];
-    if constexpr(mode == 0) { accum_i<32, 0, 1>(a, A, N); accum_i<32, 1, 1>(a, E, N); store_i<0, 1>(a, A, N); } else
-    if constexpr(mode == 1) { accum_i<43, 0, 2>(a, A, N); accum_i<43, 2, 1>(a, E, N); store_i<0, 2>(a, A, N); } else
-    if constexpr(mode == 2) { accum_i<32, 0, 2>(a, A, N); accum_i<32, 2, 2>(a, E, N); store_i<0, 2>(a, A, N); } else
-    if constexpr(mode == 3) { accum_i<48, 0, 3>(a, A, N); accum_i<48, 3, 1>(a, E, N); store_i<0, 3>(a, A, N); } else
-    if constexpr(mode == 4) { accum_i<38, 0, 3>(a, A, N); accum_i<38, 3, 2>(a, E, N); store_i<0, 3>(a, A, N); } else
-    if constexpr(mode == 5) { accum_i<32, 0, 3>(a, A, N); accum_i<32, 3, 3>(a, E, N); store_i<0, 3>(a, A, N); } else
-    if constexpr(mode == 6) { accum_i<32, 0, 2>(a, A, N); store_i<0, 1>(a, A, N); accum_i<32, 0, 2>(a, E, N); store_i<0, 1>(a, &A[N], N); } else
-    if constexpr(mode == 7) { accum_i<43, 0, 3>(a, A, N); store_i<0, 2>(a, A, N); accum_i<43, 0, 1>(a, &A[N * int64_t(3)], N); accum_i<43, 1, 2>(a, E, N); store_i<0, 2>(a, &A[N * int64_t(2)], N); } else
-    if constexpr(mode == 8) { accum_i<32, 0, 4>(a, A, N); store_i<0, 2>(a, A, N); accum_i<32, 0, 4>(a, E, N); store_i<0, 2>(a, &A[N * int64_t(2)], N); } else
-    if constexpr(mode == 9) { accum_i<48, 0, 4>(a, A, N); store_i<0, 3>(a, A, N); accum_i<48, 0, 2>(a, &A[N * int64_t(4)], N); accum_i<48, 2, 2>(a, E, N); store_i<0, 3>(a, &A[N * int64_t(3)], N); } else
-    if constexpr(mode == 10) { accum_i<38, 0, 5>(a, A, N); store_i<0, 3>(a, A, N); accum_i<38, 0, 1>(a, &A[N * int64_t(5)], N); accum_i<38, 1, 4>(a, E, N); store_i<0, 3>(a, &A[N * int64_t(3)], N); } else
-    if constexpr(mode == 11) { accum_i<32, 0, 6>(a, A, N); store_i<0, 3>(a, A, N); accum_i<32, 0, 6>(a, E, N); store_i<0, 3>(a, &A[N * int64_t(3)], N); }
+    if constexpr(op == 0) { accum_i<32, 0, 1>(a, A, N); accum_i<32, 1, 1>(a, E, N); store_i<0, 1>(a, A, N); } else
+    if constexpr(op == 1) { accum_i<43, 0, 2>(a, A, N); accum_i<43, 2, 1>(a, E, N); store_i<0, 2>(a, A, N); } else
+    if constexpr(op == 2) { accum_i<32, 0, 2>(a, A, N); accum_i<32, 2, 2>(a, E, N); store_i<0, 2>(a, A, N); } else
+    if constexpr(op == 3) { accum_i<48, 0, 3>(a, A, N); accum_i<48, 3, 1>(a, E, N); store_i<0, 3>(a, A, N); } else
+    if constexpr(op == 4) { accum_i<38, 0, 3>(a, A, N); accum_i<38, 3, 2>(a, E, N); store_i<0, 3>(a, A, N); } else
+    if constexpr(op == 5) { accum_i<32, 0, 3>(a, A, N); accum_i<32, 3, 3>(a, E, N); store_i<0, 3>(a, A, N); } else
+    if constexpr(op == 6) { accum_i<32, 0, 2>(a, A, N); store_i<0, 1>(a, A, N); accum_i<32, 0, 2>(a, E, N); store_i<0, 1>(a, &A[N], N); } else
+    if constexpr(op == 7) { accum_i<43, 0, 3>(a, A, N); store_i<0, 2>(a, A, N); accum_i<43, 0, 1>(a, &A[N * int64_t(3)], N); accum_i<43, 1, 2>(a, E, N); store_i<0, 2>(a, &A[N * int64_t(2)], N); } else
+    if constexpr(op == 8) { accum_i<32, 0, 4>(a, A, N); store_i<0, 2>(a, A, N); accum_i<32, 0, 4>(a, E, N); store_i<0, 2>(a, &A[N * int64_t(2)], N); } else
+    if constexpr(op == 9) { accum_i<48, 0, 4>(a, A, N); store_i<0, 3>(a, A, N); accum_i<48, 0, 2>(a, &A[N * int64_t(4)], N); accum_i<48, 2, 2>(a, E, N); store_i<0, 3>(a, &A[N * int64_t(3)], N); } else
+    if constexpr(op == 10) { accum_i<38, 0, 5>(a, A, N); store_i<0, 3>(a, A, N); accum_i<38, 0, 1>(a, &A[N * int64_t(5)], N); accum_i<38, 1, 4>(a, E, N); store_i<0, 3>(a, &A[N * int64_t(3)], N); } else
+    if constexpr(op == 11) { accum_i<32, 0, 6>(a, A, N); store_i<0, 3>(a, A, N); accum_i<32, 0, 6>(a, E, N); store_i<0, 3>(a, &A[N * int64_t(3)], N); }
   }
 }
 
-template <int32_t mode> inline void conv_reduction(cudaStream_t stream, int64_t N, uint64_t* A, int64_t lenA, uint64_t* E, int64_t lenE, ncclComm_t col_comm) {
+template <int32_t op> inline void conv_reduction(cudaStream_t stream, int64_t N, uint64_t* A, int64_t lenA, uint64_t* E, int64_t lenE, ncclComm_t col_comm) {
   constexpr int32_t block_threads = 512;
   int32_t grid = int32_t((N + int64_t(511)) >> 9);
-  limbs_convert_kernel<mode> <<< grid, block_threads, 0, stream >>> (N, A, E);
+  limbs_convert_kernel<op> <<< grid, block_threads, 0, stream >>> (N, A, E);
   ncclGroupStart();
   ncclAllReduce(A, A, lenA, ncclUint64, ncclSum, col_comm, stream);
   ncclAllReduce(E, E, lenE, ncclUint64, ncclSum, col_comm, stream);
   ncclGroupEnd();
-  limbs_accum_kernel<mode> <<< grid, block_threads, 0, stream >>> (N, A, E);
+  limbs_accum_kernel<op> <<< grid, block_threads, 0, stream >>> (N, A, E);
 }
 
 extern "C" void hyacinXAllReduce1Drow(hyacinHandle_t handle, int32_t orderA, int32_t Complex, int64_t N, uint64_t* A, ncclComm_t col_comm) {
