@@ -14,13 +14,12 @@ inline std::tuple<int32_t, int32_t, int32_t, int32_t, int32_t, int64_t, int64_t,
 
   int32_t algnM = (localM + 255) & (~255);
   int32_t algnN = (N + 63) & (~63);
-  int32_t bits_E = int32_t(std::ceil(std::log2(double(std::max(1, globalM))))) + (Complex ? 6 : 4);
-  int32_t bits = bits_E + (umax << 1);
+  int32_t bits = int32_t(std::ceil(std::log2(double(std::max(1, globalM))))) + (Complex ? 2 : 0) + (use_limbs ? 0 : 2) + (umax << 1);
 
-  int32_t orderA = (use_limbs ? (umax + 9) : (bits + 8)) >> 3;
-  int64_t i8_bytes = int64_t(N) * int64_t(use_limbs ? orderA : 8) * ((int64_t(algnM) << Complex) + (int64_t(algnN) * sizeof(int32_t)));
+  int32_t orderA = (use_limbs ? (umax + 9) : (bits + 9)) >> 3;
+  int64_t i8_bytes = int64_t(N) * int64_t(use_limbs ? orderA : 8) * ((int64_t(algnM) * int64_t(Complex ? 3 : 1)) + (int64_t(algnN) * sizeof(int32_t)));
 
-  int32_t orderC = ((use_limbs ? bits : (orderA << 3)) + 63) / 63;
+  int32_t orderC = (use_limbs ? (bits + 62) : ((orderA << 3) + 63)) / 63;
   int64_t acc_bytes = int64_t(algnN) * int64_t(N + 1) * int64_t(orderC << Complex) * sizeof(uint64_t);
   int64_t vec_bytes = int64_t(algnN) * sizeof(int32_t);
   return std::tie(Complex, algnM, algnN, orderA, orderC, i8_bytes, acc_bytes, vec_bytes);

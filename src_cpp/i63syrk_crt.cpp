@@ -83,7 +83,7 @@ inline void gemm_accum_crt_diag(cudaStream_t stream, cublasHandle_t handle, int3
 
 void internal::int8::i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const double* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C, int8_t* workspace) {
   int64_t strideA = int64_t(algnM) * int64_t(N), strideC = int64_t(N) * int64_t(N + 1);
-  int32_t* scratch = (int32_t*)&workspace[strideA << 3];
+  int32_t* scratch = (int32_t*)&workspace[strideA * int64_t(8)];
 
   for (int32_t i = 0; (i << 3) < orderA; ++i) {
     int32_t moduli = std::min(orderA - (i << 3), 8);
@@ -96,7 +96,7 @@ void internal::int8::i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int3
 
 void internal::int8::i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const float* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C, int8_t* workspace) {
   int64_t strideA = int64_t(algnM) * int64_t(N), strideC = int64_t(N) * int64_t(N + 1);
-  int32_t* scratch = (int32_t*)&workspace[strideA << 3];
+  int32_t* scratch = (int32_t*)&workspace[strideA * int64_t(8)];
 
   for (int32_t i = 0; (i << 3) < orderA; ++i) {
     int32_t moduli = std::min(orderA - (i << 3), 8);
@@ -109,7 +109,7 @@ void internal::int8::i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int3
 
 void internal::int8::i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const __half* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C, int8_t* workspace) {
   int64_t strideA = int64_t(algnM) * int64_t(N), strideC = int64_t(N) * int64_t(N + 1);
-  int32_t* scratch = (int32_t*)&workspace[strideA << 3];
+  int32_t* scratch = (int32_t*)&workspace[strideA * int64_t(8)];
 
   for (int32_t i = 0; (i << 3) < orderA; ++i) {
     int32_t moduli = std::min(orderA - (i << 3), 8);
@@ -122,7 +122,7 @@ void internal::int8::i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int3
 
 void internal::int8::i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const cuDoubleComplex* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C, int8_t* workspace) {
   int64_t strideA = int64_t(algnM) * int64_t(N), strideC = int64_t(N) * int64_t(N + 1);
-  int32_t* scratch = (int32_t*)&workspace[strideA << 4];
+  int32_t* scratch = (int32_t*)&workspace[strideA * int64_t(24)];
 
   for (int32_t i = 0; (i << 3) < orderA; ++i) {
     int32_t moduli = std::min(orderA - (i << 3), 8);
@@ -138,7 +138,7 @@ void internal::int8::i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int3
 
 void internal::int8::i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const cuComplex* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C, int8_t* workspace) {
   int64_t strideA = int64_t(algnM) * int64_t(N), strideC = int64_t(N) * int64_t(N + 1);
-  int32_t* scratch = (int32_t*)&workspace[strideA << 4];
+  int32_t* scratch = (int32_t*)&workspace[strideA * int64_t(24)];
 
   for (int32_t i = 0; (i << 3) < orderA; ++i) {
     int32_t moduli = std::min(orderA - (i << 3), 8);
@@ -154,7 +154,7 @@ void internal::int8::i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int3
 
 void internal::int8::i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const __half2* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C, int8_t* workspace) {
   int64_t strideA = int64_t(algnM) * int64_t(N), strideC = int64_t(N) * int64_t(N + 1);
-  int32_t* scratch = (int32_t*)&workspace[strideA << 4];
+  int32_t* scratch = (int32_t*)&workspace[strideA * int64_t(24)];
 
   for (int32_t i = 0; (i << 3) < orderA; ++i) {
     int32_t moduli = std::min(orderA - (i << 3), 8);

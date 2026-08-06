@@ -35,6 +35,7 @@ set(CU_SOURCES
   src_cuda/i32_rem_accum.cu
   src_cuda/matcopy.cu
   src_cuda/potrfp_uniform.cu
+  src_cuda/zero_point.cu
 )
 
 set_source_files_properties(${CPP_SOURCES} PROPERTIES COMPILE_OPTIONS 
