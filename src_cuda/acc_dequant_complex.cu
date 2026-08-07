@@ -39,13 +39,19 @@ __global__ void dequantize_complex_kernel(int64_t K, int64_t N, const uint64_t* 
     iter = y + x * N + strideA * int64_t(LimbCount);
     uint64_t acc_im[orderA] {};
     #pragma unroll
-    for (int32_t limb = 0; limb < LimbCount; ++limb)
-    { device::int8::add_shifted(acc_im, int64_t(A[iter]), shifts[limb]); iter += strideA; }
+    for (int32_t limb = 0; limb < LimbCount; ++limb) {
+      int64_t A_im = int64_t(A[iter]); iter += strideA;
+      device::int8::add_shifted(acc_rl, -A_im, shifts[limb]);
+      device::int8::add_shifted(acc_im, A_im, shifts[limb]);
+    }
 
     iter = x + y * N + strideA * int64_t(LimbCount);
     #pragma unroll
-    for (int32_t limb = 0; limb < LimbCount; ++limb)
-    { device::int8::add_shifted(acc_im, -int64_t(A[iter]), shifts[limb]); iter += strideA; }
+    for (int32_t limb = 0; limb < LimbCount; ++limb) {
+      int64_t A_im = -int64_t(A[iter]); iter += strideA;
+      device::int8::add_shifted(acc_rl, A_im, shifts[limb]);
+      device::int8::add_shifted(acc_im, A_im, shifts[limb]);
+    }
 
     iter = strideA + y - N;
     #pragma unroll
