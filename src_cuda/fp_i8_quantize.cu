@@ -51,9 +51,8 @@ template <int32_t ORDER, class matrix_t, int32_t op>
 __global__ void quantize_kernel(int64_t M, int64_t N, const matrix_t* __restrict__ A, int64_t lda, int32_t umax, const int32_t* __restrict__ vec_expon, int8_t* __restrict__ B, int64_t ldb, int64_t strideB) {
   constexpr int32_t op_complex = std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>;
   int64_t y = (int64_t(blockIdx.x) << 8) + int64_t(threadIdx.x), panelB = int64_t(ORDER) * strideB;
-  int32_t invalidA = int32_t(M <= y || N <= int64_t(blockIdx.y));
   uint32_t code[3]; B = &B[y + (int64_t(blockIdx.y) * ldb)];
-  if (invalidA) {
+  if (M <= y || N <= int64_t(blockIdx.y)) {
     code[0] = code[1] = code[2] = uint32_t(0);
     write_i8<ORDER>(code, B, strideB);
     if constexpr(op_complex)
