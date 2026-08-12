@@ -24,17 +24,20 @@ __global__ void dequantize_kernel(int64_t K, int64_t N, const uint64_t* __restri
     for (int32_t i = 0; i < orderA; ++i)
     { acc[i] = A[iter]; iter += strideA; }
 
-    iter = strideA + y - N;
-    #pragma unroll
-    for (int32_t i = 0; i < orderA; ++i)
-    { device::int8::add_shifted(acc, -int64_t(A[iter]), uint32_t(umax) + shifts[i]); iter += strideA; }
+    if (K) {
+      iter = (strideA * int64_t(orderA)) + y;
+      #pragma unroll
+      for (int32_t i = 0; i < orderA; ++i)
+      { device::int8::add_shifted(acc, int64_t(A[iter]), uint32_t(umax) + shifts[i]); iter += N; }
 
-    iter = strideA + x - N;
-    #pragma unroll
-    for (int32_t i = 0; i < orderA; ++i)
-    { device::int8::add_shifted(acc, -int64_t(A[iter]), uint32_t(umax) + shifts[i]); iter += strideA; }
+      iter = (strideA * int64_t(orderA)) + x;
+      #pragma unroll
+      for (int32_t i = 0; i < orderA; ++i)
+      { device::int8::add_shifted(acc, int64_t(A[iter]), uint32_t(umax) + shifts[i]); iter += N; }
 
-    device::int8::add_shifted(acc, K, uint32_t(umax <<= 1));
+      device::int8::add_shifted(acc, K, uint32_t(umax <<= 1));
+    }
+
     int32_t ex = vec_expon[x], ey = vec_expon[y]; iter = y + x * ldb;
     if (ex == int_min || ey == int_min) B[iter] = real_t();
       else fscal(acc, ex + ey - umax, B[iter]);
@@ -45,7 +48,7 @@ template<class real_t>
 inline void dequantize_dispatcher(cudaStream_t stream, int32_t orderA, int64_t K, int64_t N, const uint64_t* A, int32_t umax, const int32_t* vec_expon, real_t* B, int64_t ldb) {
   constexpr int32_t block_threads = 512;
   dim3 grid(uint32_t(N + 511) >> 9, uint32_t(N), uint32_t(1));
-  int64_t strideA = N * N + N;
+  int64_t strideA = N * N;
   switch(orderA) {
     case 1: dequantize_kernel<1> <<< grid, block_threads, 0, stream >>> (K, N, A, strideA, umax, vec_expon, B, ldb); return;
     case 2: dequantize_kernel<2> <<< grid, block_threads, 0, stream >>> (K, N, A, strideA, umax, vec_expon, B, ldb); return;

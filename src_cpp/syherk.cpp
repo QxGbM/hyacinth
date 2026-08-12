@@ -20,8 +20,8 @@ inline std::tuple<int32_t, int32_t, int32_t, int32_t, int32_t, int64_t, int64_t,
   int64_t i8_bytes = int64_t(N) * int64_t(use_limbs ? orderA : 8) * ((int64_t(algnM) * int64_t(Complex ? 3 : 1)) + (int64_t(algnN) * sizeof(int32_t)));
 
   int32_t orderC = (use_limbs ? (bits + 62) : ((orderA << 3) + 63)) / 63;
-  int64_t acc_bytes = int64_t(algnN) * int64_t(N + 1) * int64_t(orderC << Complex) * sizeof(uint64_t);
-  int64_t vec_bytes = int64_t(algnN) * sizeof(int32_t);
+  int64_t acc_bytes = (int64_t(N) * int64_t(N + (use_limbs ? 0 : 1)) * int64_t(orderC << Complex) * sizeof(uint64_t) + int64_t(255)) & (~int64_t(255));
+  int64_t vec_bytes = (int64_t(N) * sizeof(int32_t) + int64_t(255)) & (~int64_t(255));
   return std::tie(Complex, algnM, algnN, orderA, orderC, i8_bytes, acc_bytes, vec_bytes);
 }
 
@@ -38,23 +38,23 @@ inline void vexp_dispatcher(cudaStream_t stream, int32_t M, int32_t N, hyacinPre
 }
 
 inline void igemm_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, 
-  int32_t umax, const int32_t* vexp, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* acc, int8_t* iA, hyacinAlgorithm_t alg) {
+  int32_t umax, const int32_t* vexp, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* acc, hyacinAlgorithm_t alg) {
   if (alg == HYACIN_ALG_LIMBS) switch(Atype) {
-    case HYACIN_F64: internal::int8::i63AHA_limbs(stream, handle, M, N, (const double*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
-    case HYACIN_F32: internal::int8::i63AHA_limbs(stream, handle, M, N, (const float*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
-    case HYACIN_F16: internal::int8::i63AHA_limbs(stream, handle, M, N, (const __half*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
-    case HYACIN_F64_COMPLEX: internal::int8::i63AHA_limbs(stream, handle, M, N, (const cuDoubleComplex*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
-    case HYACIN_F32_COMPLEX: internal::int8::i63AHA_limbs(stream, handle, M, N, (const cuComplex*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
-    case HYACIN_F16_COMPLEX: internal::int8::i63AHA_limbs(stream, handle, M, N, (const __half2*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
+    case HYACIN_F64: internal::int8::i63AHA_limbs(stream, handle, M, N, (const double*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc); return;
+    case HYACIN_F32: internal::int8::i63AHA_limbs(stream, handle, M, N, (const float*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc); return;
+    case HYACIN_F16: internal::int8::i63AHA_limbs(stream, handle, M, N, (const __half*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc); return;
+    case HYACIN_F64_COMPLEX: internal::int8::i63AHA_limbs(stream, handle, M, N, (const cuDoubleComplex*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc); return;
+    case HYACIN_F32_COMPLEX: internal::int8::i63AHA_limbs(stream, handle, M, N, (const cuComplex*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc); return;
+    case HYACIN_F16_COMPLEX: internal::int8::i63AHA_limbs(stream, handle, M, N, (const __half2*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc); return;
     default: return;
   }
   else if (alg == HYACIN_ALG_CRT) switch(Atype) {
-    case HYACIN_F64: internal::int8::i63AHA_crt(stream, handle, M, N, (const double*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
-    case HYACIN_F32: internal::int8::i63AHA_crt(stream, handle, M, N, (const float*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
-    case HYACIN_F16: internal::int8::i63AHA_crt(stream, handle, M, N, (const __half*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
-    case HYACIN_F64_COMPLEX: internal::int8::i63AHA_crt(stream, handle, M, N, (const cuDoubleComplex*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
-    case HYACIN_F32_COMPLEX: internal::int8::i63AHA_crt(stream, handle, M, N, (const cuComplex*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
-    case HYACIN_F16_COMPLEX: internal::int8::i63AHA_crt(stream, handle, M, N, (const __half2*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc, iA); return;
+    case HYACIN_F64: internal::int8::i63AHA_crt(stream, handle, M, N, (const double*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc); return;
+    case HYACIN_F32: internal::int8::i63AHA_crt(stream, handle, M, N, (const float*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc); return;
+    case HYACIN_F16: internal::int8::i63AHA_crt(stream, handle, M, N, (const __half*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc); return;
+    case HYACIN_F64_COMPLEX: internal::int8::i63AHA_crt(stream, handle, M, N, (const cuDoubleComplex*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc); return;
+    case HYACIN_F32_COMPLEX: internal::int8::i63AHA_crt(stream, handle, M, N, (const cuComplex*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc); return;
+    case HYACIN_F16_COMPLEX: internal::int8::i63AHA_crt(stream, handle, M, N, (const __half2*)A, lda, umax, vexp, algnM, algnN, orderA, orderC, acc); return;
     default: return;
   }
 }
@@ -83,9 +83,9 @@ extern "C" void hyacinXsyherk(hyacinHandle_t handle, int32_t M, int32_t N, int32
   void* dev_work = nullptr;
   if (cudaSuccess != cudaMallocAsync(&dev_work, uint64_t(i8_bytes + acc_bytes + vec_bytes), handle.cudaStream))
     throw std::runtime_error("Workspace allocation failed at Integer SY/HERK.");
-  int8_t* iA = (int8_t*)(dev_work), *acc = &iA[i8_bytes], *vexp = &acc[acc_bytes];
+  int8_t* acc = (int8_t*)(dev_work), *vexp = &acc[acc_bytes + i8_bytes];
   vexp_dispatcher(handle.cudaStream, M, N, Atype, A, lda, (int32_t*)vexp);
-  igemm_dispatcher(handle.cudaStream, handle.cublasHandle, M, N, Atype, A, lda, umax, (const int32_t*)vexp, algnM, algnN, orderA, orderC, (uint64_t*)acc, iA, alg);
+  igemm_dispatcher(handle.cudaStream, handle.cublasHandle, M, N, Atype, A, lda, umax, (const int32_t*)vexp, algnM, algnN, orderA, orderC, (uint64_t*)acc, alg);
   deq_dispatcher(handle.cudaStream, alg == HYACIN_ALG_CRT ? M : 0, N, umax, (uint64_t*)acc, orderC, G, ldg, (const int32_t*)vexp, Gtype);
   cudaFreeAsync(dev_work, handle.cudaStream);
 }
@@ -102,15 +102,15 @@ extern "C" void hyacinXsyherk1Drow(hyacinHandle_t handle, int32_t localM, int32_
   void* dev_work = nullptr;
   if (cudaSuccess != cudaMallocAsync(&dev_work, uint64_t(i8_bytes + acc_bytes + vec_bytes), handle.cudaStream))
     throw std::runtime_error("Workspace allocation failed at 1-D row Integer SY/HERK.");
-  int8_t* iA = (int8_t*)(dev_work), *acc = &iA[i8_bytes], *vexp = &acc[acc_bytes];
+  int8_t* acc = (int8_t*)(dev_work), *vexp = &acc[acc_bytes + i8_bytes];
   vexp_dispatcher(handle.cudaStream, localM, N, Atype, A, lda, (int32_t*)vexp);
 
-  int64_t stride = int64_t(N) * int64_t(N + 1);
+  int64_t stride = int64_t(N) * int64_t(N);
   Timer::register_comm(handle.cudaStream, handle.timer);
   ncclAllReduce(vexp, vexp, int64_t(N), ncclInt32, ncclMax, col_comm, handle.cudaStream);
   if (0 < localM) {
     Timer::register_kernel(handle.cudaStream, handle.timer);
-    igemm_dispatcher(handle.cudaStream, handle.cublasHandle, localM, N, Atype, A, lda, umax, (const int32_t*)vexp, algnM, algnN, orderA, orderC, (uint64_t*)acc, iA, alg);
+    igemm_dispatcher(handle.cudaStream, handle.cublasHandle, localM, N, Atype, A, lda, umax, (const int32_t*)vexp, algnM, algnN, orderA, orderC, (uint64_t*)acc, alg);
   }
   else { cudaMemsetAsync(acc, 0, acc_bytes, handle.cudaStream); }
   hyacinXAllReduce1Drow(handle, orderC, Complex, stride, (uint64_t*)acc, col_comm);

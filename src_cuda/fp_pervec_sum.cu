@@ -26,7 +26,15 @@ __device__ __forceinline__ void accumulate(real_t x, int32_t expon, uint64_t lo,
   acc.x += uint32_t(lo); acc.y += uint32_t(lo >> 32) & i31; acc.z += hi;
 }
 
-template <int32_t ORDER, int32_t COMPLEX, int32_t BLOCK_THREADS, class reduc_t, class real_t>
+template <int32_t ORDER, class reduc_t>
+__device__ __forceinline__ void conv_acc(uint64_t (&a)[ORDER], reduc_t acc) {
+  if constexpr(0 < ORDER) { a[0] = acc.x; }
+  if constexpr(1 < ORDER) { if constexpr(std::is_same_v<reduc_t, ulonglong3>) a[1] = acc.z; else a[1] = uint64_t(0); }
+  if constexpr(2 < ORDER) { a[2] = uint64_t(0); }
+  if constexpr(0 < ORDER) { device::int8::add_shifted(a, acc.y, uint32_t(32)); }
+}
+
+template <int32_t ORDER, int32_t Complex, int32_t BLOCK_THREADS, class reduc_t, class real_t>
 __global__ void vector_sum_kernel(int64_t M, const real_t* __restrict__ A, int64_t lda, uint64_t lo, uint32_t hi, int32_t umax, const int32_t* __restrict__ vec_expon, uint64_t* __restrict__ vec_sum, int64_t incv) {
   constexpr int64_t inci = int64_t(BLOCK_THREADS);
   int64_t iter = int64_t(blockIdx.x) * lda, iter_end = iter + M;
@@ -37,7 +45,7 @@ __global__ void vector_sum_kernel(int64_t M, const real_t* __restrict__ A, int64
     accumulate(A[iter], expon, lo, hi, threadA);
   iter = int64_t(blockIdx.x);
 
-  if constexpr(COMPLEX) {
+  if constexpr(Complex) {
     __shared__ typename cub::BlockReduce<reduc_t, BLOCK_THREADS>::TempStorage temp_reduce[2];
     reduc_t threadB = threadA;
     if (int32_t(threadIdx.x) & 1) threadA = reduc_t(); else threadB = reduc_t();
@@ -45,20 +53,12 @@ __global__ void vector_sum_kernel(int64_t M, const real_t* __restrict__ A, int64
     threadB = cub::BlockReduce<reduc_t, BLOCK_THREADS>(temp_reduce[1]).Reduce(threadB, u64_add());
 
     if (threadIdx.x == 0) {
-      uint64_t c[ORDER]; c[0] = threadA.x;
-      if constexpr(1 < ORDER) { if constexpr(std::is_same_v<reduc_t, ulonglong3>) c[1] = threadA.z; else c[1] = uint64_t(0); }
-      if constexpr(2 < ORDER) c[2] = uint64_t(0);
-      device::int8::add_shifted(c, threadA.y, uint32_t(32));
-
+      uint64_t c[ORDER]; conv_acc(c, threadA);
       #pragma unroll
       for (int32_t limb = 0; limb < ORDER; ++limb)
       { vec_sum[iter] = c[limb]; iter += incv; }
 
-      c[0] = threadB.x;
-      if constexpr(1 < ORDER) { if constexpr(std::is_same_v<reduc_t, ulonglong3>) c[1] = threadB.z; else c[1] = uint64_t(0); }
-      if constexpr(2 < ORDER) c[2] = uint64_t(0);
-      device::int8::add_shifted(c, threadB.y, uint32_t(32));
-
+      conv_acc(c, threadB);
       #pragma unroll
       for (int32_t limb = 0; limb < ORDER; ++limb)
       { vec_sum[iter] = c[limb]; iter += incv; }
@@ -69,32 +69,30 @@ __global__ void vector_sum_kernel(int64_t M, const real_t* __restrict__ A, int64
     threadA = cub::BlockReduce<reduc_t, BLOCK_THREADS>(temp_reduce).Reduce(threadA, u64_add());
 
     if (threadIdx.x == 0) {
-      uint64_t c[ORDER]; c[0] = threadA.x;
-      if constexpr(1 < ORDER) { if constexpr(std::is_same_v<reduc_t, ulonglong3>) c[1] = threadA.z; else c[1] = uint64_t(0); }
-      if constexpr(2 < ORDER) c[2] = uint64_t(0);
-      device::int8::add_shifted(c, threadA.y, uint32_t(32));
+      uint64_t c[ORDER]; conv_acc(c, threadA);
 
       #pragma unroll
       for (int32_t limb = 0; limb < ORDER; ++limb)
-      { vec_sum[iter] = c[limb]; iter += incv; }
+      { vec_sum[iter] = -c[limb]; iter += incv; }
     }
   }
 }
 
-template <int32_t COMPLEX, class real_t>
-inline void vsum_dispatcher(cudaStream_t stream, int64_t M, int32_t N, const real_t* A, int64_t lda, int32_t umax, const int32_t* vec_expon, int32_t order, uint64_t* vec_sum, int64_t incv) {
-  constexpr int32_t block_threads = 512;
+template <class real_t, class matrix_t>
+inline void vsum_dispatcher(cudaStream_t stream, int32_t M, int32_t N, const matrix_t* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t order, uint64_t* vec_sum, int64_t incv) {
+  constexpr int32_t block_threads = 512, Complex = std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>;
   uint64_t lo = umax < 63 ? (uint64_t(1) << umax) : uint64_t(0);
   uint32_t hi = 63 <= umax ? (uint32_t(1) << (umax - 63)) : uint32_t(0);
+  int64_t M64 = int64_t(M), lda64 = int64_t(lda); if constexpr(Complex) { M64 <<= 1; lda64 <<= 1; }
   if (umax < 63) switch(order) {
-    case 1: vector_sum_kernel<1, COMPLEX, block_threads, ulonglong2> <<< N, block_threads, 0, stream >>> (M, A, lda, lo, hi, umax, vec_expon, vec_sum, incv); return;
-    case 2: vector_sum_kernel<2, COMPLEX, block_threads, ulonglong2> <<< N, block_threads, 0, stream >>> (M, A, lda, lo, hi, umax, vec_expon, vec_sum, incv); return;
-    case 3: vector_sum_kernel<3, COMPLEX, block_threads, ulonglong2> <<< N, block_threads, 0, stream >>> (M, A, lda, lo, hi, umax, vec_expon, vec_sum, incv); return;
+    case 1: vector_sum_kernel<1, Complex, block_threads, ulonglong2> <<< N, block_threads, 0, stream >>> (M64, (const real_t*)A, lda64, lo, hi, umax, vec_expon, vec_sum, incv); return;
+    case 2: vector_sum_kernel<2, Complex, block_threads, ulonglong2> <<< N, block_threads, 0, stream >>> (M64, (const real_t*)A, lda64, lo, hi, umax, vec_expon, vec_sum, incv); return;
+    case 3: vector_sum_kernel<3, Complex, block_threads, ulonglong2> <<< N, block_threads, 0, stream >>> (M64, (const real_t*)A, lda64, lo, hi, umax, vec_expon, vec_sum, incv); return;
     default: return;
   } else switch(order) {
-    case 1: vector_sum_kernel<1, COMPLEX, block_threads, ulonglong3> <<< N, block_threads, 0, stream >>> (M, A, lda, lo, hi, umax, vec_expon, vec_sum, incv); return;
-    case 2: vector_sum_kernel<2, COMPLEX, block_threads, ulonglong3> <<< N, block_threads, 0, stream >>> (M, A, lda, lo, hi, umax, vec_expon, vec_sum, incv); return;
-    case 3: vector_sum_kernel<3, COMPLEX, block_threads, ulonglong3> <<< N, block_threads, 0, stream >>> (M, A, lda, lo, hi, umax, vec_expon, vec_sum, incv); return;
+    case 1: vector_sum_kernel<1, Complex, block_threads, ulonglong3> <<< N, block_threads, 0, stream >>> (M64, (const real_t*)A, lda64, lo, hi, umax, vec_expon, vec_sum, incv); return;
+    case 2: vector_sum_kernel<2, Complex, block_threads, ulonglong3> <<< N, block_threads, 0, stream >>> (M64, (const real_t*)A, lda64, lo, hi, umax, vec_expon, vec_sum, incv); return;
+    case 3: vector_sum_kernel<3, Complex, block_threads, ulonglong3> <<< N, block_threads, 0, stream >>> (M64, (const real_t*)A, lda64, lo, hi, umax, vec_expon, vec_sum, incv); return;
     default: return;
   }
 }
@@ -102,27 +100,27 @@ inline void vsum_dispatcher(cudaStream_t stream, int64_t M, int32_t N, const rea
 namespace internal::int8 {
 
   void vector_sums(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t order, uint64_t* vec_sum, int64_t incv) {
-    vsum_dispatcher<0>(stream, int64_t(M), N, A, int64_t(lda), umax, vec_expon, order, vec_sum, incv);
+    vsum_dispatcher<double>(stream, M, N, A, lda, umax, vec_expon, order, vec_sum, incv);
   }
 
   void vector_sums(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t order, uint64_t* vec_sum, int64_t incv) {
-    vsum_dispatcher<0>(stream, int64_t(M), N, A, int64_t(lda), umax, vec_expon, order, vec_sum, incv);
+    vsum_dispatcher<float>(stream, M, N, A, lda, umax, vec_expon, order, vec_sum, incv);
   }
 
   void vector_sums(cudaStream_t stream, int32_t M, int32_t N, const __half* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t order, uint64_t* vec_sum, int64_t incv) {
-    vsum_dispatcher<0>(stream, int64_t(M), N, A, int64_t(lda), umax, vec_expon, order, vec_sum, incv);
+    vsum_dispatcher<__half>(stream, M, N, A, lda, umax, vec_expon, order, vec_sum, incv);
   }
 
   void vector_sums(cudaStream_t stream, int32_t M, int32_t N, const cuDoubleComplex* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t order, uint64_t* vec_sum, int64_t incv) {
-    vsum_dispatcher<1>(stream, int64_t(M) << 1, N, (const double*)A, int64_t(lda) << 1, umax, vec_expon, order, vec_sum, incv);
+    vsum_dispatcher<double>(stream, M, N, A, lda, umax, vec_expon, order, vec_sum, incv);
   }
 
   void vector_sums(cudaStream_t stream, int32_t M, int32_t N, const cuComplex* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t order, uint64_t* vec_sum, int64_t incv) {
-    vsum_dispatcher<1>(stream, int64_t(M) << 1, N, (const float*)A, int64_t(lda) << 1, umax, vec_expon, order, vec_sum, incv);
+    vsum_dispatcher<float>(stream, M, N, A, lda, umax, vec_expon, order, vec_sum, incv);
   }
 
   void vector_sums(cudaStream_t stream, int32_t M, int32_t N, const __half2* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t order, uint64_t* vec_sum, int64_t incv) {
-    vsum_dispatcher<1>(stream, int64_t(M) << 1, N, (const __half*)A, int64_t(lda) << 1, umax, vec_expon, order, vec_sum, incv);
+    vsum_dispatcher<__half>(stream, M, N, A, lda, umax, vec_expon, order, vec_sum, incv);
   }
 
 }

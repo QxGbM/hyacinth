@@ -27,6 +27,7 @@ set(CU_SOURCES
   src_cuda/allreduce_1drow.cu
   src_cuda/fp_exponent.cu
   src_cuda/fp_i8_quantize.cu
+  src_cuda/fp_i63tp_dequantize.cu
   src_cuda/fp_pervec_sum.cu
   src_cuda/gemv_pp.cu
   src_cuda/gemv_scal_f128.cu

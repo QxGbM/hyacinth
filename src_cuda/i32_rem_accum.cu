@@ -99,7 +99,7 @@ template <int32_t orderX, int32_t iter, int32_t orderA>
 inline void crt_acc_dispatcher(cudaStream_t stream, char mode, int32_t beta, int64_t N, const int32_t* X, int64_t ldx, uint64_t* A) {
   constexpr int32_t block_threads = 512;
   dim3 grid(uint32_t(N + 511) >> 9, uint32_t(N), uint32_t(1));
-  int64_t strideX = ldx * N, strideA = N * N + N;
+  int64_t strideX = ldx * N, strideA = N * N;
   if (mode == 'U' && beta == 0) { i32_crt_accum_kernel<orderX, iter, orderA, 0, 'U'> <<< grid, block_threads, 0, stream >>> (N, X, ldx, strideX, A, strideA); } else
   if (mode == 'U' && beta == 1) { i32_crt_accum_kernel<orderX, iter, orderA, 1, 'U'> <<< grid, block_threads, 0, stream >>> (N, X, ldx, strideX, A, strideA); } else
   if (mode == 'A' && beta == 0) { i32_crt_accum_kernel<orderX, iter, orderA, 0, 'A'> <<< grid, block_threads, 0, stream >>> (N, X, ldx, strideX, A, strideA); } else
