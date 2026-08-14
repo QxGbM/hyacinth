@@ -30,7 +30,7 @@ template <int32_t ORDER> __device__ __forceinline__ void load_i(uint64_t (&r)[OR
 }
 
 template<int32_t orderA, int32_t Complex, class matrix_t>
-__global__ void triangle_unpack_dequantize_kernel(int64_t N, const uint64_t* __restrict__ A, int64_t strideA, int32_t umax2, const int32_t* __restrict__ vec_expon, matrix_t* __restrict__ B, int64_t ldb) {
+__global__ void triangle_unpack_dequantize_kernel(int64_t N, const uint64_t* __restrict__ A, int64_t strideA, int32_t umax2, const int32_t* __restrict__ vexp, matrix_t* __restrict__ B, int64_t ldb) {
   int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
   if (y <= x) {
     A = &A[y + int64_t(uint64_t((x + int64_t(1)) * x) >> 1)];
@@ -40,7 +40,7 @@ __global__ void triangle_unpack_dequantize_kernel(int64_t N, const uint64_t* __r
       uint64_t acc_rl[orderA], acc_im[orderA];
       load_i(acc_rl, acc_im, A, strideA);
 
-      int32_t ex = vec_expon[x], ey = vec_expon[y];
+      int32_t ex = vexp[x], ey = vexp[y];
       if (ex == int_min || ey == int_min) *B = matrix_t();
         else cscal(acc_rl, acc_im, ex + ey - umax2, *B);
     }
@@ -48,7 +48,7 @@ __global__ void triangle_unpack_dequantize_kernel(int64_t N, const uint64_t* __r
       uint64_t acc[orderA];
       load_i(acc, A, strideA);
       
-      int32_t ex = vec_expon[x], ey = vec_expon[y];
+      int32_t ex = vexp[x], ey = vexp[y];
       if (ex == int_min || ey == int_min) *B = matrix_t();
         else fscal(acc, ex + ey - umax2, *B);
     }
@@ -56,43 +56,43 @@ __global__ void triangle_unpack_dequantize_kernel(int64_t N, const uint64_t* __r
 }
 
 template<int32_t Complex, class matrix_t>
-inline void tp_deq_dispatcher(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vec_expon, matrix_t* B, int32_t ldb) {
+inline void tp_deq_dispatcher(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vexp, matrix_t* B, int32_t ldb) {
   constexpr int32_t block_threads = 512;
   dim3 grid(uint32_t(N + 511) >> 9, uint32_t(N), uint32_t(1));
   int64_t N64 = int64_t(N), strideA = (N64 * N64 + N64) / int64_t(2), ldb64 = int64_t(ldb);
   umax <<= 1;
   switch(orderA) {
-    case 1: triangle_unpack_dequantize_kernel<1, Complex> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, umax, vec_expon, B, ldb64); return;
-    case 2: triangle_unpack_dequantize_kernel<2, Complex> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, umax, vec_expon, B, ldb64); return;
-    case 3: triangle_unpack_dequantize_kernel<3, Complex> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, umax, vec_expon, B, ldb64); return;
+    case 1: triangle_unpack_dequantize_kernel<1, Complex> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, umax, vexp, B, ldb64); return;
+    case 2: triangle_unpack_dequantize_kernel<2, Complex> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, umax, vexp, B, ldb64); return;
+    case 3: triangle_unpack_dequantize_kernel<3, Complex> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, umax, vexp, B, ldb64); return;
     default: return;
   }
 }
 
 namespace internal::int8 {
 
-  void dequantize(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vec_expon, double* B, int32_t ldb)
-  { tp_deq_dispatcher<0>(stream, orderA, N, A, umax, vec_expon, B, ldb); }
+  void dequantize(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vexp, double* B, int32_t ldb)
+  { tp_deq_dispatcher<0>(stream, orderA, N, A, umax, vexp, B, ldb); }
 
-  void dequantize(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vec_expon, float* B, int32_t ldb)
-  { tp_deq_dispatcher<0>(stream, orderA, N, A, umax, vec_expon, B, ldb); }
+  void dequantize(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vexp, float* B, int32_t ldb)
+  { tp_deq_dispatcher<0>(stream, orderA, N, A, umax, vexp, B, ldb); }
 
-  void dequantize(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vec_expon, double2* B, int32_t ldb)
-  { tp_deq_dispatcher<0>(stream, orderA, N, A, umax, vec_expon, B, ldb); }
+  void dequantize(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vexp, double2* B, int32_t ldb)
+  { tp_deq_dispatcher<0>(stream, orderA, N, A, umax, vexp, B, ldb); }
 
-  void dequantize(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vec_expon, float4* B, int32_t ldb)
-  { tp_deq_dispatcher<0>(stream, orderA, N, A, umax, vec_expon, B, ldb); }
+  void dequantize(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vexp, float4* B, int32_t ldb)
+  { tp_deq_dispatcher<0>(stream, orderA, N, A, umax, vexp, B, ldb); }
 
-  void dequantize_complex(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vec_expon, cuDoubleComplex* B, int32_t ldb)
-  { tp_deq_dispatcher<1>(stream, orderA, N, A, umax, vec_expon, B, ldb); }
+  void dequantize_complex(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vexp, cuDoubleComplex* B, int32_t ldb)
+  { tp_deq_dispatcher<1>(stream, orderA, N, A, umax, vexp, B, ldb); }
 
-  void dequantize_complex(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vec_expon, cuComplex* B, int32_t ldb)
-  { tp_deq_dispatcher<1>(stream, orderA, N, A, umax, vec_expon, B, ldb); }
+  void dequantize_complex(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vexp, cuComplex* B, int32_t ldb)
+  { tp_deq_dispatcher<1>(stream, orderA, N, A, umax, vexp, B, ldb); }
 
-  void dequantize_complex(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vec_expon, complex_double2* B, int32_t ldb)
-  { tp_deq_dispatcher<1>(stream, orderA, N, A, umax, vec_expon, B, ldb); }
+  void dequantize_complex(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vexp, complex_double2* B, int32_t ldb)
+  { tp_deq_dispatcher<1>(stream, orderA, N, A, umax, vexp, B, ldb); }
 
-  void dequantize_complex(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vec_expon, complex_float4* B, int32_t ldb)
-  { tp_deq_dispatcher<1>(stream, orderA, N, A, umax, vec_expon, B, ldb); }
+  void dequantize_complex(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vexp, complex_float4* B, int32_t ldb)
+  { tp_deq_dispatcher<1>(stream, orderA, N, A, umax, vexp, B, ldb); }
 
 }

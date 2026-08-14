@@ -21,8 +21,6 @@ set(CPP_SOURCES
 )
 
 set(CU_SOURCES
-  src_cuda/acc_dequant_complex.cu
-  src_cuda/acc_dequant_real.cu
   src_cuda/allgatherv_1dcol.cu
   src_cuda/allreduce_1drow.cu
   src_cuda/fp_exponent.cu

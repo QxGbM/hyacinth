@@ -1,5 +1,6 @@
 
 #include <internal.hpp>
+#include <stdexcept>
 
 inline void gemm_accum_crt(cudaStream_t stream, cublasHandle_t handle, char mode, int32_t M, int32_t N, int32_t K, int32_t moduli, int32_t orderA, const int8_t* AT, const int8_t* A, int32_t iter, int32_t beta, uint64_t* C, int32_t orderC, int32_t* W) {
   constexpr int32_t iter_k = 131072, iter_h = iter_k / 2;
@@ -38,95 +39,54 @@ inline void gemm_accum_crt(cudaStream_t stream, cublasHandle_t handle, char mode
   }
 }
 
-void internal::int8::i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const double* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C) {
-  int64_t strideA = int64_t(algnM) * int64_t(N), strideC = int64_t(N) * int64_t(N), strideW = strideC * int64_t(orderC);
-  int8_t* W = (int8_t*)&C[(strideW + int64_t(31)) & (~int64_t(31))];
-  int32_t* scratch = (int32_t*)&W[strideA * int64_t(8)];
+template <class matrix_t>
+inline void AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const matrix_t* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C) {
+  constexpr int32_t Complex = std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>;
+  int32_t algnM = (M + 255) & (~255), algnN = (N + 63) & (~63);
+  int64_t strideA = int64_t(algnM) * int64_t(N), strideC = int64_t(N) * int64_t(N) * int64_t(orderC);
+  uint64_t mod_len = uint64_t(std::min(orderA, 8)), w_len = uint64_t(strideA) * mod_len, w_pad = uint64_t(algnN - N) * uint64_t(algnM);
+  if constexpr(Complex) { w_len *= uint64_t(3); }
+
+  int8_t* W = nullptr; int32_t* scratch = nullptr;
+  if (cudaSuccess != cudaMallocAsync((void**)&W, w_len + w_pad, stream))
+    throw std::runtime_error("Workspace (i8) allocation failed at Integer SY/HERK.");
+  if (cudaSuccess != cudaMallocAsync((void**)&scratch, uint64_t(algnN) * uint64_t(N) * mod_len * sizeof(int32_t), stream))
+    throw std::runtime_error("Workspace (i32) allocation failed at Integer SY/HERK.");
 
   for (int32_t i = 0; (i << 3) < orderA; ++i) {
     int32_t moduli = std::min(orderA - (i << 3), 8);
     int32_t beta = int32_t(0 < i);
-    quantize_modular(stream, M, N, i, A, lda, umax, vec_expon, moduli, N, algnM, W);
-    gemm_accum_crt(stream, handle, 'U', algnN, N, algnM, moduli, orderA, W, W, i, beta, C, orderC, scratch);
+    internal::int8::quantize_modular(stream, M, N, i, A, lda, umax, vexp, moduli, N, algnM, W);
+    if constexpr(Complex) {
+      int64_t strideW = int64_t(moduli) * strideA, strideW2 = strideW * int64_t(2);
+      gemm_accum_crt(stream, handle, 'U', algnN, N, algnM, moduli, orderA, &W[strideW2], &W[strideW2], i, beta, C, orderC, scratch);
+      gemm_accum_crt(stream, handle, 'A', algnN, N, algnM, moduli, orderA, W, &W[strideW], i, beta, &C[strideC], orderC, scratch);
+    } else { gemm_accum_crt(stream, handle, 'U', algnN, N, algnM, moduli, orderA, W, W, i, beta, C, orderC, scratch); }
   }
-  vector_sums(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideW], N);
+  cudaFreeAsync(W, stream); cudaFreeAsync(scratch, stream);
+
+  if constexpr(Complex) { C = &C[strideC * int64_t(2)]; } else { C = &C[strideC]; }
+  internal::int8::vector_sums(stream, M, N, A, lda, umax, vexp, orderC, C);
 }
 
-void internal::int8::i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const float* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C) {
-  int64_t strideA = int64_t(algnM) * int64_t(N), strideC = int64_t(N) * int64_t(N), strideW = strideC * int64_t(orderC);
-  int8_t* W = (int8_t*)&C[(strideW + int64_t(31)) & (~int64_t(31))];
-  int32_t* scratch = (int32_t*)&W[strideA * int64_t(8)];
+namespace internal::int8 {
 
-  for (int32_t i = 0; (i << 3) < orderA; ++i) {
-    int32_t moduli = std::min(orderA - (i << 3), 8);
-    int32_t beta = int32_t(0 < i);
-    quantize_modular(stream, M, N, i, A, lda, umax, vec_expon, moduli, N, algnM, W);
-    gemm_accum_crt(stream, handle, 'U', algnN, N, algnM, moduli, orderA, W, W, i, beta, C, orderC, scratch);
-  }
-  vector_sums(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideW], N);
-}
+  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const double* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C)
+  { AHA_crt(stream, handle, M, N, orderA, A, lda, umax, vexp, orderC, C); }
 
-void internal::int8::i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const __half* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C) {
-  int64_t strideA = int64_t(algnM) * int64_t(N), strideC = int64_t(N) * int64_t(N), strideW = strideC * int64_t(orderC);
-  int8_t* W = (int8_t*)&C[(strideW + int64_t(31)) & (~int64_t(31))];
-  int32_t* scratch = (int32_t*)&W[strideA * int64_t(8)];
+  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const float* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C)
+  { AHA_crt(stream, handle, M, N, orderA, A, lda, umax, vexp, orderC, C); }
 
-  for (int32_t i = 0; (i << 3) < orderA; ++i) {
-    int32_t moduli = std::min(orderA - (i << 3), 8);
-    int32_t beta = int32_t(0 < i);
-    quantize_modular(stream, M, N, i, A, lda, umax, vec_expon, moduli, N, algnM, W);
-    gemm_accum_crt(stream, handle, 'U', algnN, N, algnM, moduli, orderA, W, W, i, beta, C, orderC, scratch);
-  }
-  vector_sums(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideW], N);
-}
+  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C)
+  { AHA_crt(stream, handle, M, N, orderA, A, lda, umax, vexp, orderC, C); }
 
-void internal::int8::i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const cuDoubleComplex* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C) {
-  int64_t strideA = int64_t(algnM) * int64_t(N), strideC = int64_t(N) * int64_t(N), strideW = strideC * int64_t(orderC) * int64_t(2);
-  int8_t* W = (int8_t*)&C[(strideW + int64_t(31)) & (~int64_t(31))];
-  int32_t* scratch = (int32_t*)&W[strideA * int64_t(24)];
+  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuDoubleComplex* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C)
+  { AHA_crt(stream, handle, M, N, orderA, A, lda, umax, vexp, orderC, C); }
 
-  for (int32_t i = 0; (i << 3) < orderA; ++i) {
-    int32_t moduli = std::min(orderA - (i << 3), 8);
-    int32_t beta = int32_t(0 < i);
-    quantize_modular(stream, M, N, i, A, lda, umax, vec_expon, moduli, N, algnM, W);
+  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuComplex* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C)
+  { AHA_crt(stream, handle, M, N, orderA, A, lda, umax, vexp, orderC, C); }
 
-    int64_t stride = int64_t(moduli) * strideA;
-    gemm_accum_crt(stream, handle, 'U', algnN, N, algnM, moduli, orderA, &W[stride * int64_t(2)], &W[stride * int64_t(2)], i, beta, C, orderC, scratch);
-    gemm_accum_crt(stream, handle, 'A', algnN, N, algnM, moduli, orderA, W, &W[stride], i, beta, &C[strideC * int64_t(orderC)], orderC, scratch);
-  }
-  vector_sums(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideW], N);
-}
+  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half2* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C)
+  { AHA_crt(stream, handle, M, N, orderA, A, lda, umax, vexp, orderC, C); }
 
-void internal::int8::i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const cuComplex* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C) {
-  int64_t strideA = int64_t(algnM) * int64_t(N), strideC = int64_t(N) * int64_t(N), strideW = strideC * int64_t(orderC) * int64_t(2);
-  int8_t* W = (int8_t*)&C[(strideW + int64_t(31)) & (~int64_t(31))];
-  int32_t* scratch = (int32_t*)&W[strideA * int64_t(24)];
-
-  for (int32_t i = 0; (i << 3) < orderA; ++i) {
-    int32_t moduli = std::min(orderA - (i << 3), 8);
-    int32_t beta = int32_t(0 < i);
-    quantize_modular(stream, M, N, i, A, lda, umax, vec_expon, moduli, N, algnM, W);
-
-    int64_t stride = int64_t(moduli) * strideA;
-    gemm_accum_crt(stream, handle, 'U', algnN, N, algnM, moduli, orderA, &W[stride * int64_t(2)], &W[stride * int64_t(2)], i, beta, C, orderC, scratch);
-    gemm_accum_crt(stream, handle, 'A', algnN, N, algnM, moduli, orderA, W, &W[stride], i, beta, &C[strideC * int64_t(orderC)], orderC, scratch);
-  }
-  vector_sums(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideW], N);
-}
-
-void internal::int8::i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const __half2* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C) {
-  int64_t strideA = int64_t(algnM) * int64_t(N), strideC = int64_t(N) * int64_t(N), strideW = strideC * int64_t(orderC) * int64_t(2);
-  int8_t* W = (int8_t*)&C[(strideW + int64_t(31)) & (~int64_t(31))];
-  int32_t* scratch = (int32_t*)&W[strideA * int64_t(24)];
-
-  for (int32_t i = 0; (i << 3) < orderA; ++i) {
-    int32_t moduli = std::min(orderA - (i << 3), 8);
-    int32_t beta = int32_t(0 < i);
-    quantize_modular(stream, M, N, i, A, lda, umax, vec_expon, moduli, N, algnM, W);
-
-    int64_t stride = int64_t(moduli) * strideA;
-    gemm_accum_crt(stream, handle, 'U', algnN, N, algnM, moduli, orderA, &W[stride * int64_t(2)], &W[stride * int64_t(2)], i, beta, C, orderC, scratch);
-    gemm_accum_crt(stream, handle, 'A', algnN, N, algnM, moduli, orderA, W, &W[stride], i, beta, &C[strideC * int64_t(orderC)], orderC, scratch);
-  }
-  vector_sums(stream, M, N, A, lda, umax, vec_expon, orderC, &C[strideW], N);
 }

@@ -1,5 +1,6 @@
 
 #include <internal.hpp>
+#include <stdexcept>
 
 inline void gemm_accum(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, int32_t sft, int32_t orderA, const int8_t* AT, const int8_t* A, int32_t beta, uint64_t* C, int32_t orderC, int32_t* W) {
   constexpr int32_t iter_k = 131072, iter_h = iter_k / 2;
@@ -91,53 +92,47 @@ inline void i8GemmU(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32
   gemm_accum_diag(stream, handle, M, N, K, orderA, A, C, orderC, W);
 }
 
-void internal::int8::i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const double* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C) {
-  int64_t strideA = int64_t(algnM) * int64_t(N) * int64_t(orderA), strideC = int64_t(N) * int64_t(N), strideW = strideC * int64_t(orderC);
-  int8_t* W = (int8_t*)&C[(strideW + int64_t(31)) & (~int64_t(31))];
-  int32_t* scratch = (int32_t*)&W[strideA];
-  quantize(stream, M, N, A, lda, umax, vec_expon, orderA, N, algnM, W);
-  i8GemmU(stream, handle, algnN, N, algnM, W, orderA, C, orderC, scratch);
+template <class matrix_t>
+inline void AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const matrix_t* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C) {
+  constexpr int32_t Complex = std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>;
+  int32_t algnM = (M + 255) & (~255), algnN = (N + 63) & (~63);
+  int64_t strideA = int64_t(algnM) * int64_t(N) * int64_t(orderA);
+  uint64_t w_len = uint64_t(strideA), w_pad = uint64_t(algnN - N) * uint64_t(algnM);
+  if constexpr(Complex) { w_len *= uint64_t(3); }
+
+  int8_t* W = nullptr; int32_t* scratch = nullptr;
+  if (cudaSuccess != cudaMallocAsync((void**)&W, w_len + w_pad, stream))
+    throw std::runtime_error("Workspace (i8) allocation failed at Integer SY/HERK.");
+  if (cudaSuccess != cudaMallocAsync((void**)&scratch, uint64_t(algnN) * uint64_t(N) * uint64_t(orderA) * sizeof(int32_t), stream))
+    throw std::runtime_error("Workspace (i32) allocation failed at Integer SY/HERK.");
+
+  internal::int8::quantize(stream, M, N, A, lda, umax, vexp, orderA, N, algnM, W);
+  if constexpr(Complex) {
+    int64_t strideA2 = strideA * int64_t(2), strideC = int64_t(N) * int64_t(N) * int64_t(orderC);
+    i8GemmU(stream, handle, algnN, N, algnM, &W[strideA2], orderA, C, orderC, scratch);
+    i8GemmF(stream, handle, algnN, N, algnM, W, &W[strideA], orderA, &C[strideC], orderC, scratch);
+  } else { i8GemmU(stream, handle, algnN, N, algnM, W, orderA, C, orderC, scratch); }
+  cudaFreeAsync(W, stream); cudaFreeAsync(scratch, stream);
 }
 
-void internal::int8::i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const float* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C) {
-  int64_t strideA = int64_t(algnM) * int64_t(N) * int64_t(orderA), strideC = int64_t(N) * int64_t(N), strideW = strideC * int64_t(orderC);
-  int8_t* W = (int8_t*)&C[(strideW + int64_t(31)) & (~int64_t(31))];
-  int32_t* scratch = (int32_t*)&W[strideA];
-  quantize(stream, M, N, A, lda, umax, vec_expon, orderA, N, algnM, W);
-  i8GemmU(stream, handle, algnN, N, algnM, W, orderA, C, orderC, scratch);
-}
+namespace internal::int8 {
 
-void internal::int8::i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const __half* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C) {
-  int64_t strideA = int64_t(algnM) * int64_t(N) * int64_t(orderA), strideC = int64_t(N) * int64_t(N), strideW = strideC * int64_t(orderC);
-  int8_t* W = (int8_t*)&C[(strideW + int64_t(31)) & (~int64_t(31))];
-  int32_t* scratch = (int32_t*)&W[strideA];
-  quantize(stream, M, N, A, lda, umax, vec_expon, orderA, N, algnM, W);
-  i8GemmU(stream, handle, algnN, N, algnM, W, orderA, C, orderC, scratch);
-}
+  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const double* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C)
+  { AHA_limbs(stream, handle, M, N, orderA, A, lda, umax, vexp, orderC, C); }
 
-void internal::int8::i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const cuDoubleComplex* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C) {
-  int64_t strideA = int64_t(algnM) * int64_t(N) * int64_t(orderA), strideC = int64_t(N) * int64_t(N), strideW = strideC * int64_t(orderC) * int64_t(2);
-  int8_t* W = (int8_t*)&C[(strideW + int64_t(31)) & (~int64_t(31))];
-  int32_t* scratch = (int32_t*)&W[strideA * int64_t(3)];
-  quantize(stream, M, N, A, lda, umax, vec_expon, orderA, N, algnM, W);
-  i8GemmU(stream, handle, algnN, N, algnM, &W[strideA * int64_t(2)], orderA, C, orderC, scratch);
-  i8GemmF(stream, handle, algnN, N, algnM, W, &W[strideA], orderA, &C[strideC * int64_t(orderC)], orderC, scratch);
-}
+  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const float* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C)
+  { AHA_limbs(stream, handle, M, N, orderA, A, lda, umax, vexp, orderC, C); }
 
-void internal::int8::i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const cuComplex* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C) {
-  int64_t strideA = int64_t(algnM) * int64_t(N) * int64_t(orderA), strideC = int64_t(N) * int64_t(N), strideW = strideC * int64_t(orderC) * int64_t(2);
-  int8_t* W = (int8_t*)&C[(strideW + int64_t(31)) & (~int64_t(31))];
-  int32_t* scratch = (int32_t*)&W[strideA * int64_t(3)];
-  quantize(stream, M, N, A, lda, umax, vec_expon, orderA, N, algnM, W);
-  i8GemmU(stream, handle, algnN, N, algnM, &W[strideA * int64_t(2)], orderA, C, orderC, scratch);
-  i8GemmF(stream, handle, algnN, N, algnM, W, &W[strideA], orderA, &C[strideC * int64_t(orderC)], orderC, scratch);
-}
+  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C)
+  { AHA_limbs(stream, handle, M, N, orderA, A, lda, umax, vexp, orderC, C); }
 
-void internal::int8::i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const __half2* A, int32_t lda, int32_t umax, const int32_t* vec_expon, int32_t algnM, int32_t algnN, int32_t orderA, int32_t orderC, uint64_t* C) {
-  int64_t strideA = int64_t(algnM) * int64_t(N) * int64_t(orderA), strideC = int64_t(N) * int64_t(N), strideW = strideC * int64_t(orderC) * int64_t(2);
-  int8_t* W = (int8_t*)&C[(strideW + int64_t(31)) & (~int64_t(31))];
-  int32_t* scratch = (int32_t*)&W[strideA * int64_t(3)];
-  quantize(stream, M, N, A, lda, umax, vec_expon, orderA, N, algnM, W);
-  i8GemmU(stream, handle, algnN, N, algnM, &W[strideA * int64_t(2)], orderA, C, orderC, scratch);
-  i8GemmF(stream, handle, algnN, N, algnM, W, &W[strideA], orderA, &C[strideC * int64_t(orderC)], orderC, scratch);
+  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuDoubleComplex* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C)
+  { AHA_limbs(stream, handle, M, N, orderA, A, lda, umax, vexp, orderC, C); }
+
+  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuComplex* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C)
+  { AHA_limbs(stream, handle, M, N, orderA, A, lda, umax, vexp, orderC, C); }
+
+  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half2* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C)
+  { AHA_limbs(stream, handle, M, N, orderA, A, lda, umax, vexp, orderC, C); }
+
 }
