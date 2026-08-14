@@ -87,7 +87,7 @@ __global__ void triangle_pack_kernel(int64_t N, const uint64_t* __restrict__ A, 
 
 namespace internal::int8 {
 
-  void triangle_pack(cudaStream_t stream, int32_t orderA, int32_t Complex, int32_t M, int32_t N, int32_t umax, const uint64_t* A, int32_t beta, int32_t orderB, uint64_t* B) {
+  void triangle_pack(cudaStream_t stream, int32_t Complex, int32_t M, int32_t N, int32_t orderA, const uint64_t* A, int32_t umax, int32_t beta, int32_t orderB, uint64_t* B) {
     constexpr int32_t block_threads = 512;
     dim3 grid(uint32_t(N + 511) >> 9, uint32_t(N), uint32_t(1));
     int64_t K64 = int64_t(M) << Complex, N64 = int64_t(N);

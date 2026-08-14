@@ -117,17 +117,17 @@ namespace internal::int8 {
   void quantize_modular(cudaStream_t stream, int32_t M, int32_t N, int32_t iter, const cuComplex* C, int32_t ldc, int32_t umax, const int32_t* vexp, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A);
   void quantize_modular(cudaStream_t stream, int32_t M, int32_t N, int32_t iter, const __half2* C, int32_t ldc, int32_t umax, const int32_t* vexp, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A);
 
-  void dequantize(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vexp, double* B, int32_t ldb);
-  void dequantize(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vexp, float* B, int32_t ldb);
-  void dequantize(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vexp, double2* B, int32_t ldb);
-  void dequantize(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vexp, float4* B, int32_t ldb);
+  void dequantize(cudaStream_t stream, int32_t N, int32_t orderA, const uint64_t* A, int32_t umax, const int32_t* vexp, double* B, int32_t ldb);
+  void dequantize(cudaStream_t stream, int32_t N, int32_t orderA, const uint64_t* A, int32_t umax, const int32_t* vexp, float* B, int32_t ldb);
+  void dequantize(cudaStream_t stream, int32_t N, int32_t orderA, const uint64_t* A, int32_t umax, const int32_t* vexp, double2* B, int32_t ldb);
+  void dequantize(cudaStream_t stream, int32_t N, int32_t orderA, const uint64_t* A, int32_t umax, const int32_t* vexp, float4* B, int32_t ldb);
 
-  void dequantize_complex(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vexp, cuDoubleComplex* B, int32_t ldb);
-  void dequantize_complex(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vexp, cuComplex* B, int32_t ldb);
-  void dequantize_complex(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vexp, complex_double2* B, int32_t ldb);
-  void dequantize_complex(cudaStream_t stream, int32_t orderA, int32_t N, const uint64_t* A, int32_t umax, const int32_t* vexp, complex_float4* B, int32_t ldb);
+  void dequantize_complex(cudaStream_t stream, int32_t N, int32_t orderA, const uint64_t* A, int32_t umax, const int32_t* vexp, cuDoubleComplex* B, int32_t ldb);
+  void dequantize_complex(cudaStream_t stream, int32_t N, int32_t orderA, const uint64_t* A, int32_t umax, const int32_t* vexp, cuComplex* B, int32_t ldb);
+  void dequantize_complex(cudaStream_t stream, int32_t N, int32_t orderA, const uint64_t* A, int32_t umax, const int32_t* vexp, complex_double2* B, int32_t ldb);
+  void dequantize_complex(cudaStream_t stream, int32_t N, int32_t orderA, const uint64_t* A, int32_t umax, const int32_t* vexp, complex_float4* B, int32_t ldb);
 
-  void triangle_pack(cudaStream_t stream, int32_t orderA, int32_t Complex, int32_t M, int32_t N, int32_t umax, const uint64_t* C, int32_t beta, int32_t orderB, uint64_t* B);
+  void triangle_pack(cudaStream_t stream, int32_t Complex, int32_t M, int32_t N, int32_t orderA, const uint64_t* A, int32_t umax, int32_t beta, int32_t orderB, uint64_t* B);
   void accumulate_i32tensor(cudaStream_t stream, char mode, int32_t beta, int32_t N, int32_t sft, uint32_t sft_iter, int32_t orderX, const int32_t* X, int32_t ldx, int32_t orderA, uint64_t* A);
   void accumulate_remainder_i32tensor(cudaStream_t stream, char mode, int32_t beta, int32_t N, int32_t orderX, int32_t iter, const int32_t* X, int32_t ldx, int32_t orderA, uint64_t* A);
 

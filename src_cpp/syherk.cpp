@@ -7,11 +7,11 @@
 #include <tuple>
 #include <stdexcept>
 
-inline std::tuple<int32_t, int32_t, int32_t, uint64_t, uint64_t> ext_params(int32_t localM, int32_t globalM, int32_t N, int32_t umax, hyacinPrecision_t Gtype, hyacinAlgorithm_t alg) {
+inline std::tuple<int32_t, int32_t, int32_t, uint64_t, uint64_t> ext_params(int32_t M, int32_t N, int32_t umax, hyacinPrecision_t Gtype, hyacinAlgorithm_t alg) {
   hyacinPrecision_t GtypeReal = Gtype; hyacinXelem('R', &GtypeReal);
   int32_t Complex = int32_t(Gtype != GtypeReal);
   int32_t use_limbs = int32_t(alg == HYACIN_ALG_LIMBS);
-  int32_t bits = int32_t(std::ceil(std::log2(double(std::max(1, globalM))))) + (Complex ? 2 : 0) + (use_limbs ? 0 : 2) + (umax << 1);
+  int32_t bits = int32_t(std::ceil(std::log2(double(std::max(1, M))))) + (Complex ? 2 : 0) + (use_limbs ? 0 : 2) + (umax << 1);
   int32_t orderA = (use_limbs ? (umax + 9) : (bits + 9)) >> 3;
   int32_t orderC = (use_limbs ? (bits + 62) : ((orderA << 3) + 63)) / 63;
   uint64_t acc_bytes = uint64_t(N) * uint64_t(N + (use_limbs ? 0 : 1)) * uint64_t(orderC) * uint64_t(Complex + 1) * sizeof(uint64_t);
@@ -55,14 +55,14 @@ inline void igemm_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t
 
 inline void deq_dispatcher(cudaStream_t stream, int32_t N, int32_t umax, const uint64_t* acc, int32_t order, void* G, int32_t ldg, const int32_t* vexp, hyacinPrecision_t Gtype) {
   switch (Gtype) {
-    case HYACIN_F64: internal::int8::dequantize(stream, order, N, acc, umax, vexp, (double*)G, ldg); return;
-    case HYACIN_F32: internal::int8::dequantize(stream, order, N, acc, umax, vexp, (float*)G, ldg); return;
-    case HYACIN_DD: internal::int8::dequantize(stream, order, N, acc, umax, vexp, (double2*)G, ldg); return;
-    case HYACIN_QF: internal::int8::dequantize(stream, order, N, acc, umax, vexp, (float4*)G, ldg); return;
-    case HYACIN_F64_COMPLEX: internal::int8::dequantize_complex(stream, order, N, acc, umax, vexp, (cuDoubleComplex*)G, ldg); return;
-    case HYACIN_F32_COMPLEX: internal::int8::dequantize_complex(stream, order, N, acc, umax, vexp, (cuComplex*)G, ldg); return;
-    case HYACIN_DD_COMPLEX: internal::int8::dequantize_complex(stream, order, N, acc, umax, vexp, (complex_double2*)G, ldg); return;
-    case HYACIN_QF_COMPLEX: internal::int8::dequantize_complex(stream, order, N, acc, umax, vexp, (complex_float4*)G, ldg); return;
+    case HYACIN_F64: internal::int8::dequantize(stream, N, order, acc, umax, vexp, (double*)G, ldg); return;
+    case HYACIN_F32: internal::int8::dequantize(stream, N, order, acc, umax, vexp, (float*)G, ldg); return;
+    case HYACIN_DD: internal::int8::dequantize(stream, N, order, acc, umax, vexp, (double2*)G, ldg); return;
+    case HYACIN_QF: internal::int8::dequantize(stream, N, order, acc, umax, vexp, (float4*)G, ldg); return;
+    case HYACIN_F64_COMPLEX: internal::int8::dequantize_complex(stream, N, order, acc, umax, vexp, (cuDoubleComplex*)G, ldg); return;
+    case HYACIN_F32_COMPLEX: internal::int8::dequantize_complex(stream, N, order, acc, umax, vexp, (cuComplex*)G, ldg); return;
+    case HYACIN_DD_COMPLEX: internal::int8::dequantize_complex(stream, N, order, acc, umax, vexp, (complex_double2*)G, ldg); return;
+    case HYACIN_QF_COMPLEX: internal::int8::dequantize_complex(stream, N, order, acc, umax, vexp, (complex_float4*)G, ldg); return;
     default: return;
   }
 }
@@ -72,7 +72,7 @@ extern "C" void hyacinXsyherk(hyacinHandle_t handle, int32_t M, int32_t N, int32
   Timer::register_kernel(handle.cudaStream, handle.timer);
 
   int32_t Complex, orderA, orderC; uint64_t acc_bytes, tp_bytes;
-  std::tie(Complex, orderA, orderC, acc_bytes, tp_bytes) = ext_params(M, M, N, umax, Gtype, alg);
+  std::tie(Complex, orderA, orderC, acc_bytes, tp_bytes) = ext_params(M, N, umax, Gtype, alg);
 
   uint64_t* acc = nullptr, *tp = nullptr; int32_t* vexp = nullptr;
   if (cudaSuccess != cudaMallocAsync((void**)&acc, acc_bytes, handle.cudaStream))
@@ -83,7 +83,7 @@ extern "C" void hyacinXsyherk(hyacinHandle_t handle, int32_t M, int32_t N, int32
     throw std::runtime_error("Workspace allocation failed at Integer SY/HERK.");
   vexp_dispatcher(handle.cudaStream, M, N, Atype, A, lda, vexp);
   igemm_dispatcher(handle.cudaStream, handle.cublasHandle, M, N, Atype, A, lda, umax, vexp, orderA, orderC, acc, alg);
-  internal::int8::triangle_pack(handle.cudaStream, orderC, Complex, alg == HYACIN_ALG_CRT ? M : 0, N, umax, acc, 0, orderC, tp);
+  internal::int8::triangle_pack(handle.cudaStream, Complex, alg == HYACIN_ALG_CRT ? M : 0, N, orderC, acc, umax, 0, orderC, tp);
 
   deq_dispatcher(handle.cudaStream, N, umax, tp, orderC, G, ldg, vexp, Gtype);
   cudaFreeAsync(acc, handle.cudaStream);
@@ -98,7 +98,7 @@ extern "C" void hyacinXsyherk1Drow(hyacinHandle_t handle, int32_t localM, int32_
   Timer::register_kernel(handle.cudaStream, handle.timer);
 
   int32_t Complex, orderA, orderC; uint64_t acc_bytes, tp_bytes;
-  std::tie(Complex, orderA, orderC, acc_bytes, tp_bytes) = ext_params(localM, globalM, N, umax, Gtype, alg);
+  std::tie(Complex, orderA, orderC, acc_bytes, tp_bytes) = ext_params(globalM, N, umax, Gtype, alg);
 
   uint64_t* acc = nullptr, *tp = nullptr; int32_t* vexp = nullptr;
   if (cudaSuccess != cudaMallocAsync((void**)&acc, acc_bytes, handle.cudaStream))
@@ -114,7 +114,7 @@ extern "C" void hyacinXsyherk1Drow(hyacinHandle_t handle, int32_t localM, int32_
   if (0 < localM) {
     Timer::register_kernel(handle.cudaStream, handle.timer);
     igemm_dispatcher(handle.cudaStream, handle.cublasHandle, localM, N, Atype, A, lda, umax, vexp, orderA, orderC, acc, alg);
-    internal::int8::triangle_pack(handle.cudaStream, orderC, Complex, alg == HYACIN_ALG_CRT ? localM : 0, N, umax, acc, 0, orderC, tp);
+    internal::int8::triangle_pack(handle.cudaStream, Complex, alg == HYACIN_ALG_CRT ? localM : 0, N, orderC, acc, umax, 0, orderC, tp);
   }
   else { cudaMemsetAsync(tp, 0, tp_bytes, handle.cudaStream); }
 
