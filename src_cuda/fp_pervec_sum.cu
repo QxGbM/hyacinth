@@ -35,7 +35,7 @@ __device__ __forceinline__ uint64_t* conv_acc(reduc_t acc, uint64_t* out, int64_
   device::int8::add_shifted(a, acc.y, uint32_t(32)); 
   if constexpr(sign) { *out = -a[0]; } else { *out = a[0]; }
   if constexpr(1 < ORDER && sign) { *(out += stride) = -a[1]; } else if constexpr(1 < ORDER) { *(out += stride) = a[1]; }
-  if constexpr(2 < ORDER && sign) { *(out += stride) = -a[2]; } else if constexpr(1 < ORDER) { *(out += stride) = a[2]; }
+  if constexpr(2 < ORDER && sign) { *(out += stride) = -a[2]; } else if constexpr(2 < ORDER) { *(out += stride) = a[2]; }
   return &out[stride];
 }
 
