@@ -106,7 +106,7 @@ inline void AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int
   if (cudaSuccess != cudaMallocAsync((void**)&scratch, uint64_t(algnN) * uint64_t(N) * uint64_t(orderA) * sizeof(int32_t), stream))
     throw std::runtime_error("Workspace (i32) allocation failed at Integer SY/HERK.");
 
-  internal::int8::quantize(stream, M, N, A, lda, umax, vexp, orderA, N, algnM, W);
+  internal::int8::quantize(stream, -1, M, A, lda, umax, vexp, orderA, N, algnM, W);
   if constexpr(Complex) {
     int64_t strideA2 = strideA * int64_t(2), strideC = int64_t(N) * int64_t(N) * int64_t(orderC);
     i8GemmU(stream, handle, algnN, N, algnM, &W[strideA2], orderA, C, orderC, scratch);
