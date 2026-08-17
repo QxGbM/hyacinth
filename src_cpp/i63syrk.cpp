@@ -77,23 +77,19 @@ inline void gemm_accum_diag(cudaStream_t stream, cublasHandle_t handle, int32_t 
 
 inline void i8GemmF(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, const int8_t* AT, const int8_t* A, int32_t orderA, uint64_t* C, int32_t orderC, int32_t* W) {
   int64_t strideA = int64_t(K) * int64_t(N);
-  for (int32_t i = 0; i < orderA; ++i) {
-    int64_t AT_i = int64_t(i) * strideA;
-    gemm_accum(stream, handle, M, N, K, i << 3, orderA, &AT[AT_i], A, int32_t(0 < i), C, orderC, W);
-  }
+  for (int32_t i = 0; i < orderA; ++i)
+    gemm_accum(stream, handle, M, N, K, i << 3, orderA, &AT[int64_t(i) * strideA], A, int32_t(0 < i), C, orderC, W);
 }
 
 inline void i8GemmU(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, const int8_t* A, int32_t orderA, uint64_t* C, int32_t orderC, int32_t* W) {
   int64_t strideA = int64_t(K) * int64_t(N);
-  for (int32_t i = 1; i < orderA; ++i) {
-    int64_t AT_i = int64_t(i - 1) * strideA, AN_i = int64_t(i) * strideA;
-    gemm_accum(stream, handle, M, N, K, (i << 4) - 8, orderA - i, &A[AT_i], &A[AN_i], int32_t(1 < i), C, orderC, W);
-  }
+  for (int32_t i = 1; i < orderA; ++i)
+    gemm_accum(stream, handle, M, N, K, (i << 4) - 8, orderA - i, &A[int64_t(i - 1) * strideA], &A[int64_t(i) * strideA], int32_t(1 < i), C, orderC, W);
   gemm_accum_diag(stream, handle, M, N, K, orderA, A, C, orderC, W);
 }
 
 template <class matrix_t>
-inline void AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const matrix_t* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C) {
+inline void AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const matrix_t* A, int32_t lda, const int32_t* vexp, int32_t orderC, uint64_t* C) {
   constexpr int32_t Complex = std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>;
   int32_t algnM = (M + 255) & (~255), algnN = (N + 63) & (~63);
   int64_t strideA = int64_t(algnM) * int64_t(N) * int64_t(orderA);
@@ -106,7 +102,7 @@ inline void AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int
   if (cudaSuccess != cudaMallocAsync((void**)&scratch, uint64_t(algnN) * uint64_t(N) * uint64_t(orderA) * sizeof(int32_t), stream))
     throw std::runtime_error("Workspace (i32) allocation failed at Integer SY/HERK.");
 
-  internal::int8::quantize(stream, -1, M, A, lda, umax, vexp, orderA, N, algnM, W);
+  internal::int8::quantize(stream, -1, M, A, lda, uint32_t(0), vexp, orderA, N, algnM, W);
   if constexpr(Complex) {
     int64_t strideA2 = strideA * int64_t(2), strideC = int64_t(N) * int64_t(N) * int64_t(orderC);
     i8GemmU(stream, handle, algnN, N, algnM, &W[strideA2], orderA, C, orderC, scratch);
@@ -117,22 +113,22 @@ inline void AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int
 
 namespace internal::int8 {
 
-  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const double* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C)
-  { AHA_limbs(stream, handle, M, N, orderA, A, lda, umax, vexp, orderC, C); }
+  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const double* A, int32_t lda, const int32_t* vexp, int32_t orderC, uint64_t* C)
+  { AHA_limbs(stream, handle, M, N, orderA, A, lda, vexp, orderC, C); }
 
-  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const float* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C)
-  { AHA_limbs(stream, handle, M, N, orderA, A, lda, umax, vexp, orderC, C); }
+  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const float* A, int32_t lda, const int32_t* vexp, int32_t orderC, uint64_t* C)
+  { AHA_limbs(stream, handle, M, N, orderA, A, lda, vexp, orderC, C); }
 
-  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C)
-  { AHA_limbs(stream, handle, M, N, orderA, A, lda, umax, vexp, orderC, C); }
+  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half* A, int32_t lda, const int32_t* vexp, int32_t orderC, uint64_t* C)
+  { AHA_limbs(stream, handle, M, N, orderA, A, lda, vexp, orderC, C); }
 
-  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuDoubleComplex* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C)
-  { AHA_limbs(stream, handle, M, N, orderA, A, lda, umax, vexp, orderC, C); }
+  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuDoubleComplex* A, int32_t lda, const int32_t* vexp, int32_t orderC, uint64_t* C)
+  { AHA_limbs(stream, handle, M, N, orderA, A, lda, vexp, orderC, C); }
 
-  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuComplex* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C)
-  { AHA_limbs(stream, handle, M, N, orderA, A, lda, umax, vexp, orderC, C); }
+  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuComplex* A, int32_t lda, const int32_t* vexp, int32_t orderC, uint64_t* C)
+  { AHA_limbs(stream, handle, M, N, orderA, A, lda, vexp, orderC, C); }
 
-  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half2* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C)
-  { AHA_limbs(stream, handle, M, N, orderA, A, lda, umax, vexp, orderC, C); }
+  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half2* A, int32_t lda, const int32_t* vexp, int32_t orderC, uint64_t* C)
+  { AHA_limbs(stream, handle, M, N, orderA, A, lda, vexp, orderC, C); }
 
 }

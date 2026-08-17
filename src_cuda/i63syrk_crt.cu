@@ -41,10 +41,10 @@ __device__ __forceinline__ uint64_t* conv_acc(reduc_t acc, uint64_t* out, int64_
 }
 
 template <int32_t ORDER, int32_t Complex, int32_t BLOCK_THREADS, class reduc_t, class real_t>
-__global__ void vector_sum_kernel(int64_t M, const real_t* __restrict__ A, int64_t lda, uint64_t lo, uint32_t hi, int32_t umax, const int32_t* __restrict__ vexp, uint64_t* __restrict__ vec_sum) {
+__global__ void vector_sum_kernel(int64_t M, const real_t* __restrict__ A, int64_t lda, uint64_t lo, uint32_t hi, const int32_t* __restrict__ vexp, uint64_t* __restrict__ vec_sum) {
   constexpr int64_t inci = int64_t(BLOCK_THREADS);
   int64_t iter = int64_t(blockIdx.x) * lda, iter_end = iter + M;
-  int32_t expon = umax - vexp[blockIdx.x];
+  int32_t expon = vexp[blockIdx.x];
   reduc_t threadA = reduc_t();
 
   for (iter += int64_t(threadIdx.x); iter < iter_end; iter += inci)
@@ -67,20 +67,18 @@ __global__ void vector_sum_kernel(int64_t M, const real_t* __restrict__ A, int64
 }
 
 template <class real_t, class matrix_t>
-inline void vector_sums(cudaStream_t stream, int32_t M, int32_t N, const matrix_t* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t order, uint64_t* vec_sum) {
+inline void vector_sums(cudaStream_t stream, int32_t M, int32_t N, const matrix_t* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t order, uint64_t* vec_sum) {
   constexpr int32_t block_threads = 512, Complex = std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>;
-  uint64_t lo = umax < 63 ? (uint64_t(1) << umax) : uint64_t(0);
-  uint32_t hi = 63 <= umax ? (uint32_t(1) << (umax - 63)) : uint32_t(0);
   int64_t M64 = int64_t(M), lda64 = int64_t(lda); if constexpr(Complex) { M64 <<= 1; lda64 <<= 1; }
-  if (umax < 63) switch(order) {
-    case 1: vector_sum_kernel<1, Complex, block_threads, ulonglong2> <<< N, block_threads, 0, stream >>> (M64, (const real_t*)A, lda64, lo, hi, umax, vexp, vec_sum); return;
-    case 2: vector_sum_kernel<2, Complex, block_threads, ulonglong2> <<< N, block_threads, 0, stream >>> (M64, (const real_t*)A, lda64, lo, hi, umax, vexp, vec_sum); return;
-    case 3: vector_sum_kernel<3, Complex, block_threads, ulonglong2> <<< N, block_threads, 0, stream >>> (M64, (const real_t*)A, lda64, lo, hi, umax, vexp, vec_sum); return;
+  if (corr < uint32_t(63)) switch(order) {
+    case 1: vector_sum_kernel<1, Complex, block_threads, ulonglong2> <<< N, block_threads, 0, stream >>> (M64, (const real_t*)A, lda64, uint64_t(1) << corr, uint32_t(0), vexp, vec_sum); return;
+    case 2: vector_sum_kernel<2, Complex, block_threads, ulonglong2> <<< N, block_threads, 0, stream >>> (M64, (const real_t*)A, lda64, uint64_t(1) << corr, uint32_t(0), vexp, vec_sum); return;
+    case 3: vector_sum_kernel<3, Complex, block_threads, ulonglong2> <<< N, block_threads, 0, stream >>> (M64, (const real_t*)A, lda64, uint64_t(1) << corr, uint32_t(0), vexp, vec_sum); return;
     default: return;
   } else switch(order) {
-    case 1: vector_sum_kernel<1, Complex, block_threads, ulonglong3> <<< N, block_threads, 0, stream >>> (M64, (const real_t*)A, lda64, lo, hi, umax, vexp, vec_sum); return;
-    case 2: vector_sum_kernel<2, Complex, block_threads, ulonglong3> <<< N, block_threads, 0, stream >>> (M64, (const real_t*)A, lda64, lo, hi, umax, vexp, vec_sum); return;
-    case 3: vector_sum_kernel<3, Complex, block_threads, ulonglong3> <<< N, block_threads, 0, stream >>> (M64, (const real_t*)A, lda64, lo, hi, umax, vexp, vec_sum); return;
+    case 1: vector_sum_kernel<1, Complex, block_threads, ulonglong3> <<< N, block_threads, 0, stream >>> (M64, (const real_t*)A, lda64, uint64_t(0), uint32_t(1) << (corr - uint32_t(63)), vexp, vec_sum); return;
+    case 2: vector_sum_kernel<2, Complex, block_threads, ulonglong3> <<< N, block_threads, 0, stream >>> (M64, (const real_t*)A, lda64, uint64_t(0), uint32_t(1) << (corr - uint32_t(63)), vexp, vec_sum); return;
+    case 3: vector_sum_kernel<3, Complex, block_threads, ulonglong3> <<< N, block_threads, 0, stream >>> (M64, (const real_t*)A, lda64, uint64_t(0), uint32_t(1) << (corr - uint32_t(63)), vexp, vec_sum); return;
     default: return;
   }
 }
@@ -123,7 +121,7 @@ inline void gemm_accum_crt(cudaStream_t stream, cublasHandle_t handle, char mode
 }
 
 template <class real_t, class matrix_t>
-inline void AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const matrix_t* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C) {
+inline void AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const matrix_t* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t orderC, uint64_t* C) {
   constexpr int32_t Complex = std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>;
   int32_t algnM = (M + 255) & (~255), algnN = (N + 63) & (~63);
   int64_t strideA = int64_t(algnM) * int64_t(N), strideC = int64_t(N) * int64_t(N) * int64_t(orderC);
@@ -139,7 +137,7 @@ inline void AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32
   for (int32_t i = 0; (i << 3) < orderA; ++i) {
     int32_t moduli = std::min(orderA - (i << 3), 8);
     int32_t beta = int32_t(0 < i);
-    internal::int8::quantize(stream, i, M, A, lda, umax, vexp, moduli, N, algnM, W);
+    internal::int8::quantize(stream, i, M, A, lda, corr, vexp, moduli, N, algnM, W);
     if constexpr(Complex) {
       int64_t strideW = int64_t(moduli) * strideA, strideW2 = strideW * int64_t(2);
       gemm_accum_crt(stream, handle, 'U', algnN, N, algnM, moduli, orderA, &W[strideW2], &W[strideW2], i, beta, C, orderC, scratch);
@@ -149,27 +147,27 @@ inline void AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32
   cudaFreeAsync(W, stream); cudaFreeAsync(scratch, stream);
 
   if constexpr(Complex) { C = &C[strideC * int64_t(2)]; } else { C = &C[strideC]; }
-  vector_sums<real_t>(stream, M, N, A, lda, umax, vexp, orderC, C);
+  vector_sums<real_t>(stream, M, N, A, lda, corr, vexp, orderC, C);
 }
 
 namespace internal::int8 {
 
-  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const double* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C)
-  { AHA_crt<double>(stream, handle, M, N, orderA, A, lda, umax, vexp, orderC, C); }
+  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const double* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t orderC, uint64_t* C)
+  { AHA_crt<double>(stream, handle, M, N, orderA, A, lda, corr, vexp, orderC, C); }
 
-  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const float* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C)
-  { AHA_crt<float>(stream, handle, M, N, orderA, A, lda, umax, vexp, orderC, C); }
+  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const float* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t orderC, uint64_t* C)
+  { AHA_crt<float>(stream, handle, M, N, orderA, A, lda, corr, vexp, orderC, C); }
 
-  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C)
-  { AHA_crt<__half>(stream, handle, M, N, orderA, A, lda, umax, vexp, orderC, C); }
+  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t orderC, uint64_t* C)
+  { AHA_crt<__half>(stream, handle, M, N, orderA, A, lda, corr, vexp, orderC, C); }
 
-  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuDoubleComplex* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C)
-  { AHA_crt<double>(stream, handle, M, N, orderA, A, lda, umax, vexp, orderC, C); }
+  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuDoubleComplex* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t orderC, uint64_t* C)
+  { AHA_crt<double>(stream, handle, M, N, orderA, A, lda, corr, vexp, orderC, C); }
 
-  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuComplex* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C)
-  { AHA_crt<float>(stream, handle, M, N, orderA, A, lda, umax, vexp, orderC, C); }
+  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuComplex* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t orderC, uint64_t* C)
+  { AHA_crt<float>(stream, handle, M, N, orderA, A, lda, corr, vexp, orderC, C); }
 
-  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half2* A, int32_t lda, int32_t umax, const int32_t* vexp, int32_t orderC, uint64_t* C)
-  { AHA_crt<__half>(stream, handle, M, N, orderA, A, lda, umax, vexp, orderC, C); }
+  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half2* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t orderC, uint64_t* C)
+  { AHA_crt<__half>(stream, handle, M, N, orderA, A, lda, corr, vexp, orderC, C); }
 
 }

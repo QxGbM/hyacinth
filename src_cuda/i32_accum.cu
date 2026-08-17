@@ -78,7 +78,7 @@ inline void acc_dispatcher(cudaStream_t stream, char mode, int32_t beta, int64_t
   }
 }
 
-void internal::int8::accumulate_i32tensor(cudaStream_t stream, char mode, int32_t beta, int32_t N, int32_t sft, uint32_t sft_iter, int32_t orderX, const int32_t* X, int32_t ldx, int32_t orderA, uint64_t* A) {
+void internal::int8::accumulate_i32tensor(cudaStream_t stream, char mode, int32_t beta, int32_t N, int32_t sft, int32_t sft_iter, int32_t orderX, const int32_t* X, int32_t ldx, int32_t orderA, uint64_t* A) {
   switch (orderA) {
     case 1: acc_dispatcher<1>(stream, mode, beta, int64_t(N), uint32_t(sft), uint32_t(sft_iter), orderX, X, int64_t(ldx), A); return;
     case 2: acc_dispatcher<2>(stream, mode, beta, int64_t(N), uint32_t(sft), uint32_t(sft_iter), orderX, X, int64_t(ldx), A); return;

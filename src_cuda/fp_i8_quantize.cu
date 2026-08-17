@@ -2,7 +2,9 @@
 #include <internal.hpp>
 #include <int_fp_quantize.hpp>
 #include <crt_constants.hpp>
+#include <limits>
 
+constexpr int32_t int_max = std::numeric_limits<int32_t>::max();
 template <int32_t op, int32_t ORDER> __device__ __forceinline__ void quantize_i8(uint64_t lo, uint32_t hi, uint32_t (&code)[3]) {
   constexpr uint32_t i31 = 0x7fffffffu, u31 = ~i31;
   if constexpr(op < 0) {
@@ -48,116 +50,116 @@ __device__ __forceinline__ void write_i8(const uint32_t (&code)[3], int8_t* A, i
 }
 
 template <int32_t ORDER, int32_t op, class matrix_t>
-__global__ void quantize_kernel(int64_t M, const matrix_t* __restrict__ A, int64_t lda, int32_t umax, const int32_t* __restrict__ vexp, int8_t* __restrict__ B, int64_t ldb, int64_t strideB) {
+__global__ void quantize_kernel(int64_t M, const matrix_t* __restrict__ A, int64_t lda, uint32_t corr, const int32_t* __restrict__ vexp, int8_t* __restrict__ B, int64_t ldb, int64_t strideB) {
   constexpr int32_t op_complex = std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>;
   int64_t y = (int64_t(blockIdx.x) << 8) + int64_t(threadIdx.x), panelB = int64_t(ORDER) * strideB;
   uint32_t code[3]; B = &B[y + (int64_t(blockIdx.y) * ldb)];
-  if (M <= y) {
+  int32_t expon = vexp[blockIdx.y];
+  if (M <= y || expon == int_max) {
     code[0] = code[1] = code[2] = uint32_t(0);
     write_i8<ORDER>(code, B, strideB);
     if constexpr(op_complex)
     { write_i8<ORDER>(code, B += panelB, strideB); write_i8<ORDER>(code, B += panelB, strideB); }
   }
   else {
-    int32_t expon = umax - vexp[blockIdx.y];
     matrix_t A_i = A[y + (int64_t(blockIdx.y) * lda)];
     if constexpr(op_complex) {
       uint64_t rl[2]{}, im[2]{};
       int32_t e_rl; int64_t q_rl = device::int8::round_i64(A_i.x, expon, e_rl); device::int8::add_shifted(rl, q_rl, uint32_t(e_rl));
       int32_t e_im; int64_t q_im = device::int8::round_i64(A_i.y, expon, e_im); device::int8::add_shifted(im, q_im, uint32_t(e_im));
-      if constexpr(0 <= op) { device::int8::add_shifted(rl, int64_t(1), uint32_t(umax)); device::int8::add_shifted(im, int64_t(1), uint32_t(umax)); }
+      if constexpr(0 <= op) { device::int8::add_shifted(rl, int64_t(1), corr); device::int8::add_shifted(im, int64_t(1), corr); }
 
       quantize_i8<op, ORDER>(rl[0], uint32_t(rl[1]), code); write_i8<ORDER>(code, B, strideB);
       quantize_i8<op, ORDER>(im[0], uint32_t(im[1]), code); write_i8<ORDER>(code, B += panelB, strideB);
       device::int8::add_shifted(im, q_rl, uint32_t(e_rl));
-      if constexpr(0 <= op) { device::int8::add_shifted(im, int64_t(1), uint32_t(umax)); }
+      if constexpr(0 <= op) { device::int8::add_shifted(im, int64_t(1), corr); }
       quantize_i8<op, ORDER>(im[0], uint32_t(im[1]), code); write_i8<ORDER>(code, B += panelB, strideB);
     }
     else {
       uint64_t rl[2]{};
       int32_t e_rl; int64_t q_rl = device::int8::round_i64(A_i, expon, e_rl); device::int8::add_shifted(rl, q_rl, uint32_t(e_rl));
-      if constexpr(0 <= op) { device::int8::add_shifted(rl, int64_t(1), uint32_t(umax)); }
+      if constexpr(0 <= op) { device::int8::add_shifted(rl, int64_t(1), corr); }
       quantize_i8<op, ORDER>(rl[0], uint32_t(rl[1]), code); write_i8<ORDER>(code, B, strideB);
     }
   }
 };
 
 template <int32_t op, class matrix_t>
-inline void quantize_dispatcher(cudaStream_t stream, int32_t M, const matrix_t* C, int32_t ldc, int32_t umax, const int32_t* vexp, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
+inline void quantize_dispatcher(cudaStream_t stream, int32_t M, const matrix_t* C, int32_t ldc, uint32_t corr, const int32_t* vexp, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
   constexpr int32_t block_threads = 256;
   dim3 grid(uint32_t(dimX) >> 8, uint32_t(dimY));
   int64_t M64 = int64_t(M), ldc64 = int64_t(ldc), dimX64 = int64_t(dimX), strideA = int64_t(dimY) * dimX64;
 
   switch (dimZ) {
-    case 1: quantize_kernel<1, op> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, umax, vexp, A, dimX64, strideA); return;
-    case 2: quantize_kernel<2, op> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, umax, vexp, A, dimX64, strideA); return;
-    case 3: quantize_kernel<3, op> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, umax, vexp, A, dimX64, strideA); return;
-    case 4: quantize_kernel<4, op> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, umax, vexp, A, dimX64, strideA); return;
-    case 5: quantize_kernel<5, op> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, umax, vexp, A, dimX64, strideA); return;
-    case 6: quantize_kernel<6, op> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, umax, vexp, A, dimX64, strideA); return;
-    case 7: quantize_kernel<7, op> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, umax, vexp, A, dimX64, strideA); return;
-    case 8: quantize_kernel<8, op> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, umax, vexp, A, dimX64, strideA); return;
-    case 9: quantize_kernel<9, op> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, umax, vexp, A, dimX64, strideA); return;
-    case 10: quantize_kernel<10, op> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, umax, vexp, A, dimX64, strideA); return;
-    case 11: quantize_kernel<11, op> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, umax, vexp, A, dimX64, strideA); return;
-    case 12: quantize_kernel<12, op> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, umax, vexp, A, dimX64, strideA); return;
+    case 1: quantize_kernel<1, op> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
+    case 2: quantize_kernel<2, op> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
+    case 3: quantize_kernel<3, op> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
+    case 4: quantize_kernel<4, op> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
+    case 5: quantize_kernel<5, op> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
+    case 6: quantize_kernel<6, op> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
+    case 7: quantize_kernel<7, op> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
+    case 8: quantize_kernel<8, op> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
+    case 9: quantize_kernel<9, op> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
+    case 10: quantize_kernel<10, op> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
+    case 11: quantize_kernel<11, op> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
+    case 12: quantize_kernel<12, op> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
     default: return;
   }
 }
 
 namespace internal::int8 {
 
-  void quantize(cudaStream_t stream, int32_t op, int32_t M, const double* C, int32_t ldc, int32_t umax, const int32_t* vexp, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
+  void quantize(cudaStream_t stream, int32_t op, int32_t M, const double* C, int32_t ldc, uint32_t corr, const int32_t* vexp, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
     switch (op) {
-      case 0: quantize_dispatcher<0>(stream, M, C, ldc, umax, vexp, dimZ, dimY, dimX, A); return;
-      case 1: quantize_dispatcher<1>(stream, M, C, ldc, umax, vexp, dimZ, dimY, dimX, A); return;
-      case 2: quantize_dispatcher<2>(stream, M, C, ldc, umax, vexp, dimZ, dimY, dimX, A); return;
-      default: quantize_dispatcher<-1>(stream, M, C, ldc, umax, vexp, dimZ, dimY, dimX, A); return;
+      case 0: quantize_dispatcher<0>(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); return;
+      case 1: quantize_dispatcher<1>(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); return;
+      case 2: quantize_dispatcher<2>(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); return;
+      default: quantize_dispatcher<-1>(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); return;
     }
   }
 
-  void quantize(cudaStream_t stream, int32_t op, int32_t M, const float* C, int32_t ldc, int32_t umax, const int32_t* vexp, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
+  void quantize(cudaStream_t stream, int32_t op, int32_t M, const float* C, int32_t ldc, uint32_t corr, const int32_t* vexp, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
     switch (op) {
-      case 0: quantize_dispatcher<0>(stream, M, C, ldc, umax, vexp, dimZ, dimY, dimX, A); return;
-      case 1: quantize_dispatcher<1>(stream, M, C, ldc, umax, vexp, dimZ, dimY, dimX, A); return;
-      case 2: quantize_dispatcher<2>(stream, M, C, ldc, umax, vexp, dimZ, dimY, dimX, A); return;
-      default: quantize_dispatcher<-1>(stream, M, C, ldc, umax, vexp, dimZ, dimY, dimX, A); return;
+      case 0: quantize_dispatcher<0>(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); return;
+      case 1: quantize_dispatcher<1>(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); return;
+      case 2: quantize_dispatcher<2>(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); return;
+      default: quantize_dispatcher<-1>(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); return;
     }
   }
 
-  void quantize(cudaStream_t stream, int32_t op, int32_t M, const __half* C, int32_t ldc, int32_t umax, const int32_t* vexp, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
+  void quantize(cudaStream_t stream, int32_t op, int32_t M, const __half* C, int32_t ldc, uint32_t corr, const int32_t* vexp, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
     switch (op) {
-      case 0: quantize_dispatcher<0>(stream, M, C, ldc, umax, vexp, dimZ, dimY, dimX, A); return;
-      case 1: quantize_dispatcher<1>(stream, M, C, ldc, umax, vexp, dimZ, dimY, dimX, A); return;
-      case 2: quantize_dispatcher<2>(stream, M, C, ldc, umax, vexp, dimZ, dimY, dimX, A); return;
-      default: quantize_dispatcher<-1>(stream, M, C, ldc, umax, vexp, dimZ, dimY, dimX, A); return;
+      case 0: quantize_dispatcher<0>(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); return;
+      case 1: quantize_dispatcher<1>(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); return;
+      case 2: quantize_dispatcher<2>(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); return;
+      default: quantize_dispatcher<-1>(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); return;
     }
   }
 
-  void quantize(cudaStream_t stream, int32_t op, int32_t M, const cuDoubleComplex* C, int32_t ldc, int32_t umax, const int32_t* vexp, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
+  void quantize(cudaStream_t stream, int32_t op, int32_t M, const cuDoubleComplex* C, int32_t ldc, uint32_t corr, const int32_t* vexp, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
     switch (op) {
-      case 0: quantize_dispatcher<0>(stream, M, C, ldc, umax, vexp, dimZ, dimY, dimX, A); return;
-      case 1: quantize_dispatcher<1>(stream, M, C, ldc, umax, vexp, dimZ, dimY, dimX, A); return;
-      case 2: quantize_dispatcher<2>(stream, M, C, ldc, umax, vexp, dimZ, dimY, dimX, A); return;
-      default: quantize_dispatcher<-1>(stream, M, C, ldc, umax, vexp, dimZ, dimY, dimX, A); return;
+      case 0: quantize_dispatcher<0>(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); return;
+      case 1: quantize_dispatcher<1>(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); return;
+      case 2: quantize_dispatcher<2>(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); return;
+      default: quantize_dispatcher<-1>(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); return;
     }
   }
 
-  void quantize(cudaStream_t stream, int32_t op, int32_t M, const cuComplex* C, int32_t ldc, int32_t umax, const int32_t* vexp, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
+  void quantize(cudaStream_t stream, int32_t op, int32_t M, const cuComplex* C, int32_t ldc, uint32_t corr, const int32_t* vexp, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
     switch (op) {
-      case 0: quantize_dispatcher<0>(stream, M, C, ldc, umax, vexp, dimZ, dimY, dimX, A); return;
-      case 1: quantize_dispatcher<1>(stream, M, C, ldc, umax, vexp, dimZ, dimY, dimX, A); return;
-      case 2: quantize_dispatcher<2>(stream, M, C, ldc, umax, vexp, dimZ, dimY, dimX, A); return;
-      default: quantize_dispatcher<-1>(stream, M, C, ldc, umax, vexp, dimZ, dimY, dimX, A); return;
+      case 0: quantize_dispatcher<0>(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); return;
+      case 1: quantize_dispatcher<1>(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); return;
+      case 2: quantize_dispatcher<2>(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); return;
+      default: quantize_dispatcher<-1>(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); return;
     }
   }
 
-  void quantize(cudaStream_t stream, int32_t op, int32_t M, const __half2* C, int32_t ldc, int32_t umax, const int32_t* vexp, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
+  void quantize(cudaStream_t stream, int32_t op, int32_t M, const __half2* C, int32_t ldc, uint32_t corr, const int32_t* vexp, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
     switch (op) {
-      case 0: quantize_dispatcher<0>(stream, M, C, ldc, umax, vexp, dimZ, dimY, dimX, A); return;
-      case 1: quantize_dispatcher<1>(stream, M, C, ldc, umax, vexp, dimZ, dimY, dimX, A); return;
-      case 2: quantize_dispatcher<2>(stream, M, C, ldc, umax, vexp, dimZ, dimY, dimX, A); return;
-      default: quantize_dispatcher<-1>(stream, M, C, ldc, umax, vexp, dimZ, dimY, dimX, A); return;
+      case 0: quantize_dispatcher<0>(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); return;
+      case 1: quantize_dispatcher<1>(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); return;
+      case 2: quantize_dispatcher<2>(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); return;
+      default: quantize_dispatcher<-1>(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); return;
     }
   }
 
