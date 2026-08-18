@@ -56,16 +56,16 @@ inline void igemm_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t
   }
 }
 
-inline void deq_dispatcher(cudaStream_t stream, int32_t N, const uint64_t* acc, int32_t order, void* G, int32_t ldg, const int32_t* vexp, hyacinPrecision_t Gtype) {
+inline void deq_dispatcher(cudaStream_t stream, int32_t N, const uint64_t* C, int32_t order, void* G, int32_t ldg, const int32_t* vexp, hyacinPrecision_t Gtype) {
   switch (Gtype) {
-    case HYACIN_F64: internal::int8::dequantize(stream, N, order, acc, vexp, (double*)G, ldg); return;
-    case HYACIN_F32: internal::int8::dequantize(stream, N, order, acc, vexp, (float*)G, ldg); return;
-    case HYACIN_DD: internal::int8::dequantize(stream, N, order, acc, vexp, (double2*)G, ldg); return;
-    case HYACIN_QF: internal::int8::dequantize(stream, N, order, acc, vexp, (float4*)G, ldg); return;
-    case HYACIN_F64_COMPLEX: internal::int8::dequantize_complex(stream, N, order, acc, vexp, (cuDoubleComplex*)G, ldg); return;
-    case HYACIN_F32_COMPLEX: internal::int8::dequantize_complex(stream, N, order, acc, vexp, (cuComplex*)G, ldg); return;
-    case HYACIN_DD_COMPLEX: internal::int8::dequantize_complex(stream, N, order, acc, vexp, (complex_double2*)G, ldg); return;
-    case HYACIN_QF_COMPLEX: internal::int8::dequantize_complex(stream, N, order, acc, vexp, (complex_float4*)G, ldg); return;
+    case HYACIN_F64: internal::int8::dequantize(stream, N, order, C, vexp, (double*)G, ldg); return;
+    case HYACIN_F32: internal::int8::dequantize(stream, N, order, C, vexp, (float*)G, ldg); return;
+    case HYACIN_DD: internal::int8::dequantize(stream, N, order, C, vexp, (double2*)G, ldg); return;
+    case HYACIN_QF: internal::int8::dequantize(stream, N, order, C, vexp, (float4*)G, ldg); return;
+    case HYACIN_F64_COMPLEX: internal::int8::dequantize_complex(stream, N, order, C, vexp, (cuDoubleComplex*)G, ldg); return;
+    case HYACIN_F32_COMPLEX: internal::int8::dequantize_complex(stream, N, order, C, vexp, (cuComplex*)G, ldg); return;
+    case HYACIN_DD_COMPLEX: internal::int8::dequantize_complex(stream, N, order, C, vexp, (complex_double2*)G, ldg); return;
+    case HYACIN_QF_COMPLEX: internal::int8::dequantize_complex(stream, N, order, C, vexp, (complex_float4*)G, ldg); return;
     default: return;
   }
 }

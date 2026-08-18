@@ -93,7 +93,7 @@ namespace internal::int8 {
     int64_t K64 = int64_t(M) << Complex, N64 = int64_t(N);
     int64_t strideA = N64 * N64, strideB = (strideA + N64) / int64_t(2);
     int32_t mode = (1 <= orderA && orderA <= orderB && orderB <= 3) ? ((orderB * (orderB - 1) / 2) + orderA + (beta ? 6 : 0) + (Complex ? 12 : 0)) : 0;
-    const uint64_t* sum = &A[strideA * int64_t(orderA << Complex)];
+    const uint64_t* sum = 0 < M ? &A[strideA * int64_t(orderA << Complex)] : nullptr;
 
     switch(mode) {
       case 1: triangle_pack_kernel<1, 1, 0, 0> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, K64, sum, corr, B, strideB); return;
