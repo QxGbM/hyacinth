@@ -121,53 +121,58 @@ inline void gemm_accum_crt(cudaStream_t stream, cublasHandle_t handle, char mode
 }
 
 template <class real_t, class matrix_t>
-inline void AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const matrix_t* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t orderC, uint64_t* C) {
-  constexpr int32_t Complex = std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>;
+inline void AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const matrix_t* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C) {
+  constexpr int32_t Complex = !std::is_same_v<real_t, matrix_t>;
+  int32_t orderB = std::min(orderC, (63 + (orderA << 3)) / 63);
   int32_t algnM = (M + 255) & (~255), algnN = (N + 63) & (~63);
-  int64_t strideA = int64_t(algnM) * int64_t(N), strideC = int64_t(N) * int64_t(N) * int64_t(orderC);
-  uint64_t mod_len = uint64_t(std::min(orderA, 8)), w_len = uint64_t(strideA) * mod_len, w_pad = uint64_t(algnN - N) * uint64_t(algnM);
-  if constexpr(Complex) { w_len *= uint64_t(3); }
+  int64_t strideW = int64_t(algnM) * int64_t(N), strideB = int64_t(N) * int64_t(N) * int64_t(orderB);
+  uint64_t mod_len = uint64_t(std::min(orderA, 8)), w_len = uint64_t(strideW) * mod_len, w_pad = uint64_t(algnN - N) * uint64_t(algnM), b_len = uint64_t(strideB) + (uint64_t(N) * uint64_t(orderB));
+  if constexpr(Complex) { w_len *= uint64_t(3); b_len *= uint64_t(2); }
 
-  int8_t* W = nullptr; int32_t* scratch = nullptr;
+  int8_t* W = nullptr; int32_t* scratch = nullptr; uint64_t* B = nullptr;
   if (cudaSuccess != cudaMallocAsync((void**)&W, w_len + w_pad, stream))
     throw std::runtime_error("Workspace (i8) allocation failed at Integer SY/HERK.");
   if (cudaSuccess != cudaMallocAsync((void**)&scratch, uint64_t(algnN) * uint64_t(N) * mod_len * sizeof(int32_t), stream))
     throw std::runtime_error("Workspace (i32) allocation failed at Integer SY/HERK.");
+  if (cudaSuccess != cudaMallocAsync((void**)&B, b_len * sizeof(uint64_t), stream))
+    throw std::runtime_error("Workspace (u64) allocation failed at Integer SY/HERK.");
 
   for (int32_t i = 0; (i << 3) < orderA; ++i) {
     int32_t moduli = std::min(orderA - (i << 3), 8);
     int32_t beta = int32_t(0 < i);
     internal::int8::quantize(stream, i, M, A, lda, corr, vexp, moduli, N, algnM, W);
     if constexpr(Complex) {
-      int64_t strideW = int64_t(moduli) * strideA, strideW2 = strideW * int64_t(2);
-      gemm_accum_crt(stream, handle, 'U', algnN, N, algnM, moduli, orderA, &W[strideW2], &W[strideW2], i, beta, C, orderC, scratch);
-      gemm_accum_crt(stream, handle, 'A', algnN, N, algnM, moduli, orderA, W, &W[strideW], i, beta, &C[strideC], orderC, scratch);
-    } else { gemm_accum_crt(stream, handle, 'U', algnN, N, algnM, moduli, orderA, W, W, i, beta, C, orderC, scratch); }
+      int64_t strideWm = int64_t(moduli) * strideW, strideW2 = strideWm * int64_t(2);
+      gemm_accum_crt(stream, handle, 'U', algnN, N, algnM, moduli, orderA, &W[strideW2], &W[strideW2], i, beta, B, orderB, scratch);
+      gemm_accum_crt(stream, handle, 'A', algnN, N, algnM, moduli, orderA, W, &W[strideWm], i, beta, &B[strideB], orderB, scratch);
+    } else { gemm_accum_crt(stream, handle, 'U', algnN, N, algnM, moduli, orderA, W, W, i, beta, B, orderB, scratch); }
   }
   cudaFreeAsync(W, stream); cudaFreeAsync(scratch, stream);
 
-  if constexpr(Complex) { C = &C[strideC * int64_t(2)]; } else { C = &C[strideC]; }
-  vector_sums<real_t>(stream, M, N, A, lda, corr, vexp, orderC, C);
+  uint64_t* Bsums; if constexpr(Complex) { Bsums = &B[strideB * int64_t(2)]; } else { Bsums = &B[strideB]; }
+  vector_sums<real_t>(stream, M, N, A, lda, corr, vexp, orderB, Bsums);
+  internal::int8::triangle_pack(stream, Complex, M, N, orderB, B, corr, beta, orderC, C);
+  cudaFreeAsync(B, stream);
 }
 
 namespace internal::int8 {
 
-  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const double* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t orderC, uint64_t* C)
-  { AHA_crt<double>(stream, handle, M, N, orderA, A, lda, corr, vexp, orderC, C); }
+  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const double* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
+  { AHA_crt<double>(stream, handle, M, N, orderA, A, lda, corr, vexp, beta, orderC, C); }
 
-  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const float* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t orderC, uint64_t* C)
-  { AHA_crt<float>(stream, handle, M, N, orderA, A, lda, corr, vexp, orderC, C); }
+  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const float* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
+  { AHA_crt<float>(stream, handle, M, N, orderA, A, lda, corr, vexp, beta, orderC, C); }
 
-  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t orderC, uint64_t* C)
-  { AHA_crt<__half>(stream, handle, M, N, orderA, A, lda, corr, vexp, orderC, C); }
+  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
+  { AHA_crt<__half>(stream, handle, M, N, orderA, A, lda, corr, vexp, beta, orderC, C); }
 
-  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuDoubleComplex* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t orderC, uint64_t* C)
-  { AHA_crt<double>(stream, handle, M, N, orderA, A, lda, corr, vexp, orderC, C); }
+  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuDoubleComplex* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
+  { AHA_crt<double>(stream, handle, M, N, orderA, A, lda, corr, vexp, beta, orderC, C); }
 
-  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuComplex* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t orderC, uint64_t* C)
-  { AHA_crt<float>(stream, handle, M, N, orderA, A, lda, corr, vexp, orderC, C); }
+  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuComplex* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
+  { AHA_crt<float>(stream, handle, M, N, orderA, A, lda, corr, vexp, beta, orderC, C); }
 
-  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half2* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t orderC, uint64_t* C)
-  { AHA_crt<__half>(stream, handle, M, N, orderA, A, lda, corr, vexp, orderC, C); }
+  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half2* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
+  { AHA_crt<__half>(stream, handle, M, N, orderA, A, lda, corr, vexp, beta, orderC, C); }
 
 }

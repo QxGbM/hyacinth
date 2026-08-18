@@ -89,46 +89,53 @@ inline void i8GemmU(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32
 }
 
 template <class matrix_t>
-inline void AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const matrix_t* A, int32_t lda, const int32_t* vexp, int32_t orderC, uint64_t* C) {
+inline void AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const matrix_t* A, int32_t lda, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C) {
   constexpr int32_t Complex = std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>;
+  constexpr int32_t bits = Complex ? 62 : 60;
+  int32_t orderB = std::min(orderC, (int32_t(std::ceil(std::log2(double(std::max(1, M))))) + bits + (orderA << 4)) / 63);
   int32_t algnM = (M + 255) & (~255), algnN = (N + 63) & (~63);
-  int64_t strideA = int64_t(algnM) * int64_t(N) * int64_t(orderA);
-  uint64_t w_len = uint64_t(strideA), w_pad = uint64_t(algnN - N) * uint64_t(algnM);
-  if constexpr(Complex) { w_len *= uint64_t(3); }
+  int64_t strideW = int64_t(algnM) * int64_t(N) * int64_t(orderA), strideB = int64_t(N) * int64_t(N) * int64_t(orderB);
+  uint64_t w_len = uint64_t(strideW), w_pad = uint64_t(algnN - N) * uint64_t(algnM), b_len = uint64_t(strideB);
+  if constexpr(Complex) { w_len *= uint64_t(3); b_len *= uint64_t(2); }
 
-  int8_t* W = nullptr; int32_t* scratch = nullptr;
+  int8_t* W = nullptr; int32_t* scratch = nullptr; uint64_t* B = nullptr;
   if (cudaSuccess != cudaMallocAsync((void**)&W, w_len + w_pad, stream))
     throw std::runtime_error("Workspace (i8) allocation failed at Integer SY/HERK.");
   if (cudaSuccess != cudaMallocAsync((void**)&scratch, uint64_t(algnN) * uint64_t(N) * uint64_t(orderA) * sizeof(int32_t), stream))
     throw std::runtime_error("Workspace (i32) allocation failed at Integer SY/HERK.");
+  if (cudaSuccess != cudaMallocAsync((void**)&B, b_len * sizeof(uint64_t), stream))
+    throw std::runtime_error("Workspace (u64) allocation failed at Integer SY/HERK.");
 
   internal::int8::quantize(stream, -1, M, A, lda, uint32_t(0), vexp, orderA, N, algnM, W);
   if constexpr(Complex) {
-    int64_t strideA2 = strideA * int64_t(2), strideC = int64_t(N) * int64_t(N) * int64_t(orderC);
-    i8GemmU(stream, handle, algnN, N, algnM, &W[strideA2], orderA, C, orderC, scratch);
-    i8GemmF(stream, handle, algnN, N, algnM, W, &W[strideA], orderA, &C[strideC], orderC, scratch);
-  } else { i8GemmU(stream, handle, algnN, N, algnM, W, orderA, C, orderC, scratch); }
+    int64_t strideW2 = strideW + strideW;
+    i8GemmU(stream, handle, algnN, N, algnM, &W[strideW2], orderA, B, orderB, scratch);
+    i8GemmF(stream, handle, algnN, N, algnM, W, &W[strideW], orderA, &B[strideB], orderB, scratch);
+  } else { i8GemmU(stream, handle, algnN, N, algnM, W, orderA, B, orderB, scratch); }
   cudaFreeAsync(W, stream); cudaFreeAsync(scratch, stream);
+
+  internal::int8::triangle_pack(stream, Complex, 0, N, orderB, B, uint32_t(0), beta, orderC, C);
+  cudaFreeAsync(B, stream);
 }
 
 namespace internal::int8 {
 
-  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const double* A, int32_t lda, const int32_t* vexp, int32_t orderC, uint64_t* C)
-  { AHA_limbs(stream, handle, M, N, orderA, A, lda, vexp, orderC, C); }
+  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const double* A, int32_t lda, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
+  { AHA_limbs(stream, handle, M, N, orderA, A, lda, vexp, beta, orderC, C); }
 
-  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const float* A, int32_t lda, const int32_t* vexp, int32_t orderC, uint64_t* C)
-  { AHA_limbs(stream, handle, M, N, orderA, A, lda, vexp, orderC, C); }
+  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const float* A, int32_t lda, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
+  { AHA_limbs(stream, handle, M, N, orderA, A, lda, vexp, beta, orderC, C); }
 
-  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half* A, int32_t lda, const int32_t* vexp, int32_t orderC, uint64_t* C)
-  { AHA_limbs(stream, handle, M, N, orderA, A, lda, vexp, orderC, C); }
+  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half* A, int32_t lda, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
+  { AHA_limbs(stream, handle, M, N, orderA, A, lda, vexp, beta, orderC, C); }
 
-  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuDoubleComplex* A, int32_t lda, const int32_t* vexp, int32_t orderC, uint64_t* C)
-  { AHA_limbs(stream, handle, M, N, orderA, A, lda, vexp, orderC, C); }
+  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuDoubleComplex* A, int32_t lda, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
+  { AHA_limbs(stream, handle, M, N, orderA, A, lda, vexp, beta, orderC, C); }
 
-  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuComplex* A, int32_t lda, const int32_t* vexp, int32_t orderC, uint64_t* C)
-  { AHA_limbs(stream, handle, M, N, orderA, A, lda, vexp, orderC, C); }
+  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuComplex* A, int32_t lda, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
+  { AHA_limbs(stream, handle, M, N, orderA, A, lda, vexp, beta, orderC, C); }
 
-  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half2* A, int32_t lda, const int32_t* vexp, int32_t orderC, uint64_t* C)
-  { AHA_limbs(stream, handle, M, N, orderA, A, lda, vexp, orderC, C); }
+  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half2* A, int32_t lda, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
+  { AHA_limbs(stream, handle, M, N, orderA, A, lda, vexp, beta, orderC, C); }
 
 }

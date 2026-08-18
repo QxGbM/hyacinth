@@ -23,8 +23,9 @@ typedef enum {
 } hyacinPrecision_t;
 
 typedef enum {
-  HYACIN_ALG_LIMBS = 0,
-  HYACIN_ALG_CRT = 1
+  HYACIN_ALG_AUTO = 0,
+  HYACIN_ALG_LIMBS = 1,
+  HYACIN_ALG_CRT = 2
 } hyacinAlgorithm_t;
 
 typedef struct {
@@ -59,8 +60,7 @@ void hyacinXsyherk_autoTune(
   int32_t u_extra,
   int32_t* umax, // host-pointer
   hyacinPrecision_t Atype,
-  hyacinPrecision_t* ComputeType, // host-pointer
-  hyacinAlgorithm_t* alg // host-pointer
+  hyacinPrecision_t* ComputeType // host-pointer
 );
 
 void hyacinXsyherk(

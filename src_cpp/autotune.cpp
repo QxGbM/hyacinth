@@ -10,7 +10,6 @@
 #include <limits>
 
 int32_t device_sm = 0;
-const int32_t umax_threshold = 30; // umax < 30 : Limbs, 30 <= umax : CRT
 const int32_t umax_practical_limit = 80; // umax <= 80 to satisfy implementation assumptions
 const std::vector<int32_t> f64_capable_sm_list({ 800, 900, 1000 }); // sm80,sm90,sm100
 
@@ -26,7 +25,7 @@ extern "C" int32_t hyacinXelem(char sel, hyacinPrecision_t* Atype) {
   return type_bytes[int32_t(*Atype)];
 }
 
-extern "C" void hyacinXsyherk_autoTune(double epi, int32_t u_extra, int32_t* umax, hyacinPrecision_t Atype, hyacinPrecision_t* ComputeType, hyacinAlgorithm_t* alg) {
+extern "C" void hyacinXsyherk_autoTune(double epi, int32_t u_extra, int32_t* umax, hyacinPrecision_t Atype, hyacinPrecision_t* ComputeType) {
   if (device_sm == 0) {
     int32_t device, major, minor;
     cudaGetDevice(&device);
@@ -52,8 +51,6 @@ extern "C" void hyacinXsyherk_autoTune(double epi, int32_t u_extra, int32_t* uma
     *umax = u;
   if (ComputeType)
     *ComputeType = (Atype != ATypeReal) ? complex_type[int32_t(auto_prec)] : auto_prec;
-  if (alg)
-    *alg = u < umax_threshold ? HYACIN_ALG_LIMBS : HYACIN_ALG_CRT;
 }
 
 extern "C" char hyacinXGevPcsvd_autoTune(int32_t N, int32_t K, hyacinPrecision_t Gtype) {
