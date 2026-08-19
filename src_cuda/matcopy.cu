@@ -43,9 +43,9 @@ __global__ void scatter_conj_cvcpy_kernel(int64_t M, const int32_t* __restrict__
   int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
   int32_t pred; if constexpr(mode == 'I') { pred = int32_t(x < M) + int32_t(x == y); } else { pred = int32_t(x < y); }
   if (y < M) {
-    A = &A[y + x * lda]; B = &B[int64_t(jpiv[x] - 1) + (y * ldb)];
+    B = &B[int64_t(jpiv[x] - 1) + (y * ldb)];
     if (pred) { if constexpr(mode == 'I') { *B = (pred == 2) ? float_one<Btype>() : Btype(); } else { *B = Btype(); }}
-      else { *B = conj(conv<Btype>(*A)); }
+      else { *B = conj(conv<Btype>(A[y + x * lda])); }
   }
 };
 

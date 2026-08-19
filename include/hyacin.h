@@ -77,6 +77,17 @@ void hyacinXsyherk(
   hyacinAlgorithm_t alg
 );
 
+void hyacinXdequantize(
+  hyacinHandle_t handle,
+  int32_t N,
+  int32_t orderC,
+  const uint64_t* C, // device-pointer
+  const int32_t* vexp, // device-pointer
+  hyacinPrecision_t Gtype,
+  void* G, // device-pointer
+  int32_t ldg
+);
+
 char hyacinXGevPcsvd_autoTune(
   int32_t N,
   int32_t K,

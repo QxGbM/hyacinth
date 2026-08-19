@@ -1,4 +1,5 @@
 
+#include <hyacin.h>
 #include <internal.hpp>
 #include <int_fp_quantize.hpp>
 #include <double_double.hpp>
@@ -6,7 +7,8 @@
 #include <limits>
 
 constexpr int32_t int_max = std::numeric_limits<int32_t>::max();
-template <int32_t orderA, int32_t Complex, class matrix_t> __device__ __forceinline__ void deq_i(const uint64_t* A, int64_t stride, int32_t e, matrix_t* f) {
+template <int32_t orderA, int32_t Complex, class matrix_t>
+__device__ __forceinline__ void deq_i(const uint64_t* A, int64_t stride, int32_t e, matrix_t* f) {
   if constexpr(Complex) {
     uint64_t r[orderA], i[orderA];
     if constexpr(0 < orderA) { r[0] = *A; } if constexpr(1 < orderA) { r[1] = *(A += stride); } if constexpr(2 < orderA) { r[2] = *(A += stride); }
@@ -50,30 +52,18 @@ inline void tp_deq_dispatcher(cudaStream_t stream, int32_t N, int32_t orderA, co
   }
 }
 
-namespace internal::int8 {
-
-  void dequantize(cudaStream_t stream, int32_t N, int32_t orderA, const uint64_t* A, const int32_t* vexp, double* B, int32_t ldb)
-  { tp_deq_dispatcher<0>(stream, N, orderA, A, vexp, B, ldb); }
-
-  void dequantize(cudaStream_t stream, int32_t N, int32_t orderA, const uint64_t* A, const int32_t* vexp, float* B, int32_t ldb)
-  { tp_deq_dispatcher<0>(stream, N, orderA, A, vexp, B, ldb); }
-
-  void dequantize(cudaStream_t stream, int32_t N, int32_t orderA, const uint64_t* A, const int32_t* vexp, double2* B, int32_t ldb)
-  { tp_deq_dispatcher<0>(stream, N, orderA, A, vexp, B, ldb); }
-
-  void dequantize(cudaStream_t stream, int32_t N, int32_t orderA, const uint64_t* A, const int32_t* vexp, float4* B, int32_t ldb)
-  { tp_deq_dispatcher<0>(stream, N, orderA, A, vexp, B, ldb); }
-
-  void dequantize_complex(cudaStream_t stream, int32_t N, int32_t orderA, const uint64_t* A, const int32_t* vexp, cuDoubleComplex* B, int32_t ldb)
-  { tp_deq_dispatcher<1>(stream, N, orderA, A, vexp, B, ldb); }
-
-  void dequantize_complex(cudaStream_t stream, int32_t N, int32_t orderA, const uint64_t* A, const int32_t* vexp, cuComplex* B, int32_t ldb)
-  { tp_deq_dispatcher<1>(stream, N, orderA, A, vexp, B, ldb); }
-
-  void dequantize_complex(cudaStream_t stream, int32_t N, int32_t orderA, const uint64_t* A, const int32_t* vexp, complex_double2* B, int32_t ldb)
-  { tp_deq_dispatcher<1>(stream, N, orderA, A, vexp, B, ldb); }
-
-  void dequantize_complex(cudaStream_t stream, int32_t N, int32_t orderA, const uint64_t* A, const int32_t* vexp, complex_float4* B, int32_t ldb)
-  { tp_deq_dispatcher<1>(stream, N, orderA, A, vexp, B, ldb); }
-
+extern "C" void hyacinXdequantize(hyacinHandle_t handle, int32_t N, int32_t orderC, const uint64_t* C, const int32_t* vexp, hyacinPrecision_t Gtype, void* G, int32_t ldg) {
+  if (N <= 0) { return; }
+  Timer::register_kernel(handle.cudaStream, handle.timer);
+  switch(Gtype) {
+    case HYACIN_F64: tp_deq_dispatcher<0>(handle.cudaStream, N, orderC, C, vexp, (double*)G, ldg); return;
+    case HYACIN_F32: tp_deq_dispatcher<0>(handle.cudaStream, N, orderC, C, vexp, (float*)G, ldg); return;
+    case HYACIN_DD: tp_deq_dispatcher<0>(handle.cudaStream, N, orderC, C, vexp, (double2*)G, ldg); return;
+    case HYACIN_QF: tp_deq_dispatcher<0>(handle.cudaStream, N, orderC, C, vexp, (float4*)G, ldg); return;
+    case HYACIN_F64_COMPLEX: tp_deq_dispatcher<1>(handle.cudaStream, N, orderC, C, vexp, (cuDoubleComplex*)G, ldg); return;
+    case HYACIN_F32_COMPLEX: tp_deq_dispatcher<1>(handle.cudaStream, N, orderC, C, vexp, (cuComplex*)G, ldg); return;
+    case HYACIN_DD_COMPLEX: tp_deq_dispatcher<1>(handle.cudaStream, N, orderC, C, vexp, (complex_double2*)G, ldg); return;
+    case HYACIN_QF_COMPLEX: tp_deq_dispatcher<1>(handle.cudaStream, N, orderC, C, vexp, (complex_float4*)G, ldg); return;
+    default: return;
+  }
 }
