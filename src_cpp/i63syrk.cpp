@@ -1,4 +1,5 @@
 
+#include <hyacin.h>
 #include <internal.hpp>
 #include <stdexcept>
 
@@ -116,6 +117,34 @@ inline void AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int
 
   internal::int8::triangle_pack(stream, Complex, 0, N, orderB, B, uint32_t(0), beta, orderC, C);
   cudaFreeAsync(B, stream);
+}
+
+template <class matrix_t>
+void herk_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const matrix_t* A, int32_t lda, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C, int32_t* uptr, hyacinAlgorithm_t alg) {
+  constexpr int32_t Complex = int32_t(std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>);
+  if (M <= 0 && beta == 0) { cudaMemsetAsync(C, 0, uint64_t(N) * uint64_t(N + 1) * uint64_t(orderC) * uint64_t(Complex + 1) * sizeof(uint32_t), stream); return; }
+  *uptr = 0; internal::int8::vector_exponents(stream, M, N, A, lda, uptr, const_cast<int32_t*>(vexp)); int32_t umax = *uptr;
+
+  int32_t bits = int32_t(std::ceil(std::log2(double(std::max(1, M))))) + (Complex ? 2 : 0) + (umax << 1);
+  int32_t orderA_limbs = int32_t(uint32_t(umax + 9) >> 3), orderA_crt = int32_t(uint32_t(bits + 11) >> 3);
+  int32_t cost_limbs = int32_t(uint32_t(orderA_limbs * (orderA_limbs + 1)) >> 1), cost_crt = orderA_crt + int32_t(uint32_t(orderA_crt) >> 3);
+  int32_t use_limbs = int32_t(alg == HYACIN_ALG_LIMBS || (alg == HYACIN_ALG_AUTO && (orderA_limbs <= 3 || cost_limbs <= cost_crt)));
+  if (use_limbs) { AHA_limbs(stream, handle, M, N, orderA_limbs, A, lda, vexp, beta, orderC, C); }
+    else { internal::int8::i63AHA_crt(stream, handle, M, N, orderA_crt, A, lda, umax, vexp, beta, orderC, C); }
+}
+
+extern "C" void hyacinXherk(hyacinHandle_t handle, int32_t M, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C, hyacinAlgorithm_t alg) {
+  if (N <= 0 || orderC <= 0) { return; }
+  Timer::register_kernel(handle.cudaStream, handle.timer);
+  switch(Atype) {
+    case HYACIN_F64: herk_dispatcher(handle.cudaStream, handle.cublasHandle, M, N, (const double*)A, lda, vexp, beta, orderC, C, (int32_t*)handle.pinnedWorkspace, alg); return;
+    case HYACIN_F32: herk_dispatcher(handle.cudaStream, handle.cublasHandle, M, N, (const float*)A, lda, vexp, beta, orderC, C, (int32_t*)handle.pinnedWorkspace, alg); return;
+    case HYACIN_F16: herk_dispatcher(handle.cudaStream, handle.cublasHandle, M, N, (const __half*)A, lda, vexp, beta, orderC, C, (int32_t*)handle.pinnedWorkspace, alg); return;
+    case HYACIN_F64_COMPLEX: herk_dispatcher(handle.cudaStream, handle.cublasHandle, M, N, (const cuDoubleComplex*)A, lda, vexp, beta, orderC, C, (int32_t*)handle.pinnedWorkspace, alg); return;
+    case HYACIN_F32_COMPLEX: herk_dispatcher(handle.cudaStream, handle.cublasHandle, M, N, (const cuComplex*)A, lda, vexp, beta, orderC, C, (int32_t*)handle.pinnedWorkspace, alg); return;
+    case HYACIN_F16_COMPLEX: herk_dispatcher(handle.cudaStream, handle.cublasHandle, M, N, (const __half2*)A, lda, vexp, beta, orderC, C, (int32_t*)handle.pinnedWorkspace, alg); return;
+    default: return;
+  }
 }
 
 namespace internal::int8 {

@@ -23,7 +23,7 @@ inline int32_t potrfp_dispatcher(cudaStream_t stream, cublasHandle_t handle, cha
     matrix_fill_upper_to_full<'U', real_t> <<< dim3(uint32_t(N + 511) >> 9, uint32_t(N)), 512, 0, stream >>> (A, int64_t(lda));
   else if (fillmode == 'L' || fillmode == 'l')
     matrix_fill_upper_to_full<'L', real_t> <<< dim3(uint32_t(N + 511) >> 9, uint32_t(N)), 512, 0, stream >>> (A, int64_t(lda));
-  internal::Cholesky::imax_initializer(stream, epi, N, A, lda + 1, jpiv, dvec, hvec);
+  internal::Cholesky::imax_initializer(stream, std::min(1., std::max(0., std::pow(epi, 2))), N, A, lda + 1, jpiv, dvec, hvec);
   int32_t iters = std::min(N, std::max(0, k)); iters = iters ? iters : N; p = std::max(0, p);
 
   for (int32_t i = 0, s = 0; i < iters; ++i) {

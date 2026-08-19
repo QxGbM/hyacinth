@@ -77,6 +77,20 @@ void hyacinXsyherk(
   hyacinAlgorithm_t alg
 );
 
+void hyacinXherk(
+  hyacinHandle_t handle,
+  int32_t M,
+  int32_t N,
+  hyacinPrecision_t Atype,
+  const void* A, // device-pointer
+  int32_t lda,
+  const int32_t* vexp, // device-pointer
+  int32_t beta,
+  int32_t orderC,
+  uint64_t* C, // device-pointer
+  hyacinAlgorithm_t alg
+);
+
 void hyacinXdequantize(
   hyacinHandle_t handle,
   int32_t N,

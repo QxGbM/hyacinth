@@ -55,7 +55,7 @@ __global__ void vector_range_kernel(int32_t M, int32_t N, const matrix_t* __rest
   if (threadIdx.x == 0) { vbuf[blockIdx.x] = thread_i; } else { thread_i = int_min; }
   cooperative_groups::this_grid().sync();
   if (blockIdx.x == 0) {
-    for (int32_t i = threadIdx.x; i < N; i += BLOCK_THREADS)
+    for (int32_t i = threadIdx.x; i < gridDim.x; i += BLOCK_THREADS)
       thread_i = max(thread_i, vbuf[i]);
 
     thread_i = cub::BlockReduce<int32_t, BLOCK_THREADS>(temp_reduce[1]).Reduce(thread_i, cmp_max);
@@ -78,11 +78,10 @@ inline void vector_exponents_dispatcher(cudaStream_t stream, int32_t M, int32_t 
     if constexpr(F64) { cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, vector_range_kernel<block_threads, double, matrix_t>, block_threads, 0); }
       else { cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, vector_range_kernel<block_threads, float, matrix_t>, block_threads, 0); }
     
-    int32_t* vbuf = nullptr;
-    if (cudaSuccess != cudaMallocAsync((void**)&vbuf, uint64_t(N) * sizeof(int32_t), stream))
+    int32_t grid = std::min(N, device_sms * maxBlocksPerSM), *vbuf = nullptr;
+    if (cudaSuccess != cudaMallocAsync((void**)&vbuf, uint64_t(grid) * sizeof(int32_t), stream))
       throw std::runtime_error("Workspace allocation failed at Exponent Range.");
 
-    int32_t grid = std::min(N, device_sms * maxBlocksPerSM);
     void* kernelArgs[]{ &M, &N, &A, &lda64, &vexp, &vbuf, &umax };
     if constexpr(F64) { cudaLaunchCooperativeKernel(vector_range_kernel<block_threads, double, matrix_t>, grid, block_threads, kernelArgs, 0, stream); }
       else { cudaLaunchCooperativeKernel(vector_range_kernel<block_threads, float, matrix_t>, grid, block_threads, kernelArgs, 0, stream); }

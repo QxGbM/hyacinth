@@ -51,7 +51,7 @@ template <> inline cudaDataType_t cuda_type<cuComplex>() { return CUDA_C_32F; }
 template <class real_t, class complex_t>
 inline int32_t tevd(cudaStream_t stream, cusolverDnHandle_t handle, cusolverDnParams_t params, char fillmode, double epi, int32_t N, int32_t K, int32_t p, complex_t* G, int32_t ldg, real_t* S) {
   cudaDataType_t type_c = cuda_type<complex_t>(), type_r = cuda_type<real_t>();
-  K = std::min(K, N); uint64_t s_bytes = std::max(uint64_t(sizeof(int32_t)), uint64_t(sizeof(real_t)) * N);
+  K = std::min(K, N); uint64_t s_bytes = std::max(uint64_t(sizeof(int32_t)), uint64_t(sizeof(real_t)) * uint64_t(N));
   cublasFillMode_t fill = (fillmode == 'U' || fillmode == 'u') ? CUBLAS_FILL_MODE_UPPER : CUBLAS_FILL_MODE_LOWER;
 
   size_t workspaceInBytesOnDevice, workspaceInBytesOnHost;
@@ -73,12 +73,12 @@ inline int32_t tevd(cudaStream_t stream, cusolverDnHandle_t handle, cusolverDnPa
 }
 
 template <class real_t, class complex_t, class Xtype, class Stype>
-inline int32_t ge_tsvd(cudaStream_t stream, cusolverDnHandle_t handle, cusolverDnParams_t params, double epi, int32_t N, int32_t K, int32_t p, complex_t* A, int32_t lda, Xtype* X, int32_t ldx, Stype* S) {
+inline int32_t tsvd(cudaStream_t stream, cusolverDnHandle_t handle, cusolverDnParams_t params, double epi, int32_t N, int32_t K, int32_t p, complex_t* A, int32_t lda, Xtype* X, int32_t ldx, Stype* S) {
   cudaDataType_t type_c = cuda_type<complex_t>(), type_r = cuda_type<real_t>();
   size_t workspaceInBytesOnDevice, workspaceInBytesOnHost;
   cusolverDnXgesvd_bufferSize(handle, params, 'O', 'N', N, K, type_c, A, lda, type_r, nullptr, type_c, A, lda, type_c, nullptr, K, type_c, &workspaceInBytesOnDevice, &workspaceInBytesOnHost);
   std::vector<uint8_t> workspaceOnHost(workspaceInBytesOnHost);
-  uint64_t s_bytes = std::max(uint64_t(sizeof(int32_t)), uint64_t(sizeof(real_t)) * K);
+  uint64_t s_bytes = std::max(uint64_t(sizeof(int32_t)), uint64_t(sizeof(real_t)) * uint64_t(K));
   uint8_t* workspaceOnDevice = nullptr, *workspaceOnHostPtr = workspaceOnHost.empty() ? nullptr : workspaceOnHost.data();
   if (cudaSuccess != cudaMallocAsync((void**)&workspaceOnDevice, workspaceInBytesOnDevice + s_bytes, stream))
     throw std::runtime_error("Workspace allocation failed at GESVD.");
@@ -108,7 +108,7 @@ inline int32_t gsvd(cudaStream_t stream, cublasHandle_t handle, cusolverDnHandle
     int32_t ldx = ldg * int32_t(sizeof(Gtype) / sizeof(Xtype));
     Xtype* Xptr = (Xtype*)G; complex_t* Wptr = (complex_t*)dev_work;
     internal::Cholesky::scatter_matcopy(stream, 'U', K, N, piv, G, ldg, Wptr, N);
-    K = ge_tsvd<real_t>(stream, s_handle, params, epi, N, K, p, Wptr, N, Xptr, ldx, S);
+    K = tsvd<real_t>(stream, s_handle, params, epi, N, K, p, Wptr, N, Xptr, ldx, S);
   }
   cudaFreeAsync(dev_work, stream); return K;
 }

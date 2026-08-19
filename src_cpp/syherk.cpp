@@ -17,7 +17,7 @@ inline std::tuple<int32_t, int32_t, int32_t, uint64_t> ext_params(int32_t M, int
 
   int32_t orderA = use_limbs ? orderA_limbs : orderA_crt;
   int32_t orderC = (use_limbs ? (bits + 62) : ((orderA_crt << 3) + 63)) / 63;
-  uint64_t C_bytes = ((uint64_t(N) * uint64_t(N + 1)) / uint64_t(2)) * uint64_t(orderC) * uint64_t(Complex + 1) * sizeof(uint64_t);
+  uint64_t C_bytes = uint64_t(N) * uint64_t(N + 1) * uint64_t(orderC) * uint64_t(Complex + 1) * sizeof(uint32_t);
   alg = use_limbs ? HYACIN_ALG_LIMBS : HYACIN_ALG_CRT;
   return std::tie(Complex, orderA, orderC, C_bytes);
 }
