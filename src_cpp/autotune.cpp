@@ -52,18 +52,3 @@ extern "C" void hyacinXsyherk_autoTune(double epi, int32_t u_extra, int32_t* uma
   if (ComputeType)
     *ComputeType = (Atype != ATypeReal) ? complex_type[int32_t(auto_prec)] : auto_prec;
 }
-
-extern "C" char hyacinXGevPcsvd_autoTune(int32_t N, int32_t K, hyacinPrecision_t Gtype) {
-  if (device_sm == 0) {
-    int32_t device, major, minor;
-    cudaGetDevice(&device);
-    cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, device);
-    cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, device);
-    device_sm = 100 * major + minor;
-  }
-
-  int32_t f64_capable = int32_t(f64_capable_sm_list.end() != std::find(f64_capable_sm_list.begin(), f64_capable_sm_list.end(), device_sm));
-  hyacinPrecision_t GTypeReal = real_type[int32_t(Gtype)];
-  int32_t pred = ((GTypeReal == HYACIN_F32) || ((GTypeReal == HYACIN_F64) && f64_capable)) && (N <= (K << 1));
-  return pred ? 'Y' : 'N';
-}

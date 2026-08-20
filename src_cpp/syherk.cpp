@@ -10,8 +10,7 @@
 inline std::tuple<int32_t, int32_t, uint64_t> ext_params(int32_t M, int32_t N, int32_t umax, hyacinPrecision_t Atype) {
   hyacinPrecision_t AtypeReal = Atype; hyacinXelem('R', &AtypeReal);
   int32_t Complex = int32_t(Atype != AtypeReal);
-  int32_t bits = int32_t(std::ceil(std::log2(double(std::max(1, M))))) + (Complex ? 1 : 0) + (umax << 1);
-  int32_t orderC = (bits + 62) / 63;
+  int32_t orderC = (int32_t(std::ceil(std::log2(double(std::max(1, M))))) + (Complex ? 63 : 62) + (umax << 1)) / 63;
   uint64_t C_bytes = uint64_t(N) * uint64_t(N + 1) * uint64_t(orderC) * uint64_t(Complex + 1) * sizeof(uint32_t);
   return std::tie(Complex, orderC, C_bytes);
 }

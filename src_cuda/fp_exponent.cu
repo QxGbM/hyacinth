@@ -33,7 +33,6 @@ __global__ void vector_exponent_kernel(int32_t M, const matrix_t* __restrict__ A
   A = &A[int64_t(blockIdx.x) * lda];
   for (int32_t i = threadIdx.x; i < M; i += BLOCK_THREADS)
     thread_x = cmp_max(float_abs(A[i]), thread_x);
-
   thread_x = cub::BlockReduce<reduc_t, BLOCK_THREADS>(temp_reduce).Reduce(thread_x, cmp_max);
   if (threadIdx.x == 0) { vexp[blockIdx.x] = float_frexp<1>(thread_x, umax); }
 }
@@ -48,16 +47,16 @@ __global__ void vector_range_kernel(int32_t M, int32_t N, const matrix_t* __rest
     const matrix_t* Aj = &A[int64_t(j) * lda];
     for (int32_t i = threadIdx.x; i < M; i += BLOCK_THREADS)
       thread_x = cmp_max(float_abs(Aj[i]), thread_x);
-    thread_i = cmp_max(float_frexp<0>(thread_x, vexp[j]), thread_i);
+    thread_i = max(float_frexp<0>(thread_x, vexp[j]), thread_i);
   }
-
   thread_i = cub::BlockReduce<int32_t, BLOCK_THREADS>(temp_reduce[0]).Reduce(thread_i, cmp_max);
+  if (gridDim.x == 1) { if (threadIdx.x == 0) { *out = thread_i; } return; }
+
   if (threadIdx.x == 0) { vbuf[blockIdx.x] = thread_i; } else { thread_i = int_min; }
   cooperative_groups::this_grid().sync();
   if (blockIdx.x == 0) {
     for (int32_t i = threadIdx.x; i < gridDim.x; i += BLOCK_THREADS)
       thread_i = max(thread_i, vbuf[i]);
-
     thread_i = cub::BlockReduce<int32_t, BLOCK_THREADS>(temp_reduce[1]).Reduce(thread_i, cmp_max);
     if (threadIdx.x == 0) { *out = thread_i; }
   }
@@ -65,7 +64,7 @@ __global__ void vector_range_kernel(int32_t M, int32_t N, const matrix_t* __rest
 
 template<class matrix_t>
 inline void vector_exponents_dispatcher(cudaStream_t stream, int32_t M, int32_t N, const matrix_t* A, int32_t lda, int32_t* umax, int32_t* vexp) {
-  constexpr int32_t block_threads = 512, F64 = (std::is_same_v<matrix_t, double> || std::is_same_v<matrix_t, cuDoubleComplex>);
+  constexpr int32_t block_threads = 512, F64 = int32_t(std::is_same_v<matrix_t, double> || std::is_same_v<matrix_t, cuDoubleComplex>);
   int64_t lda64 = int64_t(lda); int32_t u = *umax;
   if (u) {
     if constexpr(F64) { vector_exponent_kernel<block_threads, double> <<< N, block_threads, 0, stream >>> (M, A, lda64, u, vexp); }

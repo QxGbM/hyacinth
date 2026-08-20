@@ -122,8 +122,8 @@ inline void AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int
 template <class matrix_t>
 void herk_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, const matrix_t* A, int32_t lda, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C, int32_t* uptr, hyacinAlgorithm_t alg) {
   constexpr int32_t Complex = int32_t(std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>);
-  if (M <= 0 && beta == 0) { cudaMemsetAsync(C, 0, uint64_t(N) * uint64_t(N + 1) * uint64_t(orderC) * uint64_t(Complex + 1) * sizeof(uint32_t), stream); return; }
-  *uptr = 0; internal::int8::vector_exponents(stream, M, N, A, lda, uptr, const_cast<int32_t*>(vexp)); int32_t umax = *uptr;
+  *uptr = 0; if (0 < M) { internal::int8::vector_exponents(stream, M, N, A, lda, uptr, const_cast<int32_t*>(vexp)); } int32_t umax = *uptr;
+  if (umax <= 0 && beta == 0) { cudaMemsetAsync(C, 0, uint64_t(N) * uint64_t(N + 1) * uint64_t(orderC) * uint64_t(Complex + 1) * sizeof(uint32_t), stream); return; }
 
   int32_t bits = int32_t(std::ceil(std::log2(double(std::max(1, M))))) + (Complex ? 2 : 0) + (umax << 1);
   int32_t orderA_limbs = int32_t(uint32_t(umax + 9) >> 3), orderA_crt = int32_t(uint32_t(bits + 11) >> 3);

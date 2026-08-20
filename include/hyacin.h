@@ -102,12 +102,6 @@ void hyacinXdequantize(
   int32_t ldg
 );
 
-char hyacinXGevPcsvd_autoTune(
-  int32_t N,
-  int32_t K,
-  hyacinPrecision_t Gtype
-);
-
 int32_t hyacinXGevPcsvd(
   hyacinHandle_t handle,
   char use_evd,
@@ -116,7 +110,9 @@ int32_t hyacinXGevPcsvd(
   int32_t N,
   int32_t K,
   int32_t p,
-  hyacinPrecision_t Xtype,
+  hyacinPrecision_t Atype,
+  void* X,
+  int32_t ldx,
   void* S, // device-pointer
   hyacinPrecision_t Gtype,
   void* G, // device-pointer
