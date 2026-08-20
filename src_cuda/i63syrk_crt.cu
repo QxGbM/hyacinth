@@ -83,7 +83,7 @@ inline void vector_sums(cudaStream_t stream, int32_t M, int32_t N, const matrix_
   }
 }
 
-inline void gemm_accum_crt(cudaStream_t stream, cublasHandle_t handle, char mode, int32_t M, int32_t N, int32_t K, int32_t moduli, int32_t orderA, const int8_t* AT, const int8_t* A, int32_t iter, int32_t beta, uint64_t* C, int32_t orderC, int32_t* W) {
+inline void gemm_accum_crt(cudaStream_t stream, cublasHandle_t handle, char mode, int32_t M, int32_t N, int32_t K, int32_t moduli, int32_t iter, int32_t orderA, const int8_t* AT, const int8_t* A, int32_t beta, int32_t orderC, uint64_t* C, int32_t* W) {
   constexpr int32_t iter_k = 131072, iter_h = iter_k / 2;
   int32_t zero = 0, one = 1;
   int64_t strideA = int64_t(N) * int64_t(K), strideC = int64_t(M) * int64_t(N);
@@ -143,9 +143,9 @@ inline void crt_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t M
     internal::int8::quantize(stream, i, M, A, lda, corr, vexp, moduli, N, algnM, W);
     if constexpr(Complex) {
       int64_t strideWm = int64_t(moduli) * strideW, strideW2 = strideWm * int64_t(2);
-      gemm_accum_crt(stream, handle, 'U', algnN, N, algnM, moduli, orderA, &W[strideW2], &W[strideW2], i, beta, B, orderB, scratch);
-      gemm_accum_crt(stream, handle, 'A', algnN, N, algnM, moduli, orderA, W, &W[strideWm], i, beta, &B[strideB], orderB, scratch);
-    } else { gemm_accum_crt(stream, handle, 'U', algnN, N, algnM, moduli, orderA, W, W, i, beta, B, orderB, scratch); }
+      gemm_accum_crt(stream, handle, 'U', algnN, N, algnM, moduli, i, orderA, &W[strideW2], &W[strideW2], beta, orderB, B, scratch);
+      gemm_accum_crt(stream, handle, 'A', algnN, N, algnM, moduli, i, orderA, W, &W[strideWm], beta, orderB, &B[strideB], scratch);
+    } else { gemm_accum_crt(stream, handle, 'U', algnN, N, algnM, moduli, i, orderA, W, W, beta, orderB, B, scratch); }
   }
   cudaFreeAsync(W, stream); cudaFreeAsync(scratch, stream);
 

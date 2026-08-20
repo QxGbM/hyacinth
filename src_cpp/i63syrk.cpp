@@ -3,7 +3,7 @@
 #include <internal.hpp>
 #include <stdexcept>
 
-inline void gemm_accum(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, int32_t sft, int32_t orderA, const int8_t* AT, const int8_t* A, int32_t beta, uint64_t* C, int32_t orderC, int32_t* W) {
+inline void gemm_accum(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, int32_t sft, int32_t orderA, const int8_t* AT, const int8_t* A, int32_t beta, int32_t orderC, uint64_t* C, int32_t* W) {
   constexpr int32_t iter_k = 131072, iter_h = iter_k / 2;
   int32_t zero = 0, one = 1;
   if (K <= iter_k) {
@@ -39,14 +39,14 @@ inline void gemm_accum(cudaStream_t stream, cublasHandle_t handle, int32_t M, in
   }
 }
 
-inline void gemm_accum_diag(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, int32_t orderA, const int8_t* A, uint64_t* C, int32_t orderC, int32_t* W) {
+inline void gemm_accum_diag(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, int32_t orderA, const int8_t* A, int32_t beta, int32_t orderC, uint64_t* C, int32_t* W) {
   constexpr int32_t iter_k = 131072, iter_h = iter_k / 2;
   int32_t one = 1, zero = 0;
   int64_t strideA = int64_t(N) * int64_t(K), strideC = int64_t(M) * int64_t(N);
   if (K <= iter_k) {
     cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, K, &one, A, CUDA_R_8I, K, strideA, A, CUDA_R_8I, K, strideA,
       &zero, W, CUDA_R_32I, M, strideC, orderA, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
-    internal::int8::accumulate_i32tensor(stream, 'T', 1, N, 0, 16, orderA, W, M, orderC, C);
+    internal::int8::accumulate_i32tensor(stream, 'T', beta, N, 0, 16, orderA, W, M, orderC, C);
   }
   else {
     int32_t rem = K & (iter_k - 1); rem = rem < iter_h ? (rem + iter_k) : rem;
@@ -56,19 +56,19 @@ inline void gemm_accum_diag(cudaStream_t stream, cublasHandle_t handle, int32_t 
       const int8_t* A_k = &A[k];
       cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, iter_k, &one, A_k, CUDA_R_8I, K, strideA, A_k, CUDA_R_8I, K, strideA,
         &zero, W, CUDA_R_32I, M, strideC, orderA, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
-      internal::int8::accumulate_i32tensor(stream, k == 0 ? 'T' : 'U', 1, N, 0, 16, orderA, W, M, orderC, C);
+      internal::int8::accumulate_i32tensor(stream, k == 0 ? 'T' : 'U', k == 0 ? beta : 1, N, 0, 16, orderA, W, M, orderC, C);
     }
 
     const int8_t* A_k = &A[range_k];
     if (rem <= iter_k) {
       cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, rem, &one, A_k, CUDA_R_8I, K, strideA, A_k, CUDA_R_8I, K, strideA,
         &zero, W, CUDA_R_32I, M, strideC, orderA, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
-      internal::int8::accumulate_i32tensor(stream, range_k == 0 ? 'T' : 'U', 1, N, 0, 16, orderA, W, M, orderC, C);
+      internal::int8::accumulate_i32tensor(stream, range_k == 0 ? 'T' : 'U', range_k == 0 ? beta : 1, N, 0, 16, orderA, W, M, orderC, C);
     }
     else {
       cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, iter_h, &one, A_k, CUDA_R_8I, K, strideA, A_k, CUDA_R_8I, K, strideA,
         &zero, W, CUDA_R_32I, M, strideC, orderA, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
-      internal::int8::accumulate_i32tensor(stream, range_k == 0 ? 'T' : 'U', 1, N, 0, 16, orderA, W, M, orderC, C);
+      internal::int8::accumulate_i32tensor(stream, range_k == 0 ? 'T' : 'U', range_k == 0 ? beta : 1, N, 0, 16, orderA, W, M, orderC, C);
       cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, rem - iter_h, &one, &A_k[iter_h], CUDA_R_8I, K, strideA, &A_k[iter_h], CUDA_R_8I, K, strideA,
         &zero, W, CUDA_R_32I, M, strideC, orderA, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
       internal::int8::accumulate_i32tensor(stream, 'U', 1, N, 0, 16, orderA, W, M, orderC, C);
@@ -76,17 +76,17 @@ inline void gemm_accum_diag(cudaStream_t stream, cublasHandle_t handle, int32_t 
   }
 }
 
-inline void i8GemmF(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, const int8_t* AT, const int8_t* A, int32_t orderA, uint64_t* C, int32_t orderC, int32_t* W) {
+inline void i8GemmF(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, int32_t orderA, const int8_t* AT, const int8_t* A, int32_t orderC, uint64_t* C, int32_t* W) {
   int64_t strideA = int64_t(K) * int64_t(N);
   for (int32_t i = 0; i < orderA; ++i)
-    gemm_accum(stream, handle, M, N, K, i << 3, orderA, &AT[int64_t(i) * strideA], A, int32_t(0 < i), C, orderC, W);
+    gemm_accum(stream, handle, M, N, K, i << 3, orderA, &AT[int64_t(i) * strideA], A, int32_t(0 < i), orderC, C, W);
 }
 
-inline void i8GemmU(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, const int8_t* A, int32_t orderA, uint64_t* C, int32_t orderC, int32_t* W) {
+inline void i8GemmU(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, int32_t orderA, const int8_t* A, int32_t orderC, uint64_t* C, int32_t* W) {
   int64_t strideA = int64_t(K) * int64_t(N);
   for (int32_t i = 1; i < orderA; ++i)
-    gemm_accum(stream, handle, M, N, K, (i << 4) - 8, orderA - i, &A[int64_t(i - 1) * strideA], &A[int64_t(i) * strideA], int32_t(1 < i), C, orderC, W);
-  gemm_accum_diag(stream, handle, M, N, K, orderA, A, C, orderC, W);
+    gemm_accum(stream, handle, M, N, K, (i << 4) - 8, orderA - i, &A[int64_t(i - 1) * strideA], &A[int64_t(i) * strideA], int32_t(1 < i), orderC, C, W);
+  gemm_accum_diag(stream, handle, M, N, K, orderA, A, int32_t(1 < orderA), orderC, C, W);
 }
 
 template <class matrix_t>
@@ -110,9 +110,9 @@ inline void AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int
   internal::int8::quantize(stream, -1, M, A, lda, uint32_t(0), vexp, orderA, N, algnM, W);
   if constexpr(Complex) {
     int64_t strideW2 = strideW + strideW;
-    i8GemmU(stream, handle, algnN, N, algnM, &W[strideW2], orderA, B, orderB, scratch);
-    i8GemmF(stream, handle, algnN, N, algnM, W, &W[strideW], orderA, &B[strideB], orderB, scratch);
-  } else { i8GemmU(stream, handle, algnN, N, algnM, W, orderA, B, orderB, scratch); }
+    i8GemmU(stream, handle, algnN, N, algnM, orderA, &W[strideW2], orderB, B, scratch);
+    i8GemmF(stream, handle, algnN, N, algnM, orderA, W, &W[strideW], orderB, &B[strideB], scratch);
+  } else { i8GemmU(stream, handle, algnN, N, algnM, orderA, W, orderB, B, scratch); }
   cudaFreeAsync(W, stream); cudaFreeAsync(scratch, stream);
 
   internal::int8::triangle_pack(stream, Complex, 0, N, orderB, B, uint32_t(0), beta, orderC, C);
