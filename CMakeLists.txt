@@ -10,7 +10,6 @@ project("hyacin" LANGUAGES CXX CUDA)
 find_package(CUDAToolkit REQUIRED)
 
 set(CPP_SOURCES
-  src_cpp/autotune.cpp
   src_cpp/gemv_cublas.cpp
   src_cpp/gram_id.cpp
   src_cpp/handle_timer.cpp

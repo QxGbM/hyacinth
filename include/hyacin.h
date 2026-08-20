@@ -77,6 +77,19 @@ void hyacinXsyherk(
   hyacinAlgorithm_t alg
 );
 
+void hyacinXquantizationScale(
+  hyacinHandle_t handle,
+  double epi,
+  int32_t u_extra,
+  int32_t M,
+  int32_t N,
+  hyacinPrecision_t Atype,
+  const void* A,
+  int32_t lda,
+  int32_t* umax,
+  int32_t* vexp
+);
+
 void hyacinXherk(
   hyacinHandle_t handle,
   int32_t M,
