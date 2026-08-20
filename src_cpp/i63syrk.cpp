@@ -130,7 +130,7 @@ void herk_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t M, int3
   int32_t cost_limbs = int32_t(uint32_t(orderA_limbs * (orderA_limbs + 1)) >> 1), cost_crt = orderA_crt + int32_t(uint32_t(orderA_crt) >> 3);
   int32_t use_limbs = int32_t(alg == HYACIN_ALG_LIMBS || (alg == HYACIN_ALG_AUTO && (orderA_limbs <= 3 || cost_limbs <= cost_crt)));
   if (use_limbs) { AHA_limbs(stream, handle, M, N, orderA_limbs, A, lda, vexp, beta, orderC, C); }
-    else { internal::int8::i63AHA_crt(stream, handle, M, N, orderA_crt, A, lda, umax, vexp, beta, orderC, C); }
+    else { internal::int8::AHA_crt(stream, handle, M, N, orderA_crt, A, lda, umax, vexp, beta, orderC, C); }
 }
 
 extern "C" void hyacinXherk(hyacinHandle_t handle, int32_t M, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C, hyacinAlgorithm_t alg) {
@@ -145,26 +145,4 @@ extern "C" void hyacinXherk(hyacinHandle_t handle, int32_t M, int32_t N, hyacinP
     case HYACIN_F16_COMPLEX: herk_dispatcher(handle.cudaStream, handle.cublasHandle, M, N, (const __half2*)A, lda, vexp, beta, orderC, C, (int32_t*)handle.pinnedWorkspace, alg); return;
     default: return;
   }
-}
-
-namespace internal::int8 {
-
-  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const double* A, int32_t lda, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
-  { AHA_limbs(stream, handle, M, N, orderA, A, lda, vexp, beta, orderC, C); }
-
-  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const float* A, int32_t lda, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
-  { AHA_limbs(stream, handle, M, N, orderA, A, lda, vexp, beta, orderC, C); }
-
-  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half* A, int32_t lda, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
-  { AHA_limbs(stream, handle, M, N, orderA, A, lda, vexp, beta, orderC, C); }
-
-  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuDoubleComplex* A, int32_t lda, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
-  { AHA_limbs(stream, handle, M, N, orderA, A, lda, vexp, beta, orderC, C); }
-
-  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuComplex* A, int32_t lda, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
-  { AHA_limbs(stream, handle, M, N, orderA, A, lda, vexp, beta, orderC, C); }
-
-  void i63AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half2* A, int32_t lda, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
-  { AHA_limbs(stream, handle, M, N, orderA, A, lda, vexp, beta, orderC, C); }
-
 }

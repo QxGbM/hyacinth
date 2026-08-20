@@ -121,7 +121,7 @@ inline void gemm_accum_crt(cudaStream_t stream, cublasHandle_t handle, char mode
 }
 
 template <class real_t, class matrix_t>
-inline void AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const matrix_t* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C) {
+inline void crt_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const matrix_t* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C) {
   constexpr int32_t Complex = !std::is_same_v<real_t, matrix_t>;
   int32_t orderB = std::min(orderC, (63 + (orderA << 3)) / 63);
   int32_t algnM = (M + 255) & (~255), algnN = (N + 63) & (~63);
@@ -157,22 +157,22 @@ inline void AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32
 
 namespace internal::int8 {
 
-  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const double* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
-  { AHA_crt<double>(stream, handle, M, N, orderA, A, lda, corr, vexp, beta, orderC, C); }
+  void AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const double* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
+  { crt_dispatcher<double>(stream, handle, M, N, orderA, A, lda, corr, vexp, beta, orderC, C); }
 
-  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const float* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
-  { AHA_crt<float>(stream, handle, M, N, orderA, A, lda, corr, vexp, beta, orderC, C); }
+  void AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const float* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
+  { crt_dispatcher<float>(stream, handle, M, N, orderA, A, lda, corr, vexp, beta, orderC, C); }
 
-  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
-  { AHA_crt<__half>(stream, handle, M, N, orderA, A, lda, corr, vexp, beta, orderC, C); }
+  void AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
+  { crt_dispatcher<__half>(stream, handle, M, N, orderA, A, lda, corr, vexp, beta, orderC, C); }
 
-  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuDoubleComplex* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
-  { AHA_crt<double>(stream, handle, M, N, orderA, A, lda, corr, vexp, beta, orderC, C); }
+  void AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuDoubleComplex* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
+  { crt_dispatcher<double>(stream, handle, M, N, orderA, A, lda, corr, vexp, beta, orderC, C); }
 
-  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuComplex* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
-  { AHA_crt<float>(stream, handle, M, N, orderA, A, lda, corr, vexp, beta, orderC, C); }
+  void AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuComplex* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
+  { crt_dispatcher<float>(stream, handle, M, N, orderA, A, lda, corr, vexp, beta, orderC, C); }
 
-  void i63AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half2* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
-  { AHA_crt<__half>(stream, handle, M, N, orderA, A, lda, corr, vexp, beta, orderC, C); }
+  void AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half2* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
+  { crt_dispatcher<__half>(stream, handle, M, N, orderA, A, lda, corr, vexp, beta, orderC, C); }
 
 }
