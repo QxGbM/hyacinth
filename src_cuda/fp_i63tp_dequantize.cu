@@ -16,7 +16,8 @@ __device__ __forceinline__ matrix_t deq_i(const uint64_t* A, int64_t stride, int
     if constexpr(std::is_same_v<matrix_t, cuDoubleComplex>) { return make_cuDoubleComplex(device::dd::conv_a63_f64(r, e), device::dd::conv_a63_f64(i, e)); } else
     if constexpr(std::is_same_v<matrix_t, cuComplex>) { return make_cuComplex(float(device::dd::conv_a63_f64(r, e)), float(device::dd::conv_a63_f64(i, e))); } else
     if constexpr(std::is_same_v<matrix_t, complex_double2>) { return device::dd::make_complex_double2(device::dd::conv_a63_dd(r, e), device::dd::conv_a63_dd(i, e)); } else
-    if constexpr(std::is_same_v<matrix_t, complex_float4>) { return device::qf::make_complex_float4(device::qf::conv_a63_qf(r, e), device::qf::conv_a63_qf(i, e)); }
+    if constexpr(std::is_same_v<matrix_t, complex_float4>) { return device::qf::make_complex_float4(device::qf::conv_a63_qf(r, e), device::qf::conv_a63_qf(i, e)); } else
+    { return matrix_t(); }
   }
   else {
     uint64_t a[orderA];
@@ -24,7 +25,8 @@ __device__ __forceinline__ matrix_t deq_i(const uint64_t* A, int64_t stride, int
     if constexpr(std::is_same_v<matrix_t, double>) { return device::dd::conv_a63_f64(a, e); } else
     if constexpr(std::is_same_v<matrix_t, float>) { return float(device::dd::conv_a63_f64(a, e)); } else
     if constexpr(std::is_same_v<matrix_t, double2>) { return device::dd::conv_a63_dd(a, e); } else
-    if constexpr(std::is_same_v<matrix_t, float4>) { return device::qf::conv_a63_qf(a, e); }
+    if constexpr(std::is_same_v<matrix_t, float4>) { return device::qf::conv_a63_qf(a, e); } else
+    { return matrix_t(); }
   }
 }
 
