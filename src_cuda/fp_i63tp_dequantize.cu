@@ -8,34 +8,39 @@
 
 constexpr int32_t int_max = std::numeric_limits<int32_t>::max();
 template <int32_t orderA, int32_t Complex, class matrix_t>
-__device__ __forceinline__ void deq_i(const uint64_t* A, int64_t stride, int32_t e, matrix_t* f) {
+__device__ __forceinline__ matrix_t deq_i(const uint64_t* A, int64_t stride, int32_t e) {
   if constexpr(Complex) {
     uint64_t r[orderA], i[orderA];
     if constexpr(0 < orderA) { r[0] = *A; } if constexpr(1 < orderA) { r[1] = *(A += stride); } if constexpr(2 < orderA) { r[2] = *(A += stride); }
     if constexpr(0 < orderA) { i[0] = *(A += stride); } if constexpr(1 < orderA) { i[1] = *(A += stride); } if constexpr(2 < orderA) { i[2] = *(A += stride); }
-    if constexpr(std::is_same_v<matrix_t, cuDoubleComplex>) { *f = make_cuDoubleComplex(device::dd::conv_a63_f64(r, e), device::dd::conv_a63_f64(i, e)); } else
-    if constexpr(std::is_same_v<matrix_t, cuComplex>) { *f = make_cuComplex(float(device::dd::conv_a63_f64(r, e)), float(device::dd::conv_a63_f64(i, e))); } else
-    if constexpr(std::is_same_v<matrix_t, complex_double2>) { *f = device::dd::make_complex_double2(device::dd::conv_a63_dd(r, e), device::dd::conv_a63_dd(i, e)); } else
-    if constexpr(std::is_same_v<matrix_t, complex_float4>) { *f = device::qf::make_complex_float4(device::qf::conv_a63_qf(r, e), device::qf::conv_a63_qf(i, e)); }
+    if constexpr(std::is_same_v<matrix_t, cuDoubleComplex>) { return make_cuDoubleComplex(device::dd::conv_a63_f64(r, e), device::dd::conv_a63_f64(i, e)); } else
+    if constexpr(std::is_same_v<matrix_t, cuComplex>) { return make_cuComplex(float(device::dd::conv_a63_f64(r, e)), float(device::dd::conv_a63_f64(i, e))); } else
+    if constexpr(std::is_same_v<matrix_t, complex_double2>) { return device::dd::make_complex_double2(device::dd::conv_a63_dd(r, e), device::dd::conv_a63_dd(i, e)); } else
+    if constexpr(std::is_same_v<matrix_t, complex_float4>) { return device::qf::make_complex_float4(device::qf::conv_a63_qf(r, e), device::qf::conv_a63_qf(i, e)); }
   }
   else {
     uint64_t a[orderA];
     if constexpr(0 < orderA) { a[0] = *A; } if constexpr(1 < orderA) { a[1] = *(A += stride); } if constexpr(2 < orderA) { a[2] = *(A += stride); }
-    if constexpr(std::is_same_v<matrix_t, double>) { *f = device::dd::conv_a63_f64(a, e); } else
-    if constexpr(std::is_same_v<matrix_t, float>) { *f = float(device::dd::conv_a63_f64(a, e)); } else
-    if constexpr(std::is_same_v<matrix_t, double2>) { *f = device::dd::conv_a63_dd(a, e); } else
-    if constexpr(std::is_same_v<matrix_t, float4>) { *f = device::qf::conv_a63_qf(a, e); }
+    if constexpr(std::is_same_v<matrix_t, double>) { return device::dd::conv_a63_f64(a, e); } else
+    if constexpr(std::is_same_v<matrix_t, float>) { return float(device::dd::conv_a63_f64(a, e)); } else
+    if constexpr(std::is_same_v<matrix_t, double2>) { return device::dd::conv_a63_dd(a, e); } else
+    if constexpr(std::is_same_v<matrix_t, float4>) { return device::qf::conv_a63_qf(a, e); }
   }
 }
+
+__device__ __forceinline__ cuDoubleComplex conj(cuDoubleComplex a) { return make_cuDoubleComplex(a.x, -a.y); }
+__device__ __forceinline__ cuComplex conj(cuComplex a) { return make_cuComplex(a.x, -a.y); }
+__device__ __forceinline__ complex_double2 conj(complex_double2 a) { return device::dd::make_complex_double2(a.real, device::dd::negate(a.imag)); }
+__device__ __forceinline__ complex_float4 conj(complex_float4 a) { return device::qf::make_complex_float4(a.real, device::qf::negate(a.imag)); }
 
 template<int32_t orderA, int32_t Complex, class matrix_t>
 __global__ void triangle_unpack_dequantize_kernel(int64_t N, const uint64_t* __restrict__ A, int64_t strideA, const int32_t* __restrict__ vexp, matrix_t* __restrict__ B, int64_t ldb) {
   int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
   if (y <= x) {
-    B = &B[y + (x * ldb)];
     int32_t ex = vexp[x], ey = vexp[y];
-    if (ex == int_max || ey == int_max) { *B = matrix_t(); }
-      else { deq_i<orderA, Complex>(&A[y + int64_t(uint64_t((x + int64_t(1)) * x) >> 1)], strideA, -(ex + ey), B); }
+    matrix_t f = (ex == int_max || ey == int_max) ? matrix_t() : deq_i<orderA, Complex, matrix_t>(&A[y + int64_t(uint64_t((x + int64_t(1)) * x) >> 1)], strideA, -(ex + ey));
+    if constexpr(Complex) { B[x + (y * ldb)] = conj(B[y + (x * ldb)] = f); }
+      else { B[x + (y * ldb)] = B[y + (x * ldb)] = f; }
   }
 }
 
