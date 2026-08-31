@@ -62,51 +62,45 @@ __global__ void vector_range_kernel(int32_t M, int32_t N, const matrix_t* __rest
   }
 }
 
-template<class matrix_t>
+template<class reduc_t, class matrix_t>
 inline void vector_exponents_dispatcher(cudaStream_t stream, int32_t M, int32_t N, const matrix_t* A, int32_t lda, int32_t* umax, int32_t* vexp) {
-  constexpr int32_t block_threads = 512, F64 = int32_t(std::is_same_v<matrix_t, double> || std::is_same_v<matrix_t, cuDoubleComplex>);
+  constexpr int32_t block_threads = 512;
   int64_t lda64 = int64_t(lda); int32_t u = *umax;
-  if (u) {
-    if constexpr(F64) { vector_exponent_kernel<block_threads, double> <<< N, block_threads, 0, stream >>> (M, A, lda64, u, vexp); }
-      else { vector_exponent_kernel<block_threads, float> <<< N, block_threads, 0, stream >>> (M, A, lda64, u, vexp); }
-  }
-  else {
+  if (u <= 0) {
     int32_t device_sms = 0, device = -1;
     cudaGetDevice(&device); cudaDeviceGetAttribute(&device_sms, cudaDevAttrMultiProcessorCount, device);
     int32_t maxBlocksPerSM = 0;
-    if constexpr(F64) { cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, vector_range_kernel<block_threads, double, matrix_t>, block_threads, 0); }
-      else { cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, vector_range_kernel<block_threads, float, matrix_t>, block_threads, 0); }
+    cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, vector_range_kernel<block_threads, reduc_t, matrix_t>, block_threads, 0);
     
     int32_t grid = std::min(N, device_sms * maxBlocksPerSM), *vbuf = nullptr;
     if (cudaSuccess != cudaMallocAsync((void**)&vbuf, uint64_t(grid) * sizeof(int32_t), stream))
       throw std::runtime_error("Workspace allocation failed at Exponent Range.");
 
     void* kernelArgs[]{ &M, &N, &A, &lda64, &vexp, &vbuf, &umax };
-    if constexpr(F64) { cudaLaunchCooperativeKernel(vector_range_kernel<block_threads, double, matrix_t>, grid, block_threads, kernelArgs, 0, stream); }
-      else { cudaLaunchCooperativeKernel(vector_range_kernel<block_threads, float, matrix_t>, grid, block_threads, kernelArgs, 0, stream); }
+    cudaLaunchCooperativeKernel(vector_range_kernel<block_threads, reduc_t, matrix_t>, grid, block_threads, kernelArgs, 0, stream);
     cudaFreeAsync(vbuf, stream);
     cudaStreamSynchronize(stream);
-  }
+  } else { vector_exponent_kernel<block_threads, reduc_t> <<< N, block_threads, 0, stream >>> (M, A, lda64, u, vexp); }
 }
 
 namespace internal::int8 {
 
   void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int32_t* umax, int32_t* vexp)
-  { vector_exponents_dispatcher(stream, M, N, A, lda, umax, vexp); }
+  { vector_exponents_dispatcher<double>(stream, M, N, A, lda, umax, vexp); }
 
   void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, int32_t* umax, int32_t* vexp)
-  { vector_exponents_dispatcher(stream, M, N, A, lda, umax, vexp); }
+  { vector_exponents_dispatcher<float>(stream, M, N, A, lda, umax, vexp); }
 
   void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const __half* A, int32_t lda, int32_t* umax, int32_t* vexp)
-  { vector_exponents_dispatcher(stream, M, N, A, lda, umax, vexp); }
+  { vector_exponents_dispatcher<float>(stream, M, N, A, lda, umax, vexp); }
 
   void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const cuDoubleComplex* A, int32_t lda, int32_t* umax, int32_t* vexp)
-  { vector_exponents_dispatcher(stream, M, N, A, lda, umax, vexp); }
+  { vector_exponents_dispatcher<double>(stream, M, N, A, lda, umax, vexp); }
 
   void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const cuComplex* A, int32_t lda, int32_t* umax, int32_t* vexp)
-  { vector_exponents_dispatcher(stream, M, N, A, lda, umax, vexp); }
+  { vector_exponents_dispatcher<float>(stream, M, N, A, lda, umax, vexp); }
 
   void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const __half2* A, int32_t lda, int32_t* umax, int32_t* vexp)
-  { vector_exponents_dispatcher(stream, M, N, A, lda, umax, vexp); }
+  { vector_exponents_dispatcher<float>(stream, M, N, A, lda, umax, vexp); }
 
 }

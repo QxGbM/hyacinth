@@ -28,18 +28,18 @@ extern "C" int32_t hyacinXelem(char sel, hyacinPrecision_t* Atype) {
   return type_bytes[int32_t(*Atype)];
 }
 
-extern "C" void hyacinXquantizationScale(hyacinHandle_t handle, double epi, int32_t u_extra, int32_t M, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t* umax, int32_t* vexp) {
+extern "C" int32_t hyacinXquantizationScale(hyacinHandle_t handle, double epi, int32_t u_extra, int32_t M, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t* vexp) {
   double epi_nrm = std::min(1., std::max(std::abs(epi), std::ldexp(1., -type_mantissa[int32_t(Atype)])));
-  *umax = std::min(umax_practical_limit, u_extra + int32_t(std::ceil(-std::log2(epi_nrm))));
-  switch(Atype) {
-    case HYACIN_F64: internal::int8::vector_exponents(handle.cudaStream, M, N, (const double*)A, lda, umax, vexp); return;
-    case HYACIN_F32: internal::int8::vector_exponents(handle.cudaStream, M, N, (const float*)A, lda, umax, vexp); return;
-    case HYACIN_F16: internal::int8::vector_exponents(handle.cudaStream, M, N, (const __half*)A, lda, umax, vexp); return;
-    case HYACIN_F64_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, M, N, (const cuDoubleComplex*)A, lda, umax, vexp); return;
-    case HYACIN_F32_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, M, N, (const cuComplex*)A, lda, umax, vexp); return;
-    case HYACIN_F16_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, M, N, (const __half2*)A, lda, umax, vexp); return;
-    default: return;
-  }
+  int32_t umax = std::min(umax_practical_limit, u_extra + int32_t(std::ceil(-std::log2(epi_nrm))));
+  if (0 < umax) switch(Atype) {
+    case HYACIN_F64: internal::int8::vector_exponents(handle.cudaStream, M, N, (const double*)A, lda, &umax, vexp); return umax;
+    case HYACIN_F32: internal::int8::vector_exponents(handle.cudaStream, M, N, (const float*)A, lda, &umax, vexp); return umax;
+    case HYACIN_F16: internal::int8::vector_exponents(handle.cudaStream, M, N, (const __half*)A, lda, &umax, vexp); return umax;
+    case HYACIN_F64_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, M, N, (const cuDoubleComplex*)A, lda, &umax, vexp); return umax;
+    case HYACIN_F32_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, M, N, (const cuComplex*)A, lda, &umax, vexp); return umax;
+    case HYACIN_F16_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, M, N, (const __half2*)A, lda, &umax, vexp); return umax;
+    default: return 0;
+  } else return 0;
 }
 
 extern "C" void hyacinXsyherk_autoTune(double epi, int32_t u_extra, int32_t* umax, hyacinPrecision_t Atype, hyacinPrecision_t* ComputeType) {
