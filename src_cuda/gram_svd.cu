@@ -137,7 +137,7 @@ extern "C" int32_t hyacinXGevPcsvd(hyacinHandle_t handle, char use_evd, char fil
     { return tsvd<float, float, double>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (float*)X, ldx, (float*)S, (double*)G, ldg, handle.pinnedWorkspace); } else { return 0; }
     case HYACIN_F32: if (Atype == HYACIN_F32)
     { return tsvd<float, float, float>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (float*)X, ldx, (float*)S, (float*)G, ldg, handle.pinnedWorkspace); } else
-    if (Atype == HYACIN_F16) 
+    if (Atype == HYACIN_F16)
     { return tsvd<float, float, float>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (__half*)X, ldx, (__half*)S, (float*)G, ldg, handle.pinnedWorkspace); } else { return 0; }
     case HYACIN_DD: if (Atype == HYACIN_F64)
     { return tsvd<double, double, double2>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (double*)X, ldx, (double*)S, (double2*)G, ldg, handle.pinnedWorkspace); } else { return 0; }
