@@ -70,7 +70,7 @@ inline void matcopy_dispatcher(cudaStream_t stream, cublasHandle_t handle, char 
   }
 }
 
-namespace internal::Cholesky {
+namespace internal {
 
   void scatter_matcopy(cudaStream_t stream, cublasHandle_t handle, char mode, int32_t M, int32_t N, const int32_t* jpiv, const double* A, int32_t lda, double* B, int32_t ldb) { matcopy_dispatcher(stream, handle, mode, M, N, jpiv, A, lda, B, ldb); }
   void scatter_matcopy(cudaStream_t stream, cublasHandle_t handle, char mode, int32_t M, int32_t N, const int32_t* jpiv, const float* A, int32_t lda, double* B, int32_t ldb) { matcopy_dispatcher(stream, handle, mode, M, N, jpiv, A, lda, B, ldb); }

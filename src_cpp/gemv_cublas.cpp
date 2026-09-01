@@ -8,9 +8,8 @@ void internal::Cholesky::gemv_scal(cudaStream_t stream, cublasHandle_t handle, d
     if (1 <= N)
       cublasDgemv(handle, CUBLAS_OP_T, N, M, &minus_one, A, lda, &A[int64_t(j) * int64_t(lda)], 1, &one, &A[int64_t(N) + int64_t(j) * int64_t(lda)], 1);
     gemv_pp(stream, scale, j, N, M, A, lda, jpiv, D);
-  }
-  else if (1 == M)
-    cudaMemcpyAsync(&A[N], scale, sizeof(double), cudaMemcpyHostToDevice, stream);
+  } else if (1 == M)
+  { cudaMemcpyAsync(&A[N], scale, sizeof(double), cudaMemcpyHostToDevice, stream); }
 }
 
 void internal::Cholesky::gemv_scal(cudaStream_t stream, cublasHandle_t handle, float_idx* scale, int32_t j, int32_t M, int32_t N, float* A, int32_t lda, int32_t* jpiv, float* D) {
@@ -19,9 +18,8 @@ void internal::Cholesky::gemv_scal(cudaStream_t stream, cublasHandle_t handle, f
     if (1 <= N)
       cublasSgemv(handle, CUBLAS_OP_T, N, M, &minus_one, A, lda, &A[int64_t(j) * int64_t(lda)], 1, &one, &A[int64_t(N) + int64_t(j) * int64_t(lda)], 1);
     gemv_pp(stream, scale, j, N, M, A, lda, jpiv, D);
-  }
-  else if (1 == M)
-    cudaMemcpyAsync(&A[N], scale, sizeof(float), cudaMemcpyHostToDevice, stream);
+  } else if (1 == M)
+  { cudaMemcpyAsync(&A[N], scale, sizeof(float), cudaMemcpyHostToDevice, stream); }
 }
 
 void internal::Cholesky::gemv_scal(cudaStream_t stream, cublasHandle_t handle, double_idx* scale, int32_t j, int32_t M, int32_t N, cuDoubleComplex* A, int32_t lda, int32_t* jpiv, double* D) {
@@ -30,8 +28,7 @@ void internal::Cholesky::gemv_scal(cudaStream_t stream, cublasHandle_t handle, d
     if (1 <= N)
       cublasZgemv(handle, CUBLAS_OP_C, N, M, &minus_one, A, lda, &A[int64_t(j) * int64_t(lda)], 1, &one, &A[int64_t(N) + int64_t(j) * int64_t(lda)], 1);
     gemv_pp(stream, scale, j, N, M, A, lda, jpiv, D);
-  }
-  else if (1 == M) {
+  } else if (1 == M) {
     cudaMemsetAsync(&((double*)scale)[1], 0, sizeof(double), stream);
     cudaMemcpyAsync(&A[N], scale, 2 * sizeof(double), cudaMemcpyHostToDevice, stream);
   }
@@ -43,8 +40,7 @@ void internal::Cholesky::gemv_scal(cudaStream_t stream, cublasHandle_t handle, f
     if (1 <= N)
       cublasCgemv(handle, CUBLAS_OP_C, N, M, &minus_one, A, lda, &A[int64_t(j) * int64_t(lda)], 1, &one, &A[int64_t(N) + int64_t(j) * int64_t(lda)], 1);
     gemv_pp(stream, scale, j, N, M, A, lda, jpiv, D);
-  }
-  else if (1 == M) {
+  } else if (1 == M) {
     cudaMemsetAsync(&((float*)scale)[1], 0, sizeof(float), stream);
     cudaMemcpyAsync(&A[N], scale, 2 * sizeof(float), cudaMemcpyHostToDevice, stream);
   }

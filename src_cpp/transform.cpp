@@ -25,7 +25,7 @@ inline void ax_transform(cudaStream_t stream, cublasHandle_t handle, int32_t M, 
   for (int32_t i = 0; i < M; i += rows) {
     int32_t m = std::min(M - i, rows), ld = std::min((m + 63) & (~63), rows);
     nn_gemm(handle, m, K, N, &A[i], lda, X, ldx, dev_work, ld);
-    internal::Cholesky::scatter_matcopy(stream, handle, 'A', m, K, nullptr, dev_work, ld, &A[i], lda);
+    internal::scatter_matcopy(stream, handle, 'A', m, K, nullptr, dev_work, ld, &A[i], lda);
   }
   cudaFreeAsync(dev_work, stream);
 }
@@ -41,12 +41,12 @@ inline void ax_transform_cf16(cudaStream_t stream, cublasHandle_t handle, int32_
 
   cuComplex one = make_cuComplex(1.f, 0.f), zero = make_cuComplex(0.f, 0.f);
   cuComplex* f32a = (cuComplex*)&dev_work[dev_work_bytes], *f32x = (cuComplex*)&dev_work[dev_work_bytes + devA_bytes];
-  internal::Cholesky::scatter_matcopy(stream, handle, 'A', N, K, nullptr, X, ldx, f32x, N);
+  internal::scatter_matcopy(stream, handle, 'A', N, K, nullptr, X, ldx, f32x, N);
   for (int32_t i = 0; i < M; i += rows) {
     int32_t m = std::min(M - i, rows), ld = std::min((m + 63) & (~63), rows);
-    internal::Cholesky::scatter_matcopy(stream, handle, 'A', m, N, nullptr, &A[i], lda, f32a, ld);
+    internal::scatter_matcopy(stream, handle, 'A', m, N, nullptr, &A[i], lda, f32a, ld);
     cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_N, m, K, N, &one, f32a, CUDA_C_32F, ld, f32x, CUDA_C_32F, N, &zero, dev_work, CUDA_C_32F, ld, CUBLAS_COMPUTE_32F_FAST_16F, CUBLAS_GEMM_DEFAULT);
-    internal::Cholesky::scatter_matcopy(stream, handle, 'A', m, K, nullptr, (cuComplex*)dev_work, ld, &A[i], lda);
+    internal::scatter_matcopy(stream, handle, 'A', m, K, nullptr, (cuComplex*)dev_work, ld, &A[i], lda);
   }
   cudaFreeAsync(dev_work, stream);
 }
@@ -55,15 +55,14 @@ extern "C" void hyacinXtransform(hyacinHandle_t handle, int32_t M, int32_t N, in
   if ((M <= 0) || (K <= 0)) return;
   Timer::register_kernel(handle.cudaStream, handle.timer);
   if (N <= 0) switch(Atype) {
-    case HYACIN_F64: internal::Cholesky::scatter_matcopy(handle.cudaStream, handle.cublasHandle, 'A', M, K, nullptr, (const double*)X, ldx, (double*)A, lda); return;
-    case HYACIN_F32: internal::Cholesky::scatter_matcopy(handle.cudaStream, handle.cublasHandle, 'A', M, K, nullptr, (const float*)X, ldx, (float*)A, lda); return;
-    case HYACIN_F16: internal::Cholesky::scatter_matcopy(handle.cudaStream, handle.cublasHandle, 'A', M, K, nullptr, (const __half*)X, ldx, (__half*)A, lda); return;
-    case HYACIN_F64_COMPLEX: internal::Cholesky::scatter_matcopy(handle.cudaStream, handle.cublasHandle, 'A', M, K, nullptr, (const cuDoubleComplex*)X, ldx, (cuDoubleComplex*)A, lda); return;
-    case HYACIN_F32_COMPLEX: internal::Cholesky::scatter_matcopy(handle.cudaStream, handle.cublasHandle, 'A', M, K, nullptr, (const cuComplex*)X, ldx, (cuComplex*)A, lda); return;
-    case HYACIN_F16_COMPLEX: internal::Cholesky::scatter_matcopy(handle.cudaStream, handle.cublasHandle, 'A', M, K, nullptr, (const __half2*)X, ldx, (__half2*)A, lda); return;
+    case HYACIN_F64: internal::scatter_matcopy(handle.cudaStream, handle.cublasHandle, 'A', M, K, nullptr, (const double*)X, ldx, (double*)A, lda); return;
+    case HYACIN_F32: internal::scatter_matcopy(handle.cudaStream, handle.cublasHandle, 'A', M, K, nullptr, (const float*)X, ldx, (float*)A, lda); return;
+    case HYACIN_F16: internal::scatter_matcopy(handle.cudaStream, handle.cublasHandle, 'A', M, K, nullptr, (const __half*)X, ldx, (__half*)A, lda); return;
+    case HYACIN_F64_COMPLEX: internal::scatter_matcopy(handle.cudaStream, handle.cublasHandle, 'A', M, K, nullptr, (const cuDoubleComplex*)X, ldx, (cuDoubleComplex*)A, lda); return;
+    case HYACIN_F32_COMPLEX: internal::scatter_matcopy(handle.cudaStream, handle.cublasHandle, 'A', M, K, nullptr, (const cuComplex*)X, ldx, (cuComplex*)A, lda); return;
+    case HYACIN_F16_COMPLEX: internal::scatter_matcopy(handle.cudaStream, handle.cublasHandle, 'A', M, K, nullptr, (const __half2*)X, ldx, (__half2*)A, lda); return;
     default: return;
-  }
-  else switch(Atype) {
+  } else switch(Atype) {
     case HYACIN_F64: ax_transform(handle.cudaStream, handle.cublasHandle, M, N, K, (double*)A, lda, (const double*)X, ldx); return;
     case HYACIN_F32: ax_transform(handle.cudaStream, handle.cublasHandle, M, N, K, (float*)A, lda, (const float*)X, ldx); return;
     case HYACIN_F16: ax_transform(handle.cudaStream, handle.cublasHandle, M, N, K, (__half*)A, lda, (const __half*)X, ldx); return;

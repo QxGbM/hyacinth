@@ -52,7 +52,7 @@ namespace device::int8 {
 
   __host__ __device__ __forceinline__ uint32_t conv_u8i8(uint32_t code, uint32_t& carry) {
     uint8_t* b = (uint8_t*)&code;
-    uint32_t a = uint32_t(carry) + uint32_t(b[0]);
+    uint32_t a = carry + uint32_t(b[0]);
     b[0] = uint8_t(a); a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint32_t(b[1]);
     b[1] = uint8_t(a); a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint32_t(b[2]);
     b[2] = uint8_t(a); a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint32_t(b[3]);

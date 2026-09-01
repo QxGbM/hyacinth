@@ -132,8 +132,7 @@ inline void crt_acc_dispatcher(cudaStream_t stream, char mode, int32_t beta, int
     case 22: crt_acc_dispatcher<22, 0, orderA>(stream, mode, beta, N, X, ldx, A); return;
     case 23: crt_acc_dispatcher<23, 0, orderA>(stream, mode, beta, N, X, ldx, A); return;
     default: return;
-  }
-  else if (iter == 1) switch (orderX) {
+  } else if (iter == 1) switch (orderX) {
     case 9: crt_acc_dispatcher<9, 1, orderA>(stream, mode, beta, N, X, ldx, A); return;
     case 10: crt_acc_dispatcher<10, 1, orderA>(stream, mode, beta, N, X, ldx, A); return;
     case 11: crt_acc_dispatcher<11, 1, orderA>(stream, mode, beta, N, X, ldx, A); return;
@@ -150,8 +149,7 @@ inline void crt_acc_dispatcher(cudaStream_t stream, char mode, int32_t beta, int
     case 22: crt_acc_dispatcher<22, 1, orderA>(stream, mode, beta, N, X, ldx, A); return;
     case 23: crt_acc_dispatcher<23, 1, orderA>(stream, mode, beta, N, X, ldx, A); return;
     default: return;
-  }
-  else if (iter == 2) switch (orderX) {
+  } else if (iter == 2) switch (orderX) {
     case 17: crt_acc_dispatcher<17, 2, orderA>(stream, mode, beta, N, X, ldx, A); return;
     case 18: crt_acc_dispatcher<18, 2, orderA>(stream, mode, beta, N, X, ldx, A); return;
     case 19: crt_acc_dispatcher<19, 2, orderA>(stream, mode, beta, N, X, ldx, A); return;

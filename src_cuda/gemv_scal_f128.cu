@@ -76,9 +76,8 @@ void gemv_scal(cudaStream_t stream, cublasHandle_t, double2_idx* scale, int32_t 
     if (1 <= N)
       gemv_dispatcher(stream, j, M, N, A, lda);
     gemv_pp(stream, scale, j, N, M, A, lda, jpiv, D);
-  }
-  else if (1 == M)
-    cudaMemcpyAsync(&A[N], scale, sizeof(double2), cudaMemcpyHostToDevice, stream);
+  } else if (1 == M)
+  { cudaMemcpyAsync(&A[N], scale, sizeof(double2), cudaMemcpyHostToDevice, stream); }
 }
 
 void gemv_scal(cudaStream_t stream, cublasHandle_t, float4_idx* scale, int32_t j, int32_t M, int32_t N, float4* A, int32_t lda, int32_t* jpiv, float4* D) {
@@ -86,9 +85,8 @@ void gemv_scal(cudaStream_t stream, cublasHandle_t, float4_idx* scale, int32_t j
     if (1 <= N)
       gemv_dispatcher(stream, j, M, N, A, lda);
     gemv_pp(stream, scale, j, N, M, A, lda, jpiv, D);
-  }
-  else if (1 == M)
-    cudaMemcpyAsync(&A[N], scale, sizeof(float4), cudaMemcpyHostToDevice, stream);
+  } else if (1 == M)
+  { cudaMemcpyAsync(&A[N], scale, sizeof(float4), cudaMemcpyHostToDevice, stream); }
 }
 
 void gemv_scal(cudaStream_t stream, cublasHandle_t, double2_idx* scale, int32_t j, int32_t M, int32_t N, complex_double2* A, int32_t lda, int32_t* jpiv, double2* D) {
@@ -96,8 +94,7 @@ void gemv_scal(cudaStream_t stream, cublasHandle_t, double2_idx* scale, int32_t 
     if (1 <= N)
       gemv_dispatcher(stream, j, M, N, A, lda);
     gemv_pp(stream, scale, j, N, M, A, lda, jpiv, D);
-  }
-  else if (1 == M) {
+  } else if (1 == M) {
     cudaMemsetAsync(&((double2*)scale)[1], 0, sizeof(double), stream);
     cudaMemcpyAsync(&A[N], scale, sizeof(complex_double2), cudaMemcpyHostToDevice, stream);
   }
@@ -108,8 +105,7 @@ void gemv_scal(cudaStream_t stream, cublasHandle_t, float4_idx* scale, int32_t j
     if (1 <= N)
       gemv_dispatcher(stream, j, M, N, A, lda);
     gemv_pp(stream, scale, j, N, M, A, lda, jpiv, D);
-  }
-  else if (1 == M) {
+  } else if (1 == M) {
     cudaMemsetAsync(&((float4*)scale)[1], 0, sizeof(double), stream);
     cudaMemcpyAsync(&A[N], scale, sizeof(complex_float4), cudaMemcpyHostToDevice, stream);
   }

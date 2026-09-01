@@ -190,8 +190,7 @@ inline void gemv_pp_dispatcher(cudaStream_t stream, int32_t j, int32_t M, int32_
     int32_t grid = std::min(idx[2].idx, std::max(N + block_threads - 2, M + block_threads - 1) / block_threads);
     void* kernelArgs[]{ &j, &M, &N, &sq, &rsq, &A, &lda, &jpiv, &diag, &D, &idx };
     cudaLaunchCooperativeKernel(gemv_pp_kernel<block_threads, real_t, matrix_t, idx_t>, grid, block_threads, kernelArgs, 0, stream);
-  }
-  else {
+  } else {
     int32_t grid = std::min(idx[3].idx, (N + block_threads - 2) / block_threads);
     void* kernelArgs[]{ &M, &N, &sq, &rsq, &A, &lda, &diag, &D, &idx };
     cudaLaunchCooperativeKernel(gemv_pp_nopiv_kernel<block_threads, real_t, matrix_t, idx_t>, grid, block_threads, kernelArgs, 0, stream);

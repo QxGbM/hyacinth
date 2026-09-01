@@ -22,9 +22,9 @@ inline int32_t diag_piv_dispatcher(cudaStream_t stream, cublasHandle_t handle, c
   K = internal::Cholesky::potrfp(stream, handle, fillmode, epi, K, p, N, G, ldg, jpiv, (Rtype*)dev_work, pinned_work);
   if (0 < K) {
     Btype* B = (Btype*)dev_work;
-    internal::Cholesky::scatter_matcopy(stream, handle, 'A', K, N, nullptr, G, ldg, B, K);
+    internal::scatter_matcopy(stream, handle, 'A', K, N, nullptr, G, ldg, B, K);
     if (K < N) { ltrsm(handle, K, N - K, B, K); }
-    internal::Cholesky::scatter_matcopy(stream, handle, 'I', K, N, jpiv, B, K, X, ldx);
+    internal::scatter_matcopy(stream, handle, 'I', K, N, jpiv, B, K, X, ldx);
   }
   cudaFreeAsync(dev_work, stream);
   return K;

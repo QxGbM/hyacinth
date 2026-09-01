@@ -105,7 +105,7 @@ extern "C" void hyacinXsyherk(hyacinHandle_t handle, int32_t M, int32_t N, int32
     throw std::runtime_error("Workspace allocation failed at Integer SY/HERK.");
 
   vexp_dispatcher(handle.cudaStream, M, N, Atype, A, lda, umax, vexp);
-  hyacinXherk(handle, M, N, Atype, A, lda, vexp, 0, orderC, C, alg);
+  hyacinXherk(handle, M, N, Atype, A, lda, 0, vexp, 0, orderC, C, alg);
   hyacinXdequantize(handle, N, orderC, C, vexp, Gtype, G, ldg);
   cudaFreeAsync(C, handle.cudaStream);
   cudaFreeAsync(vexp, handle.cudaStream);
@@ -130,7 +130,7 @@ extern "C" void hyacinXsyherk1Drow(hyacinHandle_t handle, int32_t localM, int32_
   Timer::register_comm(handle.cudaStream, handle.timer);
   ncclAllReduce(vexp, vexp, int64_t(N), ncclInt32, ncclMin, col_comm, handle.cudaStream);
 
-  hyacinXherk(handle, localM, N, Atype, A, lda, vexp, 0, orderC, C, alg);
+  hyacinXherk(handle, localM, N, Atype, A, lda, 0, vexp, 0, orderC, C, alg);
   hyacinXAllReduce1Drow(handle, orderC, Complex, (int64_t(N) * int64_t(N + 1)) / int64_t(2), C, col_comm);
   hyacinXdequantize(handle, N, orderC, C, vexp, Gtype, G, ldg);
 

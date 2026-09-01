@@ -51,9 +51,8 @@ inline void acc_dispatcher(cudaStream_t stream, char mode, int32_t beta, int64_t
   constexpr int32_t block_threads = 512;
   dim3 grid(uint32_t(N + 511) >> 9, uint32_t(N), uint32_t(1));
   int64_t strideX = ldx * N, strideA = N * N;
-  if (mode == 'U' && beta == 0) { i32_accum_kernel<orderA, orderX, 0, 'U'> <<< grid, block_threads, 0, stream >>> (sft, sft_iter, N, X, ldx, strideX, A, strideA); } else
+  if ((mode == 'U' || mode == 'T') && beta == 0) { i32_accum_kernel<orderA, orderX, 0, 'U'> <<< grid, block_threads, 0, stream >>> (sft, sft_iter, N, X, ldx, strideX, A, strideA); } else
   if (mode == 'U' && beta == 1) { i32_accum_kernel<orderA, orderX, 1, 'U'> <<< grid, block_threads, 0, stream >>> (sft, sft_iter, N, X, ldx, strideX, A, strideA); } else
-  if (mode == 'T' && beta == 0) { i32_accum_kernel<orderA, orderX, 0, 'T'> <<< grid, block_threads, 0, stream >>> (sft, sft_iter, N, X, ldx, strideX, A, strideA); } else
   if (mode == 'T' && beta == 1) { i32_accum_kernel<orderA, orderX, 1, 'T'> <<< grid, block_threads, 0, stream >>> (sft, sft_iter, N, X, ldx, strideX, A, strideA); } else
   if (mode == 'A' && beta == 0) { i32_accum_kernel<orderA, orderX, 0, 'A'> <<< grid, block_threads, 0, stream >>> (sft, sft_iter, N, X, ldx, strideX, A, strideA); } else
   if (mode == 'A' && beta == 1) { i32_accum_kernel<orderA, orderX, 1, 'A'> <<< grid, block_threads, 0, stream >>> (sft, sft_iter, N, X, ldx, strideX, A, strideA); }

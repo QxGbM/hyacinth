@@ -86,7 +86,7 @@ inline int32_t tsvd(cudaStream_t stream, cublasHandle_t handle, cusolverDnHandle
   K = internal::Cholesky::potrfp(stream, handle, fillmode, epi, K, p, N, G, ldg, piv, (GRtype*)dev_work, pinned_work);
   if (0 < K) {
     complex_t* W = (complex_t*)dev_work;
-    internal::Cholesky::scatter_matcopy(stream, handle, 'U', K, N, piv, G, ldg, W, N);
+    internal::scatter_matcopy(stream, handle, 'U', K, N, piv, G, ldg, W, N);
 
     cudaDataType_t type_c = cuda_type<complex_t>(), type_r = cuda_type<real_t>();
     size_t workspaceInBytesOnDevice, workspaceInBytesOnHost;
@@ -104,7 +104,7 @@ inline int32_t tsvd(cudaStream_t stream, cublasHandle_t handle, cusolverDnHandle
     cudaFreeAsync(workspaceOnDevice, stream);
     K = std::min(K, p + rank);
 
-    internal::Cholesky::scatter_matcopy(stream, handle, 'A', N, K, nullptr, W, N, X, ldx);
+    internal::scatter_matcopy(stream, handle, 'A', N, K, nullptr, W, N, X, ldx);
   }
   cudaFreeAsync(dev_work, stream); return K;
 }
@@ -130,8 +130,7 @@ extern "C" int32_t hyacinXGevPcsvd(hyacinHandle_t handle, char use_evd, char fil
     if (Atype == HYACIN_F16_COMPLEX)
     { return tevd<float>(handle.cudaStream, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (cuComplex*)G, ldg, (__half2*)X, ldx, (__half*)S); } else { return 0; }
     default: return 0;
-  }
-  else switch(Gtype) {
+  } else switch(Gtype) {
     case HYACIN_F64: if (Atype == HYACIN_F64)
     { return tsvd<double, double, double>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (double*)X, ldx, (double*)S, (double*)G, ldg, handle.pinnedWorkspace); } else
     if (Atype == HYACIN_F32)

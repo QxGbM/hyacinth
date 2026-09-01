@@ -58,8 +58,7 @@ __global__ void vector_sum_kernel(int64_t M, const real_t* __restrict__ A, int64
     threadA = cub::BlockReduce<reduc_t, BLOCK_THREADS>(temp_reduce[0]).Reduce(threadA, u64_add());
     threadB = cub::BlockReduce<reduc_t, BLOCK_THREADS>(temp_reduce[1]).Reduce(threadB, u64_add());
     if (threadIdx.x == 0) { conv_acc<ORDER, 0>(threadB, conv_acc<ORDER, 0>(threadA, &vec_sum[blockIdx.x], int64_t(gridDim.x)), int64_t(gridDim.x)); }
-  }
-  else {
+  } else {
     __shared__ typename cub::BlockReduce<reduc_t, BLOCK_THREADS>::TempStorage temp_reduce;
     threadA = cub::BlockReduce<reduc_t, BLOCK_THREADS>(temp_reduce).Reduce(threadA, u64_add());
     if (threadIdx.x == 0) { conv_acc<ORDER, 1>(threadA, &vec_sum[blockIdx.x], int64_t(gridDim.x)); }
@@ -91,8 +90,7 @@ inline void gemm_accum_crt(cudaStream_t stream, cublasHandle_t handle, char mode
     cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, K, &one, AT, CUDA_R_8I, K, strideA, A, CUDA_R_8I, K, strideA,
       &zero, W, CUDA_R_32I, M, strideC, moduli, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
     internal::int8::accumulate_remainder_i32tensor(stream, mode, beta, N, orderA, iter, W, M, orderC, C);
-  }
-  else {
+  } else {
     int32_t rem = K & (iter_k - 1); rem = rem < iter_h ? (rem + iter_k) : rem;
     int32_t range_k = K - rem;
 
@@ -108,8 +106,7 @@ inline void gemm_accum_crt(cudaStream_t stream, cublasHandle_t handle, char mode
       cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, rem, &one, AT_k, CUDA_R_8I, K, strideA, AN_k, CUDA_R_8I, K, strideA,
         &zero, W, CUDA_R_32I, M, strideC, moduli, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
       internal::int8::accumulate_remainder_i32tensor(stream, mode, range_k == 0 ? beta : 1, N, orderA, iter, W, M, orderC, C);
-    }
-    else {
+    } else {
       cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, iter_h, &one, AT_k, CUDA_R_8I, K, strideA, AN_k, CUDA_R_8I, K, strideA,
         &zero, W, CUDA_R_32I, M, strideC, moduli, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
       internal::int8::accumulate_remainder_i32tensor(stream, mode, range_k == 0 ? beta : 1, N, orderA, iter, W, M, orderC, C);
