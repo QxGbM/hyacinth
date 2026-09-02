@@ -29,7 +29,7 @@ inline int32_t potrfp_dispatcher(cudaStream_t stream, cublasHandle_t handle, cha
   for (int32_t i = 0, s = 0; i < iters; ++i) {
     int32_t j = hvec[0].idx;
     if ((p < (s += hvec[1].idx)) || (j < 0)) { return i; }
-    internal::Cholesky::gemv_scal(stream, handle, hvec, j, N - i, i, &A[int64_t(i) * int64_t(lda)], lda, jpiv, dvec);
+    internal::Cholesky::gemv_scal(stream, handle, hvec, j, i, N - i, &A[int64_t(i) * int64_t(lda)], lda, jpiv, dvec);
   }
   return iters;
 }

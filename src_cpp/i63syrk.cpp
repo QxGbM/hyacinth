@@ -11,8 +11,7 @@ inline void gemm_accum(cudaStream_t stream, cublasHandle_t handle, int32_t M, in
     cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N * orderA, K, &one, AT, CUDA_R_8I, K, A, CUDA_R_8I, K,
       &zero, W, CUDA_R_32I, M, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
     internal::int8::accumulate_i32tensor(stream, 'A', beta, N, sft, 8, orderA, W, M, orderC, C);
-  }
-  else {
+  } else {
     int32_t rem = K & (iter_k - 1); rem = rem < iter_h ? (rem + iter_k) : rem;
     int32_t range_k = K - rem;
 
@@ -28,8 +27,7 @@ inline void gemm_accum(cudaStream_t stream, cublasHandle_t handle, int32_t M, in
       cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N * orderA, rem, &one, AT_k, CUDA_R_8I, K, AN_k, CUDA_R_8I, K,
         &zero, W, CUDA_R_32I, M, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
       internal::int8::accumulate_i32tensor(stream, 'A', range_k == 0 ? beta : 1, N, sft, 8, orderA, W, M, orderC, C);
-    }
-    else {
+    } else {
       cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N * orderA, iter_h, &one, AT_k, CUDA_R_8I, K, AN_k, CUDA_R_8I, K,
         &zero, W, CUDA_R_32I, M, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
       internal::int8::accumulate_i32tensor(stream, 'A', range_k == 0 ? beta : 1, N, sft, 8, orderA, W, M, orderC, C);
@@ -48,8 +46,7 @@ inline void gemm_accum_diag(cudaStream_t stream, cublasHandle_t handle, int32_t 
     cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, K, &one, A, CUDA_R_8I, K, strideA, A, CUDA_R_8I, K, strideA,
       &zero, W, CUDA_R_32I, M, strideC, orderA, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
     internal::int8::accumulate_i32tensor(stream, 'T', beta, N, 0, 16, orderA, W, M, orderC, C);
-  }
-  else {
+  } else {
     int32_t rem = K & (iter_k - 1); rem = rem < iter_h ? (rem + iter_k) : rem;
     int32_t range_k = K - rem;
 
@@ -65,8 +62,7 @@ inline void gemm_accum_diag(cudaStream_t stream, cublasHandle_t handle, int32_t 
       cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, rem, &one, A_k, CUDA_R_8I, K, strideA, A_k, CUDA_R_8I, K, strideA,
         &zero, W, CUDA_R_32I, M, strideC, orderA, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
       internal::int8::accumulate_i32tensor(stream, range_k == 0 ? 'T' : 'U', range_k == 0 ? beta : 1, N, 0, 16, orderA, W, M, orderC, C);
-    }
-    else {
+    } else {
       cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, iter_h, &one, A_k, CUDA_R_8I, K, strideA, A_k, CUDA_R_8I, K, strideA,
         &zero, W, CUDA_R_32I, M, strideC, orderA, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
       internal::int8::accumulate_i32tensor(stream, range_k == 0 ? 'T' : 'U', range_k == 0 ? beta : 1, N, 0, 16, orderA, W, M, orderC, C);
@@ -210,9 +206,8 @@ inline void batch_flush_dispatcher(cudaStream_t stream, cublasHandle_t handle, i
   int32_t batchK, int32_t Nbatches, const int32_t* batchU, int32_t* batchLoc, const Btype* B, int32_t beta, int32_t orderC, uint64_t* C, hyacinAlgorithm_t alg) {
   int64_t strideB = int64_t(batchK) * int64_t(N);
   for (int32_t b = 0; b < Nbatches; ++b) {
-    int32_t K = batchLoc[b], u = batchU[b];
+    int32_t K = batchLoc[b], u = batchU[b]; batchLoc[b] = 0;
     if (0 < K && u < 0) { herk_dispatcher(stream, handle, K, N, &B[strideB * int64_t(b)], batchK, vexp, &beta, orderC, C, &u, alg); }
-    batchLoc[b] = 0;
   }
   constexpr uint64_t elem = uint64_t((std::is_same_v<Btype, cuDoubleComplex> || std::is_same_v<Btype, cuComplex> || std::is_same_v<Btype, __half2>) ? sizeof(uint64_t) : sizeof(uint32_t));
   if (beta == 0) { cudaMemsetAsync(C, 0, uint64_t(N) * uint64_t(N + 1) * uint64_t(orderC) * elem, stream); }
