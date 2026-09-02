@@ -77,16 +77,18 @@ void hyacinXsyherk(
   hyacinAlgorithm_t alg
 );
 
-int32_t hyacinXquantizationScale(
+int32_t hyacinXquantizeScale(
   hyacinHandle_t handle,
   double epi,
-  int32_t u_extra,
+  int32_t u_corr,
+  int32_t globalM,
   int32_t M,
   int32_t N,
   hyacinPrecision_t Atype,
-  const void* A,
+  const void* A, // device-pointer
   int32_t lda,
-  int32_t* vexp
+  int32_t* vexp, // device-pointer
+  int32_t* cPanels // host-pointer
 );
 
 void hyacinXherk(
@@ -139,6 +141,14 @@ void hyacinXherkBatchFlush(
   int32_t orderC,
   uint64_t* C, // device-pointer
   hyacinAlgorithm_t alg
+);
+
+hyacinPrecision_t hyacinXGautoType(
+  int32_t g_corr,
+  int32_t M,
+  hyacinPrecision_t Atype,
+  int32_t u,
+  int32_t* gElemBytes // host-pointer
 );
 
 void hyacinXdequantize(

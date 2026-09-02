@@ -90,7 +90,7 @@ template <class matrix_t>
 inline void AHA_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const matrix_t* A, int32_t lda, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C) {
   constexpr int32_t Complex = std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>;
   constexpr int32_t bits = Complex ? 62 : 60;
-  int32_t orderB = std::min(orderC, (int32_t(std::ceil(std::log2(double(std::max(1, M))))) + bits + (orderA << 4)) / 63);
+  int32_t orderB = (bits + int32_t(std::ceil(std::log2(double(std::max(1, M))))) + (orderA << 4)) / 63;
   int32_t algnM = (M + 255) & (~255), algnN = (N + 63) & (~63);
   int64_t strideW = int64_t(algnM) * int64_t(N) * int64_t(orderA), strideB = int64_t(N) * int64_t(N) * int64_t(orderB);
   uint64_t w_len = uint64_t(strideW), w_pad = uint64_t(algnN - N) * uint64_t(algnM), b_len = uint64_t(strideB);

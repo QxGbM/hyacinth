@@ -33,16 +33,18 @@ __device__ __forceinline__ void cross_sum(uint64_t (&rl)[ORDER], uint64_t (&im)[
 }
 
 template <int32_t orderIn, int32_t ORDER> __device__ __forceinline__ void load_i(uint64_t (&a)[ORDER], const uint64_t* in, int64_t stride) {
-  if constexpr(0 < orderIn && 0 < ORDER) { a[0] = *in; } else if constexpr(0 < ORDER) { a[0] = uint64_t(0); }
-  if constexpr(1 < orderIn && 1 < ORDER) { a[1] = *(in += stride); } else if constexpr(1 < ORDER) { a[1] = uint64_t(0); }
-  if constexpr(2 < orderIn && 2 < ORDER) { a[2] = *(in += stride); } else if constexpr(2 < ORDER) { a[2] = uint64_t(0); }
+  if constexpr(0 < orderIn) { a[0] = *in; } else if constexpr(0 < ORDER) { a[0] = uint64_t(0); }
+  if constexpr(1 < orderIn) { a[1] = *(in += stride); } else if constexpr(1 < ORDER) { a[1] = -(a[0] >> 63); a[0] &= uint64_t(0x7fffffffffffffffllu); }
+  if constexpr(2 < orderIn) { a[2] = *(in += stride); } else if constexpr(2 < ORDER) { a[2] = -(a[1] >> 63); a[1] &= uint64_t(0x7fffffffffffffffllu); }
 }
 
-template <int32_t orderOut, int32_t ORDER> __device__ __forceinline__ void store_i(const uint64_t (&a)[ORDER], uint64_t* out, int64_t stride) {
+template <int32_t orderOut, int32_t ORDER> __device__ __forceinline__ void store_i(uint64_t (&a)[ORDER], uint64_t* out, int64_t stride) {
+  if constexpr(0 < orderOut && orderOut < ORDER) { a[orderOut - 1] |= a[ORDER - 1] & uint64_t(0x8000000000000000llu); }
   if constexpr(0 < orderOut) { *out = a[0]; } if constexpr(1 < orderOut) { *(out += stride) = a[1]; } if constexpr(2 < orderOut) { *(out += stride) = a[2]; }
 }
 
-template <int32_t orderOut, int32_t ORDER> __device__ __forceinline__ void store_i(const uint64_t (&r)[ORDER], const uint64_t (&i)[ORDER], uint64_t* out, int64_t stride) {
+template <int32_t orderOut, int32_t ORDER> __device__ __forceinline__ void store_i(uint64_t (&r)[ORDER], uint64_t (&i)[ORDER], uint64_t* out, int64_t stride) {
+  if constexpr(0 < orderOut && orderOut < ORDER) { r[orderOut - 1] |= r[ORDER - 1] & uint64_t(0x8000000000000000llu); i[orderOut - 1] |= i[ORDER - 1] & uint64_t(0x8000000000000000llu); }
   if constexpr(0 < orderOut) { *out = r[0]; } if constexpr(1 < orderOut) { *(out += stride) = r[1]; } if constexpr(2 < orderOut) { *(out += stride) = r[2]; }
   if constexpr(0 < orderOut) { *(out += stride) = i[0]; } if constexpr(1 < orderOut) { *(out += stride) = i[1]; } if constexpr(2 < orderOut) { *(out += stride) = i[2]; }
 }
@@ -68,11 +70,11 @@ __global__ void triangle_pack_kernel(int64_t N, const uint64_t* __restrict__ A, 
       else { cross_sum(acc_rl, acc_im); }
       add_i<orderA>(acc_rl, A, strideA, 0);
 
-      if constexpr(beta) { add_i<orderB>(acc_rl, acc_im, B, strideB, 0); }
+      if constexpr(beta) { add_i<orderB>(acc_rl, acc_im, B, strideB, uint32_t(0)); }
       store_i<orderB>(acc_rl, acc_im, B, strideB);
     }
     else {
-      uint64_t acc[ORDER];
+      uint64_t acc[ORDER]{};
       load_i<orderA>(acc, A, strideA);
 
       if (K) {
@@ -80,7 +82,7 @@ __global__ void triangle_pack_kernel(int64_t N, const uint64_t* __restrict__ A, 
         add_i<orderA>(acc, &sum[x], N, corr);
         device::int8::add_shifted(acc, K, corr + corr);
       }
-      if constexpr(beta) { add_i<orderB>(acc, B, strideB, 0); }
+      if constexpr(beta) { add_i<orderB>(acc, B, strideB, uint32_t(0)); }
       store_i<orderB>(acc, B, strideB);
     }
   }
@@ -93,7 +95,7 @@ namespace internal::int8 {
     dim3 grid(uint32_t(N + 511) >> 9, uint32_t(N), uint32_t(1));
     int64_t K64 = int64_t(M) << Complex, N64 = int64_t(N);
     int64_t strideA = N64 * N64, strideB = (strideA + N64) / int64_t(2);
-    int32_t mode = (1 <= orderA && orderA <= orderB && orderB <= 3) ? ((orderA - 1) + ((orderB - 1) * 3) + (beta ? 9 : 0) + (Complex ? 18 : 0)) : 0;
+    int32_t mode = (1 <= orderA && orderA <= 3 && 1 <= orderB && orderB <= 3) ? ((orderA - 1) + ((orderB - 1) * 3) + (beta ? 9 : 0) + (Complex ? 18 : 0)) : -1;
     const uint64_t* sum = 0 < M ? &A[strideA * int64_t(orderA << Complex)] : nullptr;
 
     switch(mode) {

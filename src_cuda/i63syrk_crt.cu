@@ -120,7 +120,7 @@ inline void gemm_accum_crt(cudaStream_t stream, cublasHandle_t handle, char mode
 template <class real_t, class matrix_t>
 inline void crt_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const matrix_t* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C) {
   constexpr int32_t Complex = !std::is_same_v<real_t, matrix_t>;
-  int32_t orderB = std::min(orderC, (63 + (orderA << 3)) / 63);
+  int32_t orderB = (63 + (orderA << 3)) / 63;
   int32_t algnM = (M + 255) & (~255), algnN = (N + 63) & (~63);
   int64_t strideW = int64_t(algnM) * int64_t(N), strideB = int64_t(N) * int64_t(N) * int64_t(orderB);
   uint64_t mod_len = uint64_t(std::min(orderA, 8)), w_len = uint64_t(strideW) * mod_len, w_pad = uint64_t(algnN - N) * uint64_t(algnM), b_len = uint64_t(strideB) + (uint64_t(N) * uint64_t(orderB));
@@ -146,8 +146,8 @@ inline void crt_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t M
   }
   cudaFreeAsync(W, stream); cudaFreeAsync(scratch, stream);
 
-  uint64_t* Bsums; if constexpr(Complex) { Bsums = &B[strideB * int64_t(2)]; } else { Bsums = &B[strideB]; }
-  vector_sums<real_t>(stream, M, N, A, lda, corr, vexp, orderB, Bsums);
+  if constexpr(Complex) { vector_sums<real_t>(stream, M, N, A, lda, corr, vexp, orderB, &B[strideB * int64_t(2)]); }
+    else { vector_sums<real_t>(stream, M, N, A, lda, corr, vexp, orderB, &B[strideB]); }
   internal::int8::triangle_pack(stream, Complex, M, N, orderB, B, corr, beta, orderC, C);
   cudaFreeAsync(B, stream);
 }

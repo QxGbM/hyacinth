@@ -112,7 +112,11 @@ inline int32_t tsvd(cudaStream_t stream, cublasHandle_t handle, cusolverDnHandle
 extern "C" int32_t hyacinXGevPcsvd(hyacinHandle_t handle, char use_evd, char fillmode, double epi, int32_t N, int32_t K, int32_t p, hyacinPrecision_t Atype, void* X, int32_t ldx, void* S, hyacinPrecision_t Gtype, void* G, int32_t ldg) {
   if (N <= 0 || K <= 0) { return 0; }
   Timer::register_kernel(handle.cudaStream, handle.timer);
-  if ((use_evd == 'Y' || use_evd == 'y') && (Gtype == HYACIN_F64 || Gtype == HYACIN_F32 || Gtype == HYACIN_F64_COMPLEX || Gtype == HYACIN_F32_COMPLEX)) switch (Gtype) {
+  int32_t pred_use = int32_t(use_evd == 'Y' || use_evd == 'y'), pred_auto = (use_evd == 'A' || use_evd == 'a');
+  int32_t pred64 = int32_t((Gtype == HYACIN_F64 || Gtype == HYACIN_F64_COMPLEX) && (pred_use || (pred_auto && internal::device_is_f64_capable())));
+  int32_t pred32 = int32_t((Gtype == HYACIN_F32 || Gtype == HYACIN_F32_COMPLEX) && (pred_use || pred_auto));
+
+  if (pred64 || pred32) switch (Gtype) {
     case HYACIN_F64: if (Atype == HYACIN_F64)
     { return tevd<double>(handle.cudaStream, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (double*)G, ldg, (double*)X, ldx, (double*)S); } else
     if (Atype == HYACIN_F32)
