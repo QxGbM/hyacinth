@@ -35,6 +35,9 @@ typedef struct {
   cusolverDnParams_t cusolverParams;
   void* pinnedWorkspace; // A 128-byte pinned workspace on host for host reduction
   void* timer;
+#ifndef NO_NCCL
+  ncclComm_t col_comm, row_comm;
+#endif
 } hyacinHandle_t;
 
 #ifdef __cplusplus
@@ -48,33 +51,6 @@ void hyacinCreate(
 
 void hyacinDestroy(
   hyacinHandle_t handle
-);
-
-int32_t hyacinXelem(
-  char sel,
-  hyacinPrecision_t* Atype // host-pointer
-);
-
-void hyacinXsyherk_autoTune(
-  double epi,
-  int32_t u_extra,
-  int32_t* umax, // host-pointer
-  hyacinPrecision_t Atype,
-  hyacinPrecision_t* ComputeType // host-pointer
-);
-
-void hyacinXsyherk(
-  hyacinHandle_t handle,
-  int32_t M,
-  int32_t N,
-  int32_t umax,
-  hyacinPrecision_t Atype,
-  const void* A, // device-pointer
-  int32_t lda,
-  hyacinPrecision_t Gtype,
-  void* G, // device-pointer
-  int32_t ldg,
-  hyacinAlgorithm_t alg
 );
 
 int32_t hyacinXquantizeScale(
@@ -207,41 +183,30 @@ void hyacinXtransform(
   int32_t ldx
 );
 
-#ifndef NO_NCCL
-
-void hyacinXsyherk1Drow(
-  hyacinHandle_t handle,
-  int32_t localM,
-  int32_t globalM,
-  int32_t N,
-  int32_t umax,
-  hyacinPrecision_t Atype,
-  const void* A, // device-pointer
-  int32_t lda,
-  hyacinPrecision_t Gtype,
-  void* G, // device-pointer
-  int32_t ldg,
-  hyacinAlgorithm_t alg,
-  ncclComm_t col_comm
-);
-
 void hyacinXAllReduce1Drow(
   hyacinHandle_t handle,
   int32_t Complex,
   int32_t orderA,
   int64_t N,
-  uint64_t* A, // device-pointer
-  ncclComm_t col_comm
+  uint64_t* A // device-pointer
 );
 
 int32_t hyacinXAllGatherV1Dcol(
   hyacinHandle_t handle,
   int32_t M,
   int32_t* K, // host-pointer
-  hyacinPrecision_t Atype,
+  int32_t AElemBytes,
   void* A, // device-pointer
-  int32_t lda,
-  ncclComm_t row_comm
+  int32_t lda
+);
+
+#ifndef NO_NCCL
+
+void hyacinCreate2D(
+  hyacinHandle_t* handle, // host-pointer
+  ncclComm_t col_comm,
+  ncclComm_t row_comm,
+  int32_t create_timer
 );
 
 #endif

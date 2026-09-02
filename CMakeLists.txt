@@ -13,7 +13,6 @@ set(CPP_SOURCES
   src_cpp/gram_id.cpp
   src_cpp/handle_timer.cpp
   src_cpp/i63syrk.cpp
-  src_cpp/syherk.cpp
   src_cpp/transform.cpp
 )
 

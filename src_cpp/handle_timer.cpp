@@ -30,8 +30,19 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle, int32_t create_timer) {
   cusolverDnSetStream(handle->cusolverHandle, handle->cudaStream);
   cusolverDnCreateParams(&handle->cusolverParams);
   cudaMallocHost(&handle->pinnedWorkspace, size_t(128));
+#ifndef NO_NCCL
+  handle->col_comm = handle->row_comm = nullptr;
+#endif
   handle->timer = create_timer ? (new EventTimer()) : nullptr;
 }
+
+#ifndef NO_NCCL
+extern "C" void hyacinCreate2D(hyacinHandle_t* handle, ncclComm_t col_comm, ncclComm_t row_comm, int32_t create_timer) {
+  hyacinCreate(handle, create_timer);
+  handle->col_comm = col_comm;
+  handle->row_comm = row_comm;
+}
+#endif
 
 extern "C" void hyacinDestroy(hyacinHandle_t handle) {
   cudaStreamDestroy(handle.cudaStream);

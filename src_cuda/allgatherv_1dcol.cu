@@ -43,12 +43,13 @@ inline void allgather_iter(cudaStream_t stream, int32_t comm_rank, int64_t M, in
   }
 }
 
-extern "C" int32_t hyacinXAllGatherV1Dcol(hyacinHandle_t handle, int32_t M, int32_t* K, hyacinPrecision_t Atype, void* A, int32_t lda, ncclComm_t row_comm) {
-  const int32_t wcols = 2048, a_bytes = hyacinXelem('A', &Atype);
-  int64_t Mi = int64_t(M) * int64_t(a_bytes / int32_t(sizeof(int32_t))), LDAi = int64_t(lda) * int64_t(a_bytes / int32_t(sizeof(int32_t)));
+extern "C" int32_t hyacinXAllGatherV1Dcol(hyacinHandle_t handle, int32_t M, int32_t* K, int32_t AElemBytes, void* A, int32_t lda) {
+  if (handle.row_comm == nullptr) { return 0; }
+  const int32_t wcols = 2048, items = AElemBytes / int32_t(sizeof(int32_t));
+  int64_t Mi = int64_t(M) * int64_t(items), LDAi = int64_t(lda) * int64_t(items);
 
   Timer::register_comm(handle.cudaStream, handle.timer);
-  int32_t comm_rank, comm_size; ncclCommUserRank(row_comm, &comm_rank); ncclCommCount(row_comm, &comm_size);
+  int32_t comm_rank, comm_size; ncclCommUserRank(handle.row_comm, &comm_rank); ncclCommCount(handle.row_comm, &comm_size);
   uint64_t work_bytes = std::max(uint64_t(Mi) * uint64_t(wcols), uint64_t(1)) * uint64_t(comm_size) * uint64_t(sizeof(int32_t));
   int32_t* dev_k = nullptr;
   if (cudaSuccess != cudaMallocAsync((void**)&dev_k, work_bytes, handle.cudaStream))
@@ -56,12 +57,12 @@ extern "C" int32_t hyacinXAllGatherV1Dcol(hyacinHandle_t handle, int32_t M, int3
 
   std::vector<int32_t> local_k(comm_size);
   cudaMemcpyAsync(&dev_k[comm_rank], K, sizeof(int32_t), cudaMemcpyHostToDevice, handle.cudaStream);
-  ncclAllGather(&dev_k[comm_rank], dev_k, 1, ncclInt32, row_comm, handle.cudaStream);
+  ncclAllGather(&dev_k[comm_rank], dev_k, 1, ncclInt32, handle.row_comm, handle.cudaStream);
   cudaMemcpyAsync(local_k.data(), dev_k, uint64_t(comm_size) * uint64_t(sizeof(int32_t)), cudaMemcpyDeviceToHost, handle.cudaStream);
 
   int32_t offset_j = std::reduce(local_k.begin(), local_k.begin() + comm_rank, 0);
   *K = std::reduce(local_k.begin() + comm_rank, local_k.end(), offset_j);
-  if (0 < M) {
+  if (Mi) {
     std::vector<int64_t> iN(comm_size);
     std::transform_exclusive_scan(local_k.begin(), local_k.end(), iN.begin(), int64_t(0), std::plus<int64_t>(), [=](int32_t n) { return int64_t(n) * LDAi; });
 
@@ -71,10 +72,12 @@ extern "C" int32_t hyacinXAllGatherV1Dcol(hyacinHandle_t handle, int32_t M, int3
 
     int32_t maxK = std::reduce(local_k.begin(), local_k.end(), 0, [](int32_t i, int32_t j) { return std::max(i, j); });
     for (int32_t iter = maxK; iter > 0; iter -= wcols)
-      allgather_iter(handle.cudaStream, comm_rank, Mi, std::min(iter, wcols), local_k, iN, Aptr, LDAi, dev_k, row_comm);
+      allgather_iter(handle.cudaStream, comm_rank, Mi, std::min(iter, wcols), local_k, iN, Aptr, LDAi, dev_k, handle.row_comm);
   }
   cudaFreeAsync(dev_k, handle.cudaStream);
   return offset_j;
 }
 
+#else
+extern "C" int32_t hyacinXAllGatherV1Dcol(hyacinHandle_t handle, int32_t M, int32_t* K, int32_t AElemBytes, void* A, int32_t lda) { return 0; }
 #endif

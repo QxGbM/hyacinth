@@ -112,7 +112,7 @@ inline int32_t tsvd(cudaStream_t stream, cublasHandle_t handle, cusolverDnHandle
 extern "C" int32_t hyacinXGevPcsvd(hyacinHandle_t handle, char use_evd, char fillmode, double epi, int32_t N, int32_t K, int32_t p, hyacinPrecision_t Atype, void* X, int32_t ldx, void* S, hyacinPrecision_t Gtype, void* G, int32_t ldg) {
   if (N <= 0 || K <= 0) { return 0; }
   Timer::register_kernel(handle.cudaStream, handle.timer);
-  int32_t pred_use = int32_t(use_evd == 'Y' || use_evd == 'y'), pred_auto = int32_t(use_evd == 'A' || use_evd == 'a');
+  int32_t pred_use = int32_t(use_evd == 'Y' || use_evd == 'y'), pred_auto = int32_t((use_evd == 'A' || use_evd == 'a') && (N <= (K + K)));
   int32_t pred64 = int32_t((Gtype == HYACIN_F64 || Gtype == HYACIN_F64_COMPLEX) && (pred_use || (pred_auto && internal::device_is_f64_capable())));
   int32_t pred32 = int32_t((Gtype == HYACIN_F32 || Gtype == HYACIN_F32_COMPLEX) && (pred_use || pred_auto));
 
