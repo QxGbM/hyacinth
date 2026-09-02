@@ -134,7 +134,7 @@ template <int32_t op> inline void conv_reduction(cudaStream_t stream, int64_t N,
   limbs_accum_kernel<op> <<< grid, block_threads, 0, stream >>> (N, A, E);
 }
 
-extern "C" void hyacinXAllReduce1Drow(hyacinHandle_t handle, int32_t orderA, int32_t Complex, int64_t N, uint64_t* A, ncclComm_t col_comm) {
+extern "C" void hyacinXAllReduce1Drow(hyacinHandle_t handle, int32_t Complex, int32_t orderA, int64_t N, uint64_t* A, ncclComm_t col_comm) {
   if (N < int64_t(0)) { return; }
 
   Timer::register_comm(handle.cudaStream, handle.timer);
@@ -142,23 +142,23 @@ extern "C" void hyacinXAllReduce1Drow(hyacinHandle_t handle, int32_t orderA, int
   if (comm_size == 1) { return; } else if (comm_size <= 0) { throw std::runtime_error("Invalid NCCL communicator at All-reduce"); }
 
   int32_t LimbCount = orderA + 1 + int32_t(orderA == 2 && 1048576 < comm_size) + int32_t(orderA == 3 && 32768 < comm_size) + int32_t(orderA == 3 && 33554432 < comm_size);
-  int64_t lenA = int64_t(orderA) * (N << Complex), lenE = int64_t(LimbCount - orderA) * (N << Complex);
+  int64_t lenA = int64_t(Complex + 1) * int64_t(orderA) * N, lenE = int64_t(Complex + 1) * int64_t(LimbCount - orderA) * N;
   uint64_t* devE = nullptr;
   if (cudaSuccess != cudaMallocAsync((void**)&devE, uint64_t(lenE) * uint64_t(sizeof(uint64_t)), handle.cudaStream))
     throw std::runtime_error("Workspace allocation failed at All-reduce.");
 
-  if (!Complex && orderA == 1 && LimbCount == 2) { conv_reduction<0>(handle.cudaStream, N, A, lenA, devE, lenE, col_comm); } else
-  if (!Complex && orderA == 2 && LimbCount == 3) { conv_reduction<1>(handle.cudaStream, N, A, lenA, devE, lenE, col_comm); } else
-  if (!Complex && orderA == 2 && LimbCount == 4) { conv_reduction<2>(handle.cudaStream, N, A, lenA, devE, lenE, col_comm); } else
-  if (!Complex && orderA == 3 && LimbCount == 4) { conv_reduction<3>(handle.cudaStream, N, A, lenA, devE, lenE, col_comm); } else
-  if (!Complex && orderA == 3 && LimbCount == 5) { conv_reduction<4>(handle.cudaStream, N, A, lenA, devE, lenE, col_comm); } else
-  if (!Complex && orderA == 3 && LimbCount == 6) { conv_reduction<5>(handle.cudaStream, N, A, lenA, devE, lenE, col_comm); } else
-  if (Complex && orderA == 1 && LimbCount == 2) { conv_reduction<6>(handle.cudaStream, N, A, lenA, devE, lenE, col_comm); } else
-  if (Complex && orderA == 2 && LimbCount == 3) { conv_reduction<7>(handle.cudaStream, N, A, lenA, devE, lenE, col_comm); } else
-  if (Complex && orderA == 2 && LimbCount == 4) { conv_reduction<8>(handle.cudaStream, N, A, lenA, devE, lenE, col_comm); } else
-  if (Complex && orderA == 3 && LimbCount == 4) { conv_reduction<9>(handle.cudaStream, N, A, lenA, devE, lenE, col_comm); } else
-  if (Complex && orderA == 3 && LimbCount == 5) { conv_reduction<10>(handle.cudaStream, N, A, lenA, devE, lenE, col_comm); } else
-  if (Complex && orderA == 3 && LimbCount == 6) { conv_reduction<11>(handle.cudaStream, N, A, lenA, devE, lenE, col_comm); }
+  if (Complex == 0 && orderA == 1 && LimbCount == 2) { conv_reduction<0>(handle.cudaStream, N, A, lenA, devE, lenE, col_comm); } else
+  if (Complex == 0 && orderA == 2 && LimbCount == 3) { conv_reduction<1>(handle.cudaStream, N, A, lenA, devE, lenE, col_comm); } else
+  if (Complex == 0 && orderA == 2 && LimbCount == 4) { conv_reduction<2>(handle.cudaStream, N, A, lenA, devE, lenE, col_comm); } else
+  if (Complex == 0 && orderA == 3 && LimbCount == 4) { conv_reduction<3>(handle.cudaStream, N, A, lenA, devE, lenE, col_comm); } else
+  if (Complex == 0 && orderA == 3 && LimbCount == 5) { conv_reduction<4>(handle.cudaStream, N, A, lenA, devE, lenE, col_comm); } else
+  if (Complex == 0 && orderA == 3 && LimbCount == 6) { conv_reduction<5>(handle.cudaStream, N, A, lenA, devE, lenE, col_comm); } else
+  if (Complex == 1 && orderA == 1 && LimbCount == 2) { conv_reduction<6>(handle.cudaStream, N, A, lenA, devE, lenE, col_comm); } else
+  if (Complex == 1 && orderA == 2 && LimbCount == 3) { conv_reduction<7>(handle.cudaStream, N, A, lenA, devE, lenE, col_comm); } else
+  if (Complex == 1 && orderA == 2 && LimbCount == 4) { conv_reduction<8>(handle.cudaStream, N, A, lenA, devE, lenE, col_comm); } else
+  if (Complex == 1 && orderA == 3 && LimbCount == 4) { conv_reduction<9>(handle.cudaStream, N, A, lenA, devE, lenE, col_comm); } else
+  if (Complex == 1 && orderA == 3 && LimbCount == 5) { conv_reduction<10>(handle.cudaStream, N, A, lenA, devE, lenE, col_comm); } else
+  if (Complex == 1 && orderA == 3 && LimbCount == 6) { conv_reduction<11>(handle.cudaStream, N, A, lenA, devE, lenE, col_comm); }
   cudaFreeAsync(devE, handle.cudaStream);
 }
 

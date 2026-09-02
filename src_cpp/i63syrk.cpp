@@ -1,8 +1,45 @@
 
 #include <hyacin.h>
 #include <internal.hpp>
+#include <double_double.hpp>
+#include <quad_float.hpp>
+#include <vector>
 #include <algorithm>
 #include <stdexcept>
+
+const int32_t u_practical_limit = 80; // u <= 80 to satisfy implementation assumptions
+// mappings vector for datatypes
+const std::vector<hyacinPrecision_t> real_type({ HYACIN_F64, HYACIN_F32, HYACIN_F16, HYACIN_DD, HYACIN_QF, HYACIN_F64, HYACIN_F32, HYACIN_F16, HYACIN_DD, HYACIN_QF });
+const std::vector<hyacinPrecision_t> complex_type({ HYACIN_F64_COMPLEX, HYACIN_F32_COMPLEX, HYACIN_F16_COMPLEX, HYACIN_DD_COMPLEX, HYACIN_QF_COMPLEX, HYACIN_F64_COMPLEX, HYACIN_F32_COMPLEX, HYACIN_F16_COMPLEX, HYACIN_DD_COMPLEX, HYACIN_QF_COMPLEX });
+const std::vector<int32_t> type_bytes({ sizeof(double), sizeof(float), sizeof(__half), sizeof(double2), sizeof(float4), sizeof(cuDoubleComplex), sizeof(cuComplex), sizeof(half2), sizeof(complex_double2), sizeof(complex_float4) });
+const std::vector<int32_t> type_mantissa({ 52, 23, 10, 105, 95, 52, 23, 10, 105, 95 });
+
+extern "C" int32_t hyacinXquantizeScale(hyacinHandle_t handle, double epi, int32_t u_corr, int32_t globalM, int32_t M, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t* vexp, int32_t* dimC) {
+  double epi_nrm = std::min(1., std::max(std::abs(epi), std::ldexp(1., -type_mantissa[int32_t(Atype)])));
+  int32_t u = std::min(u_practical_limit, u_corr + int32_t(std::ceil(-std::log2(epi_nrm))));
+  if (dimC) { dimC[0] = int32_t(Atype == real_type[int32_t(Atype)]); dimC[1] = (int32_t(std::ceil(std::log2(double(std::max(1, globalM))))) + (dimC[0] ? 62 : 63) + (u << 1)) / 63; }
+  if (0 < u) switch(Atype) {
+    case HYACIN_F64: internal::int8::vector_exponents(handle.cudaStream, M, N, (const double*)A, lda, &u, vexp); return u;
+    case HYACIN_F32: internal::int8::vector_exponents(handle.cudaStream, M, N, (const float*)A, lda, &u, vexp); return u;
+    case HYACIN_F16: internal::int8::vector_exponents(handle.cudaStream, M, N, (const __half*)A, lda, &u, vexp); return u;
+    case HYACIN_F64_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, M, N, (const cuDoubleComplex*)A, lda, &u, vexp); return u;
+    case HYACIN_F32_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, M, N, (const cuComplex*)A, lda, &u, vexp); return u;
+    case HYACIN_F16_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, M, N, (const __half2*)A, lda, &u, vexp); return u;
+    default: return 0;
+  } else return 0;
+}
+
+extern "C" hyacinPrecision_t hyacinXGautoType(int32_t g_corr, int32_t globalM, hyacinPrecision_t Atype, int32_t u, int32_t* gElemBytes) {
+  hyacinPrecision_t AtypeReal = real_type[int32_t(Atype)];
+  int32_t bits = (g_corr + 1) + int32_t(std::ceil(0.5 * std::log2(double(std::max(1, globalM))))) + (u << 1);
+  hyacinPrecision_t GtypeReal = 
+    (bits <= type_mantissa[int32_t(HYACIN_F32)] && (AtypeReal == HYACIN_F32 || AtypeReal == HYACIN_F16)) ? HYACIN_F32 : (
+    bits <= type_mantissa[int32_t(HYACIN_F64)] ? HYACIN_F64 : (
+    (bits <= type_mantissa[int32_t(HYACIN_QF)] && !internal::device_is_f64_capable()) ? HYACIN_QF : HYACIN_DD));
+  hyacinPrecision_t Gtype = (Atype == AtypeReal) ? GtypeReal : complex_type[int32_t(GtypeReal)];
+  if (gElemBytes) { *gElemBytes = type_bytes[Gtype]; }
+  return Gtype;
+}
 
 inline void gemm_accum(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, int32_t sft, int32_t orderA, const int8_t* AT, const int8_t* A, int32_t beta, int32_t orderC, uint64_t* C, int32_t* W) {
   constexpr int32_t iter_k = 131072, iter_h = iter_k / 2;

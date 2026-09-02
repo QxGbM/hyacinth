@@ -88,8 +88,8 @@ int32_t hyacinXquantizeScale(
   const void* A, // device-pointer
   int32_t lda,
   int32_t* vexp, // device-pointer
-  int32_t* cPanels // host-pointer
-);
+  int32_t* dimC // host-array
+); // returns u
 
 void hyacinXherk(
   hyacinHandle_t handle,
@@ -145,11 +145,11 @@ void hyacinXherkBatchFlush(
 
 hyacinPrecision_t hyacinXGautoType(
   int32_t g_corr,
-  int32_t M,
+  int32_t globalM,
   hyacinPrecision_t Atype,
   int32_t u,
   int32_t* gElemBytes // host-pointer
-);
+); // returns Gtype
 
 void hyacinXdequantize(
   hyacinHandle_t handle,
@@ -177,7 +177,7 @@ int32_t hyacinXGevPcsvd(
   hyacinPrecision_t Gtype,
   void* G, // device-pointer
   int32_t ldg
-);
+); // returns rank
 
 int32_t hyacinXGinterp(
   hyacinHandle_t handle,
@@ -193,7 +193,7 @@ int32_t hyacinXGinterp(
   hyacinPrecision_t Gtype,
   void* G, // device-pointer
   int32_t ldg
-);
+); // returns rank
 
 void hyacinXtransform(
   hyacinHandle_t handle,
@@ -227,8 +227,8 @@ void hyacinXsyherk1Drow(
 
 void hyacinXAllReduce1Drow(
   hyacinHandle_t handle,
-  int32_t orderA,
   int32_t Complex,
+  int32_t orderA,
   int64_t N,
   uint64_t* A, // device-pointer
   ncclComm_t col_comm

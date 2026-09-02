@@ -2,6 +2,19 @@
 #include <hyacin.h>
 #include <internal.hpp>
 #include <vector>
+#include <algorithm>
+
+int32_t device_sm = 0, device_f64_capable = 0;
+const std::vector<int32_t> f64_capable_sm_list({ 800, 900, 1000 }); // sm80,sm90,sm100
+int32_t internal::device_is_f64_capable() {
+  if (device_sm == 0) {
+    int32_t device, major, minor; cudaGetDevice(&device);
+    cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, device);
+    cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, device);
+    device_sm = 100 * major + minor;
+    return device_f64_capable = int32_t(f64_capable_sm_list.end() != std::find(f64_capable_sm_list.begin(), f64_capable_sm_list.end(), device_sm));
+  } else return device_f64_capable;
+}
 
 enum class segment { none, kernel, comm };
 struct EventTimer {
