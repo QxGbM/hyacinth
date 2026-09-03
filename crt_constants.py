@@ -31,7 +31,7 @@ def pd_print(pd, sft, limbs_pad = 6, chunk_size = 18):
 if all_ok:
   rem_e32 = [(1 << 32) % m for m in moduli_all]
   rem_e63 = [(1 << 63) % m for m in moduli_all]
-  padded_len = (len(moduli_all) + 7) & (~7)
+  padded_len = (len(moduli_all) + 3) & (~3)
 
   print("#pragma once\n#include <cstdint>\nnamespace U8CRT {\n")
   print("  template <int32_t Moduli> struct Constants;")
@@ -50,7 +50,7 @@ if all_ok:
     P_div = [P // m for m in moduli]
     inv = [pow(Pd % m, -1, m) for Pd, m in zip(P_div, moduli)]
     rem_e32 = [(i * (-(1 << 32))) % m for i, m in zip(inv, moduli)]
-    padded_len = (n + 7) & (~7)
+    padded_len = (n + 3) & (~3)
 
     print(f"  template<> struct Constants<{n}>" + " {")
     print(f"    static constexpr uint16_t minv[{padded_len}] =" + " { " + ", ".join(f"{m}" for m in inv) + " };")

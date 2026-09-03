@@ -62,8 +62,8 @@ __global__ void triangle_pack_kernel(int64_t N, const uint64_t* __restrict__ A, 
       load_i<orderA>(acc_im, &A[strideIm], strideA);
 
       if (K) {
-        add_i<orderA>(acc_rl, acc_im, &sum[y], N, corr);
-        add_i<orderA>(acc_im, acc_rl, &sum[x], N, corr);
+        add_i<2>(acc_rl, acc_im, &sum[y], N, corr);
+        add_i<2>(acc_im, acc_rl, &sum[x], N, corr);
         cross_sum(acc_rl, acc_im);
         device::int8::add_shifted(acc_rl, K, corr + corr);
       }
@@ -78,8 +78,8 @@ __global__ void triangle_pack_kernel(int64_t N, const uint64_t* __restrict__ A, 
       load_i<orderA>(acc, A, strideA);
 
       if (K) {
-        add_i<orderA>(acc, &sum[y], N, corr);
-        add_i<orderA>(acc, &sum[x], N, corr);
+        add_i<2>(acc, &sum[y], N, corr);
+        add_i<2>(acc, &sum[x], N, corr);
         device::int8::add_shifted(acc, K, corr + corr);
       }
       if constexpr(beta) { add_i<orderB>(acc, B, strideB, uint32_t(0)); }

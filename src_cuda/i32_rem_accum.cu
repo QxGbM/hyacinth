@@ -17,10 +17,10 @@ __device__ __forceinline__ int64_t i32_i64_prod(int32_t y) {
   return int64_t(uint64_t(lo) | (uint64_t(hi) << 32));
 }
 
-template <int32_t orderX, int32_t x, int32_t m, uint32_t ORDER>
+template <int32_t orderX, int32_t x, uint32_t ORDER>
 __device__ __forceinline__ void add_pd(uint64_t (&a)[ORDER], int32_t i) {
   if constexpr(x < orderX) {
-    constexpr int32_t x6 = x * 6, pd[6]{ U8CRT::Constants<orderX>::pd[x6], U8CRT::Constants<orderX>::pd[x6 + 1], U8CRT::Constants<orderX>::pd[x6 + 2],
+    constexpr int32_t m = U8CRT::mo[x], x6 = x * 6, pd[6]{ U8CRT::Constants<orderX>::pd[x6], U8CRT::Constants<orderX>::pd[x6 + 1], U8CRT::Constants<orderX>::pd[x6 + 2],
       U8CRT::Constants<orderX>::pd[x6 + 3], U8CRT::Constants<orderX>::pd[x6 + 4], U8CRT::Constants<orderX>::pd[x6 + 5] };
 
     i = (a[ORDER - 1] >> 63) ? i : (i - m);
@@ -33,15 +33,11 @@ __device__ __forceinline__ void add_pd(uint64_t (&a)[ORDER], int32_t i) {
   }
 }
 
-template<int32_t orderX, int32_t iterX, int32_t orderA, int32_t beta, char mode>
+template<int32_t orderX, int32_t orderA, int32_t beta, char mode>
 __global__ void i32_crt_accum_kernel(int64_t N, const int32_t* __restrict__ X, int64_t ldx, int64_t strideX, uint64_t* __restrict__ A, int64_t strideA) {
   int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
   bool pred; if constexpr(mode == 'U') pred = y <= x; else pred = y < N;
   if (pred) {
-    constexpr int32_t iterX8 = iterX << 3;
-    constexpr int32_t m[8]{ U8CRT::mo[iterX8], U8CRT::mo[iterX8 + 1], U8CRT::mo[iterX8 + 2], U8CRT::mo[iterX8 + 3],
-      U8CRT::mo[iterX8 + 4], U8CRT::mo[iterX8 + 5], U8CRT::mo[iterX8 + 6], U8CRT::mo[iterX8 + 7] };
-
     uint64_t acc[orderA]; int32_t rem[4];
     A = &A[y + x * N]; X = &X[y + x * ldx];
 
@@ -56,30 +52,64 @@ __global__ void i32_crt_accum_kernel(int64_t N, const int32_t* __restrict__ X, i
       if constexpr(2 < orderA) { acc[2] = uint64_t(0); }
     }
 
-    if constexpr(iterX8 < orderX) {
+    if constexpr(0 < orderX) {
       using U8CRT::mo, U8CRT::Constants;
-      constexpr uint64_t m_lo = uint64_t(mo[iterX8]) | (uint64_t(mo[iterX8 + 1]) << 16) | (uint64_t(mo[iterX8 + 2]) << 32) | (uint64_t(mo[iterX8 + 3]) << 48);
-      constexpr uint64_t i_lo = uint64_t(Constants<orderX>::minv[iterX8]) | (uint64_t(Constants<orderX>::minv[iterX8 + 1]) << 16) | (uint64_t(Constants<orderX>::minv[iterX8 + 2]) << 32) | (uint64_t(Constants<orderX>::minv[iterX8 + 3]) << 48);
-      constexpr uint64_t r_lo = uint64_t(Constants<orderX>::rem_e32[iterX8]) | (uint64_t(Constants<orderX>::rem_e32[iterX8 + 1]) << 16) | (uint64_t(Constants<orderX>::rem_e32[iterX8 + 2]) << 32) | (uint64_t(Constants<orderX>::rem_e32[iterX8 + 3]) << 48);
-      loadX<orderX - iterX8>(rem, X, strideX);
+      constexpr uint64_t m_lo = uint64_t(mo[0]) | (uint64_t(mo[1]) << 16) | (uint64_t(mo[2]) << 32) | (uint64_t(mo[3]) << 48);
+      constexpr uint64_t i_lo = uint64_t(Constants<orderX>::minv[0]) | (uint64_t(Constants<orderX>::minv[1]) << 16) | (uint64_t(Constants<orderX>::minv[2]) << 32) | (uint64_t(Constants<orderX>::minv[3]) << 48);
+      constexpr uint64_t r_lo = uint64_t(Constants<orderX>::rem_e32[0]) | (uint64_t(Constants<orderX>::rem_e32[1]) << 16) | (uint64_t(Constants<orderX>::rem_e32[2]) << 32) | (uint64_t(Constants<orderX>::rem_e32[3]) << 48);
+      loadX<orderX>(rem, X, strideX);
       device::int8::crt_recover<m_lo, i_lo, r_lo>(rem);
-      add_pd<orderX, iterX8, m[0]>(acc, rem[0]);
-      add_pd<orderX, iterX8 + 1, m[1]>(acc, rem[1]);
-      add_pd<orderX, iterX8 + 2, m[2]>(acc, rem[2]);
-      add_pd<orderX, iterX8 + 3, m[3]>(acc, rem[3]);
+      add_pd<orderX, 0>(acc, rem[0]); add_pd<orderX, 1>(acc, rem[1]); add_pd<orderX, 2>(acc, rem[2]); add_pd<orderX, 3>(acc, rem[3]);
     }
   
-    if constexpr(iterX8 + 4 < orderX) {
+    if constexpr(4 < orderX) {
       using U8CRT::mo, U8CRT::Constants;
-      constexpr uint64_t m_hi = uint64_t(mo[iterX8 + 4]) | (uint64_t(mo[iterX8 + 5]) << 16) | (uint64_t(mo[iterX8 + 6]) << 32) | (uint64_t(mo[iterX8 + 7]) << 48);
-      constexpr uint64_t i_hi = uint64_t(Constants<orderX>::minv[iterX8 + 4]) | (uint64_t(Constants<orderX>::minv[iterX8 + 5]) << 16) | (uint64_t(Constants<orderX>::minv[iterX8 + 6]) << 32) | (uint64_t(Constants<orderX>::minv[iterX8 + 7]) << 48);
-      constexpr uint64_t r_hi = uint64_t(Constants<orderX>::rem_e32[iterX8 + 4]) | (uint64_t(Constants<orderX>::rem_e32[iterX8 + 5]) << 16) | (uint64_t(Constants<orderX>::rem_e32[iterX8 + 6]) << 32) | (uint64_t(Constants<orderX>::rem_e32[iterX8 + 7]) << 48);
-      loadX<orderX - (iterX8 + 4)>(rem, &X[strideX << 2], strideX);
+      constexpr uint64_t m_hi = uint64_t(mo[4]) | (uint64_t(mo[5]) << 16) | (uint64_t(mo[6]) << 32) | (uint64_t(mo[7]) << 48);
+      constexpr uint64_t i_hi = uint64_t(Constants<orderX>::minv[4]) | (uint64_t(Constants<orderX>::minv[5]) << 16) | (uint64_t(Constants<orderX>::minv[6]) << 32) | (uint64_t(Constants<orderX>::minv[7]) << 48);
+      constexpr uint64_t r_hi = uint64_t(Constants<orderX>::rem_e32[4]) | (uint64_t(Constants<orderX>::rem_e32[5]) << 16) | (uint64_t(Constants<orderX>::rem_e32[6]) << 32) | (uint64_t(Constants<orderX>::rem_e32[7]) << 48);
+      loadX<orderX - 4>(rem, X += (strideX << 2), strideX);
       device::int8::crt_recover<m_hi, i_hi, r_hi>(rem);
-      add_pd<orderX, iterX8 + 4, m[4]>(acc, rem[0]);
-      add_pd<orderX, iterX8 + 5, m[5]>(acc, rem[1]);
-      add_pd<orderX, iterX8 + 6, m[6]>(acc, rem[2]);
-      add_pd<orderX, iterX8 + 7, m[7]>(acc, rem[3]);
+      add_pd<orderX, 4>(acc, rem[0]); add_pd<orderX, 5>(acc, rem[1]); add_pd<orderX, 6>(acc, rem[2]); add_pd<orderX, 7>(acc, rem[3]);
+    }
+
+    if constexpr(8 < orderX) {
+      using U8CRT::mo, U8CRT::Constants;
+      constexpr uint64_t m_hi = uint64_t(mo[8]) | (uint64_t(mo[9]) << 16) | (uint64_t(mo[10]) << 32) | (uint64_t(mo[11]) << 48);
+      constexpr uint64_t i_hi = uint64_t(Constants<orderX>::minv[8]) | (uint64_t(Constants<orderX>::minv[9]) << 16) | (uint64_t(Constants<orderX>::minv[10]) << 32) | (uint64_t(Constants<orderX>::minv[11]) << 48);
+      constexpr uint64_t r_hi = uint64_t(Constants<orderX>::rem_e32[8]) | (uint64_t(Constants<orderX>::rem_e32[9]) << 16) | (uint64_t(Constants<orderX>::rem_e32[10]) << 32) | (uint64_t(Constants<orderX>::rem_e32[11]) << 48);
+      loadX<orderX - 8>(rem, X += (strideX << 2), strideX);
+      device::int8::crt_recover<m_hi, i_hi, r_hi>(rem);
+      add_pd<orderX, 8>(acc, rem[0]); add_pd<orderX, 9>(acc, rem[1]); add_pd<orderX, 10>(acc, rem[2]); add_pd<orderX, 11>(acc, rem[3]);
+    }
+
+    if constexpr(12 < orderX) {
+      using U8CRT::mo, U8CRT::Constants;
+      constexpr uint64_t m_hi = uint64_t(mo[12]) | (uint64_t(mo[13]) << 16) | (uint64_t(mo[14]) << 32) | (uint64_t(mo[15]) << 48);
+      constexpr uint64_t i_hi = uint64_t(Constants<orderX>::minv[12]) | (uint64_t(Constants<orderX>::minv[13]) << 16) | (uint64_t(Constants<orderX>::minv[14]) << 32) | (uint64_t(Constants<orderX>::minv[15]) << 48);
+      constexpr uint64_t r_hi = uint64_t(Constants<orderX>::rem_e32[12]) | (uint64_t(Constants<orderX>::rem_e32[13]) << 16) | (uint64_t(Constants<orderX>::rem_e32[14]) << 32) | (uint64_t(Constants<orderX>::rem_e32[15]) << 48);
+      loadX<orderX - 12>(rem, X += (strideX << 2), strideX);
+      device::int8::crt_recover<m_hi, i_hi, r_hi>(rem);
+      add_pd<orderX, 12>(acc, rem[0]); add_pd<orderX, 13>(acc, rem[1]); add_pd<orderX, 14>(acc, rem[2]); add_pd<orderX, 15>(acc, rem[3]);
+    }
+
+    if constexpr(16 < orderX) {
+      using U8CRT::mo, U8CRT::Constants;
+      constexpr uint64_t m_hi = uint64_t(mo[16]) | (uint64_t(mo[17]) << 16) | (uint64_t(mo[18]) << 32) | (uint64_t(mo[19]) << 48);
+      constexpr uint64_t i_hi = uint64_t(Constants<orderX>::minv[16]) | (uint64_t(Constants<orderX>::minv[17]) << 16) | (uint64_t(Constants<orderX>::minv[18]) << 32) | (uint64_t(Constants<orderX>::minv[19]) << 48);
+      constexpr uint64_t r_hi = uint64_t(Constants<orderX>::rem_e32[16]) | (uint64_t(Constants<orderX>::rem_e32[17]) << 16) | (uint64_t(Constants<orderX>::rem_e32[18]) << 32) | (uint64_t(Constants<orderX>::rem_e32[19]) << 48);
+      loadX<orderX - 16>(rem, X += (strideX << 2), strideX);
+      device::int8::crt_recover<m_hi, i_hi, r_hi>(rem);
+      add_pd<orderX, 16>(acc, rem[0]); add_pd<orderX, 17>(acc, rem[1]); add_pd<orderX, 18>(acc, rem[2]); add_pd<orderX, 19>(acc, rem[3]);
+    }
+
+    if constexpr(20 < orderX) {
+      using U8CRT::mo, U8CRT::Constants;
+      constexpr uint64_t m_hi = uint64_t(mo[20]) | (uint64_t(mo[21]) << 16) | (uint64_t(mo[22]) << 32) | (uint64_t(mo[23]) << 48);
+      constexpr uint64_t i_hi = uint64_t(Constants<orderX>::minv[20]) | (uint64_t(Constants<orderX>::minv[21]) << 16) | (uint64_t(Constants<orderX>::minv[22]) << 32) | (uint64_t(Constants<orderX>::minv[23]) << 48);
+      constexpr uint64_t r_hi = uint64_t(Constants<orderX>::rem_e32[20]) | (uint64_t(Constants<orderX>::rem_e32[21]) << 16) | (uint64_t(Constants<orderX>::rem_e32[22]) << 32) | (uint64_t(Constants<orderX>::rem_e32[23]) << 48);
+      loadX<orderX - 20>(rem, X += (strideX << 2), strideX);
+      device::int8::crt_recover<m_hi, i_hi, r_hi>(rem);
+      add_pd<orderX, 20>(acc, rem[0]); add_pd<orderX, 21>(acc, rem[1]); add_pd<orderX, 22>(acc, rem[2]); add_pd<orderX, 23>(acc, rem[3]);
     }
 
     if (acc[orderA - 1] >> 63) {
@@ -95,77 +125,51 @@ __global__ void i32_crt_accum_kernel(int64_t N, const int32_t* __restrict__ X, i
   }
 }
 
-template <int32_t orderX, int32_t iter, int32_t orderA>
+template <int32_t orderX, int32_t orderA>
 inline void crt_acc_dispatcher(cudaStream_t stream, char mode, int32_t beta, int64_t N, const int32_t* X, int64_t ldx, uint64_t* A) {
   constexpr int32_t block_threads = 512;
   dim3 grid(uint32_t(N + 511) >> 9, uint32_t(N), uint32_t(1));
   int64_t strideX = ldx * N, strideA = N * N;
-  if (mode == 'U' && beta == 0) { i32_crt_accum_kernel<orderX, iter, orderA, 0, 'U'> <<< grid, block_threads, 0, stream >>> (N, X, ldx, strideX, A, strideA); } else
-  if (mode == 'U' && beta == 1) { i32_crt_accum_kernel<orderX, iter, orderA, 1, 'U'> <<< grid, block_threads, 0, stream >>> (N, X, ldx, strideX, A, strideA); } else
-  if (mode == 'A' && beta == 0) { i32_crt_accum_kernel<orderX, iter, orderA, 0, 'A'> <<< grid, block_threads, 0, stream >>> (N, X, ldx, strideX, A, strideA); } else
-  if (mode == 'A' && beta == 1) { i32_crt_accum_kernel<orderX, iter, orderA, 1, 'A'> <<< grid, block_threads, 0, stream >>> (N, X, ldx, strideX, A, strideA); }
+  if (mode == 'U' && beta == 0) { i32_crt_accum_kernel<orderX, orderA, 0, 'U'> <<< grid, block_threads, 0, stream >>> (N, X, ldx, strideX, A, strideA); } else
+  if (mode == 'U' && beta == 1) { i32_crt_accum_kernel<orderX, orderA, 1, 'U'> <<< grid, block_threads, 0, stream >>> (N, X, ldx, strideX, A, strideA); } else
+  if (mode == 'A' && beta == 0) { i32_crt_accum_kernel<orderX, orderA, 0, 'A'> <<< grid, block_threads, 0, stream >>> (N, X, ldx, strideX, A, strideA); } else
+  if (mode == 'A' && beta == 1) { i32_crt_accum_kernel<orderX, orderA, 1, 'A'> <<< grid, block_threads, 0, stream >>> (N, X, ldx, strideX, A, strideA); }
 }
 
 template <int32_t orderA>
-inline void crt_acc_dispatcher(cudaStream_t stream, char mode, int32_t beta, int64_t N, int32_t orderX, int32_t iter, const int32_t* X, int64_t ldx, uint64_t* A) {
-  if (iter == 0) switch (orderX) {
-    case 2: crt_acc_dispatcher<2, 0, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 3: crt_acc_dispatcher<3, 0, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 4: crt_acc_dispatcher<4, 0, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 5: crt_acc_dispatcher<5, 0, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 6: crt_acc_dispatcher<6, 0, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 7: crt_acc_dispatcher<7, 0, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 8: crt_acc_dispatcher<8, 0, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 9: crt_acc_dispatcher<9, 0, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 10: crt_acc_dispatcher<10, 0, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 11: crt_acc_dispatcher<11, 0, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 12: crt_acc_dispatcher<12, 0, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 13: crt_acc_dispatcher<13, 0, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 14: crt_acc_dispatcher<14, 0, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 15: crt_acc_dispatcher<15, 0, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 16: crt_acc_dispatcher<16, 0, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 17: crt_acc_dispatcher<17, 0, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 18: crt_acc_dispatcher<18, 0, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 19: crt_acc_dispatcher<19, 0, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 20: crt_acc_dispatcher<20, 0, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 21: crt_acc_dispatcher<21, 0, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 22: crt_acc_dispatcher<22, 0, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 23: crt_acc_dispatcher<23, 0, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    default: return;
-  } else if (iter == 1) switch (orderX) {
-    case 9: crt_acc_dispatcher<9, 1, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 10: crt_acc_dispatcher<10, 1, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 11: crt_acc_dispatcher<11, 1, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 12: crt_acc_dispatcher<12, 1, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 13: crt_acc_dispatcher<13, 1, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 14: crt_acc_dispatcher<14, 1, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 15: crt_acc_dispatcher<15, 1, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 16: crt_acc_dispatcher<16, 1, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 17: crt_acc_dispatcher<17, 1, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 18: crt_acc_dispatcher<18, 1, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 19: crt_acc_dispatcher<19, 1, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 20: crt_acc_dispatcher<20, 1, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 21: crt_acc_dispatcher<21, 1, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 22: crt_acc_dispatcher<22, 1, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 23: crt_acc_dispatcher<23, 1, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    default: return;
-  } else if (iter == 2) switch (orderX) {
-    case 17: crt_acc_dispatcher<17, 2, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 18: crt_acc_dispatcher<18, 2, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 19: crt_acc_dispatcher<19, 2, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 20: crt_acc_dispatcher<20, 2, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 21: crt_acc_dispatcher<21, 2, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 22: crt_acc_dispatcher<22, 2, orderA>(stream, mode, beta, N, X, ldx, A); return;
-    case 23: crt_acc_dispatcher<23, 2, orderA>(stream, mode, beta, N, X, ldx, A); return;
+inline void crt_acc_dispatcher(cudaStream_t stream, char mode, int32_t beta, int64_t N, int32_t orderX, const int32_t* X, int64_t ldx, uint64_t* A) {
+  switch (orderX) {
+    case 2: crt_acc_dispatcher<2, orderA>(stream, mode, beta, N, X, ldx, A); return;
+    case 3: crt_acc_dispatcher<3, orderA>(stream, mode, beta, N, X, ldx, A); return;
+    case 4: crt_acc_dispatcher<4, orderA>(stream, mode, beta, N, X, ldx, A); return;
+    case 5: crt_acc_dispatcher<5, orderA>(stream, mode, beta, N, X, ldx, A); return;
+    case 6: crt_acc_dispatcher<6, orderA>(stream, mode, beta, N, X, ldx, A); return;
+    case 7: crt_acc_dispatcher<7, orderA>(stream, mode, beta, N, X, ldx, A); return;
+    case 8: crt_acc_dispatcher<8, orderA>(stream, mode, beta, N, X, ldx, A); return;
+    case 9: crt_acc_dispatcher<9, orderA>(stream, mode, beta, N, X, ldx, A); return;
+    case 10: crt_acc_dispatcher<10, orderA>(stream, mode, beta, N, X, ldx, A); return;
+    case 11: crt_acc_dispatcher<11, orderA>(stream, mode, beta, N, X, ldx, A); return;
+    case 12: crt_acc_dispatcher<12, orderA>(stream, mode, beta, N, X, ldx, A); return;
+    case 13: crt_acc_dispatcher<13, orderA>(stream, mode, beta, N, X, ldx, A); return;
+    case 14: crt_acc_dispatcher<14, orderA>(stream, mode, beta, N, X, ldx, A); return;
+    case 15: crt_acc_dispatcher<15, orderA>(stream, mode, beta, N, X, ldx, A); return;
+    case 16: crt_acc_dispatcher<16, orderA>(stream, mode, beta, N, X, ldx, A); return;
+    case 17: crt_acc_dispatcher<17, orderA>(stream, mode, beta, N, X, ldx, A); return;
+    case 18: crt_acc_dispatcher<18, orderA>(stream, mode, beta, N, X, ldx, A); return;
+    case 19: crt_acc_dispatcher<19, orderA>(stream, mode, beta, N, X, ldx, A); return;
+    case 20: crt_acc_dispatcher<20, orderA>(stream, mode, beta, N, X, ldx, A); return;
+    case 21: crt_acc_dispatcher<21, orderA>(stream, mode, beta, N, X, ldx, A); return;
+    case 22: crt_acc_dispatcher<22, orderA>(stream, mode, beta, N, X, ldx, A); return;
+    case 23: crt_acc_dispatcher<23, orderA>(stream, mode, beta, N, X, ldx, A); return;
     default: return;
   }
 }
 
-void internal::int8::accumulate_remainder_i32tensor(cudaStream_t stream, char mode, int32_t beta, int32_t N, int32_t orderX, int32_t iter, const int32_t* X, int32_t ldx, int32_t orderA, uint64_t* A) {
+void internal::int8::accumulate_remainder_i32tensor(cudaStream_t stream, char mode, int32_t beta, int32_t N, int32_t orderX, const int32_t* X, int32_t ldx, int32_t orderA, uint64_t* A) {
   switch (orderA) {
-    case 1: crt_acc_dispatcher<1>(stream, mode, beta, int64_t(N), orderX, iter, X, int64_t(ldx), A); return;
-    case 2: crt_acc_dispatcher<2>(stream, mode, beta, int64_t(N), orderX, iter, X, int64_t(ldx), A); return;
-    case 3: crt_acc_dispatcher<3>(stream, mode, beta, int64_t(N), orderX, iter, X, int64_t(ldx), A); return;
+    case 1: crt_acc_dispatcher<1>(stream, mode, beta, int64_t(N), orderX, X, int64_t(ldx), A); return;
+    case 2: crt_acc_dispatcher<2>(stream, mode, beta, int64_t(N), orderX, X, int64_t(ldx), A); return;
+    case 3: crt_acc_dispatcher<3>(stream, mode, beta, int64_t(N), orderX, X, int64_t(ldx), A); return;
     default: return;
   }
 }

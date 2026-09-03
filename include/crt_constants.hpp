@@ -8,24 +8,24 @@ namespace U8CRT {
   constexpr uint16_t rem_e63[24] = { 0, 118, 160, 101, 151, 233, 75, 83, 32, 22, 52, 136, 8, 140, 63, 129, 42, 13, 22, 62, 110, 108, 110 };
 
   template<> struct Constants<2> {
-    static constexpr uint16_t minv[8] = { 85, 169 };
-    static constexpr uint16_t rem_e32[8] = { 0, 226 };
+    static constexpr uint16_t minv[4] = { 85, 169 };
+    static constexpr uint16_t rem_e32[4] = { 0, 226 };
     static constexpr int64_t p[3] = { 64768ll, 0ll, 0ll };
     static constexpr int32_t pd[12] = {
       253, 0, 0, 0, 0, 0, 256, 0, 0, 0, 0, 0 };
   };
 
   template<> struct Constants<3> {
-    static constexpr uint16_t minv[8] = { 239, 42, 226 };
-    static constexpr uint16_t rem_e32[8] = { 0, 140, 63 };
+    static constexpr uint16_t minv[4] = { 239, 42, 226 };
+    static constexpr uint16_t rem_e32[4] = { 0, 140, 63 };
     static constexpr int64_t p[3] = { 16256768ll, 0ll, 0ll };
     static constexpr int32_t pd[18] = {
       63503, 0, 0, 0, 0, 0, 64256, 0, 0, 0, 0, 0, 64768, 0, 0, 0, 0, 0 };
   };
 
   template<> struct Constants<4> {
-    static constexpr uint16_t minv[8] = { 39, 116, 138, 209 };
-    static constexpr uint16_t rem_e32[8] = { 0, 218, 94, 175 };
+    static constexpr uint16_t minv[4] = { 39, 116, 138, 209 };
+    static constexpr uint16_t rem_e32[4] = { 0, 218, 94, 175 };
     static constexpr int64_t p[3] = { 4047935232ll, 0ll, 0ll };
     static constexpr int32_t pd[24] = {
       15812247, 0, 0, 0, 0, 0, 15999744, 0, 0, 0, 0, 0, 16127232, 0, 0, 0, 0, 0,
@@ -71,8 +71,8 @@ namespace U8CRT {
   };
 
   template<> struct Constants<9> {
-    static constexpr uint16_t minv[16] = { 197, 5, 208, 122, 142, 82, 178, 107, 181 };
-    static constexpr uint16_t rem_e32[16] = { 0, 101, 18, 151, 22, 216, 18, 18, 183 };
+    static constexpr uint16_t minv[12] = { 197, 5, 208, 122, 142, 82, 178, 107, 181 };
+    static constexpr uint16_t rem_e32[12] = { 0, 101, 18, 151, 22, 216, 18, 18, 183 };
     static constexpr int64_t p[3] = { 8158774379753245952ll, 341ll, 0ll };
     static constexpr int32_t pd[54] = {
       306429965, 1440904084, 2, 0, 0, 0, 607146240, 1508918369, 2, 0, 0, 0, 432314112, 1555164470, 2, 0, 0, 0,
@@ -81,8 +81,8 @@ namespace U8CRT {
   };
 
   template<> struct Constants<10> {
-    static constexpr uint16_t minv[16] = { 97, 179, 59, 218, 47, 194, 30, 178, 13, 199 };
-    static constexpr uint16_t rem_e32[16] = { 0, 175, 22, 229, 136, 223, 46, 232, 129, 21 };
+    static constexpr uint16_t minv[12] = { 97, 179, 59, 218, 47, 194, 30, 178, 13, 199 };
+    static constexpr uint16_t rem_e32[12] = { 0, 175, 22, 229, 136, 223, 46, 232, 129, 21 };
     static constexpr int64_t p[3] = { 5238181518828609792ll, 78291ll, 0ll };
     static constexpr int32_t pd[60] = {
       1452985249, 1402037124, 611, 0, 0, 0, 1597535488, 1944922885, 618, 0, 0, 0, 215683840, 1797861756, 623, 0, 0, 0,
@@ -92,8 +92,8 @@ namespace U8CRT {
   };
 
   template<> struct Constants<11> {
-    static constexpr uint16_t minv[16] = { 235, 178, 8, 58, 10, 55, 117, 154, 192, 15, 184 };
-    static constexpr uint16_t rem_e32[16] = { 0, 3, 20, 182, 92, 139, 36, 206, 95, 104, 77 };
+    static constexpr uint16_t minv[12] = { 235, 178, 8, 58, 10, 55, 117, 154, 192, 15, 184 };
+    static constexpr uint16_t rem_e32[12] = { 0, 3, 20, 182, 92, 139, 36, 206, 95, 104, 77 };
     static constexpr int64_t p[3] = { 8475584056683119360ll, 17772185ll, 0ll };
     static constexpr int32_t pd[66] = {
       1262653379, 434847397, 138845, 0, 0, 0, 1863302912, 1263347223, 140491, 0, 0, 0, 1715591424, 92725514, 141611, 0, 0, 0,
@@ -103,8 +103,8 @@ namespace U8CRT {
   };
 
   template<> struct Constants<12> {
-    static constexpr uint16_t minv[16] = { 117, 129, 179, 151, 226, 171, 157, 183, 74, 112, 181, 11 };
-    static constexpr uint16_t rem_e32[16] = { 0, 177, 71, 242, 202, 86, 177, 22, 107, 59, 151, 146 };
+    static constexpr uint16_t minv[12] = { 117, 129, 179, 151, 226, 171, 157, 183, 74, 112, 181, 11 };
+    static constexpr uint16_t rem_e32[12] = { 0, 177, 71, 242, 202, 86, 177, 22, 107, 59, 151, 146 };
     static constexpr int64_t p[3] = { 8487349121961352448ll, 3963197459ll, 0ll };
     static constexpr int32_t pd[72] = {
       251345629, 334205502, 30962480, 0, 0, 0, 1052205312, 406073034, 31329624, 0, 0, 0, 324798208, 1350436968, 31579262, 0, 0, 0,
@@ -163,8 +163,8 @@ namespace U8CRT {
   };
 
   template<> struct Constants<17> {
-    static constexpr uint16_t minv[24] = { 5, 153, 51, 155, 202, 109, 22, 71, 86, 121, 56, 135, 156, 201, 81, 92, 114 };
-    static constexpr uint16_t rem_e32[24] = { 0, 4, 2, 100, 80, 52, 209, 214, 11, 213, 132, 170, 27, 88, 55, 178, 40 };
+    static constexpr uint16_t minv[20] = { 5, 153, 51, 155, 202, 109, 22, 71, 86, 121, 56, 135, 156, 201, 81, 92, 114 };
+    static constexpr uint16_t rem_e32[20] = { 0, 4, 2, 100, 80, 52, 209, 214, 11, 213, 132, 170, 27, 88, 55, 178, 40 };
     static constexpr int64_t p[3] = { 5479914498853817600ll, 7921888997221340136ll, 148ll };
     static constexpr int32_t pd[102] = {
       871346637, 1754798370, 609937447, 699908304, 2, 0, 745869568, 324144976, 430432199, 759136078, 2, 0, 1282266880, 1610084566, 502307631, 799407818, 2, 0,
@@ -176,8 +176,8 @@ namespace U8CRT {
   };
 
   template<> struct Constants<18> {
-    static constexpr uint16_t minv[24] = { 59, 173, 87, 139, 164, 234, 129, 196, 120, 39, 175, 170, 211, 106, 164, 116, 136, 69 };
-    static constexpr uint16_t rem_e32[24] = { 0, 155, 92, 170, 175, 105, 150, 134, 205, 133, 72, 148, 24, 80, 18, 36, 173, 171 };
+    static constexpr uint16_t minv[20] = { 59, 173, 87, 139, 164, 234, 129, 196, 120, 39, 175, 170, 211, 106, 164, 116, 136, 69 };
+    static constexpr uint16_t rem_e32[20] = { 0, 155, 92, 170, 175, 105, 150, 134, 205, 133, 72, 148, 24, 80, 18, 36, 173, 171 };
     static constexpr int64_t p[3] = { 4422629116489495296ll, 447784425092733577ll, 28432ll };
     static constexpr int32_t pd[108] = {
       1070966771, 159039659, 533935541, 538499942, 444, 0, 727166720, 1782148338, 608171413, 1113586520, 449, 0, 99838208, 435990556, 1451477152, 215554274, 453, 0,
@@ -189,8 +189,8 @@ namespace U8CRT {
   };
 
   template<> struct Constants<19> {
-    static constexpr uint16_t minv[24] = { 47, 226, 239, 214, 5, 213, 142, 66, 159, 128, 11, 134, 181, 109, 13, 42, 53, 165, 122 };
-    static constexpr uint16_t rem_e32[24] = { 0, 163, 221, 122, 46, 179, 154, 189, 126, 2, 107, 177, 144, 138, 198, 47, 66, 2, 161 };
+    static constexpr uint16_t minv[20] = { 47, 226, 239, 214, 5, 213, 142, 66, 159, 128, 11, 134, 181, 109, 13, 42, 53, 165, 122 };
+    static constexpr uint16_t rem_e32[20] = { 0, 163, 221, 122, 46, 179, 154, 189, 126, 2, 107, 177, 144, 138, 198, 47, 66, 2, 161 };
     static constexpr int64_t p[3] = { 7285874915087929088ll, 7262004646946571059ll, 5146200ll };
     static constexpr int32_t pd[114] = {
       571457231, 868890945, 5568774, 831725387, 80409, 0, 620673792, 446302039, 557359855, 1843180907, 81362, 0, 890846464, 1604879316, 724359492, 360618052, 82011, 0,
@@ -203,8 +203,8 @@ namespace U8CRT {
   };
 
   template<> struct Constants<20> {
-    static constexpr uint16_t minv[24] = { 149, 79, 42, 125, 98, 16, 149, 24, 10, 144, 118, 149, 138, 201, 69, 129, 10, 34, 120, 162 };
-    static constexpr uint16_t rem_e32[24] = { 0, 179, 105, 169, 210, 1, 101, 26, 153, 174, 116, 72, 99, 88, 10, 74, 78, 159, 10, 173 };
+    static constexpr uint16_t minv[20] = { 149, 79, 42, 125, 98, 16, 149, 24, 10, 144, 118, 149, 138, 201, 69, 129, 10, 34, 120, 162 };
+    static constexpr uint16_t rem_e32[20] = { 0, 179, 105, 169, 210, 1, 101, 26, 153, 174, 116, 72, 99, 88, 10, 74, 78, 159, 10, 173 };
     static constexpr int64_t p[3] = { 3676152604215917824ll, 8626746643767606582ll, 921169940ll };
     static constexpr int32_t pd[120] = {
       1359112893, 912656546, 996810618, 702472561, 14393280, 0, 1578942720, 431170056, 983166274, 1364384255, 14563951, 0, 547727104, 1658072454, 811330321, 126121928, 14679999, 0,
