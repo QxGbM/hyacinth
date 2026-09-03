@@ -198,7 +198,7 @@ int32_t hyacinXAllGatherV1Dcol(
   int32_t AElemBytes,
   void* A, // device-pointer
   int32_t lda
-);
+); // returns local Koffset
 
 #ifndef NO_NCCL
 

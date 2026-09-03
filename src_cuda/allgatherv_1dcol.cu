@@ -1,7 +1,7 @@
 
+#include <hyacin.h>
 #ifndef NO_NCCL
 
-#include <hyacin.h>
 #include <internal.hpp>
 #include <vector>
 #include <numeric>
@@ -79,5 +79,5 @@ extern "C" int32_t hyacinXAllGatherV1Dcol(hyacinHandle_t handle, int32_t M, int3
 }
 
 #else
-extern "C" int32_t hyacinXAllGatherV1Dcol(hyacinHandle_t handle, int32_t M, int32_t* K, int32_t AElemBytes, void* A, int32_t lda) { return 0; }
+extern "C" int32_t hyacinXAllGatherV1Dcol(hyacinHandle_t, int32_t, int32_t*, int32_t, void*, int32_t) { return 0; }
 #endif

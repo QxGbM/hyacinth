@@ -1,7 +1,7 @@
 
+#include <hyacin.h>
 #ifndef NO_NCCL
 
-#include <hyacin.h>
 #include <internal.hpp>
 #include <int_fp_quantize.hpp>
 #include <stdexcept>
@@ -163,5 +163,5 @@ extern "C" void hyacinXAllReduce1Drow(hyacinHandle_t handle, int32_t Complex, in
 }
 
 #else
-extern "C" void hyacinXAllReduce1Drow(hyacinHandle_t handle, int32_t Complex, int32_t orderA, int64_t N, uint64_t* A) {}
+extern "C" void hyacinXAllReduce1Drow(hyacinHandle_t, int32_t, int32_t, int64_t, uint64_t*) {}
 #endif
