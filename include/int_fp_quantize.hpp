@@ -7,27 +7,35 @@
 
 namespace device::int8 {
 
-  template <uint32_t ORDER>
-  __host__ __device__ __forceinline__ void add_shifted(uint64_t (&a)[ORDER], int64_t i, uint32_t expon) {
-    static_assert(1 <= ORDER && ORDER <= 3, "Integer 64 accumulation order must be in [1,3]");
+  __host__ __device__ __forceinline__ void add_shifted(uint64_t (&a)[1], int64_t i, uint32_t expon) {
+    uint64_t m0 = -uint64_t(expon < uint32_t(63));
+    uint32_t rem = expon & uint32_t(m0);
+    uint64_t q0 = uint64_t(i) << rem;
+    a[0] += q0 & m0;
+  } 
 
+  __host__ __device__ __forceinline__ void add_shifted(uint64_t (&a)[2], int64_t i, uint32_t expon) {
     constexpr uint64_t i63 = 0x7fffffffffffffffllu;
-    constexpr uint32_t bits = uint32_t(63);
-    int32_t p0 = int32_t(expon < bits);
-    int32_t p1 = int32_t((expon - uint32_t(63)) < bits);
-    int32_t p2 = int32_t((expon - uint32_t(126)) < bits);
-    uint32_t rem = (expon - uint32_t(p1 * 63 + p2 * 126)) & bits;
-    uint64_t q0 = (uint64_t(i) << rem), m0 = -uint64_t(p0);
+    uint64_t m0 = -uint64_t(expon < uint32_t(63));
+    uint64_t m1 = -uint64_t((expon - uint32_t(63)) < uint32_t(63));
+    uint32_t rem = (expon - (uint32_t(63) & uint32_t(m1))) & (uint32_t(m0) | uint32_t(m1));
+    uint64_t q0 = uint64_t(i) << rem;
+    a[0] += q0 & m0 & i63;
+    uint64_t sign = -(uint64_t(i) >> 63), q1 = (sign << (uint32_t(1) + rem)) | (uint64_t(i) >> (uint32_t(63) - rem));
+    a[1] += ((q1 & m0) | (q0 & m1)) + (a[0] >> 63); a[0] &= i63;
+  }
 
-    if constexpr(1 < ORDER) {
-      a[0] += q0 & m0 & i63;
-      uint64_t q1 = uint64_t(i >> (bits - rem)), m1 = -uint64_t(p1);
-      if constexpr(2 < ORDER) {
-        a[1] += (((q1 & m0) | (q0 & m1)) & i63) + (a[0] >> bits); a[0] &= i63; 
-        uint64_t q2 = (-(uint64_t(i) >> bits)), m2 = -uint64_t(p2);
-        a[2] += ((q2 & m0) | (q1 & m1) | (q0 & m2)) + (a[1] >> bits); a[1] &= i63;
-      } else { a[1] += ((q1 & m0) | (q0 & m1)) + (a[0] >> bits); a[0] &= i63; }
-    } else { a[0] += q0 & m0; }
+  __host__ __device__ __forceinline__ void add_shifted(uint64_t (&a)[3], int64_t i, uint32_t expon) {
+    constexpr uint64_t i63 = 0x7fffffffffffffffllu;
+    uint64_t m0 = -uint64_t(expon < uint32_t(63));
+    uint64_t m1 = -uint64_t((expon - uint32_t(63)) < uint32_t(63));
+    uint64_t m2 = -uint64_t((expon - uint32_t(126)) < uint32_t(63));
+    uint32_t rem = (expon - (uint32_t(63) & uint32_t(m1)) - (uint32_t(126) & uint32_t(m2))) & (uint32_t(m0) | uint32_t(m1) | uint32_t(m2));
+    uint64_t q0 = uint64_t(i) << rem;
+    a[0] += q0 & m0 & i63;
+    uint64_t sign = -(uint64_t(i) >> 63), q1 = (sign << (uint32_t(1) + rem)) | (uint64_t(i) >> (uint32_t(63) - rem));
+    a[1] += (((q1 & m0) | (q0 & m1)) & i63) + (a[0] >> 63); a[0] &= i63; 
+    a[2] += ((sign & m0) | (q1 & m1) | (q0 & m2)) + (a[1] >> 63); a[1] &= i63;
   }
 
   __host__ __device__ __forceinline__ int64_t round_i64(double x, int32_t expon, int32_t& e) {
