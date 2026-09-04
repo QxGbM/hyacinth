@@ -129,7 +129,6 @@ inline void quantize_dispatcher(cudaStream_t stream, int32_t M, const matrix_t* 
   int64_t M64 = int64_t(M), ldc64 = int64_t(ldc), dimX64 = int64_t(dimX), strideA = int64_t(dimY) * dimX64;
 
   if (corr) switch (dimZ) {
-    case 1: quantize_kernel<1, 1> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
     case 2: quantize_kernel<2, 1> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
     case 3: quantize_kernel<3, 1> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
     case 4: quantize_kernel<4, 1> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;

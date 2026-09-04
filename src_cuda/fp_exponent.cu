@@ -67,9 +67,7 @@ inline void vector_exponents_dispatcher(cudaStream_t stream, int32_t M, int32_t 
   constexpr int32_t block_threads = 512;
   int64_t lda64 = int64_t(lda); int32_t u = *umax;
   if (u <= 0) {
-    int32_t device_sms = 0, device = -1;
-    cudaGetDevice(&device); cudaDeviceGetAttribute(&device_sms, cudaDevAttrMultiProcessorCount, device);
-    int32_t maxBlocksPerSM = 0;
+    int32_t device_sms = internal::device_num_sms(), maxBlocksPerSM = 0;
     cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, vector_range_kernel<block_threads, reduc_t, matrix_t>, block_threads, 0);
     
     int32_t grid = std::min(N, device_sms * maxBlocksPerSM), *vbuf = nullptr;

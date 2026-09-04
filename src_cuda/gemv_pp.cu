@@ -166,9 +166,7 @@ constexpr int32_t block_threads = 256;
 
 template <class real_t, class matrix_t, class idx_t>
 inline void imax_dispatcher(cudaStream_t stream, real_t epi, int32_t N, const matrix_t* X, int64_t incx, int32_t* jpiv, real_t* D, idx_t* idx) {
-  int32_t device_sms = 0, device = -1;
-  cudaGetDevice(&device); cudaDeviceGetAttribute(&device_sms, cudaDevAttrMultiProcessorCount, device);
-  int32_t maxBlocksPerSM = 0;
+  int32_t device_sms = internal::device_num_sms(), maxBlocksPerSM = 0;
   cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, imax_kernel<block_threads, real_t, idx_t>, block_threads, 0);
   int32_t grid = std::min(std::min(grid_blocks, device_sms * maxBlocksPerSM), (N + block_threads - 1) / block_threads);
   uint8_t* diag = &((uint8_t*)D)[8192]; if constexpr(!std::is_same_v<real_t, matrix_t>) { incx <<= 1; }

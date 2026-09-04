@@ -34,7 +34,7 @@ namespace device::int8 {
     uint64_t q0 = uint64_t(i) << rem;
     a[0] += q0 & m0 & i63;
     uint64_t sign = -(uint64_t(i) >> 63), q1 = (sign << (uint32_t(1) + rem)) | (uint64_t(i) >> (uint32_t(63) - rem));
-    a[1] += (((q1 & m0) | (q0 & m1)) & i63) + (a[0] >> 63); a[0] &= i63; 
+    a[1] += (((q1 & m0) | (q0 & m1)) & i63) + (a[0] >> 63); a[0] &= i63;
     a[2] += ((sign & m0) | (q1 & m1) | (q0 & m2)) + (a[1] >> 63); a[1] &= i63;
   }
 

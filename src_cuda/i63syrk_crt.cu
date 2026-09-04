@@ -20,7 +20,7 @@ __device__ __forceinline__ uint64_t* conv_acc(ulonglong3 acc, int32_t M, uint32_
 }
 
 template <int32_t BLOCK_THREADS, class matrix_t>
-__global__ void vector_sum_kernel(int32_t M, const matrix_t* __restrict__ A, int64_t lda, uint32_t corr, const int32_t* __restrict__ vexp, uint64_t* __restrict__ vec_sum) {
+__global__ void vector_sum_kernel(int32_t M, const matrix_t* __restrict__ A, int64_t lda, uint32_t corr, const int32_t* __restrict__ vexp, uint64_t* __restrict__ vsum) {
   constexpr int32_t Complex = std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>;
   int32_t expon = vexp[blockIdx.x]; M = (expon == int_max) ? int64_t(0) : M;
   A = &A[int64_t(blockIdx.x) * lda];
@@ -36,7 +36,7 @@ __global__ void vector_sum_kernel(int32_t M, const matrix_t* __restrict__ A, int
     __shared__ typename cub::BlockReduce<ulonglong3, BLOCK_THREADS>::TempStorage temp_reduce[2];
     ulonglong3 threadA = cub::BlockReduce<ulonglong3, BLOCK_THREADS>(temp_reduce[0]).Reduce(make_ulonglong3(uint32_t(rl[0]), uint32_t(rl[0] >> 32), rl[1]), u64_add());
     ulonglong3 threadB = cub::BlockReduce<ulonglong3, BLOCK_THREADS>(temp_reduce[1]).Reduce(make_ulonglong3(uint32_t(im[0]), uint32_t(im[0] >> 32), im[1]), u64_add());
-    if (threadIdx.x == 0) { conv_acc<0>(threadB, M, corr, conv_acc<0>(threadA, M, corr, &vec_sum[blockIdx.x], int32_t(gridDim.x)), int32_t(gridDim.x)); }
+    if (threadIdx.x == 0) { conv_acc<0>(threadB, M, corr, conv_acc<0>(threadA, M, corr, &vsum[blockIdx.x], int32_t(gridDim.x)), int32_t(gridDim.x)); }
   } else {
     uint64_t rl[2]{};
     for (int32_t i = int32_t(threadIdx.x); i < M; i += BLOCK_THREADS)
@@ -44,101 +44,30 @@ __global__ void vector_sum_kernel(int32_t M, const matrix_t* __restrict__ A, int
 
     __shared__ typename cub::BlockReduce<ulonglong3, BLOCK_THREADS>::TempStorage temp_reduce;
     ulonglong3 threadA = cub::BlockReduce<ulonglong3, BLOCK_THREADS>(temp_reduce).Reduce(make_ulonglong3(uint32_t(rl[0]), uint32_t(rl[0] >> 32), rl[1]), u64_add());
-    if (threadIdx.x == 0) { conv_acc<1>(threadA, M, corr, &vec_sum[blockIdx.x], int32_t(gridDim.x)); }
+    if (threadIdx.x == 0) { conv_acc<1>(threadA, M, corr, &vsum[blockIdx.x], int32_t(gridDim.x)); }
   }
 }
 
-template <class matrix_t>
-inline void vector_sums(cudaStream_t stream, int32_t M, int32_t N, const matrix_t* A, int32_t lda, uint32_t corr, const int32_t* vexp, uint64_t* vec_sum) {
-  constexpr int32_t block_threads = 512;
-  int64_t lda64 = int64_t(lda); vector_sum_kernel<block_threads> <<< N, block_threads, 0, stream >>> (M, A, lda64, corr, vexp, vec_sum);
-}
-
-inline void gemm_accum_crt(cudaStream_t stream, cublasHandle_t handle, char mode, int32_t M, int32_t N, int32_t K, int32_t orderA, const int8_t* AT, const int8_t* A, int32_t orderC, uint64_t* C, int32_t* W) {
-  constexpr int32_t iter_k = 131072, iter_h = iter_k / 2;
-  int32_t zero = 0, one = 1;
-  int64_t strideA = int64_t(N) * int64_t(K), strideC = int64_t(M) * int64_t(N);
-  if (K <= iter_k) {
-    cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, K, &one, AT, CUDA_R_8I, K, strideA, A, CUDA_R_8I, K, strideA,
-      &zero, W, CUDA_R_32I, M, strideC, orderA, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
-    internal::int8::accumulate_remainder_i32tensor(stream, mode, 0, N, orderA, W, M, orderC, C);
-  } else {
-    int32_t rem = K & (iter_k - 1); rem = rem < iter_h ? (rem + iter_k) : rem;
-    int32_t range_k = K - rem;
-
-    for (int32_t k = 0; k < range_k; k += iter_k) {
-      const int8_t* AT_k = &AT[k], *AN_k = &A[k];
-      cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, iter_k, &one, AT_k, CUDA_R_8I, K, strideA, AN_k, CUDA_R_8I, K, strideA,
-        &zero, W, CUDA_R_32I, M, strideC, orderA, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
-      internal::int8::accumulate_remainder_i32tensor(stream, mode, int32_t(0 < k), N, orderA, W, M, orderC, C);
-    }
-
-    const int8_t* AT_k = &AT[range_k], *AN_k = &A[range_k];
-    if (rem <= iter_h) {
-      cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, rem, &one, AT_k, CUDA_R_8I, K, strideA, AN_k, CUDA_R_8I, K, strideA,
-        &zero, W, CUDA_R_32I, M, strideC, orderA, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
-      internal::int8::accumulate_remainder_i32tensor(stream, mode, int32_t(0 < range_k), N, orderA, W, M, orderC, C);
-    } else {
-      cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, iter_h, &one, AT_k, CUDA_R_8I, K, strideA, AN_k, CUDA_R_8I, K, strideA,
-        &zero, W, CUDA_R_32I, M, strideC, orderA, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
-      internal::int8::accumulate_remainder_i32tensor(stream, mode, int32_t(0 < range_k), N, orderA, W, M, orderC, C);
-      cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, rem - iter_h, &one, &AT_k[iter_h], CUDA_R_8I, K, strideA, &AN_k[iter_h], CUDA_R_8I, K, strideA,
-        &zero, W, CUDA_R_32I, M, strideC, orderA, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
-      internal::int8::accumulate_remainder_i32tensor(stream, mode, 1, N, orderA, W, M, orderC, C);
-    }
-  }
-}
-
-template <class matrix_t>
-inline void crt_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const matrix_t* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C) {
-  constexpr int32_t Complex = std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>;
-  int32_t orderB = (63 + (orderA << 3)) / 63;
-  int32_t algnM = (M + 255) & (~255), algnN = (N + 63) & (~63);
-  int64_t strideW = int64_t(algnM) * int64_t(N), strideB = int64_t(N) * int64_t(N) * int64_t(orderB);
-  uint64_t w_len = uint64_t(strideW) * uint64_t(orderA), w_pad = uint64_t(algnN - N) * uint64_t(algnM), b_len = uint64_t(strideB) + (uint64_t(N) + uint64_t(N));
-  if constexpr(Complex) { w_len *= uint64_t(3); b_len *= uint64_t(2); }
-
-  int8_t* W = nullptr; int32_t* scratch = nullptr; uint64_t* B = nullptr;
-  if (cudaSuccess != cudaMallocAsync((void**)&W, w_len + w_pad, stream))
-    throw std::runtime_error("Workspace (i8) allocation failed at Integer SY/HERK.");
-  if (cudaSuccess != cudaMallocAsync((void**)&scratch, uint64_t(algnN) * uint64_t(N) * uint64_t(orderA) * sizeof(int32_t), stream))
-    throw std::runtime_error("Workspace (i32) allocation failed at Integer SY/HERK.");
-  if (cudaSuccess != cudaMallocAsync((void**)&B, b_len * sizeof(uint64_t), stream))
-    throw std::runtime_error("Workspace (u64) allocation failed at Integer SY/HERK.");
-
-  internal::int8::quantize(stream, M, A, lda, corr, vexp, orderA, N, algnM, W);
-  if constexpr(Complex) { vector_sums(stream, M, N, A, lda, corr, vexp, &B[strideB * int64_t(2)]); }
-    else { vector_sums(stream, M, N, A, lda, corr, vexp, &B[strideB]); }
-
-  if constexpr(Complex) {
-    int64_t strideWm = int64_t(orderA) * strideW, strideW2 = strideWm * int64_t(2);
-    gemm_accum_crt(stream, handle, 'U', algnN, N, algnM, orderA, &W[strideW2], &W[strideW2], orderB, B, scratch);
-    gemm_accum_crt(stream, handle, 'A', algnN, N, algnM, orderA, W, &W[strideWm], orderB, &B[strideB], scratch);
-  } else { gemm_accum_crt(stream, handle, 'U', algnN, N, algnM, orderA, W, W, orderB, B, scratch); }
-  cudaFreeAsync(W, stream); cudaFreeAsync(scratch, stream);
-
-  internal::int8::triangle_pack(stream, Complex, M, N, orderB, B, corr, beta, orderC, C);
-  cudaFreeAsync(B, stream);
-}
+constexpr int32_t block_threads = 512;
 
 namespace internal::int8 {
 
-  void AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const double* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
-  { crt_dispatcher(stream, handle, M, N, orderA, A, lda, corr, vexp, beta, orderC, C); }
+  void vector_sums(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, uint32_t corr, const int32_t* vexp, uint64_t* vsum)
+  { vector_sum_kernel<block_threads> <<< N, block_threads, 0, stream >>> (M, A, int64_t(lda), corr, vexp, vsum); }
 
-  void AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const float* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
-  { crt_dispatcher(stream, handle, M, N, orderA, A, lda, corr, vexp, beta, orderC, C); }
+  void vector_sums(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, uint32_t corr, const int32_t* vexp, uint64_t* vsum)
+  { vector_sum_kernel<block_threads> <<< N, block_threads, 0, stream >>> (M, A, int64_t(lda), corr, vexp, vsum); }
 
-  void AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
-  { crt_dispatcher(stream, handle, M, N, orderA, A, lda, corr, vexp, beta, orderC, C); }
+  void vector_sums(cudaStream_t stream, int32_t M, int32_t N, const __half* A, int32_t lda, uint32_t corr, const int32_t* vexp, uint64_t* vsum)
+  { vector_sum_kernel<block_threads> <<< N, block_threads, 0, stream >>> (M, A, int64_t(lda), corr, vexp, vsum); }
 
-  void AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuDoubleComplex* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
-  { crt_dispatcher(stream, handle, M, N, orderA, A, lda, corr, vexp, beta, orderC, C); }
+  void vector_sums(cudaStream_t stream, int32_t M, int32_t N, const cuDoubleComplex* A, int32_t lda, uint32_t corr, const int32_t* vexp, uint64_t* vsum)
+  { vector_sum_kernel<block_threads> <<< N, block_threads, 0, stream >>> (M, A, int64_t(lda), corr, vexp, vsum); }
 
-  void AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const cuComplex* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
-  { crt_dispatcher(stream, handle, M, N, orderA, A, lda, corr, vexp, beta, orderC, C); }
+  void vector_sums(cudaStream_t stream, int32_t M, int32_t N, const cuComplex* A, int32_t lda, uint32_t corr, const int32_t* vexp, uint64_t* vsum)
+  { vector_sum_kernel<block_threads> <<< N, block_threads, 0, stream >>> (M, A, int64_t(lda), corr, vexp, vsum); }
 
-  void AHA_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const __half2* A, int32_t lda, uint32_t corr, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C)
-  { crt_dispatcher(stream, handle, M, N, orderA, A, lda, corr, vexp, beta, orderC, C); }
+  void vector_sums(cudaStream_t stream, int32_t M, int32_t N, const __half2* A, int32_t lda, uint32_t corr, const int32_t* vexp, uint64_t* vsum)
+  { vector_sum_kernel<block_threads> <<< N, block_threads, 0, stream >>> (M, A, int64_t(lda), corr, vexp, vsum); }
 
 }

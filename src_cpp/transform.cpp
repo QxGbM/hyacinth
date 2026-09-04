@@ -30,7 +30,8 @@ inline void ax_transform(cudaStream_t stream, cublasHandle_t handle, int32_t M, 
   cudaFreeAsync(dev_work, stream);
 }
 
-inline void ax_transform_cf16(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, __half2* A, int32_t lda, const __half2* X, int32_t ldx) {
+template <>
+inline void ax_transform<__half2>(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, __half2* A, int32_t lda, const __half2* X, int32_t ldx) {
   const int32_t rows = 16384;
   uint8_t* dev_work = nullptr;
   uint64_t dev_work_bytes = uint64_t(rows) * uint64_t(K) * uint64_t(sizeof(cuComplex));
@@ -68,7 +69,7 @@ extern "C" void hyacinXtransform(hyacinHandle_t handle, int32_t M, int32_t N, in
     case HYACIN_F16: ax_transform(handle.cudaStream, handle.cublasHandle, M, N, K, (__half*)A, lda, (const __half*)X, ldx); return;
     case HYACIN_F64_COMPLEX: ax_transform(handle.cudaStream, handle.cublasHandle, M, N, K, (cuDoubleComplex*)A, lda, (const cuDoubleComplex*)X, ldx); return;
     case HYACIN_F32_COMPLEX: ax_transform(handle.cudaStream, handle.cublasHandle, M, N, K, (cuComplex*)A, lda, (const cuComplex*)X, ldx); return;
-    case HYACIN_F16_COMPLEX: ax_transform_cf16(handle.cudaStream, handle.cublasHandle, M, N, K, (__half2*)A, lda, (const __half2*)X, ldx); return;
+    case HYACIN_F16_COMPLEX: ax_transform(handle.cudaStream, handle.cublasHandle, M, N, K, (__half2*)A, lda, (const __half2*)X, ldx); return;
     default: return;
   }
 }
