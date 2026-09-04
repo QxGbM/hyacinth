@@ -1,6 +1,7 @@
 
 from math import gcd
 from itertools import combinations
+import numpy as np
 
 moduli_all = [256, 253, 251, 249, 247, 241, 239, 235, 233, 229, 227, 223, 217, 211, 199, 197, 193, 191, 181, 179, 173, 167, 163]
 all_ok = True
@@ -32,9 +33,11 @@ if all_ok:
   rem_e32 = [(1 << 32) % m for m in moduli_all]
   rem_e63 = [(1 << 63) % m for m in moduli_all]
   padded_len = (len(moduli_all) + 3) & (~3)
+  log2_prefix_sum = np.trunc(np.cumsum(np.log2(moduli_all))).astype(np.int32)
 
   print("#pragma once\n#include <cstdint>\nnamespace U8CRT {\n")
   print("  template <int32_t Moduli> struct Constants;")
+  print(f"  constexpr uint16_t range[{padded_len}] =" + " { " + ", ".join(f"{m}" for m in log2_prefix_sum) + " };")
   print(f"  constexpr uint16_t mo[{padded_len}] =" + " { " + ", ".join(f"{m}" for m in moduli_all) + " };")
   print(f"  constexpr uint16_t rem_e32[{padded_len}] =" + " { " + ", ".join(f"{m}" for m in rem_e32) + " };")
   print(f"  constexpr uint16_t rem_e63[{padded_len}] =" + " { " + ", ".join(f"{m}" for m in rem_e63) + " };\n")

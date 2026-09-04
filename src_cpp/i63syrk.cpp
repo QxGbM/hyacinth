@@ -3,6 +3,7 @@
 #include <internal.hpp>
 #include <double_double.hpp>
 #include <quad_float.hpp>
+#include <crt_constants.hpp>
 #include <vector>
 #include <algorithm>
 #include <stdexcept>
@@ -236,8 +237,9 @@ inline void herk_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t 
   if (u <= 0 && 0 < M) { internal::int8::vector_exponents(stream, M, N, A, lda, uptr, const_cast<int32_t*>(vexp)); u = *uptr; }
   if (u <= 0 && i == 0) { cudaMemsetAsync(C, 0, uint64_t(N) * uint64_t(N + 1) * uint64_t(orderC) * elem, stream); return; }
 
-  int32_t bits = int32_t(std::ceil(std::log2(double(std::max(1, M))))) + (Complex ? 2 : 0) + (u << 1);
-  int32_t orderA_limbs = (u <= 7) ? 1 : int32_t(uint32_t(u + 9) >> 3), orderA_crt = int32_t(uint32_t(bits + 11) >> 3);
+  int32_t uc = u + Complex, bits = int32_t(std::ceil(std::log2(double(std::max(1, M))))) + ((uc + 1) << 1);
+  int32_t orderA_limbs = (uc <= 7) ? 1 : int32_t(uint32_t(uc + 9) >> 3);
+  int32_t orderA_crt = 1 + int32_t(std::distance(&U8CRT::range[0], std::find_if(&U8CRT::range[0], &U8CRT::range[23], [=](int32_t r) { return bits <= r; })));
   int32_t cost_limbs = int32_t(uint32_t(orderA_limbs * (orderA_limbs + 1)) >> 1), cost_crt = orderA_crt + int32_t(uint32_t(orderA_crt) >> 3);
   int32_t use_limbs = int32_t(alg == HYACIN_ALG_LIMBS || (alg == HYACIN_ALG_AUTO && (orderA_limbs <= 3 || cost_limbs <= cost_crt)));
   if (use_limbs) {
