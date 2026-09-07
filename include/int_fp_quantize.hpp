@@ -38,23 +38,23 @@ namespace device::int8 {
     a[2] += ((sign & m0) | (q1 & m1) | (q0 & m2)) + (a[1] >> 63); a[1] &= i63;
   }
 
-  __host__ __device__ __forceinline__ int64_t round_i64(double x, int32_t expon, int32_t& e) {
+  __host__ __device__ __forceinline__ int64_t round_i64(double x, int32_t expon, uint32_t& e) {
 #ifndef __CUDA_ARCH__
     return std::llrint(std::scalbn(x, expon - (e = std::max(std::ilogb(x) + (expon - 62), 0))));
 #else
-    return llrint(scalbn(x, expon - (e = __viaddmax_s32(ilogb(x), expon - 62, 0))));
+    return llrint(scalbn(x, expon - (e = uint32_t(__viaddmax_s32(ilogb(x), expon - 62, 0)))));
 #endif
   }
   
-  __host__ __device__ __forceinline__ int64_t round_i64(float x, int32_t expon, int32_t& e) {
+  __host__ __device__ __forceinline__ int64_t round_i64(float x, int32_t expon, uint32_t& e) {
 #ifndef __CUDA_ARCH__
     return std::llrint(std::scalbn(x, expon - (e = std::max(std::ilogb(x) + (expon - 62), 0))));
 #else
-    return llrintf(scalbnf(x, expon - (e = __viaddmax_s32(ilogbf(x), expon - 62, 0))));
+    return llrintf(scalbnf(x, expon - (e = uint32_t(__viaddmax_s32(ilogbf(x), expon - 62, 0)))));
 #endif
   }
 
-  __host__ __device__ __forceinline__ int64_t round_i64(__half x, int32_t expon, int32_t& e) {
+  __host__ __device__ __forceinline__ int64_t round_i64(__half x, int32_t expon, uint32_t& e) {
     return round_i64(__half2float(x), expon, e);
   }
 
