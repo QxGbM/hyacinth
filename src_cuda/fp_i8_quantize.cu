@@ -89,104 +89,106 @@ __device__ __forceinline__ void write_i8(const uint32_t (&code)[ORDER], int8_t* 
 template <int32_t orderi8, int32_t CRT, class matrix_t>
 __global__ void quantize_kernel(int64_t M, const matrix_t* __restrict__ A, int64_t lda, uint32_t corr, const int32_t* __restrict__ vexp, int8_t* __restrict__ B, int64_t ldb, int64_t strideB) {
   constexpr int32_t ORDER = (orderi8 + 3) / 4, Complex = std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>;
-  int64_t y = (int64_t(blockIdx.x) << 8) + int64_t(threadIdx.x), panelB = int64_t(orderi8) * strideB;
-  int32_t expon = vexp[blockIdx.y]; B = &B[y + (int64_t(blockIdx.y) * ldb)];
-  if (M <= y || expon == int_max) {
-    uint32_t code[ORDER]{};
-    write_i8<orderi8>(code, B, strideB);
-    if constexpr(Complex)
-    { write_i8<orderi8>(code, B += panelB, strideB); write_i8<orderi8>(code, B += panelB, strideB); }
-  }
-  else {
-    uint32_t code[ORDER];
-    matrix_t A_i = A[y + (int64_t(blockIdx.y) * lda)];
-    if constexpr(Complex) {
-      uint64_t rl[2]{}, im[2]{}; int32_t e;
-      int64_t q_rl = device::int8::round_i64(A_i.x, expon, e); device::int8::add_shifted(rl, q_rl, uint32_t(e));
-      int64_t q_im = device::int8::round_i64(A_i.y, expon, e); device::int8::add_shifted(im, q_im, uint32_t(e));
-      if constexpr(CRT) { device::int8::add_shifted(rl, int64_t(1), corr); device::int8::add_shifted(im, int64_t(1), corr); }
-
-      quantize_i8<CRT, orderi8>(rl[0], uint32_t(rl[1]), code); write_i8<orderi8>(code, B, strideB);
-      device::int8::add_shifted(rl, q_im, uint32_t(e));
-      if constexpr(CRT) { device::int8::add_shifted(rl, int64_t(1), corr); }
-
-      quantize_i8<CRT, orderi8>(im[0], uint32_t(im[1]), code); write_i8<orderi8>(code, B += panelB, strideB);
-      quantize_i8<CRT, orderi8>(rl[0], uint32_t(rl[1]), code); write_i8<orderi8>(code, B += panelB, strideB);
+  int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x), panelB = int64_t(orderi8) * strideB;
+  if (y < M) {
+    int32_t expon = vexp[blockIdx.y]; B = &B[y + (int64_t(blockIdx.y) * ldb)];
+    if (expon == int_max) {
+      uint32_t code[ORDER]{};
+      write_i8<orderi8>(code, B, strideB);
+      if constexpr(Complex)
+      { write_i8<orderi8>(code, B += panelB, strideB); write_i8<orderi8>(code, B += panelB, strideB); }
     }
     else {
-      uint64_t rl[2]{}; int32_t e;
-      int64_t q_rl = device::int8::round_i64(A_i, expon, e); device::int8::add_shifted(rl, q_rl, uint32_t(e));
-      if constexpr(CRT) { device::int8::add_shifted(rl, int64_t(1), corr); }
-      quantize_i8<CRT, orderi8>(rl[0], uint32_t(rl[1]), code); write_i8<orderi8>(code, B, strideB);
+      uint32_t code[ORDER];
+      matrix_t A_i = A[y + (int64_t(blockIdx.y) * lda)];
+      if constexpr(Complex) {
+        uint64_t rl[2]{}, im[2]{}; int32_t e;
+        int64_t q_rl = device::int8::round_i64(A_i.x, expon, e); device::int8::add_shifted(rl, q_rl, uint32_t(e));
+        int64_t q_im = device::int8::round_i64(A_i.y, expon, e); device::int8::add_shifted(im, q_im, uint32_t(e));
+        if constexpr(CRT) { device::int8::add_shifted(rl, int64_t(1), corr); device::int8::add_shifted(im, int64_t(1), corr); }
+
+        quantize_i8<CRT, orderi8>(rl[0], uint32_t(rl[1]), code); write_i8<orderi8>(code, B, strideB);
+        device::int8::add_shifted(rl, q_im, uint32_t(e));
+        if constexpr(CRT) { device::int8::add_shifted(rl, int64_t(1), corr); }
+
+        quantize_i8<CRT, orderi8>(im[0], uint32_t(im[1]), code); write_i8<orderi8>(code, B += panelB, strideB);
+        quantize_i8<CRT, orderi8>(rl[0], uint32_t(rl[1]), code); write_i8<orderi8>(code, B += panelB, strideB);
+      }
+      else {
+        uint64_t rl[2]{}; int32_t e;
+        int64_t q_rl = device::int8::round_i64(A_i, expon, e); device::int8::add_shifted(rl, q_rl, uint32_t(e));
+        if constexpr(CRT) { device::int8::add_shifted(rl, int64_t(1), corr); }
+        quantize_i8<CRT, orderi8>(rl[0], uint32_t(rl[1]), code); write_i8<orderi8>(code, B, strideB);
+      }
     }
   }
 };
 
 template <class matrix_t>
-inline void quantize_dispatcher(cudaStream_t stream, int32_t M, const matrix_t* C, int32_t ldc, uint32_t corr, const int32_t* vexp, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A) {
-  constexpr int32_t block_threads = 256;
-  dim3 grid(uint32_t(dimX) >> 8, uint32_t(dimY));
-  int64_t M64 = int64_t(M), ldc64 = int64_t(ldc), dimX64 = int64_t(dimX), strideA = int64_t(dimY) * dimX64;
+inline void quantize_dispatcher(cudaStream_t stream, int32_t dimX, int32_t dimY, int32_t dimZ, const matrix_t* A, int32_t lda, uint32_t corr, const int32_t* vexp, int8_t* B, int32_t ldb) {
+  constexpr int32_t block_threads = 512;
+  dim3 grid(uint32_t(dimX + 511) >> 9, uint32_t(dimY));
+  int64_t M64 = int64_t(dimX), lda64 = int64_t(lda), ldb64 = int64_t(ldb), strideB = int64_t(dimY) * ldb64;
 
   if (corr) switch (dimZ) {
-    case 2: quantize_kernel<2, 1> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 3: quantize_kernel<3, 1> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 4: quantize_kernel<4, 1> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 5: quantize_kernel<5, 1> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 6: quantize_kernel<6, 1> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 7: quantize_kernel<7, 1> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 8: quantize_kernel<8, 1> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 9: quantize_kernel<9, 1> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 10: quantize_kernel<10, 1> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 11: quantize_kernel<11, 1> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 12: quantize_kernel<12, 1> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 13: quantize_kernel<13, 1> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 14: quantize_kernel<14, 1> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 15: quantize_kernel<15, 1> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 16: quantize_kernel<16, 1> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 17: quantize_kernel<17, 1> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 18: quantize_kernel<18, 1> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 19: quantize_kernel<19, 1> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 20: quantize_kernel<20, 1> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 21: quantize_kernel<21, 1> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 22: quantize_kernel<22, 1> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 23: quantize_kernel<23, 1> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
+    case 2: quantize_kernel<2, 1> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 3: quantize_kernel<3, 1> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 4: quantize_kernel<4, 1> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 5: quantize_kernel<5, 1> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 6: quantize_kernel<6, 1> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 7: quantize_kernel<7, 1> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 8: quantize_kernel<8, 1> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 9: quantize_kernel<9, 1> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 10: quantize_kernel<10, 1> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 11: quantize_kernel<11, 1> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 12: quantize_kernel<12, 1> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 13: quantize_kernel<13, 1> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 14: quantize_kernel<14, 1> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 15: quantize_kernel<15, 1> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 16: quantize_kernel<16, 1> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 17: quantize_kernel<17, 1> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 18: quantize_kernel<18, 1> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 19: quantize_kernel<19, 1> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 20: quantize_kernel<20, 1> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 21: quantize_kernel<21, 1> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 22: quantize_kernel<22, 1> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 23: quantize_kernel<23, 1> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
     default: return;
   } switch (dimZ) {
-    case 1: quantize_kernel<1, 0> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 2: quantize_kernel<2, 0> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 3: quantize_kernel<3, 0> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 4: quantize_kernel<4, 0> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 5: quantize_kernel<5, 0> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 6: quantize_kernel<6, 0> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 7: quantize_kernel<7, 0> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 8: quantize_kernel<8, 0> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 9: quantize_kernel<9, 0> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 10: quantize_kernel<10, 0> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 11: quantize_kernel<11, 0> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
-    case 12: quantize_kernel<12, 0> <<< grid, block_threads, 0, stream >>> (M64, C, ldc64, corr, vexp, A, dimX64, strideA); return;
+    case 1: quantize_kernel<1, 0> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 2: quantize_kernel<2, 0> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 3: quantize_kernel<3, 0> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 4: quantize_kernel<4, 0> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 5: quantize_kernel<5, 0> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 6: quantize_kernel<6, 0> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 7: quantize_kernel<7, 0> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 8: quantize_kernel<8, 0> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 9: quantize_kernel<9, 0> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 10: quantize_kernel<10, 0> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 11: quantize_kernel<11, 0> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
+    case 12: quantize_kernel<12, 0> <<< grid, block_threads, 0, stream >>> (M64, A, lda64, corr, vexp, B, ldb64, strideB); return;
     default: return;
   }
 }
 
 namespace internal::int8 {
 
-  void quantize(cudaStream_t stream, int32_t M, const double* C, int32_t ldc, uint32_t corr, const int32_t* vexp, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A)
-  { quantize_dispatcher(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); }
+  void quantize(cudaStream_t stream, int32_t dimX, int32_t dimY, int32_t dimZ, const double* A, int32_t lda, uint32_t corr, const int32_t* vexp, int8_t* B, int32_t ldb)
+  { quantize_dispatcher(stream, dimX, dimY, dimZ, A, lda, corr, vexp, B, ldb); }
 
-  void quantize(cudaStream_t stream, int32_t M, const float* C, int32_t ldc, uint32_t corr, const int32_t* vexp, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A)
-  { quantize_dispatcher(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); }
+  void quantize(cudaStream_t stream, int32_t dimX, int32_t dimY, int32_t dimZ, const float* A, int32_t lda, uint32_t corr, const int32_t* vexp, int8_t* B, int32_t ldb)
+  { quantize_dispatcher(stream, dimX, dimY, dimZ, A, lda, corr, vexp, B, ldb); }
 
-  void quantize(cudaStream_t stream, int32_t M, const __half* C, int32_t ldc, uint32_t corr, const int32_t* vexp, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A)
-  { quantize_dispatcher(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); }
+  void quantize(cudaStream_t stream, int32_t dimX, int32_t dimY, int32_t dimZ, const __half* A, int32_t lda, uint32_t corr, const int32_t* vexp, int8_t* B, int32_t ldb)
+  { quantize_dispatcher(stream, dimX, dimY, dimZ, A, lda, corr, vexp, B, ldb); }
 
-  void quantize(cudaStream_t stream, int32_t M, const cuDoubleComplex* C, int32_t ldc, uint32_t corr, const int32_t* vexp, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A)
-  { quantize_dispatcher(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); }
+  void quantize(cudaStream_t stream, int32_t dimX, int32_t dimY, int32_t dimZ, const cuDoubleComplex* A, int32_t lda, uint32_t corr, const int32_t* vexp, int8_t* B, int32_t ldb)
+  { quantize_dispatcher(stream, dimX, dimY, dimZ, A, lda, corr, vexp, B, ldb); }
 
-  void quantize(cudaStream_t stream, int32_t M, const cuComplex* C, int32_t ldc, uint32_t corr, const int32_t* vexp, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A)
-  { quantize_dispatcher(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); }
+  void quantize(cudaStream_t stream, int32_t dimX, int32_t dimY, int32_t dimZ, const cuComplex* A, int32_t lda, uint32_t corr, const int32_t* vexp, int8_t* B, int32_t ldb)
+  { quantize_dispatcher(stream, dimX, dimY, dimZ, A, lda, corr, vexp, B, ldb); }
 
-  void quantize(cudaStream_t stream, int32_t M, const __half2* C, int32_t ldc, uint32_t corr, const int32_t* vexp, int32_t dimZ, int32_t dimY, int32_t dimX, int8_t* A)
-  { quantize_dispatcher(stream, M, C, ldc, corr, vexp, dimZ, dimY, dimX, A); }
+  void quantize(cudaStream_t stream, int32_t dimX, int32_t dimY, int32_t dimZ, const __half2* A, int32_t lda, uint32_t corr, const int32_t* vexp, int8_t* B, int32_t ldb)
+  { quantize_dispatcher(stream, dimX, dimY, dimZ, A, lda, corr, vexp, B, ldb); }
 
 }

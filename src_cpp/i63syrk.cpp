@@ -5,6 +5,7 @@
 #include <quad_float.hpp>
 #include <crt_constants.hpp>
 #include <vector>
+#include <tuple>
 #include <algorithm>
 #include <stdexcept>
 
@@ -248,7 +249,7 @@ inline void herk_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t 
     if (cudaSuccess != cudaMallocAsync((void**)&W, w_len, stream))
       throw std::runtime_error("Workspace (i8) allocation failed at Integer SY/HERK.");
 
-    internal::int8::quantize(stream, M, A, lda, uint32_t(0), vexp, orderA_limbs, N, ldw, W);
+    internal::int8::quantize(stream, M, N, orderA_limbs, A, lda, uint32_t(0), vexp, W, ldw);
     i8herk_limbs<Complex>(stream, handle, M, N, orderA_limbs, W, ldw, i, orderC, C);
     cudaFreeAsync(W, stream);
   } else {
@@ -259,7 +260,7 @@ inline void herk_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t 
     if (cudaSuccess != cudaMallocAsync((void**)&vsum, uint64_t(N) * uint64_t(4) * elem, stream))
       throw std::runtime_error("Workspace (Sums) allocation failed at Integer SY/HERK.");
 
-    internal::int8::quantize(stream, M, A, lda, u, vexp, orderA_crt, N, ldw, W);
+    internal::int8::quantize(stream, M, N, orderA_crt, A, lda, u, vexp, W, ldw);
     internal::int8::vector_sums(stream, M, N, A, lda, u, vexp, vsum);
     i8herk_crt<Complex>(stream, handle, M, N, orderA_crt, W, ldw, vsum, u, i, orderC, C);
     cudaFreeAsync(W, stream); cudaFreeAsync(vsum, stream);
