@@ -6,79 +6,83 @@
 #include <limits>
 
 constexpr int32_t int_max = std::numeric_limits<int32_t>::max();
-template <int32_t orderi8, int32_t ORDER> __device__ __forceinline__ void quantize_i8(uint64_t lo, uint32_t hi, uint32_t (&code)[ORDER]) {
+template <int32_t ORDER, class Itype> __device__ __forceinline__ void write_zeros(Itype* A, int64_t strideA) {
+  constexpr Itype zero = Itype(0);
+  if constexpr(0 < ORDER) { *A = zero; }
+  #pragma unroll
+  for (int32_t i = 1; i < ORDER; ++i) { *(A += strideA) = zero; }
+}
+
+template <int32_t ORDER> __device__ __forceinline__ int8_t* quantize_i8(uint64_t lo, uint32_t hi, int8_t* A, int64_t strideA) {
   uint32_t lo_32 = uint32_t(lo), mi = uint32_t(lo >> 32);
   using U8CRT::mo, U8CRT::rem_e32, U8CRT::rem_e63;
-  if constexpr(0 < orderi8 && 0 < ORDER) {
+  if constexpr(0 < ORDER) {
     constexpr uint64_t m = uint64_t(mo[0]) | (uint64_t(mo[1]) << 16) | (uint64_t(mo[2]) << 32) | (uint64_t(mo[3]) << 48);
     constexpr uint64_t r32 = uint64_t(rem_e32[0]) | (uint64_t(rem_e32[1]) << 16) | (uint64_t(rem_e32[2]) << 32) | (uint64_t(rem_e32[3]) << 48);
     constexpr uint64_t r63 = uint64_t(rem_e63[0]) | (uint64_t(rem_e63[1]) << 16) | (uint64_t(rem_e63[2]) << 32) | (uint64_t(rem_e63[3]) << 48);
-    code[0] = device::int8::conv_u32i8_modular<m, r32, r63>(lo_32, mi, hi);
-  } else if constexpr(0 < ORDER) { code[0] = uint32_t(0); }
+    uint32_t code = device::int8::conv_u32i8_modular<m, r32, r63>(lo_32, mi, hi);
+    *A = int8_t(code);
+    if constexpr(1 < ORDER) { *(A += strideA) = int8_t(code >> 8); }
+    if constexpr(2 < ORDER) { *(A += strideA) = int8_t(code >> 16); }
+    if constexpr(3 < ORDER) { *(A += strideA) = int8_t(code >> 24); }
+  } else { return A; }
 
-  if constexpr(4 < orderi8 && 1 < ORDER) {
+  if constexpr(4 < ORDER) {
     constexpr uint64_t m = uint64_t(mo[4]) | (uint64_t(mo[5]) << 16) | (uint64_t(mo[6]) << 32) | (uint64_t(mo[7]) << 48);
     constexpr uint64_t r32 = uint64_t(rem_e32[4]) | (uint64_t(rem_e32[5]) << 16) | (uint64_t(rem_e32[6]) << 32) | (uint64_t(rem_e32[7]) << 48);
     constexpr uint64_t r63 = uint64_t(rem_e63[4]) | (uint64_t(rem_e63[5]) << 16) | (uint64_t(rem_e63[6]) << 32) | (uint64_t(rem_e63[7]) << 48);
-    code[1] = device::int8::conv_u32i8_modular<m, r32, r63>(lo_32, mi, hi);
-  } else if constexpr(1 < ORDER) { code[1] = uint32_t(0); }
+    uint32_t code = device::int8::conv_u32i8_modular<m, r32, r63>(lo_32, mi, hi);
+    *(A += strideA) = int8_t(code);
+    if constexpr(5 < ORDER) { *(A += strideA) = int8_t(code >> 8); }
+    if constexpr(6 < ORDER) { *(A += strideA) = int8_t(code >> 16); }
+    if constexpr(7 < ORDER) { *(A += strideA) = int8_t(code >> 24); }
+  }
 
-  if constexpr(8 < orderi8 && 2 < ORDER) {
+  if constexpr(8 < ORDER) {
     constexpr uint64_t m = uint64_t(mo[8]) | (uint64_t(mo[9]) << 16) | (uint64_t(mo[10]) << 32) | (uint64_t(mo[11]) << 48);
     constexpr uint64_t r32 = uint64_t(rem_e32[8]) | (uint64_t(rem_e32[9]) << 16) | (uint64_t(rem_e32[10]) << 32) | (uint64_t(rem_e32[11]) << 48);
     constexpr uint64_t r63 = uint64_t(rem_e63[8]) | (uint64_t(rem_e63[9]) << 16) | (uint64_t(rem_e63[10]) << 32) | (uint64_t(rem_e63[11]) << 48);
-    code[2] = device::int8::conv_u32i8_modular<m, r32, r63>(lo_32, mi, hi);
-  } else if constexpr(2 < ORDER) { code[2] = uint32_t(0); }
+    uint32_t code = device::int8::conv_u32i8_modular<m, r32, r63>(lo_32, mi, hi);
+    *(A += strideA) = int8_t(code);
+    if constexpr(9 < ORDER) { *(A += strideA) = int8_t(code >> 8); }
+    if constexpr(10 < ORDER) { *(A += strideA) = int8_t(code >> 16); }
+    if constexpr(11 < ORDER) { *(A += strideA) = int8_t(code >> 24); }
+  }
 
-  if constexpr(12 < orderi8 && 3 < ORDER) {
+  if constexpr(12 < ORDER) {
     constexpr uint64_t m = uint64_t(mo[12]) | (uint64_t(mo[13]) << 16) | (uint64_t(mo[14]) << 32) | (uint64_t(mo[15]) << 48);
     constexpr uint64_t r32 = uint64_t(rem_e32[12]) | (uint64_t(rem_e32[13]) << 16) | (uint64_t(rem_e32[14]) << 32) | (uint64_t(rem_e32[15]) << 48);
     constexpr uint64_t r63 = uint64_t(rem_e63[12]) | (uint64_t(rem_e63[13]) << 16) | (uint64_t(rem_e63[14]) << 32) | (uint64_t(rem_e63[15]) << 48);
-    code[3] = device::int8::conv_u32i8_modular<m, r32, r63>(lo_32, mi, hi);
-  } else if constexpr(3 < ORDER) { code[3] = uint32_t(0); }
+    uint32_t code = device::int8::conv_u32i8_modular<m, r32, r63>(lo_32, mi, hi);
+    *(A += strideA) = int8_t(code);
+    if constexpr(13 < ORDER) { *(A += strideA) = int8_t(code >> 8); }
+    if constexpr(14 < ORDER) { *(A += strideA) = int8_t(code >> 16); }
+    if constexpr(15 < ORDER) { *(A += strideA) = int8_t(code >> 24); }
+  }
 
-  if constexpr(16 < orderi8 && 4 < ORDER) {
+  if constexpr(16 < ORDER) {
     constexpr uint64_t m = uint64_t(mo[16]) | (uint64_t(mo[17]) << 16) | (uint64_t(mo[18]) << 32) | (uint64_t(mo[19]) << 48);
     constexpr uint64_t r32 = uint64_t(rem_e32[16]) | (uint64_t(rem_e32[17]) << 16) | (uint64_t(rem_e32[18]) << 32) | (uint64_t(rem_e32[19]) << 48);
     constexpr uint64_t r63 = uint64_t(rem_e63[16]) | (uint64_t(rem_e63[17]) << 16) | (uint64_t(rem_e63[18]) << 32) | (uint64_t(rem_e63[19]) << 48);
-    code[4] = device::int8::conv_u32i8_modular<m, r32, r63>(lo_32, mi, hi);
-  } else if constexpr(4 < ORDER) { code[4] = uint32_t(0); }
+    uint32_t code = device::int8::conv_u32i8_modular<m, r32, r63>(lo_32, mi, hi);
+    *(A += strideA) = int8_t(code);
+    if constexpr(17 < ORDER) { *(A += strideA) = int8_t(code >> 8); }
+    if constexpr(18 < ORDER) { *(A += strideA) = int8_t(code >> 16); }
+    if constexpr(19 < ORDER) { *(A += strideA) = int8_t(code >> 24); }
+  }
 
-  if constexpr(20 < orderi8 && 5 < ORDER) {
+  if constexpr(20 < ORDER) {
     constexpr uint64_t m = uint64_t(mo[20]) | (uint64_t(mo[21]) << 16) | (uint64_t(mo[22]) << 32) | (uint64_t(mo[23]) << 48);
     constexpr uint64_t r32 = uint64_t(rem_e32[20]) | (uint64_t(rem_e32[21]) << 16) | (uint64_t(rem_e32[22]) << 32) | (uint64_t(rem_e32[23]) << 48);
     constexpr uint64_t r63 = uint64_t(rem_e63[20]) | (uint64_t(rem_e63[21]) << 16) | (uint64_t(rem_e63[22]) << 32) | (uint64_t(rem_e63[23]) << 48);
-    code[5] = device::int8::conv_u32i8_modular<m, r32, r63>(lo_32, mi, hi);
-  } else if constexpr(5 < ORDER) { code[5] = uint32_t(0); }
-}
+    uint32_t code = device::int8::conv_u32i8_modular<m, r32, r63>(lo_32, mi, hi);
+    *(A += strideA) = int8_t(code);
+    if constexpr(21 < ORDER) { *(A += strideA) = int8_t(code >> 8); }
+    if constexpr(22 < ORDER) { *(A += strideA) = int8_t(code >> 16); }
+    if constexpr(23 < ORDER) { *(A += strideA) = int8_t(code >> 24); }
+  }
 
-template <int32_t orderi8, int32_t ORDER>
-__device__ __forceinline__ int8_t* write_i8(const uint32_t (&code)[ORDER], int8_t* A, int64_t strideA) {
-  if constexpr(0 < orderi8 && 0 < ORDER) { *A = int8_t(code[0]); } else { return A; }
-  if constexpr(1 < orderi8 && 0 < ORDER) { *(A += strideA) = int8_t(code[0] >> 8); }
-  if constexpr(2 < orderi8 && 0 < ORDER) { *(A += strideA) = int8_t(code[0] >> 16); }
-  if constexpr(3 < orderi8 && 0 < ORDER) { *(A += strideA) = int8_t(code[0] >> 24); }
-  if constexpr(4 < orderi8 && 1 < ORDER) { *(A += strideA) = int8_t(code[1]); }
-  if constexpr(5 < orderi8 && 1 < ORDER) { *(A += strideA) = int8_t(code[1] >> 8); }
-  if constexpr(6 < orderi8 && 1 < ORDER) { *(A += strideA) = int8_t(code[1] >> 16); }
-  if constexpr(7 < orderi8 && 1 < ORDER) { *(A += strideA) = int8_t(code[1] >> 24); }
-  if constexpr(8 < orderi8 && 2 < ORDER) { *(A += strideA) = int8_t(code[2]); }
-  if constexpr(9 < orderi8 && 2 < ORDER) { *(A += strideA) = int8_t(code[2] >> 8); }
-  if constexpr(10 < orderi8 && 2 < ORDER) { *(A += strideA) = int8_t(code[2] >> 16); }
-  if constexpr(11 < orderi8 && 2 < ORDER) { *(A += strideA) = int8_t(code[2] >> 24); }
-  if constexpr(12 < orderi8 && 3 < ORDER) { *(A += strideA) = int8_t(code[3]); }
-  if constexpr(13 < orderi8 && 3 < ORDER) { *(A += strideA) = int8_t(code[3] >> 8); }
-  if constexpr(14 < orderi8 && 3 < ORDER) { *(A += strideA) = int8_t(code[3] >> 16); }
-  if constexpr(15 < orderi8 && 3 < ORDER) { *(A += strideA) = int8_t(code[3] >> 24); }
-  if constexpr(16 < orderi8 && 4 < ORDER) { *(A += strideA) = int8_t(code[4]); }
-  if constexpr(17 < orderi8 && 4 < ORDER) { *(A += strideA) = int8_t(code[4] >> 8); }
-  if constexpr(18 < orderi8 && 4 < ORDER) { *(A += strideA) = int8_t(code[4] >> 16); }
-  if constexpr(19 < orderi8 && 4 < ORDER) { *(A += strideA) = int8_t(code[4] >> 24); }
-  if constexpr(20 < orderi8 && 5 < ORDER) { *(A += strideA) = int8_t(code[5]); }
-  if constexpr(21 < orderi8 && 5 < ORDER) { *(A += strideA) = int8_t(code[5] >> 8); }
-  if constexpr(22 < orderi8 && 5 < ORDER) { *(A += strideA) = int8_t(code[5] >> 16); }
-  if constexpr(23 < orderi8 && 5 < ORDER) { *(A += strideA) = int8_t(code[5] >> 24); }
-  return (A += strideA);
+  return &A[strideA];
 }
 
 struct u64_add {
@@ -94,55 +98,47 @@ __device__ __forceinline__ uint64_t* conv_acc(ulonglong2 acc, int64_t M, uint32_
   return &out[int64_t(stride) << 1];
 }
 
-template <int32_t orderi8, int32_t beta, int32_t BLOCK_THREADS, class matrix_t>
+template <int32_t ORDER, int32_t beta, int32_t BLOCK_THREADS, class matrix_t>
 __global__ void quantize_crt_kernel(int64_t M, const matrix_t* __restrict__ A, int64_t lda, uint32_t corr, const int32_t* __restrict__ vexp, int8_t* __restrict__ B, int64_t ldb, int64_t strideB, uint64_t* __restrict__ vsum) {
-  constexpr int32_t ORDER = (orderi8 + 3) / 4, Complex = std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>;
+  constexpr int32_t Complex = std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>;
   constexpr int64_t BLOCK_THREADS_64 = int64_t(BLOCK_THREADS);
   int32_t expon = vexp[blockIdx.x]; A = &A[int64_t(blockIdx.x) * lda]; B = &B[int64_t(blockIdx.x) * ldb]; vsum = &vsum[blockIdx.x];
   if (expon == int_max) {
-    uint32_t code[ORDER]{};
-    for (int64_t i = int64_t(threadIdx.x); i < M; i += BLOCK_THREADS_64) {
-      if constexpr(Complex) { write_i8<orderi8>(code, write_i8<orderi8>(code, write_i8<orderi8>(code, &B[i], strideB), strideB), strideB); }
-        else { write_i8<orderi8>(code, &B[i], strideB); }
-    }
+    for (int64_t i = int64_t(threadIdx.x); i < M; i += BLOCK_THREADS_64)
+    { if constexpr(Complex) { write_zeros<ORDER * 3>(&B[i], strideB); } else { write_zeros<ORDER>(&B[i], strideB); }}
 
-    if (int32_t(threadIdx.x) == 0) {
-      if constexpr(Complex && (!beta)) { *vsum = uint64_t(0); *(vsum += int32_t(gridDim.x)) = uint64_t(0); *(vsum += int32_t(gridDim.x)) = uint64_t(0); *(vsum += int32_t(gridDim.x)) = uint64_t(0); }
-        else if constexpr(!beta) { *vsum = uint64_t(0); *(vsum += int32_t(gridDim.x)) = uint64_t(0); }
-    }
+    if (int32_t(threadIdx.x) == 0)
+    { if constexpr(Complex && (!beta)) { write_zeros<4>(vsum, int64_t(gridDim.x)); } else if constexpr(!beta) { write_zeros<2>(vsum, int64_t(gridDim.x)); }}
   } else if constexpr(Complex) {
-    __shared__ uint64_t rl[BLOCK_THREADS][2], im[BLOCK_THREADS][2]; uint32_t code[ORDER];
-    rl[threadIdx.x][0] = rl[threadIdx.x][1] = im[threadIdx.x][0] = im[threadIdx.x][1] = uint64_t(0);
+    __shared__ ulonglong2 rl[BLOCK_THREADS], im[BLOCK_THREADS]; u64_add acc;
+    rl[threadIdx.x] = im[threadIdx.x] = make_ulonglong2(0llu, 0llu);
     for (int64_t i = int64_t(threadIdx.x); i < M; i += BLOCK_THREADS_64) {
       matrix_t A_i = A[i]; uint64_t A_rl[2]{}, A_im[2]{}; uint32_t e;
-      int64_t q_rl = device::int8::round_i64(A_i.x, expon, e); device::int8::add_shifted(A_rl, q_rl, e); device::int8::add_shifted(rl[threadIdx.x], q_rl, e);
-      int64_t q_im = device::int8::round_i64(A_i.y, expon, e); device::int8::add_shifted(A_im, q_im, e); device::int8::add_shifted(im[threadIdx.x], q_im, e);
+      int64_t q_rl = device::int8::round_i64(A_i.x, expon, e); device::int8::add_shifted(A_rl, q_rl, e); rl[threadIdx.x] = acc(rl[threadIdx.x], make_ulonglong2(A_rl[0], A_rl[1]));
+      int64_t q_im = device::int8::round_i64(A_i.y, expon, e); device::int8::add_shifted(A_im, q_im, e); im[threadIdx.x] = acc(im[threadIdx.x], make_ulonglong2(A_im[0], A_im[1]));
       device::int8::add_shifted(A_rl, int64_t(1), corr); device::int8::add_shifted(A_im, int64_t(1), corr);
 
-      quantize_i8<orderi8>(A_rl[0], uint32_t(A_rl[1]), code); int8_t* B_i = write_i8<orderi8>(code, &B[i], strideB);
-      device::int8::add_shifted(A_rl, q_im, e);
-      device::int8::add_shifted(A_rl, int64_t(1), corr);
-
-      quantize_i8<orderi8>(A_im[0], uint32_t(A_im[1]), code); B_i = write_i8<orderi8>(code, B_i, strideB);
-      quantize_i8<orderi8>(A_rl[0], uint32_t(A_rl[1]), code); write_i8<orderi8>(code, B_i, strideB);
+      int8_t* B_i = quantize_i8<ORDER>(A_rl[0], uint32_t(A_rl[1]), &B[i], strideB);
+      device::int8::add_shifted(A_rl, q_im, e); device::int8::add_shifted(A_rl, int64_t(1), corr);
+      quantize_i8<ORDER>(A_rl[0], uint32_t(A_rl[1]), quantize_i8<ORDER>(A_im[0], uint32_t(A_im[1]), B_i, strideB), strideB);
     }
 
     __shared__ typename cub::BlockReduce<ulonglong2, BLOCK_THREADS>::TempStorage temp_reduce[2];
-    ulonglong2 threadA = cub::BlockReduce<ulonglong2, BLOCK_THREADS>(temp_reduce[0]).Reduce(make_ulonglong2(rl[threadIdx.x][0], rl[threadIdx.x][1]), u64_add());
-    ulonglong2 threadB = cub::BlockReduce<ulonglong2, BLOCK_THREADS>(temp_reduce[1]).Reduce(make_ulonglong2(im[threadIdx.x][0], im[threadIdx.x][1]), u64_add());
+    ulonglong2 threadA = cub::BlockReduce<ulonglong2, BLOCK_THREADS>(temp_reduce[0]).Reduce(rl[threadIdx.x], acc);
+    ulonglong2 threadB = cub::BlockReduce<ulonglong2, BLOCK_THREADS>(temp_reduce[1]).Reduce(im[threadIdx.x], acc);
     if (int32_t(threadIdx.x) == 0) { conv_acc<beta, 0>(threadB, M, corr, conv_acc<beta, 0>(threadA, M, corr, vsum, int32_t(gridDim.x)), int32_t(gridDim.x)); }
   } else {
-    __shared__ uint64_t rl[BLOCK_THREADS][2]; uint32_t code[ORDER];
-    rl[threadIdx.x][0] = rl[threadIdx.x][1] = uint64_t(0);
+    __shared__ ulonglong2 rl[BLOCK_THREADS];
+    rl[threadIdx.x] = make_ulonglong2(0llu, 0llu); u64_add acc;
     for (int64_t i = int64_t(threadIdx.x); i < M; i += BLOCK_THREADS_64) {
       matrix_t A_i = A[i]; uint64_t A_rl[2]{}; uint32_t e;
-      int64_t q_rl = device::int8::round_i64(A_i, expon, e); device::int8::add_shifted(A_rl, q_rl, e); device::int8::add_shifted(rl[threadIdx.x], q_rl, e);
+      int64_t q_rl = device::int8::round_i64(A_i, expon, e); device::int8::add_shifted(A_rl, q_rl, e); rl[threadIdx.x] = acc(rl[threadIdx.x], make_ulonglong2(A_rl[0], A_rl[1]));
       device::int8::add_shifted(A_rl, int64_t(1), corr);
-      quantize_i8<orderi8>(A_rl[0], uint32_t(A_rl[1]), code); write_i8<orderi8>(code, &B[i], strideB);
+      quantize_i8<ORDER>(A_rl[0], uint32_t(A_rl[1]), &B[i], strideB);
     }
 
     __shared__ typename cub::BlockReduce<ulonglong2, BLOCK_THREADS>::TempStorage temp_reduce;
-    ulonglong2 threadA = cub::BlockReduce<ulonglong2, BLOCK_THREADS>(temp_reduce).Reduce(make_ulonglong2(rl[threadIdx.x][0], rl[threadIdx.x][1]), u64_add());
+    ulonglong2 threadA = cub::BlockReduce<ulonglong2, BLOCK_THREADS>(temp_reduce).Reduce(rl[threadIdx.x], acc);
     if (int32_t(threadIdx.x) == 0) { conv_acc<beta, 1>(threadA, M, corr, vsum, int32_t(gridDim.x)); }
   }
 };
