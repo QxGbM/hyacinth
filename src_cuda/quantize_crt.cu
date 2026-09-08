@@ -6,8 +6,8 @@
 #include <limits>
 
 constexpr int32_t int_max = std::numeric_limits<int32_t>::max();
-template <int32_t ORDER, class Itype> __device__ __forceinline__ void write_zeros(Itype* A, int64_t strideA) {
-  constexpr Itype zero = Itype(0);
+template <int32_t ORDER> __device__ __forceinline__ void write_zeros(int8_t* A, int64_t strideA) {
+  constexpr int8_t zero = int8_t(0);
   if constexpr(0 < ORDER) { *A = zero; }
   #pragma unroll
   for (int32_t i = 1; i < ORDER; ++i) { *(A += strideA) = zero; }
@@ -88,18 +88,27 @@ template <int32_t ORDER> __device__ __forceinline__ int8_t* quantize_i8(uint64_t
 struct u64_add {
   __device__ __forceinline__ ulonglong2 operator()(ulonglong2 a, ulonglong2 b)
   { a.x += b.x; a.y += b.y + (a.x >> 63); a.x &= 0x7fffffffffffffffllu; return a; }
+  __device__ __forceinline__ ulonglong4_32a operator()(ulonglong4_32a a, ulonglong4_32a b)
+  { a.x += b.x; a.z += b.z; a.y += b.y + (a.x >> 63); a.w += b.w + (a.z >> 63); a.x &= 0x7fffffffffffffffllu; a.z &= 0x7fffffffffffffffllu; return a; }
 };
 
-template <int32_t beta, int32_t sign>
-__device__ __forceinline__ uint64_t* conv_acc(ulonglong2 acc, int64_t M, uint32_t corr, uint64_t* out, int32_t stride) {
+template <int32_t beta>
+__device__ __forceinline__ void conv_acc(ulonglong2 acc, int64_t M, uint32_t corr, ulonglong2* out) {
+  if constexpr (beta) { acc = u64_add().operator()(acc, *out); }
   uint64_t a[2]{ uint64_t(acc.x), uint64_t(acc.y) }; device::int8::add_shifted(a, M, corr);
-  if constexpr(beta) { device::int8::add_shifted(a, int64_t(out[0]), uint32_t(0)); device::int8::add_shifted(a, int64_t(out[stride]), uint32_t(63)); }
-  if constexpr(sign) { out[0] = -a[0]; out[stride] = -a[1]; } else { out[0] = a[0]; out[stride] = a[2]; }
-  return &out[int64_t(stride) << 1];
+  *out = make_ulonglong2(a[0], a[1]);
 }
 
-template <int32_t ORDER, int32_t beta, int32_t BLOCK_THREADS, class matrix_t>
-__global__ void quantize_crt_kernel(int64_t M, const matrix_t* __restrict__ A, int64_t lda, uint32_t corr, const int32_t* __restrict__ vexp, int8_t* __restrict__ B, int64_t ldb, int64_t strideB, uint64_t* __restrict__ vsum) {
+template <int32_t beta>
+__device__ __forceinline__ void conv_acc(ulonglong4_32a acc, int64_t M, uint32_t corr, ulonglong4_32a* out) {
+  if constexpr (beta) { acc = u64_add().operator()(acc, *out); }
+  uint64_t r[2]{ uint64_t(acc.x), uint64_t(acc.y) }, i[2]{ uint64_t(acc.z), uint64_t(acc.w) };
+  device::int8::add_shifted(r, M, corr); device::int8::add_shifted(i, M, corr);
+  *out = make_ulonglong4_32a(r[0], r[1], i[0], i[1]);
+}
+
+template <int32_t ORDER, int32_t beta, int32_t BLOCK_THREADS, class matrix_t, class sum_t>
+__global__ void quantize_crt_kernel(int64_t M, const matrix_t* __restrict__ A, int64_t lda, uint32_t corr, const int32_t* __restrict__ vexp, int8_t* __restrict__ B, int64_t ldb, int64_t strideB, sum_t* __restrict__ vsum) {
   constexpr int32_t Complex = std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>;
   constexpr int64_t BLOCK_THREADS_64 = int64_t(BLOCK_THREADS);
   int32_t expon = vexp[blockIdx.x]; A = &A[int64_t(blockIdx.x) * lda]; B = &B[int64_t(blockIdx.x) * ldb]; vsum = &vsum[blockIdx.x];
@@ -108,7 +117,7 @@ __global__ void quantize_crt_kernel(int64_t M, const matrix_t* __restrict__ A, i
     { if constexpr(Complex) { write_zeros<ORDER * 3>(&B[i], strideB); } else { write_zeros<ORDER>(&B[i], strideB); }}
 
     if (int32_t(threadIdx.x) == 0)
-    { if constexpr(Complex && (!beta)) { write_zeros<4>(vsum, int64_t(gridDim.x)); } else if constexpr(!beta) { write_zeros<2>(vsum, int64_t(gridDim.x)); }}
+    { if constexpr(!beta) { *vsum = sum_t(); }}
   } else if constexpr(Complex) {
     __shared__ ulonglong2 rl[BLOCK_THREADS], im[BLOCK_THREADS]; u64_add acc;
     rl[threadIdx.x] = im[threadIdx.x] = make_ulonglong2(0llu, 0llu);
@@ -119,14 +128,13 @@ __global__ void quantize_crt_kernel(int64_t M, const matrix_t* __restrict__ A, i
       device::int8::add_shifted(A_rl, int64_t(1), corr); device::int8::add_shifted(A_im, int64_t(1), corr);
 
       int8_t* B_i = quantize_i8<ORDER>(A_rl[0], uint32_t(A_rl[1]), &B[i], strideB);
-      device::int8::add_shifted(A_rl, q_im, e); device::int8::add_shifted(A_rl, int64_t(1), corr);
+      A_rl[0] += A_im[0]; A_rl[1] += A_im[1] + (A_rl[0] >> 63); A_rl[0] &= 0x7fffffffffffffffllu;
       quantize_i8<ORDER>(A_rl[0], uint32_t(A_rl[1]), quantize_i8<ORDER>(A_im[0], uint32_t(A_im[1]), B_i, strideB), strideB);
     }
 
-    __shared__ typename cub::BlockReduce<ulonglong2, BLOCK_THREADS>::TempStorage temp_reduce[2];
-    ulonglong2 threadA = cub::BlockReduce<ulonglong2, BLOCK_THREADS>(temp_reduce[0]).Reduce(rl[threadIdx.x], acc);
-    ulonglong2 threadB = cub::BlockReduce<ulonglong2, BLOCK_THREADS>(temp_reduce[1]).Reduce(im[threadIdx.x], acc);
-    if (int32_t(threadIdx.x) == 0) { conv_acc<beta, 0>(threadB, M, corr, conv_acc<beta, 0>(threadA, M, corr, vsum, int32_t(gridDim.x)), int32_t(gridDim.x)); }
+    __shared__ typename cub::BlockReduce<ulonglong4_32a, BLOCK_THREADS>::TempStorage temp_reduce;
+    ulonglong4_32a threadA = cub::BlockReduce<ulonglong4_32a, BLOCK_THREADS>(temp_reduce).Reduce(make_ulonglong4_32a(rl[threadIdx.x].x, rl[threadIdx.x].y, im[threadIdx.x].x, im[threadIdx.x].y), acc);
+    if (int32_t(threadIdx.x) == 0) { conv_acc<beta>(threadA, M, corr, vsum); }
   } else {
     __shared__ ulonglong2 rl[BLOCK_THREADS];
     rl[threadIdx.x] = make_ulonglong2(0llu, 0llu); u64_add acc;
@@ -139,12 +147,12 @@ __global__ void quantize_crt_kernel(int64_t M, const matrix_t* __restrict__ A, i
 
     __shared__ typename cub::BlockReduce<ulonglong2, BLOCK_THREADS>::TempStorage temp_reduce;
     ulonglong2 threadA = cub::BlockReduce<ulonglong2, BLOCK_THREADS>(temp_reduce).Reduce(rl[threadIdx.x], acc);
-    if (int32_t(threadIdx.x) == 0) { conv_acc<beta, 1>(threadA, M, corr, vsum, int32_t(gridDim.x)); }
+    if (int32_t(threadIdx.x) == 0) { conv_acc<beta>(threadA, M, corr, vsum); }
   }
 };
 
-template <class matrix_t>
-inline void quantize_crt_dispatcher(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const matrix_t* A, int32_t lda, uint32_t corr, const int32_t* vexp, int8_t* B, int32_t ldb, int32_t beta, uint64_t* vsum) {
+template <class matrix_t, class sum_t>
+inline void quantize_crt_dispatcher(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const matrix_t* A, int32_t lda, uint32_t corr, const int32_t* vexp, int8_t* B, int32_t ldb, int32_t beta, sum_t* vsum) {
   constexpr int32_t block_threads = 512;
   int64_t M64 = int64_t(M), lda64 = int64_t(lda), ldb64 = int64_t(ldb), strideB = int64_t(N) * ldb64;
 
@@ -201,22 +209,22 @@ inline void quantize_crt_dispatcher(cudaStream_t stream, int32_t M, int32_t N, i
 
 namespace internal::int8 {
 
-  void quantize_crt(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const double* A, int32_t lda, uint32_t corr, const int32_t* vexp, int8_t* B, int32_t ldb, int32_t beta, uint64_t* vsum)
+  void quantize_crt(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const double* A, int32_t lda, uint32_t corr, const int32_t* vexp, int8_t* B, int32_t ldb, int32_t beta, ulonglong2* vsum)
   { quantize_crt_dispatcher(stream, M, N, orderA, A, lda, corr, vexp, B, ldb, beta, vsum); }
 
-  void quantize_crt(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const float* A, int32_t lda, uint32_t corr, const int32_t* vexp, int8_t* B, int32_t ldb, int32_t beta, uint64_t* vsum)
+  void quantize_crt(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const float* A, int32_t lda, uint32_t corr, const int32_t* vexp, int8_t* B, int32_t ldb, int32_t beta, ulonglong2* vsum)
   { quantize_crt_dispatcher(stream, M, N, orderA, A, lda, corr, vexp, B, ldb, beta, vsum); }
 
-  void quantize_crt(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const __half* A, int32_t lda, uint32_t corr, const int32_t* vexp, int8_t* B, int32_t ldb, int32_t beta, uint64_t* vsum)
+  void quantize_crt(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const __half* A, int32_t lda, uint32_t corr, const int32_t* vexp, int8_t* B, int32_t ldb, int32_t beta, ulonglong2* vsum)
   { quantize_crt_dispatcher(stream, M, N, orderA, A, lda, corr, vexp, B, ldb, beta, vsum); }
 
-  void quantize_crt(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const cuDoubleComplex* A, int32_t lda, uint32_t corr, const int32_t* vexp, int8_t* B, int32_t ldb, int32_t beta, uint64_t* vsum)
+  void quantize_crt(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const cuDoubleComplex* A, int32_t lda, uint32_t corr, const int32_t* vexp, int8_t* B, int32_t ldb, int32_t beta, ulonglong4_32a* vsum)
   { quantize_crt_dispatcher(stream, M, N, orderA, A, lda, corr, vexp, B, ldb, beta, vsum); }
 
-  void quantize_crt(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const cuComplex* A, int32_t lda, uint32_t corr, const int32_t* vexp, int8_t* B, int32_t ldb, int32_t beta, uint64_t* vsum)
+  void quantize_crt(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const cuComplex* A, int32_t lda, uint32_t corr, const int32_t* vexp, int8_t* B, int32_t ldb, int32_t beta, ulonglong4_32a* vsum)
   { quantize_crt_dispatcher(stream, M, N, orderA, A, lda, corr, vexp, B, ldb, beta, vsum); }
 
-  void quantize_crt(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const __half2* A, int32_t lda, uint32_t corr, const int32_t* vexp, int8_t* B, int32_t ldb, int32_t beta, uint64_t* vsum)
+  void quantize_crt(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const __half2* A, int32_t lda, uint32_t corr, const int32_t* vexp, int8_t* B, int32_t ldb, int32_t beta, ulonglong4_32a* vsum)
   { quantize_crt_dispatcher(stream, M, N, orderA, A, lda, corr, vexp, B, ldb, beta, vsum); }
 
 }

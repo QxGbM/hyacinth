@@ -7,6 +7,7 @@
 #include <vector>
 #include <tuple>
 #include <algorithm>
+#include <type_traits>
 #include <stdexcept>
 
 const int32_t u_practical_limit = 80; // u <= 80 to satisfy implementation assumptions
@@ -163,7 +164,8 @@ inline void i8herk_limbs(cudaStream_t stream, cublasHandle_t handle, int32_t M, 
   }
   cudaFreeAsync(scratch, stream);
 
-  internal::int8::triangle_pack<Complex>(stream, 0, N, orderB, B, nullptr, uint32_t(0), beta, orderC, C);
+  if constexpr(Complex) { internal::int8::triangle_pack(stream, 0, N, orderB, B, (const ulonglong4_32a*)nullptr, uint32_t(0), beta, orderC, C); }
+    else { internal::int8::triangle_pack(stream, 0, N, orderB, B, (const ulonglong2*)nullptr, uint32_t(0), beta, orderC, C); }
   cudaFreeAsync(B, stream);
 }
 
@@ -202,8 +204,8 @@ inline void gemm_accum_crt(cudaStream_t stream, cublasHandle_t handle, char mode
   }
 }
 
-template <int32_t Complex>
-inline void i8herk_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, int8_t* A, int32_t lda, const uint64_t* vsum, uint32_t corr, int32_t beta, int32_t orderC, uint64_t* C) {
+template <int32_t Complex, class sum_t>
+inline void i8herk_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, int8_t* A, int32_t lda, const sum_t* vsum, uint32_t corr, int32_t beta, int32_t orderC, uint64_t* C) {
   int32_t orderB = (63 + (orderA << 3)) / 63;
   int32_t algnM = (M + 255) & (~255), algnN = (N + 63) & (~63);
   int64_t colsA = int64_t(N) * int64_t(orderA), strideA = int64_t(lda) * colsA, strideB = int64_t(N) * int64_t(N) * int64_t(orderB);
@@ -226,7 +228,7 @@ inline void i8herk_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, in
   }
   cudaFreeAsync(scratch, stream);
 
-  internal::int8::triangle_pack<Complex>(stream, M, N, orderB, B, vsum, corr, beta, orderC, C);
+  internal::int8::triangle_pack(stream, M, N, orderB, B, vsum, corr, beta, orderC, C);
   cudaFreeAsync(B, stream);
 }
 
@@ -253,11 +255,12 @@ inline void herk_dispatcher(cudaStream_t stream, cublasHandle_t handle, int32_t 
     i8herk_limbs<Complex>(stream, handle, M, N, orderA_limbs, W, ldw, i, orderC, C);
     cudaFreeAsync(W, stream);
   } else {
+    using sum_t = std::conditional_t<Complex, ulonglong4_32a, ulonglong2>;
     int32_t ldw; uint64_t w_len; std::tie(ldw, w_len) = i8_size<Complex>(M, N, orderA_crt);
-    int8_t* W = nullptr; uint64_t* vsum = nullptr;
+    int8_t* W = nullptr; sum_t* vsum = nullptr;
     if (cudaSuccess != cudaMallocAsync((void**)&W, w_len, stream))
       throw std::runtime_error("Workspace (i8) allocation failed at Integer SY/HERK.");
-    if (cudaSuccess != cudaMallocAsync((void**)&vsum, uint64_t(N) * uint64_t(4) * elem, stream))
+    if (cudaSuccess != cudaMallocAsync((void**)&vsum, uint64_t(N) * uint64_t(sizeof(sum_t)), stream))
       throw std::runtime_error("Workspace (Sums) allocation failed at Integer SY/HERK.");
 
     internal::int8::quantize_crt(stream, M, N, orderA_crt, A, lda, u, vexp, W, ldw, 0, vsum);

@@ -38,6 +38,51 @@ namespace device::int8 {
     a[2] += ((sign & m0) | (q1 & m1) | (q0 & m2)) + (a[1] >> 63); a[1] &= i63;
   }
 
+  template <uint32_t expon> __host__ __device__ __forceinline__ void add_shifted(uint64_t (&a)[1], int64_t i) {
+    if constexpr(expon == uint32_t(0)) { a[0] += uint64_t(i); } else
+    if constexpr(expon < uint32_t(63)) { a[0] += uint64_t(i) << expon; }
+  } 
+
+  template <uint32_t expon> __host__ __device__ __forceinline__ void add_shifted(uint64_t (&a)[2], int64_t i) {
+    constexpr uint64_t i63 = 0x7fffffffffffffffllu;
+    if constexpr(expon == uint32_t(0)) {
+      uint64_t sign = -(uint64_t(i) >> 63); a[0] += uint64_t(i) & i63; a[1] += sign + (a[0] >> 63); a[0] &= i63; 
+    } else if constexpr(expon == uint32_t(63)) {
+      a[1] += uint64_t(i); 
+    } else if constexpr(expon < uint32_t(63)) {
+      constexpr uint32_t left_sft = expon, sign_sft = uint32_t(1) + left_sft, right_sft = uint32_t(63) - expon;
+      uint64_t q0 = uint64_t(i) << left_sft, sign = -(uint64_t(i) >> 63), q1 = (sign << sign_sft) | (uint64_t(i) >> right_sft);
+      a[0] += q0 & i63; a[1] += q1 + (a[0] >> 63); a[0] &= i63;
+    } else if constexpr(expon < uint32_t(126)) {
+      constexpr uint32_t left_sft = expon - uint32_t(63);
+      a[1] += uint64_t(i) << left_sft;
+    }
+  }
+
+  template <uint32_t expon> __host__ __device__ __forceinline__ void add_shifted(uint64_t (&a)[3], int64_t i) {
+    constexpr uint64_t i63 = 0x7fffffffffffffffllu;
+    if constexpr(expon == uint32_t(0)) {
+      uint64_t sign = -(uint64_t(i) >> 63); a[0] += uint64_t(i) & i63;
+      a[1] += (sign & i63) + (a[0] >> 63); a[0] &= i63; a[2] += sign + (a[1] >> 63); a[1] &= i63;
+    } else if constexpr(expon == uint32_t(63)) {
+      uint64_t sign = -(uint64_t(i) >> 63); a[1] += uint64_t(i) & i63;
+      a[2] += sign + (a[1] >> 63); a[1] &= i63;
+    } else if constexpr(expon == uint32_t(126)) {
+      a[2] += uint64_t(i);
+    } else if constexpr(expon < uint32_t(63)) {
+      constexpr uint32_t left_sft = expon, sign_sft = uint32_t(1) + left_sft, right_sft = uint32_t(63) - expon;
+      uint64_t q0 = uint64_t(i) << left_sft, sign = -(uint64_t(i) >> 63), q1 = (sign << sign_sft) | (uint64_t(i) >> right_sft);
+      a[0] += q0 & i63; a[1] += (q1 & i63) + (a[0] >> 63); a[0] &= i63; a[2] += sign + (a[1] >> 63); a[1] &= i63;
+    } else if constexpr(expon < uint32_t(126)) {
+      constexpr uint32_t left_sft = expon - uint32_t(63), sign_sft = uint32_t(1) + left_sft, right_sft = uint32_t(126) - expon;
+      uint64_t q0 = uint64_t(i) << left_sft, sign = -(uint64_t(i) >> 63), q1 = (sign << sign_sft) | (uint64_t(i) >> right_sft);
+      a[1] += q0 & i63; a[2] += (q1 & i63) + (a[1] >> 63); a[1] &= i63;
+    } else if constexpr(expon < uint32_t(189)) {
+      constexpr uint32_t left_sft = expon - uint32_t(126);
+      a[2] += uint64_t(i) << left_sft;
+    }
+  }
+
   __host__ __device__ __forceinline__ int64_t round_i64(double x, int32_t expon, uint32_t& e) {
 #ifndef __CUDA_ARCH__
     return std::llrint(std::scalbn(x, expon - (e = std::max(std::ilogb(x) + (expon - 62), 0))));
