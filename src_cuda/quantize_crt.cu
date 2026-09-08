@@ -82,14 +82,13 @@ __device__ __forceinline__ int8_t* write_i8(const uint32_t (&code)[ORDER], int8_
 }
 
 struct u64_add {
-  __device__ __forceinline__ ulonglong3 operator()(ulonglong3 a, ulonglong3 b) { a.x += b.x; a.y += b.y; a.z += b.z; return a; }
+  __device__ __forceinline__ ulonglong2 operator()(ulonglong2 a, ulonglong2 b)
+  { a.x += b.x; a.y += b.y + (a.x >> 63); a.x &= 0x7fffffffffffffffllu; return a; }
 };
 
 template <int32_t beta, int32_t sign>
-__device__ __forceinline__ uint64_t* conv_acc(ulonglong3 acc, int64_t M, uint32_t corr, uint64_t* out, int32_t stride) {
-  uint64_t a[2]{ uint64_t(acc.x), uint64_t(acc.z) };
-  device::int8::add_shifted(a, M, corr);
-  device::int8::add_shifted(a, int64_t(acc.y), uint32_t(32));
+__device__ __forceinline__ uint64_t* conv_acc(ulonglong2 acc, int64_t M, uint32_t corr, uint64_t* out, int32_t stride) {
+  uint64_t a[2]{ uint64_t(acc.x), uint64_t(acc.y) }; device::int8::add_shifted(a, M, corr);
   if constexpr(beta) { device::int8::add_shifted(a, int64_t(out[0]), uint32_t(0)); device::int8::add_shifted(a, int64_t(out[stride]), uint32_t(63)); }
   if constexpr(sign) { out[0] = -a[0]; out[stride] = -a[1]; } else { out[0] = a[0]; out[stride] = a[2]; }
   return &out[int64_t(stride) << 1];
@@ -112,11 +111,12 @@ __global__ void quantize_crt_kernel(int64_t M, const matrix_t* __restrict__ A, i
         else if constexpr(!beta) { *vsum = uint64_t(0); *(vsum += int32_t(gridDim.x)) = uint64_t(0); }
     }
   } else if constexpr(Complex) {
-    uint32_t code[ORDER]; uint64_t rl[2]{}, im[2]{};
+    __shared__ uint64_t rl[BLOCK_THREADS][2], im[BLOCK_THREADS][2]; uint32_t code[ORDER];
+    rl[threadIdx.x][0] = rl[threadIdx.x][1] = im[threadIdx.x][0] = im[threadIdx.x][1] = uint64_t(0);
     for (int64_t i = int64_t(threadIdx.x); i < M; i += BLOCK_THREADS_64) {
       matrix_t A_i = A[i]; uint64_t A_rl[2]{}, A_im[2]{}; uint32_t e;
-      int64_t q_rl = device::int8::round_i64(A_i.x, expon, e); device::int8::add_shifted(A_rl, q_rl, e); device::int8::add_shifted(rl, q_rl, e);
-      int64_t q_im = device::int8::round_i64(A_i.y, expon, e); device::int8::add_shifted(A_im, q_im, e); device::int8::add_shifted(im, q_im, e);
+      int64_t q_rl = device::int8::round_i64(A_i.x, expon, e); device::int8::add_shifted(A_rl, q_rl, e); device::int8::add_shifted(rl[threadIdx.x], q_rl, e);
+      int64_t q_im = device::int8::round_i64(A_i.y, expon, e); device::int8::add_shifted(A_im, q_im, e); device::int8::add_shifted(im[threadIdx.x], q_im, e);
       device::int8::add_shifted(A_rl, int64_t(1), corr); device::int8::add_shifted(A_im, int64_t(1), corr);
 
       quantize_i8<orderi8>(A_rl[0], uint32_t(A_rl[1]), code); int8_t* B_i = write_i8<orderi8>(code, &B[i], strideB);
@@ -127,21 +127,22 @@ __global__ void quantize_crt_kernel(int64_t M, const matrix_t* __restrict__ A, i
       quantize_i8<orderi8>(A_rl[0], uint32_t(A_rl[1]), code); write_i8<orderi8>(code, B_i, strideB);
     }
 
-    __shared__ typename cub::BlockReduce<ulonglong3, BLOCK_THREADS>::TempStorage temp_reduce[2];
-    ulonglong3 threadA = cub::BlockReduce<ulonglong3, BLOCK_THREADS>(temp_reduce[0]).Reduce(make_ulonglong3(uint32_t(rl[0]), uint32_t(rl[0] >> 32), uint32_t(rl[1])), u64_add());
-    ulonglong3 threadB = cub::BlockReduce<ulonglong3, BLOCK_THREADS>(temp_reduce[1]).Reduce(make_ulonglong3(uint32_t(im[0]), uint32_t(im[0] >> 32), uint32_t(im[1])), u64_add());
+    __shared__ typename cub::BlockReduce<ulonglong2, BLOCK_THREADS>::TempStorage temp_reduce[2];
+    ulonglong2 threadA = cub::BlockReduce<ulonglong2, BLOCK_THREADS>(temp_reduce[0]).Reduce(make_ulonglong2(rl[threadIdx.x][0], rl[threadIdx.x][1]), u64_add());
+    ulonglong2 threadB = cub::BlockReduce<ulonglong2, BLOCK_THREADS>(temp_reduce[1]).Reduce(make_ulonglong2(im[threadIdx.x][0], im[threadIdx.x][1]), u64_add());
     if (int32_t(threadIdx.x) == 0) { conv_acc<beta, 0>(threadB, M, corr, conv_acc<beta, 0>(threadA, M, corr, vsum, int32_t(gridDim.x)), int32_t(gridDim.x)); }
   } else {
-    uint32_t code[ORDER]; uint64_t rl[2]{};
+    __shared__ uint64_t rl[BLOCK_THREADS][2]; uint32_t code[ORDER];
+    rl[threadIdx.x][0] = rl[threadIdx.x][1] = uint64_t(0);
     for (int64_t i = int64_t(threadIdx.x); i < M; i += BLOCK_THREADS_64) {
       matrix_t A_i = A[i]; uint64_t A_rl[2]{}; uint32_t e;
-      int64_t q_rl = device::int8::round_i64(A_i, expon, e); device::int8::add_shifted(A_rl, q_rl, e); device::int8::add_shifted(rl, q_rl, e);
+      int64_t q_rl = device::int8::round_i64(A_i, expon, e); device::int8::add_shifted(A_rl, q_rl, e); device::int8::add_shifted(rl[threadIdx.x], q_rl, e);
       device::int8::add_shifted(A_rl, int64_t(1), corr);
       quantize_i8<orderi8>(A_rl[0], uint32_t(A_rl[1]), code); write_i8<orderi8>(code, &B[i], strideB);
     }
 
-    __shared__ typename cub::BlockReduce<ulonglong3, BLOCK_THREADS>::TempStorage temp_reduce;
-    ulonglong3 threadA = cub::BlockReduce<ulonglong3, BLOCK_THREADS>(temp_reduce).Reduce(make_ulonglong3(uint32_t(rl[0]), uint32_t(rl[0] >> 32), uint32_t(rl[1])), u64_add());
+    __shared__ typename cub::BlockReduce<ulonglong2, BLOCK_THREADS>::TempStorage temp_reduce;
+    ulonglong2 threadA = cub::BlockReduce<ulonglong2, BLOCK_THREADS>(temp_reduce).Reduce(make_ulonglong2(rl[threadIdx.x][0], rl[threadIdx.x][1]), u64_add());
     if (int32_t(threadIdx.x) == 0) { conv_acc<beta, 1>(threadA, M, corr, vsum, int32_t(gridDim.x)); }
   }
 };
