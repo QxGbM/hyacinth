@@ -252,28 +252,25 @@ inline void herk_dispatcher(cudaStream_t stream, cublasHandle_t handle, char alg
   if (u <= 0 && i == 0) { cudaMemsetAsync(C, 0, uint64_t(N) * uint64_t(N + 1) * uint64_t(orderC) * elem, stream); return; }
 
   int32_t uc = u + Complex, orderA = internal::int8::gram_algorithm(alg, M, uc);
-  if (alg == 'L') {
-    int32_t ldw; uint64_t w_len; std::tie(ldw, w_len) = i8_size<Complex>(M, N, orderA);
-    int8_t* W = nullptr;
-    if (cudaSuccess != cudaMallocAsync((void**)&W, w_len, stream))
-      throw std::runtime_error("Workspace (i8) allocation failed at Integer SY/HERK.");
+  int32_t ldw; uint64_t w_len; std::tie(ldw, w_len) = i8_size<Complex>(M, N, orderA);
+  int8_t* W = nullptr;
+  if (cudaSuccess != cudaMallocAsync((void**)&W, w_len, stream))
+    throw std::runtime_error("Workspace (i8) allocation failed at Integer SY/HERK.");
 
+  if (alg == 'L') {
     internal::int8::quantize_limbs(stream, M, N, orderA, A, lda, vexp, W, ldw);
     i8herk_limbs<Complex>(stream, handle, M, N, orderA, W, ldw, i, orderC, C);
-    cudaFreeAsync(W, stream);
   } else {
     using sum_t = std::conditional_t<Complex, ulonglong4_32a, ulonglong2>;
-    int32_t ldw; uint64_t w_len; std::tie(ldw, w_len) = i8_size<Complex>(M, N, orderA);
-    int8_t* W = nullptr; sum_t* vsum = nullptr;
-    if (cudaSuccess != cudaMallocAsync((void**)&W, w_len, stream))
-      throw std::runtime_error("Workspace (i8) allocation failed at Integer SY/HERK.");
+    sum_t* vsum = nullptr;
     if (cudaSuccess != cudaMallocAsync((void**)&vsum, uint64_t(N) * uint64_t(sizeof(sum_t)), stream))
       throw std::runtime_error("Workspace (Sums) allocation failed at Integer SY/HERK.");
 
-    internal::int8::quantize_crt(stream, M, N, orderA, A, lda, u, vexp, W, ldw, 0, vsum);
-    i8herk_crt<Complex>(stream, handle, M, N, orderA, W, ldw, vsum, u, i, orderC, C);
-    cudaFreeAsync(W, stream); cudaFreeAsync(vsum, stream);
+    internal::int8::quantize_crt(stream, M, N, orderA, A, lda, uc, vexp, W, ldw, 0, vsum);
+    i8herk_crt<Complex>(stream, handle, M, N, orderA, W, ldw, vsum, uc, i, orderC, C);
+    cudaFreeAsync(vsum, stream);
   }
+  cudaFreeAsync(W, stream);
 }
 
 extern "C" void hyacinXherk(hyacinHandle_t handle, char alg, int32_t M, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t u_hint, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C) {

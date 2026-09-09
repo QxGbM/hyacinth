@@ -1,6 +1,10 @@
 #pragma once
 
 #include <cstdint>
+#include <tuple>
+#include <map>
+#include <vector>
+#include <string>
 #include <cublas_v2.h>
 #include <cuda_fp16.h>
 
@@ -128,4 +132,22 @@ namespace internal {
 namespace Timer {
   void register_kernel(cudaStream_t stream, void* timer);
   void register_comm(cudaStream_t stream, void* timer);
+};
+
+namespace Batch {
+
+  class BatchArgs {
+  private:
+    int32_t batchMaxK;
+    std::map<int32_t, std::tuple<int32_t, int32_t, int32_t, int32_t, char>> tensor;
+    // tuple is [Tensor Order, Tensor Panel Prefix, Tensor ColSums Prefix, Tensor Rows, Algorithm 'L' or 'C']
+
+  public:
+    BatchArgs(int32_t& K, const std::string& str, int32_t& order, int32_t& count_crt);
+
+    // op: 'E'=eager eval; 'Z'=lazy batch; 'F'=lazy+flush; 'S' = skip∂
+    void processA(int32_t M, int32_t uc, char alg, char& op, std::tuple<int32_t, int32_t, int32_t, int32_t, int32_t, char>& param);
+    void flush(std::vector<std::tuple<int32_t, int32_t, int32_t, int32_t, int32_t, char>>& list);
+  };
+
 };

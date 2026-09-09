@@ -95,6 +95,18 @@ void hyacinXdequantize(
   int32_t ldg
 );
 
+void hyacinXherkBatchCreate(
+  void** param,
+  const char config[],
+  int32_t* batchK,
+  int32_t* panels,
+  int32_t* CRTcounts
+);
+
+void hyacinXherkBatchDestroy(
+  void* param
+);
+
 int32_t hyacinXGevPcsvd(
   hyacinHandle_t handle,
   char use_evd,

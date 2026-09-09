@@ -123,6 +123,7 @@ void internal::int8::triangle_pack(cudaStream_t stream, int32_t M, int32_t N, in
 }
 
 void internal::int8::triangle_pack(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const uint64_t* A, const ulonglong4_32a* vsum, uint32_t corr, int32_t beta, int32_t orderB, uint64_t* B) {
+  corr += uint32_t(corr ? -1 : 0);
   if (beta) triangle_pack_dispatcher<1>(stream, M, N, orderA, A, vsum, corr, orderB, B);
     else triangle_pack_dispatcher<0>(stream, M, N, orderA, A, vsum, corr, orderB, B);
 }
