@@ -1,7 +1,6 @@
 
 #include <hyacin.h>
 #include <internal.hpp>
-#include <vector>
 #include <algorithm>
 
 int32_t device_sms = 0, device_f64_capable = 0;

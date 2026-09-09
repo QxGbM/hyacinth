@@ -4,8 +4,6 @@
 #include <double_double.hpp>
 #include <quad_float.hpp>
 #include <crt_constants.hpp>
-#include <vector>
-#include <tuple>
 #include <algorithm>
 #include <type_traits>
 #include <stdexcept>
@@ -285,6 +283,67 @@ extern "C" void hyacinXherk(hyacinHandle_t handle, char alg, int32_t M, int32_t 
     case HYACIN_F32_COMPLEX: herk_dispatcher(handle.cudaStream, handle.cublasHandle, alg, M, N, (const cuComplex*)A, lda, vexp, &beta, orderC, C, uptr); return;
     case HYACIN_F16_COMPLEX: herk_dispatcher(handle.cudaStream, handle.cublasHandle, alg, M, N, (const __half2*)A, lda, vexp, &beta, orderC, C, uptr); return;
     default: return;
+  }
+}
+
+template <class matrix_t, class sum_t>
+inline void herk_batch_dispatcher(cudaStream_t stream, cublasHandle_t handle, char alg, int32_t M, int32_t N, const matrix_t* A, int32_t lda, const int32_t* vexp, int32_t* beta, int32_t orderC, uint64_t* C, int32_t* uptr, Batch::BatchArgs* param, int8_t* batchE, sum_t* batchS) {
+  constexpr int32_t Complex = int32_t(std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>);
+  int32_t uc = *uptr, orderA, row, ldw = param->batchMaxK; int64_t prefix_elem, prefix_sum; char op;
+  if (uc <= 0 && 0 < M) { internal::int8::vector_exponents(stream, M, N, A, lda, uptr, const_cast<int32_t*>(vexp)); uc = *uptr + Complex; } else { uc += Complex; }
+  std::tie(uc, orderA, prefix_elem, prefix_sum, row, alg) = param->processA(M, N, uc, alg, op);
+  if constexpr(Complex) { prefix_elem *= int64_t(3); } int8_t* W = &batchE[prefix_elem]; sum_t* vsum = batchS ? &batchS[prefix_sum] : nullptr;
+
+  switch(op) {
+    case 'E': {
+      herk_dispatcher(stream, handle, alg, M, N, A, lda, vexp, beta, orderC, C, uptr);
+    } break;
+    case 'Z': {
+      if (alg == 'L') { internal::int8::quantize_limbs(stream, M, N, orderA, A, lda, vexp, &W[row], ldw); } else
+      if (alg == 'C') { internal::int8::quantize_crt(stream, M, N, orderA, A, lda, uc, vexp, &W[row], ldw, int32_t(0 < row), vsum); }
+    } break;
+    case 'F': { int32_t i = *beta; *beta = 1;
+      if (alg == 'L') {
+        i8herk_limbs<Complex>(stream, handle, row, N, orderA, W, ldw, i, orderC, C);
+        internal::int8::quantize_limbs(stream, M, N, orderA, A, lda, vexp, W, ldw);
+      } else if (alg == 'C') {
+        i8herk_crt<Complex>(stream, handle, row, N, orderA, W, ldw, vsum, uc, i, orderC, C);
+        internal::int8::quantize_crt(stream, M, N, orderA, A, lda, uc, vexp, W, ldw, 0, vsum);
+      }
+    } break;
+    case 'S': default: break;
+  }
+}
+
+extern "C" void hyacinXherkBatchProcessA(hyacinHandle_t handle, char alg, int32_t M, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t u_hint, const int32_t* vexp, int32_t* beta, int32_t orderC, uint64_t* C, void* param, int8_t* batchE, void* batchS) {
+  if (M <= 0 || N <= 0 || orderC <= 0) { return; }
+  Timer::register_kernel(handle.cudaStream, handle.timer);
+  int32_t* uptr = (int32_t*)handle.pinnedWorkspace; *uptr = u_hint;
+  switch(Atype) {
+    case HYACIN_F64: herk_batch_dispatcher(handle.cudaStream, handle.cublasHandle, alg, M, N, (const double*)A, lda, vexp, beta, orderC, C, uptr, (Batch::BatchArgs*)param, batchE, (ulonglong2*)batchS); return;
+    case HYACIN_F32: herk_batch_dispatcher(handle.cudaStream, handle.cublasHandle, alg, M, N, (const float*)A, lda, vexp, beta, orderC, C, uptr, (Batch::BatchArgs*)param, batchE, (ulonglong2*)batchS); return;
+    case HYACIN_F16: herk_batch_dispatcher(handle.cudaStream, handle.cublasHandle, alg, M, N, (const __half*)A, lda, vexp, beta, orderC, C, uptr, (Batch::BatchArgs*)param, batchE, (ulonglong2*)batchS); return;
+    case HYACIN_F64_COMPLEX: herk_batch_dispatcher(handle.cudaStream, handle.cublasHandle, alg, M, N, (const cuDoubleComplex*)A, lda, vexp, beta, orderC, C, uptr, (Batch::BatchArgs*)param, batchE, (ulonglong4_32a*)batchS); return;
+    case HYACIN_F32_COMPLEX: herk_batch_dispatcher(handle.cudaStream, handle.cublasHandle, alg, M, N, (const cuComplex*)A, lda, vexp, beta, orderC, C, uptr, (Batch::BatchArgs*)param, batchE, (ulonglong4_32a*)batchS); return;
+    case HYACIN_F16_COMPLEX: herk_batch_dispatcher(handle.cudaStream, handle.cublasHandle, alg, M, N, (const __half2*)A, lda, vexp, beta, orderC, C, uptr, (Batch::BatchArgs*)param, batchE, (ulonglong4_32a*)batchS); return;
+    default: return;
+  }
+}
+
+extern "C" void hyacinXherkBatchFlush(hyacinHandle_t handle, int32_t N, int32_t Complex, int32_t beta, int32_t orderC, uint64_t* C, void* param, int8_t* batchE, const void* batchS) {
+  if (N <= 0 || orderC <= 0) { return; }
+  Timer::register_kernel(handle.cudaStream, handle.timer);
+  int32_t ldw = reinterpret_cast<Batch::BatchArgs*>(param)->batchMaxK;
+  std::vector<std::tuple<int32_t, int32_t, int64_t, int64_t, int32_t, char>> list;
+  reinterpret_cast<Batch::BatchArgs*>(param)->flush(N, list);
+  if (Complex) for (const auto& [uc, orderA, prefix_elem, prefix_sum, M, alg] : list) {
+    int8_t* W = &batchE[prefix_elem * int64_t(3)];
+    if (alg == 'L') { i8herk_limbs<1>(handle.cudaStream, handle.cublasHandle, M, N, orderA, W, ldw, beta, orderC, C); } else
+    if (alg == 'C') { i8herk_crt<1>(handle.cudaStream, handle.cublasHandle, M, N, orderA, W, ldw, &((const ulonglong4_32a*)batchS)[prefix_sum], uc, beta, orderC, C); }
+  } else for (const auto& [uc, orderA, prefix_elem, prefix_sum, M, alg] : list) {
+    int8_t* W = &batchE[prefix_elem];
+    if (alg == 'L') { i8herk_limbs<0>(handle.cudaStream, handle.cublasHandle, M, N, orderA, W, ldw, beta, orderC, C); } else
+    if (alg == 'C') { i8herk_crt<0>(handle.cudaStream, handle.cublasHandle, M, N, orderA, W, ldw, &((const ulonglong2*)batchS)[prefix_sum], uc, beta, orderC, C); }
   }
 }
 

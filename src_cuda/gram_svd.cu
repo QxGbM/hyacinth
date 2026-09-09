@@ -6,7 +6,6 @@
 #include <cub/cub.cuh>
 #include <cuComplex.h>
 #include <algorithm>
-#include <vector>
 #include <stdexcept>
 
 __device__ __forceinline__ double sqrt_relu(double a) { return sqrt(fmax(a, 0.)); };

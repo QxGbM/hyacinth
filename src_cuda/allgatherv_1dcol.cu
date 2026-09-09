@@ -3,7 +3,6 @@
 #ifndef NO_NCCL
 
 #include <internal.hpp>
-#include <vector>
 #include <numeric>
 #include <stdexcept>
 

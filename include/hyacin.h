@@ -96,15 +96,45 @@ void hyacinXdequantize(
 );
 
 void hyacinXherkBatchCreate(
-  void** param,
-  const char config[],
-  int32_t* batchK,
-  int32_t* panels,
-  int32_t* CRTcounts
+  void** param, // host-pointer
+  const char config[], // host-pointer
+  int32_t* batchK, // host-pointer
+  int32_t* panels, // host-pointer
+  int32_t* CRTcounts // host-pointer
 );
 
 void hyacinXherkBatchDestroy(
-  void* param
+  void* param // host-pointer
+);
+
+void hyacinXherkBatchProcessA(
+  hyacinHandle_t handle,
+  char alg,
+  int32_t M,
+  int32_t N,
+  hyacinPrecision_t Atype,
+  const void* A, // device-pointer
+  int32_t lda,
+  int32_t u_hint,
+  const int32_t* vexp, // device-pointer
+  int32_t* beta, // host-pointer
+  int32_t orderC,
+  uint64_t* C, // device-pointer
+  void* param, // host-pointer
+  int8_t* batchE, // device-pointer
+  void* batchS // device-pointer
+);
+
+void hyacinXherkBatchFlush(
+  hyacinHandle_t handle,
+  int32_t N,
+  int32_t Complex,
+  int32_t beta,
+  int32_t orderC,
+  uint64_t* C, // device-pointer
+  void* param, // host-pointer
+  int8_t* batchE, // device-pointer
+  const void* batchS // device-pointer
 );
 
 int32_t hyacinXGevPcsvd(
