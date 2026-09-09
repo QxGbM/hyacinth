@@ -15,8 +15,7 @@ inline void nn_gemm(cublasHandle_t handle, int32_t M, int32_t N, int32_t K, cons
 inline void nn_gemm(cublasHandle_t handle, int32_t M, int32_t N, int32_t K, const cuComplex* A, int32_t lda, const cuComplex* B, int32_t ldb, cuComplex* C, int32_t ldc)
 { cuComplex one = make_cuComplex(1.f, 0.f), zero = make_cuComplex(0.f, 0.f); cublasCgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &one, A, lda, B, ldb, &zero, C, ldc); }
 
-template <class matrix_t>
-inline void ax_transform(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, matrix_t* A, int32_t lda, const matrix_t* X, int32_t ldx) {
+template <class matrix_t> inline void ax_transform(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, matrix_t* A, int32_t lda, const matrix_t* X, int32_t ldx) {
   const int32_t rows = 16384;
   matrix_t* dev_work = nullptr;
   uint64_t dev_work_bytes = uint64_t(rows) * uint64_t(K) * uint64_t(sizeof(matrix_t));
@@ -30,8 +29,7 @@ inline void ax_transform(cudaStream_t stream, cublasHandle_t handle, int32_t M, 
   cudaFreeAsync(dev_work, stream);
 }
 
-template <>
-inline void ax_transform<__half2>(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, __half2* A, int32_t lda, const __half2* X, int32_t ldx) {
+template <> inline void ax_transform<__half2>(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, __half2* A, int32_t lda, const __half2* X, int32_t ldx) {
   const int32_t rows = 16384;
   uint8_t* dev_work = nullptr;
   uint64_t dev_work_bytes = uint64_t(rows) * uint64_t(K) * uint64_t(sizeof(cuComplex));

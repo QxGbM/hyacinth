@@ -22,12 +22,6 @@ typedef enum {
   HYACIN_QF_COMPLEX = 9
 } hyacinPrecision_t;
 
-typedef enum {
-  HYACIN_ALG_AUTO = 0,
-  HYACIN_ALG_LIMBS = 1,
-  HYACIN_ALG_CRT = 2
-} hyacinAlgorithm_t;
-
 typedef struct {
   cudaStream_t cudaStream;
   cublasHandle_t cublasHandle;
@@ -69,6 +63,7 @@ int32_t hyacinXquantizeScale(
 
 void hyacinXherk(
   hyacinHandle_t handle,
+  char alg,
   int32_t M,
   int32_t N,
   hyacinPrecision_t Atype,
@@ -78,45 +73,7 @@ void hyacinXherk(
   const int32_t* vexp, // device-pointer
   int32_t beta,
   int32_t orderC,
-  uint64_t* C, // device-pointer
-  hyacinAlgorithm_t alg
-);
-
-void hyacinXherkBatch(
-  hyacinHandle_t handle,
-  int32_t M,
-  int32_t N,
-  hyacinPrecision_t Atype,
-  const void* A, // device-pointer
-  int32_t lda,
-  int32_t u_hint,
-  const int32_t* vexp, // device-pointer
-  int32_t batchK,
-  int32_t Nbatches,
-  const int32_t* batchU, // host-pointer to array of Nbatches
-  int32_t* batchLoc, // host-pointer to array of Nbatches
-  hyacinPrecision_t Btype,
-  void* B, // device-pointer
-  int32_t* beta, // host-pointer to scalar
-  int32_t orderC,
-  uint64_t* C, // device-pointer
-  hyacinAlgorithm_t alg
-);
-
-void hyacinXherkBatchFlush(
-  hyacinHandle_t handle,
-  int32_t N,
-  const int32_t* vexp, // device-pointer
-  int32_t batchK,
-  int32_t Nbatches,
-  const int32_t* batchU, // host-pointer to array of Nbatches
-  int32_t* batchLoc, // host-pointer to array of Nbatches
-  hyacinPrecision_t Btype,
-  const void* B, // device-pointer
-  int32_t beta,
-  int32_t orderC,
-  uint64_t* C, // device-pointer
-  hyacinAlgorithm_t alg
+  uint64_t* C // device-pointer
 );
 
 hyacinPrecision_t hyacinXGautoType(

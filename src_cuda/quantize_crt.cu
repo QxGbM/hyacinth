@@ -136,8 +136,8 @@ __global__ void quantize_crt_kernel(int64_t M, const matrix_t* __restrict__ A, i
     ulonglong4_32a threadA = cub::BlockReduce<ulonglong4_32a, BLOCK_THREADS>(temp_reduce).Reduce(make_ulonglong4_32a(rl[threadIdx.x].x, rl[threadIdx.x].y, im[threadIdx.x].x, im[threadIdx.x].y), acc);
     if (int32_t(threadIdx.x) == 0) { conv_acc<beta>(threadA, M, corr, vsum); }
   } else {
-    __shared__ ulonglong2 rl[BLOCK_THREADS];
-    rl[threadIdx.x] = make_ulonglong2(0llu, 0llu); u64_add acc;
+    __shared__ ulonglong2 rl[BLOCK_THREADS]; u64_add acc;
+    rl[threadIdx.x] = make_ulonglong2(0llu, 0llu);
     for (int64_t i = int64_t(threadIdx.x); i < M; i += BLOCK_THREADS_64) {
       matrix_t A_i = A[i]; uint64_t A_rl[2]{}; uint32_t e;
       int64_t q_rl = device::int8::round_i64(A_i, expon, e); device::int8::add_shifted(A_rl, q_rl, e); rl[threadIdx.x] = acc(rl[threadIdx.x], make_ulonglong2(A_rl[0], A_rl[1]));
