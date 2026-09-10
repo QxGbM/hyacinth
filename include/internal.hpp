@@ -136,11 +136,6 @@ namespace internal {
 
 };
 
-namespace Timer {
-  void register_kernel(cudaStream_t stream, void* timer);
-  void register_comm(cudaStream_t stream, void* timer);
-};
-
 namespace Batch {
 
   class BatchArgs {
@@ -152,9 +147,14 @@ namespace Batch {
     const int32_t batchMaxK, Complex;
     BatchArgs(int32_t K, int32_t Complex, int32_t elemBytes, const std::string& str, int32_t& order);
 
-    // op: 'E'=eager eval; 'Z'=lazy batch; 'F'=lazy+flush; 'S' = skip;
+    // op: 'E'=eager eval; 'Z'=lazy batch; 'F'=lazy+flush; 'S'=skip;
     std::tuple<int32_t, int32_t, int64_t, int32_t, char> processA(int32_t M, int32_t N, int32_t uc, char alg, char& op);
     void flush(int32_t N, std::vector<std::tuple<int32_t, int32_t, int64_t, int32_t, char>>& list);
   };
 
+};
+
+namespace Timer {
+  void register_kernel(cudaStream_t stream, void* timer);
+  void register_comm(cudaStream_t stream, void* timer);
 };
