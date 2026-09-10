@@ -53,7 +53,7 @@ __global__ void imax_kernel(real_t epi, int32_t N, const real_t* __restrict__ X,
   cooperative_groups::this_grid().sync();
   if (blockIdx.x == 0) {
     for (int32_t i = threadIdx.x; i < gridDim.x; i += BLOCK_THREADS)
-      thread_x = cmp_max(thread_x, work[i]);
+    { thread_x = cmp_max(thread_x, work[i]); }
     thread_x = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce[1]).Reduce(thread_x, cmp_max);
     if (threadIdx.x == 0) { real_sqrt(D[0] = _mul(epi, thread_x.real), thread_x, idx[0], idx[1]); }
   }

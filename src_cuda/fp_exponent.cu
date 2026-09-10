@@ -25,7 +25,7 @@ template <int32_t sign> __device__ __forceinline__ int32_t float_frexp(float a, 
 { if (a == 0.f) { if constexpr(sign) return int_max; else return int_min; } else { int32_t x; frexpf(a, &x); if constexpr(sign) return e - x; else return e + x; }}
 
 template <int32_t BLOCK_THREADS, class reduc_t, class matrix_t>
-__global__ void vector_exponent_kernel(int32_t M, const matrix_t* __restrict__ A, int64_t lda, int32_t umax, int32_t* __restrict__ vexp) {
+__global__ void vector_exponent_kernel(int32_t M, const matrix_t* __restrict__ A, int64_t lda, int32_t u, int32_t* __restrict__ vexp) {
   __shared__ typename cub::BlockReduce<reduc_t, BLOCK_THREADS>::TempStorage temp_reduce;
   A_max cmp_max; reduc_t thread_x = reduc_t();
 
@@ -33,7 +33,7 @@ __global__ void vector_exponent_kernel(int32_t M, const matrix_t* __restrict__ A
   for (int32_t i = threadIdx.x; i < M; i += BLOCK_THREADS)
     thread_x = cmp_max(float_abs(A[i]), thread_x);
   thread_x = cub::BlockReduce<reduc_t, BLOCK_THREADS>(temp_reduce).Reduce(thread_x, cmp_max);
-  if (threadIdx.x == 0) { vexp[blockIdx.x] = float_frexp<1>(thread_x, umax); }
+  if (threadIdx.x == 0) { vexp[blockIdx.x] = float_frexp<1>(thread_x, u); }
 }
 
 template <int32_t BLOCK_THREADS, class reduc_t, class matrix_t>
@@ -62,42 +62,65 @@ __global__ void vector_range_kernel(int32_t M, int32_t N, const matrix_t* __rest
 }
 
 template<class reduc_t, class matrix_t>
-inline void vector_exponents_dispatcher(cudaStream_t stream, int32_t M, int32_t N, const matrix_t* A, int32_t lda, int32_t* umax, int32_t* vexp) {
+inline void vector_exponents_dispatcher(cudaStream_t stream, int32_t M, int32_t N, const matrix_t* A, int32_t lda, int32_t u, int32_t* vexp) {
   constexpr int32_t block_threads = 512;
-  int64_t lda64 = int64_t(lda); int32_t u = *umax;
-  if (u == int_min) {
-    int32_t device_sms = internal::device_num_sms(), maxBlocksPerSM = 0;
-    cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, vector_range_kernel<block_threads, reduc_t, matrix_t>, block_threads, 0);
-    
-    int32_t grid = std::min(N, device_sms * maxBlocksPerSM), *vbuf = nullptr;
-    if (cudaSuccess != cudaMallocAsync((void**)&vbuf, uint64_t(grid) * sizeof(int32_t), stream))
-      throw std::runtime_error("Workspace allocation failed at Exponent Range.");
+  int64_t lda64 = int64_t(lda);
+  vector_exponent_kernel<block_threads, reduc_t> <<< N, block_threads, 0, stream >>> (M, A, lda64, u, vexp);
+}
 
-    void* kernelArgs[]{ &M, &N, &A, &lda64, &vexp, &vbuf, &umax };
-    cudaLaunchCooperativeKernel(vector_range_kernel<block_threads, reduc_t, matrix_t>, grid, block_threads, kernelArgs, 0, stream);
-    cudaFreeAsync(vbuf, stream);
-    cudaStreamSynchronize(stream);
-  } else { vector_exponent_kernel<block_threads, reduc_t> <<< N, block_threads, 0, stream >>> (M, A, lda64, u, vexp); }
+template<class reduc_t, class matrix_t>
+inline void vector_range_dispatcher(cudaStream_t stream, int32_t M, int32_t N, const matrix_t* A, int32_t lda, int32_t* u, const int32_t* vexp) {
+  constexpr int32_t block_threads = 512;
+  int64_t lda64 = int64_t(lda);
+  int32_t device_sms = internal::device_num_sms(), maxBlocksPerSM = 0;
+  cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, vector_range_kernel<block_threads, reduc_t, matrix_t>, block_threads, 0);
+  
+  int32_t grid = std::min(N, device_sms * maxBlocksPerSM), *vbuf = nullptr;
+  if (cudaSuccess != cudaMallocAsync((void**)&vbuf, uint64_t(grid) * sizeof(int32_t), stream))
+    throw std::runtime_error("Workspace allocation failed at Exponent Range.");
+
+  void* kernelArgs[]{ &M, &N, &A, &lda64, &vexp, &vbuf, &u };
+  cudaLaunchCooperativeKernel(vector_range_kernel<block_threads, reduc_t, matrix_t>, grid, block_threads, kernelArgs, 0, stream);
+  cudaFreeAsync(vbuf, stream);
+  cudaStreamSynchronize(stream);
 }
 
 namespace internal::int8 {
 
-  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int32_t* umax, int32_t* vexp)
-  { vector_exponents_dispatcher<double>(stream, M, N, A, lda, umax, vexp); }
+  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int32_t u, int32_t* vexp)
+  { vector_exponents_dispatcher<double>(stream, M, N, A, lda, u, vexp); }
 
-  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, int32_t* umax, int32_t* vexp)
-  { vector_exponents_dispatcher<float>(stream, M, N, A, lda, umax, vexp); }
+  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, int32_t u, int32_t* vexp)
+  { vector_exponents_dispatcher<float>(stream, M, N, A, lda, u, vexp); }
 
-  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const __half* A, int32_t lda, int32_t* umax, int32_t* vexp)
-  { vector_exponents_dispatcher<float>(stream, M, N, A, lda, umax, vexp); }
+  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const __half* A, int32_t lda, int32_t u, int32_t* vexp)
+  { vector_exponents_dispatcher<float>(stream, M, N, A, lda, u, vexp); }
 
-  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const cuDoubleComplex* A, int32_t lda, int32_t* umax, int32_t* vexp)
-  { vector_exponents_dispatcher<double>(stream, M, N, A, lda, umax, vexp); }
+  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const cuDoubleComplex* A, int32_t lda, int32_t u, int32_t* vexp)
+  { vector_exponents_dispatcher<double>(stream, M, N, A, lda, u, vexp); }
 
-  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const cuComplex* A, int32_t lda, int32_t* umax, int32_t* vexp)
-  { vector_exponents_dispatcher<float>(stream, M, N, A, lda, umax, vexp); }
+  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const cuComplex* A, int32_t lda, int32_t u, int32_t* vexp)
+  { vector_exponents_dispatcher<float>(stream, M, N, A, lda, u, vexp); }
 
-  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const __half2* A, int32_t lda, int32_t* umax, int32_t* vexp)
-  { vector_exponents_dispatcher<float>(stream, M, N, A, lda, umax, vexp); }
+  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const __half2* A, int32_t lda, int32_t u, int32_t* vexp)
+  { vector_exponents_dispatcher<float>(stream, M, N, A, lda, u, vexp); }
+
+  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int32_t* u, const int32_t* vexp)
+  { vector_range_dispatcher<double>(stream, M, N, A, lda, u, vexp); }
+
+  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, int32_t* u, const int32_t* vexp)
+  { vector_range_dispatcher<float>(stream, M, N, A, lda, u, vexp); }
+
+  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const __half* A, int32_t lda, int32_t* u, const int32_t* vexp)
+  { vector_range_dispatcher<float>(stream, M, N, A, lda, u, vexp); }
+
+  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const cuDoubleComplex* A, int32_t lda, int32_t* u, const int32_t* vexp)
+  { vector_range_dispatcher<double>(stream, M, N, A, lda, u, vexp); }
+
+  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const cuComplex* A, int32_t lda, int32_t* u, const int32_t* vexp)
+  { vector_range_dispatcher<float>(stream, M, N, A, lda, u, vexp); }
+
+  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const __half2* A, int32_t lda, int32_t* u, const int32_t* vexp)
+  { vector_range_dispatcher<float>(stream, M, N, A, lda, u, vexp); }
 
 }

@@ -30,14 +30,14 @@ inline void allgather_iter(cudaStream_t stream, int32_t comm_rank, int64_t M, in
   uint64_t stride = (uint64_t(M) * uint64_t(cols) + uint64_t(63)) & (~uint64_t(63));
   uint32_t grid_x = uint32_t((uint64_t(M) + uint64_t(511)) >> 9), grid_y = uint32_t(std::min(cols, N[comm_rank]));
   if (0 < grid_y)
-    imatrix_copy <<< dim3(grid_x, grid_y), 512, 0, stream >>> (M, &A[iN[comm_rank]], lda, &W[int64_t(comm_rank) * stride], M);
+  { imatrix_copy <<< dim3(grid_x, grid_y), 512, 0, stream >>> (M, &A[iN[comm_rank]], lda, &W[int64_t(comm_rank) * stride], M); }
   ncclAllGather(&W[int64_t(comm_rank) * stride], W, stride, ncclInt32, row_comm, stream);
 
   int32_t len = int32_t(iN.size());
   for (int32_t i = 0; i < len; ++i) {
     int32_t n = std::min(cols, N[i]);
     if (0 < n && i != comm_rank)
-      imatrix_copy <<< dim3(grid_x, n), 512, 0, stream >>> (M, &W[int64_t(i) * stride], M, &A[iN[i]], lda);
+    { imatrix_copy <<< dim3(grid_x, n), 512, 0, stream >>> (M, &W[int64_t(i) * stride], M, &A[iN[i]], lda); }
     iN[i] += int64_t(n) * lda; N[i] -= n;
   }
 }

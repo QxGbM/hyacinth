@@ -20,14 +20,14 @@ extern "C" int32_t hyacinXquantizeScale(hyacinHandle_t handle, double epi, int32
   Timer::register_kernel(handle.cudaStream, handle.timer);
   double epi_nrm = std::min(1., std::max(std::abs(epi), std::ldexp(1., -type_mantissa[int32_t(Atype)])));
   int32_t u = std::min(u_practical_limit, u_corr + int32_t(std::ceil(-std::log2(epi_nrm))));
-  if (dimC) { dimC[0] = 1 + int32_t(Atype != real_type[int32_t(Atype)]); dimC[1] = ((dimC[0] + 61) + int32_t(std::ceil(std::log2(double(std::max(1, globalM))))) + (u << 1)) / 63; }
+  if (dimC) { dimC[0] = 1 + int32_t(Atype != real_type[int32_t(Atype)]); dimC[1] = ((dimC[0] + 63 + u + u) + int32_t(std::ceil(std::log2(double(std::max(1, globalM)))))) / 63; }
   if (0 < u) { switch(Atype) {
-    case HYACIN_F64: internal::int8::vector_exponents(handle.cudaStream, M, N, (const double*)A, lda, &u, vexp); break;
-    case HYACIN_F32: internal::int8::vector_exponents(handle.cudaStream, M, N, (const float*)A, lda, &u, vexp); break;
-    case HYACIN_F16: internal::int8::vector_exponents(handle.cudaStream, M, N, (const __half*)A, lda, &u, vexp); break;
-    case HYACIN_F64_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, M, N, (const cuDoubleComplex*)A, lda, &u, vexp); break;
-    case HYACIN_F32_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, M, N, (const cuComplex*)A, lda, &u, vexp); break;
-    case HYACIN_F16_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, M, N, (const __half2*)A, lda, &u, vexp); break;
+    case HYACIN_F64: internal::int8::vector_exponents(handle.cudaStream, M, N, (const double*)A, lda, u, vexp); break;
+    case HYACIN_F32: internal::int8::vector_exponents(handle.cudaStream, M, N, (const float*)A, lda, u, vexp); break;
+    case HYACIN_F16: internal::int8::vector_exponents(handle.cudaStream, M, N, (const __half*)A, lda, u, vexp); break;
+    case HYACIN_F64_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, M, N, (const cuDoubleComplex*)A, lda, u, vexp); break;
+    case HYACIN_F32_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, M, N, (const cuComplex*)A, lda, u, vexp); break;
+    case HYACIN_F16_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, M, N, (const __half2*)A, lda, u, vexp); break;
     default: u = 0; break; }
 #ifndef NO_NCCL
     if (handle.col_comm) { Timer::register_comm(handle.cudaStream, handle.timer); ncclAllReduce(vexp, vexp, int64_t(N), ncclInt32, ncclMin, handle.col_comm, handle.cudaStream); }
@@ -47,7 +47,7 @@ int32_t internal::int8::gram_algorithm(char& alg, int32_t M, int32_t& u) {
 
 extern "C" hyacinPrecision_t hyacinXGautoType(int32_t g_corr, int32_t globalM, hyacinPrecision_t Atype, int32_t u, int32_t* gElemBytes) {
   hyacinPrecision_t AtypeReal = real_type[int32_t(Atype)];
-  int32_t bits = (g_corr + 1) + int32_t(std::ceil(0.5 * std::log2(double(std::max(1, globalM))))) + (u + u);
+  int32_t bits = (g_corr + 1) + int32_t(std::ceil(0.25 * std::log2(double(std::max(1, globalM))))) + (u + u);
   hyacinPrecision_t GtypeReal = 
     (bits <= type_mantissa[int32_t(HYACIN_F32)] && (AtypeReal == HYACIN_F32 || AtypeReal == HYACIN_F16)) ? HYACIN_F32 : (
     bits <= type_mantissa[int32_t(HYACIN_F64)] ? HYACIN_F64 : (
@@ -207,7 +207,7 @@ template <class matrix_t>
 inline void i8herk_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const matrix_t* A, int32_t lda, const int32_t* vexp, uint32_t corr, int32_t beta, int32_t orderC, uint64_t* C) {
   constexpr int32_t Complex = int32_t(std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>);
   using sum_t = std::conditional_t<Complex, ulonglong4_32a, ulonglong2>;
-  int32_t orderB = (63 + (orderA << 3)) / 63, algnM = (M + 255) & (~255), algnN = (N + 63) & (~63);
+  int32_t orderB = (U8CRT::range[orderA - 1] + 63) / 63, algnM = (M + 255) & (~255), algnN = (N + 63) & (~63);
   int64_t colsA = int64_t(N) * int64_t(orderA), strideW = int64_t(algnM) * colsA, strideB = int64_t(N) * int64_t(N) * int64_t(orderB);
   uint64_t b_len = uint64_t(strideB), w_len = uint64_t(algnN - N) * uint64_t(algnM);
   if constexpr(Complex) { b_len *= uint64_t(2); w_len += uint64_t(3) * uint64_t(strideW); } else { w_len += uint64_t(strideW); }
@@ -243,7 +243,7 @@ inline void herk_dispatcher(cudaStream_t stream, cublasHandle_t handle, char alg
   constexpr int32_t Complex = int32_t(std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>);
   constexpr uint64_t elem = uint64_t(Complex ? sizeof(uint64_t) : sizeof(uint32_t));
   int32_t u = *uptr, i = *beta; *beta = 1;
-  if (u == HYACIN_QUERY_U && 0 < M) { internal::int8::vector_exponents(stream, M, N, A, lda, uptr, const_cast<int32_t*>(vexp)); u = *uptr; }
+  if (u == HYACIN_QUERY_U && 0 < M) { internal::int8::vector_range(stream, M, N, A, lda, uptr, vexp); u = *uptr; }
   if (u < 0 && i == 0) { cudaMemsetAsync(C, 0, uint64_t(N) * uint64_t(N + 1) * uint64_t(orderC) * elem, stream); return; }
 
   int32_t uc = u + Complex, orderA = internal::int8::gram_algorithm(alg, M, uc);
@@ -291,7 +291,7 @@ template <class matrix_t>
 inline void herk_batch_dispatcher(cudaStream_t stream, cublasHandle_t handle, char alg, int32_t M, int32_t N, const matrix_t* A, int32_t lda, const int32_t* vexp, int32_t* beta, int32_t orderC, uint64_t* C, int32_t* uptr, Batch::BatchArgs* param, int8_t* batch) {
   constexpr int32_t Complex = int32_t(std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>);
   int32_t uc = *uptr, orderA, row, ldw = param->batchMaxK; int64_t prefix_elem; char op;
-  if (uc == HYACIN_QUERY_U && 0 < M) { internal::int8::vector_exponents(stream, M, N, A, lda, uptr, const_cast<int32_t*>(vexp)); uc = *uptr + Complex; } else { uc += Complex; }
+  if (uc == HYACIN_QUERY_U && 0 < M) { internal::int8::vector_range(stream, M, N, A, lda, uptr, vexp); uc = *uptr + Complex; } else { uc += Complex; }
   std::tie(uc, orderA, prefix_elem, row, alg) = param->processA(M, N, uc, alg, op);
   int8_t* W = &batch[prefix_elem];
 

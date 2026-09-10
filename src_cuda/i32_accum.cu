@@ -5,7 +5,7 @@
 template<int32_t orderA, int32_t orderX, int32_t beta, char mode>
 __global__ void i32_accum_kernel(uint32_t sft, uint32_t sft_iter, int64_t N, const int32_t* __restrict__ X, int64_t ldx, int64_t strideX, uint64_t* __restrict__ A, int64_t strideA) {
   int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
-  bool pred; if constexpr(mode == 'U' || mode == 'T') pred = y <= x; else pred = y < N;
+  bool pred; if constexpr(mode == 'U' || mode == 'T') { pred = y <= x; } else { pred = y < N; }
   if (pred) {
     int64_t x = int64_t(blockIdx.y);
     uint64_t acc[orderA]; A = &A[y + x * N]; X = &X[y + x * ldx];

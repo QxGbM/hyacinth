@@ -34,7 +34,7 @@ Batch::BatchArgs::BatchArgs(int32_t K, int32_t Complex, int32_t elemBytes, const
 }
 
 std::tuple<int32_t, int32_t, int64_t, int32_t, char> Batch::BatchArgs::processA(int32_t M, int32_t N, int32_t uc, char alg, char& op) {
-  if (uc <= 0 || M <= 0) { op = 'S'; return std::make_tuple(uc, 0, int64_t(0), 0, alg); } else {
+  if (uc < 0 || M <= 0) { op = 'S'; return std::make_tuple(uc, 0, int64_t(0), 0, alg); } else {
     auto iter = tensor.lower_bound(uc);
     if (iter == tensor.end() || batchMaxK < M) { op = 'E'; return std::make_tuple(uc, 0, int64_t(0), 0, alg); } else {
       int32_t rows = std::get<2>(iter->second);

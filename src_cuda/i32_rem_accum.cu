@@ -24,19 +24,19 @@ __device__ __forceinline__ void add_pd(uint64_t (&a)[ORDER], int32_t i) {
       U8CRT::Constants<orderX>::pd[x6 + 3], U8CRT::Constants<orderX>::pd[x6 + 4], U8CRT::Constants<orderX>::pd[x6 + 5] };
 
     i = (a[ORDER - 1] >> 63) ? i : (i - m);
-    if constexpr(pd[0]) { device::int8::add_shifted(a, i32_i64_prod<pd[0]>(i), uint32_t(0)); }
-    if constexpr(pd[1]) { device::int8::add_shifted(a, i32_i64_prod<pd[1]>(i), uint32_t(31)); }
-    if constexpr(pd[2]) { device::int8::add_shifted(a, i32_i64_prod<pd[2]>(i), uint32_t(62)); }
-    if constexpr(pd[3]) { device::int8::add_shifted(a, i32_i64_prod<pd[3]>(i), uint32_t(93)); }
-    if constexpr(pd[4]) { device::int8::add_shifted(a, i32_i64_prod<pd[4]>(i), uint32_t(124)); }
-    if constexpr(pd[5]) { device::int8::add_shifted(a, i32_i64_prod<pd[5]>(i), uint32_t(155)); }
+    if constexpr(pd[0]) { device::int8::add_shifted<0>(a, i32_i64_prod<pd[0]>(i)); }
+    if constexpr(pd[1]) { device::int8::add_shifted<31>(a, i32_i64_prod<pd[1]>(i)); }
+    if constexpr(pd[2]) { device::int8::add_shifted<62>(a, i32_i64_prod<pd[2]>(i)); }
+    if constexpr(pd[3]) { device::int8::add_shifted<93>(a, i32_i64_prod<pd[3]>(i)); }
+    if constexpr(pd[4]) { device::int8::add_shifted<124>(a, i32_i64_prod<pd[4]>(i)); }
+    if constexpr(pd[5]) { device::int8::add_shifted<155>(a, i32_i64_prod<pd[5]>(i)); }
   }
 }
 
 template<int32_t orderX, int32_t orderA, int32_t beta, char mode>
 __global__ void i32_crt_accum_kernel(int64_t N, const int32_t* __restrict__ X, int64_t ldx, int64_t strideX, uint64_t* __restrict__ A, int64_t strideA) {
   int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
-  bool pred; if constexpr(mode == 'U') pred = y <= x; else pred = y < N;
+  bool pred; if constexpr(mode == 'U') { pred = y <= x; } else { pred = y < N; }
   if (pred) {
     uint64_t acc[orderA]; int32_t rem[4];
     A = &A[y + x * N]; X = &X[y + x * ldx];
@@ -114,9 +114,9 @@ __global__ void i32_crt_accum_kernel(int64_t N, const int32_t* __restrict__ X, i
 
     if (acc[orderA - 1] >> 63) {
       constexpr int64_t p0 = U8CRT::Constants<orderX>::p[0], p1 = U8CRT::Constants<orderX>::p[1], p2 = U8CRT::Constants<orderX>::p[2];
-      if constexpr(p0) device::int8::add_shifted(acc, p0, uint32_t(0));
-      if constexpr(p1) device::int8::add_shifted(acc, p1, uint32_t(63));
-      if constexpr(p2) device::int8::add_shifted(acc, p2, uint32_t(126));
+      if constexpr(p0) { device::int8::add_shifted<0>(acc, p0); }
+      if constexpr(p1) { device::int8::add_shifted<63>(acc, p1); }
+      if constexpr(p2) { device::int8::add_shifted<126>(acc, p2); }
     }
 
     if constexpr(0 < orderA) { *A = acc[0]; }
