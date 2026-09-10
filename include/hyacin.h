@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <cublas_v2.h>
 #include <cusolverDn.h>
+#define HYACIN_QUERY_U (int32_t)(0x80000000)
 
 #ifndef NO_NCCL
 #include <nccl.h>
@@ -69,7 +70,7 @@ void hyacinXherk(
   hyacinPrecision_t Atype,
   const void* A, // device-pointer
   int32_t lda,
-  int32_t u_hint,
+  int32_t u_hint, // HYACIN_QUERY_U for query
   const int32_t* vexp, // device-pointer
   int32_t beta,
   int32_t orderC,
@@ -97,10 +98,11 @@ void hyacinXdequantize(
 
 void hyacinXherkBatchCreate(
   void** param, // host-pointer
+  int32_t batchK,
+  int32_t N,
+  hyacinPrecision_t Atype,
   const char config[], // host-pointer
-  int32_t* batchK, // host-pointer
-  int32_t* panels, // host-pointer
-  int32_t* CRTcounts // host-pointer
+  uint64_t* bytesBatch // host-pointer
 );
 
 void hyacinXherkBatchDestroy(
@@ -115,26 +117,25 @@ void hyacinXherkBatchProcessA(
   hyacinPrecision_t Atype,
   const void* A, // device-pointer
   int32_t lda,
-  int32_t u_hint,
+  int32_t u_hint, // HYACIN_QUERY_U for query
   const int32_t* vexp, // device-pointer
   int32_t* beta, // host-pointer
   int32_t orderC,
   uint64_t* C, // device-pointer
   void* param, // host-pointer
-  int8_t* batchE, // device-pointer
-  void* batchS // device-pointer
+  int8_t* batch // device-pointer
 );
 
 void hyacinXherkBatchFlush(
   hyacinHandle_t handle,
   int32_t N,
-  int32_t Complex,
+  hyacinPrecision_t Atype,
+  const int32_t* vexp, // device-pointer
   int32_t beta,
   int32_t orderC,
   uint64_t* C, // device-pointer
   void* param, // host-pointer
-  int8_t* batchE, // device-pointer
-  const void* batchS // device-pointer
+  int8_t* batch // device-pointer
 );
 
 int32_t hyacinXGevPcsvd(

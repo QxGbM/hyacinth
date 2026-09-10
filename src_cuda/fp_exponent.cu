@@ -3,11 +3,10 @@
 #include <int_fp_quantize.hpp>
 #include <cub/cub.cuh>
 #include <cooperative_groups.h>
-#include <limits>
 #include <stdexcept>
 
-constexpr int32_t int_min = std::numeric_limits<int32_t>::min();
-constexpr int32_t int_max = std::numeric_limits<int32_t>::max();
+constexpr int32_t int_min = 0x80000000;
+constexpr int32_t int_max = 0x7fffffff;
 struct A_max {
   __device__ __forceinline__ double operator()(double a, double b) { return fmax(a, b); }
   __device__ __forceinline__ float operator()(float a, float b) { return fmaxf(a, b); }
@@ -66,7 +65,7 @@ template<class reduc_t, class matrix_t>
 inline void vector_exponents_dispatcher(cudaStream_t stream, int32_t M, int32_t N, const matrix_t* A, int32_t lda, int32_t* umax, int32_t* vexp) {
   constexpr int32_t block_threads = 512;
   int64_t lda64 = int64_t(lda); int32_t u = *umax;
-  if (u <= 0) {
+  if (u == int_min) {
     int32_t device_sms = internal::device_num_sms(), maxBlocksPerSM = 0;
     cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, vector_range_kernel<block_threads, reduc_t, matrix_t>, block_threads, 0);
     
