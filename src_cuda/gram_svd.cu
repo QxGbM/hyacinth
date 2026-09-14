@@ -76,7 +76,7 @@ inline int32_t tevd(cudaStream_t stream, cusolverDnHandle_t handle, cusolverDnPa
 template <class real_t, class complex_t, class GRtype, class Xtype, class Stype, class Gtype>
 inline int32_t tsvd(cudaStream_t stream, cublasHandle_t handle, cusolverDnHandle_t s_handle, cusolverDnParams_t params, char fillmode, double epi, int32_t N, int32_t K, int32_t p, Xtype* X, int32_t ldx, Stype* S, Gtype* G, int32_t ldg, void* pinned_work) {
   uint64_t piv_bytes = uint64_t(N) * uint64_t(sizeof(int32_t));
-  uint64_t matrix_bytes = uint64_t(std::max(int64_t(sizeof(complex_t)) * int64_t(N) * int64_t(std::min(N, K)), int64_t(8192) + int64_t(sizeof(GRtype)) * int64_t(N)));
+  uint64_t matrix_bytes = uint64_t(std::max(int64_t(sizeof(complex_t)) * int64_t(N) * int64_t(std::min(N, K)), int64_t(8192) + int64_t(sizeof(GRtype)) * (int64_t(N) + int64_t(1))));
   uint8_t* dev_work = nullptr; 
   if (cudaSuccess != cudaMallocAsync((void**)&dev_work, matrix_bytes + piv_bytes, stream))
     throw std::runtime_error("Workspace allocation failed at GESVD Preconditioning.");

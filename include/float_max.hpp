@@ -33,36 +33,36 @@ namespace device::cmp {
     __host__ __device__ __forceinline__ double_idx operator()(double_idx a, double_idx b) {
       bool less, par; cmp_double(a.real, b.real, less, par);
       double val = less ? b.real : a.real;
-      int32_t idx_min = a.idx < b.idx ? a.idx : b.idx;
+      int32_t idx_max = a.idx < b.idx ? b.idx : a.idx;
       int32_t idx_ab = less ? b.idx : a.idx;
-      int32_t id = par ? idx_min : idx_ab;
+      int32_t id = par ? idx_max : idx_ab;
       return double_idx({ val, id });
     }
 
     __host__ __device__ __forceinline__ float_idx operator()(float_idx a, float_idx b) {
       bool less, par; cmp_float(a.real, b.real, less, par);
       float val = less ? b.real : a.real;
-      int32_t idx_min = a.idx < b.idx ? a.idx : b.idx;
+      int32_t idx_max = a.idx < b.idx ? b.idx : a.idx;
       int32_t idx_ab = less ? b.idx : a.idx;
-      int32_t id = par ? idx_min : idx_ab;
+      int32_t id = par ? idx_max : idx_ab;
       return float_idx({ val, id });
     }
 
     __host__ __device__ __forceinline__ double2_idx operator()(double2_idx a, double2_idx b) {
       bool less, par; cmp_double2(a.real, b.real, less, par);
       double2 val = less ? b.real : a.real;
-      int32_t idx_min = a.idx < b.idx ? a.idx : b.idx;
+      int32_t idx_max = a.idx < b.idx ? b.idx : a.idx;
       int32_t idx_ab = less ? b.idx : a.idx;
-      int32_t id = par ? idx_min : idx_ab;
+      int32_t id = par ? idx_max : idx_ab;
       return double2_idx({ val, id });
     }
 
     __host__ __device__ __forceinline__ float4_idx operator()(float4_idx a, float4_idx b) {
       bool less, par; cmp_float4(a.real, b.real, less, par);
       float4 val = less ? b.real : a.real;
-      int32_t idx_min = a.idx < b.idx ? a.idx : b.idx;
+      int32_t idx_max = a.idx < b.idx ? b.idx : a.idx;
       int32_t idx_ab = less ? b.idx : a.idx;
-      int32_t id = par ? idx_min : idx_ab;
+      int32_t id = par ? idx_max : idx_ab;
       return float4_idx({ val, id });
     }
   };

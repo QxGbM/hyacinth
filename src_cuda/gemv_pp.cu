@@ -45,7 +45,7 @@ __global__ void imax_kernel(real_t epi, int32_t N, const real_t* __restrict__ X,
 
   thread_x = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce[0]).Reduce(thread_x, cmp_max);
   if (gridDim.x == 1) {
-    if (threadIdx.x == 0) { real_sqrt(D[0] = _mul(epi, thread_x.real), thread_x, idx[0], idx[1]); }
+    if (threadIdx.x == 0) { real_sqrt(D[N] = _mul(epi, thread_x.real), thread_x, idx[0], idx[1]); }
     return;
   }
 
@@ -55,7 +55,7 @@ __global__ void imax_kernel(real_t epi, int32_t N, const real_t* __restrict__ X,
     for (int32_t i = threadIdx.x; i < gridDim.x; i += BLOCK_THREADS)
     { thread_x = cmp_max(thread_x, work[i]); }
     thread_x = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce[1]).Reduce(thread_x, cmp_max);
-    if (threadIdx.x == 0) { real_sqrt(D[0] = _mul(epi, thread_x.real), thread_x, idx[0], idx[1]); }
+    if (threadIdx.x == 0) { real_sqrt(D[N] = _mul(epi, thread_x.real), thread_x, idx[0], idx[1]); }
   }
 }
 
@@ -117,7 +117,7 @@ __global__ void gemv_pp_kernel(int32_t j, int32_t M, int32_t N, matrix_t sq, rea
 
   thread_x = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce[0]).Reduce(thread_x, cmp_max);
   if (gridDim.x == 1) { 
-    if (threadIdx.x == 0) { real_sqrt(D[-M], thread_x, idx[0], idx[1]); A[0] = sq; int32_t p = jpiv[0]; jpiv[0] = jpiv[j]; jpiv[j] = p; }
+    if (threadIdx.x == 0) { real_sqrt(D[N], thread_x, idx[0], idx[1]); A[0] = sq; int32_t p = jpiv[0]; jpiv[0] = jpiv[j]; jpiv[j] = p; }
     return;
   }
 
@@ -127,7 +127,7 @@ __global__ void gemv_pp_kernel(int32_t j, int32_t M, int32_t N, matrix_t sq, rea
     for (int32_t i = threadIdx.x; i < gridDim.x; i += BLOCK_THREADS)
       thread_x = cmp_max(thread_x, work[i]);
     thread_x = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce[1]).Reduce(thread_x, cmp_max);
-    if (threadIdx.x == 0) { real_sqrt(D[-M], thread_x, idx[0], idx[1]); A[0] = sq; int32_t p = jpiv[0]; jpiv[0] = jpiv[j]; jpiv[j] = p; }
+    if (threadIdx.x == 0) { real_sqrt(D[N], thread_x, idx[0], idx[1]); A[0] = sq; int32_t p = jpiv[0]; jpiv[0] = jpiv[j]; jpiv[j] = p; }
   }
 }
 
@@ -147,7 +147,7 @@ __global__ void gemv_pp_nopiv_kernel(int32_t M, int32_t N, matrix_t sq, real_t r
 
   thread_x = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce[0]).Reduce(thread_x, cmp_max);
   if (gridDim.x == 1) {
-    if (threadIdx.x == 0) { real_sqrt(D[-M], thread_x, idx[0], idx[1]); A[0] = sq; }
+    if (threadIdx.x == 0) { real_sqrt(D[N], thread_x, idx[0], idx[1]); A[0] = sq; }
     return;
   }
 
@@ -157,7 +157,7 @@ __global__ void gemv_pp_nopiv_kernel(int32_t M, int32_t N, matrix_t sq, real_t r
     for (int32_t i = threadIdx.x; i < gridDim.x; i += BLOCK_THREADS)
       thread_x = cmp_max(thread_x, work[i]);
     thread_x = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce[1]).Reduce(thread_x, cmp_max);
-    if (threadIdx.x == 0) { real_sqrt(D[-M], thread_x, idx[0], idx[1]); A[0] = sq; }
+    if (threadIdx.x == 0) { real_sqrt(D[N], thread_x, idx[0], idx[1]); A[0] = sq; }
   }
 }
 

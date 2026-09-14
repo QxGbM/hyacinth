@@ -77,7 +77,7 @@ __global__ void vector_range_kernel(int32_t M, int32_t N, const matrix_t* __rest
   threadI = cub::BlockReduce<int32_t, BLOCK_THREADS>(temp_reduce[0]).Reduce(threadI, cmp);
   if (gridDim.x == 1) { if (threadIdx.x == 0) { *out = threadI; } return; }
 
-  if (threadIdx.x == 0) { vbuf[blockIdx.x] = threadI; } else { threadI = int_max; }
+  if (threadIdx.x == 0) { vbuf[blockIdx.x] = threadI; } else { threadI = -1; }
   cooperative_groups::this_grid().sync();
   if (blockIdx.x == 0) {
     for (int32_t i = threadIdx.x; i < gridDim.x; i += BLOCK_THREADS)
