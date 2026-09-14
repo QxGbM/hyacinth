@@ -16,9 +16,9 @@ __global__ void i32_accum_kernel(uint32_t sft, uint32_t sft_iter, int64_t N, con
       if constexpr(2 < orderA) { acc[2] = A[strideA + strideA]; }
       if constexpr(mode == 'T') {
         uint64_t* AT = &A[(x - y) * (int64_t(1) - N)];
-        if constexpr(0 < orderA) { device::int8::add_shifted(acc, int64_t(*AT), uint32_t(0)); }
-        if constexpr(1 < orderA) { device::int8::add_shifted(acc, int64_t(*(AT += strideA)), uint32_t(63)); }
-        if constexpr(2 < orderA) { device::int8::add_shifted(acc, int64_t(*(AT += strideA)), uint32_t(126)); }
+        if constexpr(0 < orderA) { device::int8::add_shifted<0>(acc, int64_t(*AT)); }
+        if constexpr(1 < orderA) { device::int8::add_shifted<63>(acc, int64_t(*(AT += strideA))); }
+        if constexpr(2 < orderA) { device::int8::add_shifted<126>(acc, int64_t(*(AT += strideA))); }
       }
     }
     else {

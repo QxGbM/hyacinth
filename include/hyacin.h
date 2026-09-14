@@ -58,6 +58,7 @@ void hyacinXquantizeScale(
   hyacinPrecision_t Atype,
   const void* A, // device-pointer
   int32_t lda,
+  int32_t beta,
   int32_t* vexp, // device-pointer
   int32_t* dimC // host-array
 ); // returns u
