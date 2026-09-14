@@ -4,7 +4,6 @@
 #include <tuple>
 #include <map>
 #include <vector>
-#include <string>
 #include <cublas_v2.h>
 #include <cuda_fp16.h>
 
@@ -57,12 +56,12 @@ namespace internal::Cholesky {
 
 namespace internal::int8 {
 
-  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int32_t u, int32_t* vexp, int32_t* e);
-  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, int32_t u, int32_t* vexp, int32_t* e);
-  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const __half* A, int32_t lda, int32_t u, int32_t* vexp, int32_t* e);
-  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const cuDoubleComplex* A, int32_t lda, int32_t u, int32_t* vexp, int32_t* e);
-  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const cuComplex* A, int32_t lda, int32_t u, int32_t* vexp, int32_t* e);
-  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const __half2* A, int32_t lda, int32_t u, int32_t* vexp, int32_t* e);
+  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int32_t u, int32_t* vexp);
+  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, int32_t u, int32_t* vexp);
+  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const __half* A, int32_t lda, int32_t u, int32_t* vexp);
+  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const cuDoubleComplex* A, int32_t lda, int32_t u, int32_t* vexp);
+  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const cuComplex* A, int32_t lda, int32_t u, int32_t* vexp);
+  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const __half2* A, int32_t lda, int32_t u, int32_t* vexp);
 
   void vector_range(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int32_t* u, const int32_t* vexp);
   void vector_range(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, int32_t* u, const int32_t* vexp);
@@ -70,6 +69,7 @@ namespace internal::int8 {
   void vector_range(cudaStream_t stream, int32_t M, int32_t N, const cuDoubleComplex* A, int32_t lda, int32_t* u, const int32_t* vexp);
   void vector_range(cudaStream_t stream, int32_t M, int32_t N, const cuComplex* A, int32_t lda, int32_t* u, const int32_t* vexp);
   void vector_range(cudaStream_t stream, int32_t M, int32_t N, const __half2* A, int32_t lda, int32_t* u, const int32_t* vexp);
+  void vector_exp_diff(cudaStream_t stream, int32_t N, int32_t* d, const int32_t* vexp);
 
   void quantize_limbs(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const double* A, int32_t lda, const int32_t* vexp, int8_t* B, int32_t ldb);
   void quantize_limbs(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const float* A, int32_t lda, const int32_t* vexp, int8_t* B, int32_t ldb);
@@ -145,7 +145,7 @@ namespace Batch {
 
   public:
     const int32_t batchMaxK, Complex;
-    BatchArgs(int32_t K, int32_t Complex, int32_t elemBytes, const std::string& str, int32_t& order);
+    BatchArgs(char algo, int32_t u_ceil, int32_t u_floor, int32_t min_uinc, int32_t K, int32_t Complex, int32_t elemBytes, int32_t& order);
 
     // op: 'E'=eager eval; 'Z'=lazy batch; 'F'=lazy+flush; 'S'=skip;
     std::tuple<int32_t, int32_t, int64_t, int32_t, char> processA(int32_t M, int32_t N, int32_t uc, char alg, char& op);

@@ -5,28 +5,18 @@
 #include <charconv>
 #include <stdexcept>
 
-Batch::BatchArgs::BatchArgs(int32_t K, int32_t Complex, int32_t elemBytes, const std::string& str, int32_t& order) :
+Batch::BatchArgs::BatchArgs(char algo, int32_t u_ceil, int32_t u_floor, int32_t min_uinc, int32_t K, int32_t Complex, int32_t elemBytes, int32_t& order) :
   tensor(), batchMaxK((K + 255) & (~255)), Complex(Complex) {
-  std::vector<char> alg; std::vector<int32_t> u;
-  const char* p = str.data(), *end = p + str.size();
-  while (p != end && std::isdigit(static_cast<unsigned char>(*p))) { ++p; }
-  while (p != end) {
-    while (p != end && !std::isdigit(static_cast<unsigned char>(*p))) { ++p; }
-    if (p != end) {
-      const char key = p[-1], *iBegin = p;
-      while (p != end && std::isdigit(static_cast<unsigned char>(*p))) { ++p; }
-      int32_t value; auto [ptr, ec] = std::from_chars(iBegin, p, value);
-      if (std::isalpha(static_cast<unsigned char>(key)) && ec == std::errc{} && ptr == p)
-      { alg.emplace_back(key); u.emplace_back(value); }
-    }
+  min_uinc = std::max(1, min_uinc);
+  while (u_floor <= u_ceil) {
+    char algi = algo; int32_t ui = u_floor;
+    int32_t orderA = internal::int8::gram_algorithm(algi, batchMaxK, ui);
+    tensor.insert(std::make_pair(ui, std::make_tuple(orderA, 0, 0, algi)));
+    u_floor = std::max(1 + ui, u_floor + min_uinc);
   }
 
-  for (int32_t i = 0; i < int32_t(alg.size()); ++i) {
-    char algi = alg[i]; int32_t ui = u[i];
-    int32_t order = internal::int8::gram_algorithm(algi, batchMaxK, ui);
-    tensor.insert(std::make_pair(ui, std::make_tuple(order, 0, 0, algi)));
-  }
-
+  int32_t orderA = internal::int8::gram_algorithm(algo, batchMaxK, u_ceil);
+  tensor.insert(std::make_pair(u_ceil, std::make_tuple(orderA, 0, 0, algo)));
   order = 0; int32_t panelsLimb = Complex ? 3 : 1;
   if (1 < int32_t(tensor.size()))
     for (auto& [key, value] : tensor)

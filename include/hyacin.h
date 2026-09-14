@@ -48,7 +48,7 @@ void hyacinDestroy(
   hyacinHandle_t handle
 );
 
-int32_t hyacinXquantizeScale(
+void hyacinXquantizeScale(
   hyacinHandle_t handle,
   double epi,
   int32_t u_corr,
@@ -98,10 +98,13 @@ void hyacinXdequantize(
 
 void hyacinXherkBatchCreate(
   void** param, // host-pointer
+  char alg,
   int32_t batchK,
   int32_t N,
   hyacinPrecision_t Atype,
-  const char config[], // host-pointer
+  int32_t u_floor,
+  int32_t u_ceil,
+  int32_t min_uinc,
   uint64_t* bytesBatch // host-pointer
 );
 

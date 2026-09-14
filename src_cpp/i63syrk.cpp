@@ -15,23 +15,26 @@ const std::vector<hyacinPrecision_t> complex_type({ HYACIN_F64_COMPLEX, HYACIN_F
 const std::vector<int32_t> type_bytes({ sizeof(double), sizeof(float), sizeof(__half), sizeof(double2), sizeof(float4), sizeof(cuDoubleComplex), sizeof(cuComplex), sizeof(__half2), sizeof(complex_double2), sizeof(complex_float4) });
 const std::vector<int32_t> type_mantissa({ 52, 23, 10, 105, 95, 52, 23, 10, 105, 95 });
 
-extern "C" int32_t hyacinXquantizeScale(hyacinHandle_t handle, double epi, int32_t u_corr, int32_t globalM, int32_t M, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t* vexp, int32_t* dimC) {
+extern "C" void hyacinXquantizeScale(hyacinHandle_t handle, double epi, int32_t u_corr, int32_t globalM, int32_t M, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t* vexp, int32_t* dimC) {
   Timer::register_kernel(handle.cudaStream, handle.timer);
   double epi_nrm = std::min(1., std::max(std::abs(epi), std::ldexp(1., -type_mantissa[int32_t(Atype)])));
   int32_t u = std::min(u_practical_limit, u_corr + int32_t(std::ceil(-std::log2(epi_nrm))));
-  if (dimC) { dimC[0] = 1 + int32_t(Atype != real_type[int32_t(Atype)]); dimC[1] = ((dimC[0] + 63 + u + u) + int32_t(std::ceil(std::log2(double(std::max(1, globalM)))))) / 63; }
+  int32_t cpanels = 1 + int32_t(Atype != real_type[int32_t(Atype)]), lpanels = ((cpanels + 63 + u + u) + int32_t(std::ceil(std::log2(double(std::max(1, globalM)))))) / 63;
   if (0 < u) { switch(Atype) {
-    case HYACIN_F64: internal::int8::vector_exponents(handle.cudaStream, M, N, (const double*)A, lda, u, vexp, (int32_t*)handle.pinnedWorkspace); break;
-    case HYACIN_F32: internal::int8::vector_exponents(handle.cudaStream, M, N, (const float*)A, lda, u, vexp, (int32_t*)handle.pinnedWorkspace); break;
-    case HYACIN_F16: internal::int8::vector_exponents(handle.cudaStream, M, N, (const __half*)A, lda, u, vexp, (int32_t*)handle.pinnedWorkspace); break;
-    case HYACIN_F64_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, M, N, (const cuDoubleComplex*)A, lda, u, vexp, (int32_t*)handle.pinnedWorkspace); break;
-    case HYACIN_F32_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, M, N, (const cuComplex*)A, lda, u, vexp, (int32_t*)handle.pinnedWorkspace); break;
-    case HYACIN_F16_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, M, N, (const __half2*)A, lda, u, vexp, (int32_t*)handle.pinnedWorkspace); break;
+    case HYACIN_F64: internal::int8::vector_exponents(handle.cudaStream, M, N, (const double*)A, lda, u, vexp); break;
+    case HYACIN_F32: internal::int8::vector_exponents(handle.cudaStream, M, N, (const float*)A, lda, u, vexp); break;
+    case HYACIN_F16: internal::int8::vector_exponents(handle.cudaStream, M, N, (const __half*)A, lda, u, vexp); break;
+    case HYACIN_F64_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, M, N, (const cuDoubleComplex*)A, lda, u, vexp); break;
+    case HYACIN_F32_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, M, N, (const cuComplex*)A, lda, u, vexp); break;
+    case HYACIN_F16_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, M, N, (const __half2*)A, lda, u, vexp); break;
     default: u = 0; break; }
 #ifndef NO_NCCL
-    if (handle.col_comm) { Timer::register_comm(handle.cudaStream, handle.timer); ncclAllReduce(vexp, vexp, int64_t(N), ncclInt32, ncclMin, handle.col_comm, handle.cudaStream); }
+    if (handle.col_comm) { Timer::register_comm(handle.cudaStream, handle.timer); ncclAllReduce(vexp, vexp, int64_t(N) + int64_t(N), ncclInt32, ncclMin, handle.col_comm, handle.cudaStream); }
 #endif
-  } return u;
+    int32_t* uptr = (int32_t*)handle.pinnedWorkspace;
+    internal::int8::vector_exp_diff(handle.cudaStream, N, uptr, vexp);
+    if (dimC) { dimC[0] = cpanels; dimC[1] = lpanels; dimC[2] = u; dimC[3] = *uptr; }
+  } else if (dimC) { dimC[0] = dimC[1] = dimC[2] = dimC[3] = 0; }
 }
 
 int32_t internal::int8::gram_algorithm(char& alg, int32_t M, int32_t& u) {
@@ -276,9 +279,9 @@ extern "C" void hyacinXherk(hyacinHandle_t handle, char alg, int32_t M, int32_t 
   }
 }
 
-extern "C" void hyacinXherkBatchCreate(void** param, int32_t batchK, int32_t N, hyacinPrecision_t Atype, const char config[], uint64_t* bytesBatch) {
-  int32_t panels, Complex = int32_t(Atype == real_type[int32_t(Atype)]), elemBytes = type_bytes[int32_t(Atype)]; std::string str(config);
-  Batch::BatchArgs* p = (Batch::BatchArgs*)(*param = new Batch::BatchArgs(batchK, Complex, elemBytes, str, panels));
+extern "C" void hyacinXherkBatchCreate(void** param, char alg, int32_t batchK, int32_t N, hyacinPrecision_t Atype, int32_t u_ceil, int32_t u_floor, int32_t min_uinc, uint64_t* bytesBatch) {
+  int32_t panels, Complex = int32_t(Atype == real_type[int32_t(Atype)]), elemBytes = type_bytes[int32_t(Atype)];
+  Batch::BatchArgs* p = (Batch::BatchArgs*)(*param = new Batch::BatchArgs(alg, u_ceil, u_floor, min_uinc, batchK, Complex, elemBytes, panels));
   if (bytesBatch) { *bytesBatch = uint64_t(N) * uint64_t(p->batchMaxK) * uint64_t(panels); }
 }
 
