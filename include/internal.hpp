@@ -144,7 +144,7 @@ namespace Batch {
     // tuple is [Tensor Order, Tensor Panel Prefix, Tensor Rows, Algorithm 'L' or 'C']
 
   public:
-    const int32_t batchMaxK, Complex;
+    const int32_t batchMaxK;
     BatchArgs(char algo, int32_t u_ceil, int32_t u_floor, int32_t min_uinc, int32_t K, int32_t Complex, int32_t elemBytes, int32_t& order);
 
     // op: 'E'=eager eval; 'Z'=lazy batch; 'F'=lazy+flush; 'S'=skip;

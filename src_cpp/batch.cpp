@@ -6,7 +6,7 @@
 #include <stdexcept>
 
 Batch::BatchArgs::BatchArgs(char algo, int32_t u_ceil, int32_t u_floor, int32_t min_uinc, int32_t K, int32_t Complex, int32_t elemBytes, int32_t& order) :
-  tensor(), batchMaxK((K + 255) & (~255)), Complex(Complex) {
+  tensor(), batchMaxK((K + 255) & (~255)) {
   min_uinc = std::max(1, min_uinc);
   while (u_floor <= u_ceil) {
     char algi = algo; int32_t ui = u_floor;
