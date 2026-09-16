@@ -18,46 +18,47 @@ __global__ void matrix_fill_upper_to_full(matrix_t* __restrict__ A, int64_t lda)
 }
 
 template <class real_t, class matrix_t, class idx_t>
-inline int32_t potrfp_dispatcher(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, matrix_t* A, int32_t lda, int32_t* jpiv, real_t* dvec, idx_t* hvec) {
+inline int32_t potrfp_dispatcher(cudaStream_t stream, char fillmode, double epi, int32_t k, int32_t p, int32_t N, matrix_t* A, int32_t lda, int32_t* jpiv, real_t* dvec, idx_t* hvec) {
   if (fillmode == 'U' || fillmode == 'u')
     matrix_fill_upper_to_full<'U', real_t> <<< dim3(uint32_t(N + 511) >> 9, uint32_t(N)), 512, 0, stream >>> (A, int64_t(lda));
   else if (fillmode == 'L' || fillmode == 'l')
     matrix_fill_upper_to_full<'L', real_t> <<< dim3(uint32_t(N + 511) >> 9, uint32_t(N)), 512, 0, stream >>> (A, int64_t(lda));
-  internal::Cholesky::imax_initializer(stream, std::min(1., std::max(0., std::pow(epi, 2))), N, A, lda + 1, jpiv, dvec, hvec);
-  int32_t iters = std::min(N, std::max(0, k)); iters = iters ? iters : N; p = std::max(0, p);
+  int32_t iters = std::min(N, std::max(0, k)); iters = iters ? iters : N;
+  int32_t grid_gemv = internal::Cholesky::imax_initializer(stream, std::min(1., std::max(0., std::pow(epi, 2))), std::max(0, p), N, A, lda + 1, jpiv, dvec, hvec);
+  cudaStreamSynchronize(stream);
 
-  for (int32_t i = 0, s = 0; i < iters; ++i) {
-    int32_t j = hvec[0].idx;
-    if ((p < (s += hvec[1].idx)) || (j < 0)) { return i; }
-    internal::Cholesky::gemv_scal(stream, handle, hvec, j, i, N - i, &A[int64_t(i) * int64_t(lda)], lda, jpiv, dvec);
+  for (int32_t i = 0; i < iters; ++i) {
+    if (hvec[0].idx < 0) { return i; }
+    internal::Cholesky::gemv_pp(stream, grid_gemv, hvec, i, N - i, &A[int64_t(i) * int64_t(lda + 1)], lda, &jpiv[i], dvec);
+    cudaStreamSynchronize(stream);
   }
   return iters;
 }
 
 namespace internal::Cholesky {
 
-  int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, double* A, int32_t lda, int32_t* jpiv, double* dev_work, void* pinned_work)
-  { return potrfp_dispatcher(stream, handle, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, (double_idx*)pinned_work); }
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t k, int32_t p, int32_t N, double* A, int32_t lda, int32_t* jpiv, double* dev_work, void* pinned_work)
+  { return potrfp_dispatcher(stream, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, (double_idx*)pinned_work); }
 
-  int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, float* A, int32_t lda, int32_t* jpiv, float* dev_work, void* pinned_work)
-  { return potrfp_dispatcher(stream, handle, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, (float_idx*)pinned_work); }
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t k, int32_t p, int32_t N, float* A, int32_t lda, int32_t* jpiv, float* dev_work, void* pinned_work)
+  { return potrfp_dispatcher(stream, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, (float_idx*)pinned_work); }
 
-  int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, double2* A, int32_t lda, int32_t* jpiv, double2* dev_work, void* pinned_work)
-  { return potrfp_dispatcher(stream, handle, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, (double2_idx*)pinned_work); }
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t k, int32_t p, int32_t N, double2* A, int32_t lda, int32_t* jpiv, double2* dev_work, void* pinned_work)
+  { return potrfp_dispatcher(stream, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, (double2_idx*)pinned_work); }
 
-  int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, float4* A, int32_t lda, int32_t* jpiv, float4* dev_work, void* pinned_work)
-  { return potrfp_dispatcher(stream, handle, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, (float4_idx*)pinned_work); }
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t k, int32_t p, int32_t N, float4* A, int32_t lda, int32_t* jpiv, float4* dev_work, void* pinned_work)
+  { return potrfp_dispatcher(stream, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, (float4_idx*)pinned_work); }
 
-  int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, cuDoubleComplex* A, int32_t lda, int32_t* jpiv, double* dev_work, void* pinned_work)
-  { return potrfp_dispatcher(stream, handle, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, (double_idx*)pinned_work); }
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t k, int32_t p, int32_t N, cuDoubleComplex* A, int32_t lda, int32_t* jpiv, double* dev_work, void* pinned_work)
+  { return potrfp_dispatcher(stream, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, (double_idx*)pinned_work); }
 
-  int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, cuComplex* A, int32_t lda, int32_t* jpiv, float* dev_work, void* pinned_work)
-  { return potrfp_dispatcher(stream, handle, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, (float_idx*)pinned_work); }
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t k, int32_t p, int32_t N, cuComplex* A, int32_t lda, int32_t* jpiv, float* dev_work, void* pinned_work)
+  { return potrfp_dispatcher(stream, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, (float_idx*)pinned_work); }
 
-  int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, complex_double2* A, int32_t lda, int32_t* jpiv, double2* dev_work, void* pinned_work)
-  { return potrfp_dispatcher(stream, handle, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, (double2_idx*)pinned_work); }
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t k, int32_t p, int32_t N, complex_double2* A, int32_t lda, int32_t* jpiv, double2* dev_work, void* pinned_work)
+  { return potrfp_dispatcher(stream, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, (double2_idx*)pinned_work); }
 
-  int32_t potrfp(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t k, int32_t p, int32_t N, complex_float4* A, int32_t lda, int32_t* jpiv, float4* dev_work, void* pinned_work)
-  { return potrfp_dispatcher(stream, handle, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, (float4_idx*)pinned_work); }
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t k, int32_t p, int32_t N, complex_float4* A, int32_t lda, int32_t* jpiv, float4* dev_work, void* pinned_work)
+  { return potrfp_dispatcher(stream, fillmode, epi, k, p, N, A, lda, jpiv, dev_work, (float4_idx*)pinned_work); }
 
 };

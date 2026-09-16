@@ -50,17 +50,26 @@ void hyacinDestroy(
 
 void hyacinXquantizeScale(
   hyacinHandle_t handle,
-  double epi,
-  int32_t u_corr,
-  int32_t globalM,
   int32_t M,
   int32_t N,
   hyacinPrecision_t Atype,
   const void* A, // device-pointer
   int32_t lda,
   int32_t beta,
+  int32_t* vexp // device-pointer
+);
+
+int32_t hyacinXquantizeScaleFinalize(
+  hyacinHandle_t handle,
+  double epi,
+  int32_t u_corr,
+  int32_t globalM,
+  int32_t N,
+  hyacinPrecision_t Atype,
   int32_t* vexp, // device-pointer
-  int32_t* dimC // host-array
+  int32_t* cPanels, // host-pointer
+  int32_t* lPanels, // host-pointer
+  int32_t* u_floor // host-pointer
 ); // returns u
 
 void hyacinXherk(

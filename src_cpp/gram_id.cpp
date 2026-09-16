@@ -14,12 +14,12 @@ inline void ltrsm(cublasHandle_t handle, int32_t Mb, int32_t Nb, cuComplex* R, i
 
 template <class Btype, class Rtype, class Xtype, class Gtype>
 inline int32_t diag_piv_dispatcher(cudaStream_t stream, cublasHandle_t handle, char fillmode, double epi, int32_t N, int32_t K, int32_t p, int32_t* jpiv, Xtype* X, int32_t ldx, Gtype* G, int32_t ldg, void* pinned_work) {
-  uint64_t dev_work_bytes = uint64_t(std::max(int64_t(sizeof(Xtype)) * int64_t(N) * int64_t(std::min(N, K)), int64_t(8192) + int64_t(sizeof(Rtype)) * (int64_t(N) + int64_t(1))));
+  uint64_t dev_work_bytes = uint64_t(std::max(int64_t(sizeof(Xtype)) * int64_t(N) * int64_t(std::min(N, K)), int64_t(65536) + int64_t(sizeof(Rtype)) * (int64_t(N) + int64_t(1))));
   void* dev_work = nullptr; 
   if (cudaSuccess != cudaMallocAsync((void**)&dev_work, dev_work_bytes, stream))
     throw std::runtime_error("Workspace allocation failed at Interpolative decomposition.");
 
-  K = internal::Cholesky::potrfp(stream, handle, fillmode, epi, K, p, N, G, ldg, jpiv, (Rtype*)dev_work, pinned_work);
+  K = internal::Cholesky::potrfp(stream, fillmode, epi, K, p, N, G, ldg, jpiv, (Rtype*)dev_work, pinned_work);
   if (0 < K) {
     Btype* B = (Btype*)dev_work;
     internal::scatter_matcopy(stream, handle, 'A', K, N, nullptr, G, ldg, B, K);
