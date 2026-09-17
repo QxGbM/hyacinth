@@ -195,7 +195,7 @@ __global__ void potrf_iter_kernel(int32_t iterMax, int32_t N, matrix_t* __restri
     }
 
     if (0 < j) for (int32_t i = tid - M; i < 0; i += nthreads)
-    { matrix_t a = A[i]; A[i] = A_col_j[i]; A_col_j[i] = a; }
+    { matrix_t t = A[i]; A[i] = A_col_j[i]; A_col_j[i] = t; }
 
     A = &(++A)[lda]; ++M; --N; ++jpiv; ++D;
     thread_x = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce).Reduce(thread_x, cmp_max);
@@ -204,7 +204,7 @@ __global__ void potrf_iter_kernel(int32_t iterMax, int32_t N, matrix_t* __restri
       if (int32_t(threadIdx.x) == 0) {
         *A = real_sqrt<matrix_t>(1 < N && M < iterMax, D[N], thread_x, rsq);
         j = thread_x.idx - 1;
-        if (0 <= rsq.idx && 0 < j) { D[j] = D[0]; int32_t p = jpiv[0]; jpiv[0] = jpiv[j]; jpiv[j] = p; }
+        if (0 <= rsq.idx && 0 < j) { D[j] = D[0]; int32_t t = jpiv[0]; jpiv[0] = jpiv[j]; jpiv[j] = t; }
       }
     } else {
       if (int32_t(threadIdx.x) == 0) { work[blockIdx.x] = thread_x; } else { thread_x = idx_t(); }
@@ -216,7 +216,7 @@ __global__ void potrf_iter_kernel(int32_t iterMax, int32_t N, matrix_t* __restri
         if (int32_t(threadIdx.x) == 0) {
           *A = real_sqrt<matrix_t>(1 < N && M < iterMax, D[N], thread_x, rsq);
           work[0] = rsq; work[BLOCK_THREADS].idx = (j = thread_x.idx - 1);
-          if (0 <= rsq.idx && 0 < j) { D[j] = D[0]; int32_t p = jpiv[0]; jpiv[0] = jpiv[j]; jpiv[j] = p; }
+          if (0 <= rsq.idx && 0 < j) { D[j] = D[0]; int32_t t = jpiv[0]; jpiv[0] = jpiv[j]; jpiv[j] = t; }
         }
       }
       grid.sync();
@@ -258,7 +258,7 @@ inline int32_t potrfp_dispatcher(cudaStream_t stream, char fillmode, double epi,
   cudaLaunchCooperativeKernel(potrf_init_kernel<block_threads, real_t, matrix_t, idx_t>, grid, block_threads, initArgs, 0, stream);
 
   cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, potrf_iter_kernel<block_threads, real_t, matrix_t, idx_t>, block_threads, 0);
-  grid = std::min(std::min(grid_blocks, device_sms * maxBlocksPerSM), N - 1);
+  grid = std::min(std::min(grid_blocks, device_sms * maxBlocksPerSM), N);
   void* kernelArgs[]{ &k, &N, &A, &lda, &jpiv, &diag, &D, &rank };
   cudaLaunchCooperativeKernel(potrf_iter_kernel<block_threads, real_t, matrix_t, idx_t>, grid, block_threads, kernelArgs, 0, stream);
   cudaStreamSynchronize(stream); return *rank;

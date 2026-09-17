@@ -16,20 +16,6 @@ const std::vector<int32_t> type_bytes({ sizeof(double), sizeof(float), sizeof(__
 const std::vector<int32_t> type_mantissa({ 52, 23, 10, 105, 95, 52, 23, 10, 105, 95 });
 const cublasGemmAlgo_t cublas_algo = CUBLAS_GEMM_AUTOTUNE;
 
-extern "C" void hyacinXquantizeScale(hyacinHandle_t handle, int32_t M, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t beta, int32_t* vexp) {
-  if (M <= 0 || N <= 0) { return; }
-  Timer::register_kernel(handle.cudaStream, handle.timer);
-  switch(Atype) {
-    case HYACIN_F64: internal::int8::vector_exponents(handle.cudaStream, M, N, (const double*)A, lda, beta, vexp); return;
-    case HYACIN_F32: internal::int8::vector_exponents(handle.cudaStream, M, N, (const float*)A, lda, beta, vexp); return;
-    case HYACIN_F16: internal::int8::vector_exponents(handle.cudaStream, M, N, (const __half*)A, lda, beta, vexp); return;
-    case HYACIN_F64_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, M, N, (const cuDoubleComplex*)A, lda, beta, vexp); return;
-    case HYACIN_F32_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, M, N, (const cuComplex*)A, lda, beta, vexp); return;
-    case HYACIN_F16_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, M, N, (const __half2*)A, lda, beta, vexp); return;
-    default: return;
-  }
-}
-
 extern "C" int32_t hyacinXquantizeScaleFinalize(hyacinHandle_t handle, double epi, int32_t u_corr, int32_t globalM, int32_t N, hyacinPrecision_t Atype, int32_t* vexp, int32_t* cPanels, int32_t* lPanels, int32_t* u_floor) {
   if (N <= 0) { return 0; }
 #ifndef NO_NCCL

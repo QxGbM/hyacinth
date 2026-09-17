@@ -11,7 +11,7 @@ Batch::BatchArgs::BatchArgs(char algo, int32_t u_ceil, int32_t u_floor, int32_t 
   while (u_floor <= u_ceil) {
     char algi = algo; int32_t ui = u_floor;
     int32_t orderA = internal::int8::gram_algorithm(algi, batchMaxK, ui);
-    tensor.insert(std::make_pair(ui, std::make_tuple(orderA, 0, 0, algi)));
+    if (algi == 'L') { tensor.insert(std::make_pair(ui, std::make_tuple(orderA, 0, 0, algi))); }
     u_floor = std::max(1 + ui, u_floor + min_uinc);
   }
 
