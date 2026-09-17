@@ -19,7 +19,7 @@ inline int32_t diag_piv_dispatcher(cudaStream_t stream, cublasHandle_t handle, c
   if (cudaSuccess != cudaMallocAsync((void**)&dev_work, dev_work_bytes, stream))
     throw std::runtime_error("Workspace allocation failed at Interpolative decomposition.");
 
-  K = internal::Cholesky::potrfp(stream, fillmode, epi, K, p, N, G, ldg, jpiv, (Rtype*)dev_work, pinned_work);
+  K = internal::Cholesky::potrfp(stream, fillmode, epi, K, p, N, G, ldg, jpiv, (Rtype*)dev_work, (int32_t*)pinned_work);
   if (0 < K) {
     Btype* B = (Btype*)dev_work;
     internal::scatter_matcopy(stream, handle, 'A', K, N, nullptr, G, ldg, B, K);

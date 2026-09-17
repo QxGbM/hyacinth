@@ -82,7 +82,7 @@ inline int32_t tsvd(cudaStream_t stream, cublasHandle_t handle, cusolverDnHandle
     throw std::runtime_error("Workspace allocation failed at GESVD Preconditioning.");
 
   int32_t* piv = (int32_t*)(&dev_work[matrix_bytes]);
-  K = internal::Cholesky::potrfp(stream, fillmode, epi, K, p, N, G, ldg, piv, (GRtype*)dev_work, pinned_work);
+  K = internal::Cholesky::potrfp(stream, fillmode, epi, K, p, N, G, ldg, piv, (GRtype*)dev_work, (int32_t*)pinned_work);
   if (0 < K) {
     complex_t* W = (complex_t*)dev_work;
     internal::scatter_matcopy(stream, handle, 'U', K, N, piv, G, ldg, W, N);

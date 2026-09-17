@@ -9,39 +9,17 @@
 
 struct complex_double2;
 struct complex_float4;
-struct double_idx;
-struct float_idx;
-struct double2_idx;
-struct float4_idx;
 
 namespace internal::Cholesky {
 
-  int32_t imax_initializer(cudaStream_t stream, double epi, int32_t p, int32_t N, double* X, int32_t incx, int32_t* jpiv, double* D, double_idx* scale);
-  int32_t imax_initializer(cudaStream_t stream, double epi, int32_t p, int32_t N, float* X, int32_t incx, int32_t* jpiv, float* D, float_idx* scale);
-  int32_t imax_initializer(cudaStream_t stream, double epi, int32_t p, int32_t N, double2* X, int32_t incx, int32_t* jpiv, double2* D, double2_idx* scale);
-  int32_t imax_initializer(cudaStream_t stream, double epi, int32_t p, int32_t N, float4* X, int32_t incx, int32_t* jpiv, float4* D, float4_idx* scale);
-  int32_t imax_initializer(cudaStream_t stream, double epi, int32_t p, int32_t N, cuDoubleComplex* X, int32_t incx, int32_t* jpiv, double* D, double_idx* scale);
-  int32_t imax_initializer(cudaStream_t stream, double epi, int32_t p, int32_t N, cuComplex* X, int32_t incx, int32_t* jpiv, float* D, float_idx* scale);
-  int32_t imax_initializer(cudaStream_t stream, double epi, int32_t p, int32_t N, complex_double2* X, int32_t incx, int32_t* jpiv, double2* D, double2_idx* scale);
-  int32_t imax_initializer(cudaStream_t stream, double epi, int32_t p, int32_t N, complex_float4* X, int32_t incx, int32_t* jpiv, float4* D, float4_idx* scale);
-
-  void gemv_pp(cudaStream_t stream, int32_t grid, double_idx* scale, int32_t M, int32_t N, double* A, int32_t lda, int32_t* jpiv, double* D);
-  void gemv_pp(cudaStream_t stream, int32_t grid, float_idx* scale, int32_t M, int32_t N, float* A, int32_t lda, int32_t* jpiv, float* D);
-  void gemv_pp(cudaStream_t stream, int32_t grid, double2_idx* scale, int32_t M, int32_t N, double2* A, int32_t lda, int32_t* jpiv, double2* D);
-  void gemv_pp(cudaStream_t stream, int32_t grid, float4_idx* scale, int32_t M, int32_t N, float4* A, int32_t lda, int32_t* jpiv, float4* D);
-  void gemv_pp(cudaStream_t stream, int32_t grid, double_idx* scale, int32_t M, int32_t N, cuDoubleComplex* A, int32_t lda, int32_t* jpiv, double* D);
-  void gemv_pp(cudaStream_t stream, int32_t grid, float_idx* scale, int32_t M, int32_t N, cuComplex* A, int32_t lda, int32_t* jpiv, float* D);
-  void gemv_pp(cudaStream_t stream, int32_t grid, double2_idx* scale, int32_t M, int32_t N, complex_double2* A, int32_t lda, int32_t* jpiv, double2* D);
-  void gemv_pp(cudaStream_t stream, int32_t grid, float4_idx* scale, int32_t M, int32_t N, complex_float4* A, int32_t lda, int32_t* jpiv, float4* D);
-
-  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t k, int32_t p, int32_t N, double* A, int32_t lda, int32_t* jpiv, double* dev_work, void* pinned_work);
-  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t k, int32_t p, int32_t N, float* A, int32_t lda, int32_t* jpiv, float* dev_work, void* pinned_work);
-  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t k, int32_t p, int32_t N, double2* A, int32_t lda, int32_t* jpiv, double2* dev_work, void* pinned_work);
-  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t k, int32_t p, int32_t N, float4* A, int32_t lda, int32_t* jpiv, float4* dev_work, void* pinned_work);
-  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t k, int32_t p, int32_t N, cuDoubleComplex* A, int32_t lda, int32_t* jpiv, double* dev_work, void* pinned_work);
-  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t k, int32_t p, int32_t N, cuComplex* A, int32_t lda, int32_t* jpiv, float* dev_work, void* pinned_work);
-  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t k, int32_t p, int32_t N, complex_double2* A, int32_t lda, int32_t* jpiv, double2* dev_work, void* pinned_work);
-  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t k, int32_t p, int32_t N, complex_float4* A, int32_t lda, int32_t* jpiv, float4* dev_work, void* pinned_work);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t k, int32_t p, int32_t N, double* A, int32_t lda, int32_t* jpiv, double* dev_work, int32_t* pinned_work);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t k, int32_t p, int32_t N, float* A, int32_t lda, int32_t* jpiv, float* dev_work, int32_t* pinned_work);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t k, int32_t p, int32_t N, double2* A, int32_t lda, int32_t* jpiv, double2* dev_work, int32_t* pinned_work);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t k, int32_t p, int32_t N, float4* A, int32_t lda, int32_t* jpiv, float4* dev_work, int32_t* pinned_work);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t k, int32_t p, int32_t N, cuDoubleComplex* A, int32_t lda, int32_t* jpiv, double* dev_work, int32_t* pinned_work);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t k, int32_t p, int32_t N, cuComplex* A, int32_t lda, int32_t* jpiv, float* dev_work, int32_t* pinned_work);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t k, int32_t p, int32_t N, complex_double2* A, int32_t lda, int32_t* jpiv, double2* dev_work, int32_t* pinned_work);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t k, int32_t p, int32_t N, complex_float4* A, int32_t lda, int32_t* jpiv, float4* dev_work, int32_t* pinned_work);
 
 };
 
