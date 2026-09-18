@@ -14,7 +14,7 @@ const std::vector<hyacinPrecision_t> real_type({ HYACIN_F64, HYACIN_F32, HYACIN_
 const std::vector<hyacinPrecision_t> complex_type({ HYACIN_F64_COMPLEX, HYACIN_F32_COMPLEX, HYACIN_F16_COMPLEX, HYACIN_DD_COMPLEX, HYACIN_QF_COMPLEX, HYACIN_F64_COMPLEX, HYACIN_F32_COMPLEX, HYACIN_F16_COMPLEX, HYACIN_DD_COMPLEX, HYACIN_QF_COMPLEX });
 const std::vector<int32_t> type_bytes({ sizeof(double), sizeof(float), sizeof(__half), sizeof(double2), sizeof(float4), sizeof(cuDoubleComplex), sizeof(cuComplex), sizeof(__half2), sizeof(complex_double2), sizeof(complex_float4) });
 const std::vector<int32_t> type_mantissa({ 52, 23, 10, 105, 95, 52, 23, 10, 105, 95 });
-const cublasGemmAlgo_t cublas_algo = CUBLAS_GEMM_AUTOTUNE;
+const cublasGemmAlgo_t cublas_algo = CUBLAS_GEMM_DEFAULT;
 
 extern "C" int32_t hyacinXquantizeScaleFinalize(hyacinHandle_t handle, double epi, int32_t u_corr, int32_t globalM, int32_t N, hyacinPrecision_t Atype, int32_t* vexp, int32_t* cPanels, int32_t* lPanels, int32_t* u_floor) {
   if (N <= 0) { return 0; }
@@ -210,7 +210,7 @@ inline void i8herk_crt(cudaStream_t stream, cublasHandle_t handle, int32_t M, in
   int32_t orderB = (U8CRT::range[orderA - 1] + 63) / 63, algnM = (M + 255) & (~255), algnN = (N + 63) & (~63);
   int64_t colsA = int64_t(N) * int64_t(orderA), strideW = int64_t(algnM) * colsA, strideB = int64_t(N) * int64_t(N) * int64_t(orderB);
   uint64_t b_len = uint64_t(strideB), w_len = uint64_t(algnN - N) * uint64_t(algnM);
-  if constexpr(Complex) { b_len *= uint64_t(2); w_len += uint64_t(3) * uint64_t(strideW); } else { w_len += uint64_t(strideW); }
+  if constexpr(Complex) { b_len += b_len; w_len += uint64_t(3) * uint64_t(strideW); } else { w_len += uint64_t(strideW); }
 
   int8_t* W = nullptr; int32_t* scratch = nullptr; uint64_t* B = nullptr; sum_t *vsum = nullptr;
   if (cudaSuccess != cudaMallocAsync((void**)&W, w_len, stream))
