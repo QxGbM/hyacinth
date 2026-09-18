@@ -114,7 +114,6 @@ void hyacinXherkBatchCreate(
   hyacinPrecision_t Atype,
   int32_t u_ceil,
   int32_t u_floor,
-  int32_t min_uinc,
   uint64_t* bytesBatch // host-pointer
 );
 

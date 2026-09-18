@@ -107,7 +107,7 @@ namespace Batch {
 
   public:
     const int32_t batchMaxK;
-    BatchArgs(char algo, int32_t u_ceil, int32_t u_floor, int32_t min_uinc, int32_t K, int32_t Complex, int32_t elemBytes, int32_t& order);
+    BatchArgs(char algo, int32_t u_ceil, int32_t u_floor, int32_t K, int32_t Complex, int32_t elemBytes, int32_t& order);
 
     // op: 'E'=eager eval; 'Z'=lazy batch; 'F'=lazy+flush; 'S'=skip;
     std::tuple<int32_t, int32_t, int64_t, int32_t, char> processA(int32_t M, int32_t N, int32_t uc, char alg, char& op);

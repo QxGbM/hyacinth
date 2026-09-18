@@ -108,6 +108,20 @@ inline void vector_exponents_dispatcher(cudaStream_t stream, int32_t M, int32_t 
     else { vector_exponent_kernel<0, block_threads, reduc_t> <<< N, block_threads, 0, stream >>> (M, A, lda64, vexp); }
 }
 
+extern "C" void hyacinXquantizeScale(hyacinHandle_t handle, int32_t M, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t beta, int32_t* vexp) {
+  if (M <= 0 || N <= 0) { return; }
+  Timer::register_kernel(handle.cudaStream, handle.timer);
+  switch(Atype) {
+    case HYACIN_F64: vector_exponents_dispatcher<double2>(handle.cudaStream, M, N, (const double*)A, lda, beta, vexp); return;
+    case HYACIN_F32: vector_exponents_dispatcher<float2>(handle.cudaStream, M, N, (const float*)A, lda, beta, vexp); return;
+    case HYACIN_F16: vector_exponents_dispatcher<float2>(handle.cudaStream, M, N, (const __half*)A, lda, beta, vexp); return;
+    case HYACIN_F64_COMPLEX: vector_exponents_dispatcher<double2>(handle.cudaStream, M, N, (const cuDoubleComplex*)A, lda, beta, vexp); return;
+    case HYACIN_F32_COMPLEX: vector_exponents_dispatcher<float2>(handle.cudaStream, M, N, (const cuComplex*)A, lda, beta, vexp); return;
+    case HYACIN_F16_COMPLEX: vector_exponents_dispatcher<float2>(handle.cudaStream, M, N, (const __half2*)A, lda, beta, vexp); return;
+    default: return;
+  }
+}
+
 template<class reduc_t, class matrix_t>
 inline void vector_range_dispatcher(cudaStream_t stream, int32_t M, int32_t N, const matrix_t* A, int32_t lda, int32_t* u, const int32_t* vexp) {
   constexpr int32_t block_threads = 512, grid_blocks = 512;
@@ -123,20 +137,6 @@ inline void vector_range_dispatcher(cudaStream_t stream, int32_t M, int32_t N, c
   cudaLaunchCooperativeKernel(vector_range_kernel<block_threads, reduc_t, matrix_t>, grid, block_threads, kernelArgs, 0, stream);
   cudaFreeAsync(vbuf, stream);
   cudaStreamSynchronize(stream);
-}
-
-extern "C" void hyacinXquantizeScale(hyacinHandle_t handle, int32_t M, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t beta, int32_t* vexp) {
-  if (M <= 0 || N <= 0) { return; }
-  Timer::register_kernel(handle.cudaStream, handle.timer);
-  switch(Atype) {
-    case HYACIN_F64: vector_exponents_dispatcher<double2>(handle.cudaStream, M, N, (const double*)A, lda, beta, vexp); return;
-    case HYACIN_F32: vector_exponents_dispatcher<float2>(handle.cudaStream, M, N, (const float*)A, lda, beta, vexp); return;
-    case HYACIN_F16: vector_exponents_dispatcher<float2>(handle.cudaStream, M, N, (const __half*)A, lda, beta, vexp); return;
-    case HYACIN_F64_COMPLEX: vector_exponents_dispatcher<double2>(handle.cudaStream, M, N, (const cuDoubleComplex*)A, lda, beta, vexp); return;
-    case HYACIN_F32_COMPLEX: vector_exponents_dispatcher<float2>(handle.cudaStream, M, N, (const cuComplex*)A, lda, beta, vexp); return;
-    case HYACIN_F16_COMPLEX: vector_exponents_dispatcher<float2>(handle.cudaStream, M, N, (const __half2*)A, lda, beta, vexp); return;
-    default: return;
-  }
 }
 
 namespace internal::int8 {

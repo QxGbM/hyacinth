@@ -277,9 +277,9 @@ extern "C" void hyacinXherk(hyacinHandle_t handle, char alg, int32_t M, int32_t 
   }
 }
 
-extern "C" void hyacinXherkBatchCreate(void** param, char alg, int32_t batchK, int32_t N, hyacinPrecision_t Atype, int32_t u_ceil, int32_t u_floor, int32_t min_uinc, uint64_t* bytesBatch) {
+extern "C" void hyacinXherkBatchCreate(void** param, char alg, int32_t batchK, int32_t N, hyacinPrecision_t Atype, int32_t u_ceil, int32_t u_floor, uint64_t* bytesBatch) {
   int32_t panels, Complex = int32_t(Atype != real_type[int32_t(Atype)]), elemBytes = type_bytes[int32_t(Atype)];
-  Batch::BatchArgs* p = (Batch::BatchArgs*)(*param = new Batch::BatchArgs(alg, u_ceil + Complex, u_floor + Complex, min_uinc, batchK, Complex, elemBytes, panels));
+  Batch::BatchArgs* p = (Batch::BatchArgs*)(*param = new Batch::BatchArgs(alg, u_ceil + Complex, u_floor + Complex, batchK, Complex, elemBytes, panels));
   if (bytesBatch) { *bytesBatch = uint64_t(N) * uint64_t(p->batchMaxK) * uint64_t(panels); }
 }
 

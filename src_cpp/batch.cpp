@@ -5,22 +5,18 @@
 #include <charconv>
 #include <stdexcept>
 
-Batch::BatchArgs::BatchArgs(char algo, int32_t u_ceil, int32_t u_floor, int32_t min_uinc, int32_t K, int32_t Complex, int32_t elemBytes, int32_t& order) :
-  tensor(), batchMaxK((K + 255) & (~255)) {
-  min_uinc = std::max(1, min_uinc);
+Batch::BatchArgs::BatchArgs(char algo, int32_t u_ceil, int32_t u_floor, int32_t K, int32_t Complex, int32_t elemBytes, int32_t& order) : tensor(), batchMaxK((K + 255) & (~255)) {
   while (u_floor <= u_ceil) {
     char algi = algo; int32_t ui = u_floor;
-    int32_t orderA = internal::int8::gram_algorithm(algi, batchMaxK, ui);
+    int32_t orderA = internal::int8::gram_algorithm(algi, batchMaxK, ui); u_floor = 1 + ui;
     if (algi == 'L') { tensor.insert(std::make_pair(ui, std::make_tuple(orderA, 0, 0, algi))); }
-    u_floor = std::max(1 + ui, u_floor + min_uinc);
   }
 
   int32_t orderA = internal::int8::gram_algorithm(algo, batchMaxK, u_ceil);
   tensor.insert(std::make_pair(u_ceil, std::make_tuple(orderA, 0, 0, algo)));
   order = 0; int32_t panelsLimb = Complex ? 3 : 1;
-  if (1 < int32_t(tensor.size()))
-    for (auto& [key, value] : tensor)
-    { std::get<1>(value) = order; order += (std::get<3>(value) == 'C') ? elemBytes : (panelsLimb * std::get<0>(value)); }
+  for (auto& [key, value] : tensor)
+  { std::get<1>(value) = order; order += (std::get<3>(value) == 'C') ? elemBytes : (panelsLimb * std::get<0>(value)); }
 }
 
 std::tuple<int32_t, int32_t, int64_t, int32_t, char> Batch::BatchArgs::processA(int32_t M, int32_t N, int32_t uc, char alg, char& op) {
