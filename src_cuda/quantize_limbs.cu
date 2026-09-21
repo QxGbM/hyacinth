@@ -2,8 +2,9 @@
 #include <internal.hpp>
 #include <int_fp_quantize.hpp>
 #include <crt_constants.hpp>
+#include <limits>
 
-constexpr int32_t int_max = 0x7fffffff;
+constexpr int32_t int_max = std::numeric_limits<int32_t>::max();
 template <int32_t ORDER> __device__ __forceinline__ void write_zeros(int8_t* A, int64_t strideA) {
   constexpr int8_t zero = int8_t(0);
   if constexpr(0 < ORDER) { *A = zero; }

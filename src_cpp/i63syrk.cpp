@@ -16,11 +16,8 @@ const std::vector<int32_t> type_bytes({ sizeof(double), sizeof(float), sizeof(__
 const std::vector<int32_t> type_mantissa({ 52, 23, 10, 105, 95, 52, 23, 10, 105, 95 });
 const cublasGemmAlgo_t cublas_algo = CUBLAS_GEMM_DEFAULT;
 
-extern "C" int32_t hyacinXquantizeScaleFinalize(hyacinHandle_t handle, double epi, int32_t u_corr, int32_t globalM, int32_t N, hyacinPrecision_t Atype, int32_t* vexp, int32_t* cPanels, int32_t* lPanels, int32_t* u_floor) {
-  if (N <= 0) { return 0; }
-#ifndef NO_NCCL
-  if (handle.col_comm) { Timer::register_comm(handle.cudaStream, handle.timer); ncclAllReduce(vexp, vexp, int64_t(N) + int64_t(N), ncclInt32, ncclMin, handle.col_comm, handle.cudaStream); }
-#endif
+extern "C" int32_t hyacinXquantizeScale(hyacinHandle_t handle, double epi, int32_t u_corr, int32_t localM, int32_t globalM, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t beta, int32_t* vexp, int32_t* cPanels, int32_t* lPanels) {
+  if (N <= 0) { return -1; }
   double epi_nrm = std::min(1., std::max(std::abs(epi), std::ldexp(1., -type_mantissa[int32_t(Atype)])));
   int32_t u = std::min(u_practical_limit, u_corr + int32_t(std::ceil(-std::log2(epi_nrm))));
   if (cPanels != nullptr || lPanels != nullptr) {
@@ -28,11 +25,18 @@ extern "C" int32_t hyacinXquantizeScaleFinalize(hyacinHandle_t handle, double ep
     if (cPanels) { *cPanels = c; } if (lPanels) { *lPanels = ((c + 63 + u + u) + int32_t(std::ceil(std::log2(double(std::max(1, globalM)))))) / 63; }
   }
   
-  int32_t* uptr = (int32_t*)handle.pinnedWorkspace;
-  Timer::register_kernel(handle.cudaStream, handle.timer);
-  internal::int8::vector_exp_diff(handle.cudaStream, N, u, uptr, vexp);
-  if (u_floor) { *u_floor = *uptr; }
-  return u;
+  if (0 < localM) {
+    Timer::register_kernel(handle.cudaStream, handle.timer);
+    switch(Atype) {
+      case HYACIN_F64: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const double*)A, lda, u, beta, vexp); return u;
+      case HYACIN_F32: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const float2*)A, lda, u, beta, vexp); return u;
+      case HYACIN_F16: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const __half*)A, lda, u, beta, vexp); return u;
+      case HYACIN_F64_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const cuDoubleComplex*)A, lda, u, beta, vexp); return u;
+      case HYACIN_F32_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const cuComplex*)A, lda, u, beta, vexp); return u;
+      case HYACIN_F16_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const __half2*)A, lda, u, beta, vexp); return u;
+      default: return u;
+    }
+  } else { return u; }
 }
 
 int32_t internal::int8::gram_algorithm(char& alg, int32_t M, int32_t& u) {
@@ -277,9 +281,11 @@ extern "C" void hyacinXherk(hyacinHandle_t handle, char alg, int32_t M, int32_t 
   }
 }
 
-extern "C" void hyacinXherkBatchCreate(void** param, char alg, int32_t batchK, int32_t N, hyacinPrecision_t Atype, int32_t u_ceil, int32_t u_floor, uint64_t* bytesBatch) {
+extern "C" void hyacinXherkBatchCreate(void** param, char alg, double epi, int32_t u_corr, int32_t batchK, int32_t N, hyacinPrecision_t Atype, uint64_t* bytesBatch) {
   int32_t panels, Complex = int32_t(Atype != real_type[int32_t(Atype)]), elemBytes = type_bytes[int32_t(Atype)];
-  Batch::BatchArgs* p = (Batch::BatchArgs*)(*param = new Batch::BatchArgs(alg, u_ceil + Complex, u_floor + Complex, batchK, Complex, elemBytes, panels));
+  double epi_nrm = std::min(1., std::max(std::abs(epi), std::ldexp(1., -type_mantissa[int32_t(Atype)])));
+  int32_t u = Complex + std::min(u_practical_limit, u_corr + int32_t(std::ceil(-std::log2(epi_nrm))));
+  Batch::BatchArgs* p = (Batch::BatchArgs*)(*param = new Batch::BatchArgs(alg, u, batchK, Complex, elemBytes, panels));
   if (bytesBatch) { *bytesBatch = uint64_t(N) * uint64_t(p->batchMaxK) * uint64_t(panels); }
 }
 

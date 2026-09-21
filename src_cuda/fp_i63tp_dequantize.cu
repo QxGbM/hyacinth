@@ -4,8 +4,9 @@
 #include <int_fp_quantize.hpp>
 #include <double_double.hpp>
 #include <quad_float.hpp>
+#include <limits>
 
-constexpr int32_t int_max = 0x7fffffff;
+constexpr int32_t int_max = std::numeric_limits<int32_t>::max();
 template <int32_t orderA, int32_t Complex, class matrix_t>
 __device__ __forceinline__ matrix_t deq_i(const uint64_t* A, int64_t stride, int32_t e) {
   if constexpr(Complex) {

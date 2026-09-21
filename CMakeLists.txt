@@ -10,6 +10,7 @@ project("hyacin" LANGUAGES CXX CUDA)
 find_package(CUDAToolkit REQUIRED)
 
 set(CPP_SOURCES
+  src_cpp/allgatherv_1dcol.cpp
   src_cpp/batch.cpp
   src_cpp/gram_id.cpp
   src_cpp/handle_timer.cpp
@@ -18,7 +19,6 @@ set(CPP_SOURCES
 )
 
 set(CU_SOURCES
-  src_cuda/allgatherv_1dcol.cu
   src_cuda/allreduce_1drow.cu
   src_cuda/fp_exponent.cu
   src_cuda/fp_i63tp_dequantize.cu

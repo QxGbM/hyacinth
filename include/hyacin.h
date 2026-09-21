@@ -48,28 +48,20 @@ void hyacinDestroy(
   hyacinHandle_t handle
 );
 
-void hyacinXquantizeScale(
+int32_t hyacinXquantizeScale(
   hyacinHandle_t handle,
-  int32_t M,
+  double epi,
+  int32_t u_corr,
+  int32_t localM,
+  int32_t globalM,
   int32_t N,
   hyacinPrecision_t Atype,
   const void* A, // device-pointer
   int32_t lda,
   int32_t beta,
-  int32_t* vexp // device-pointer
-);
-
-int32_t hyacinXquantizeScaleFinalize(
-  hyacinHandle_t handle,
-  double epi,
-  int32_t u_corr,
-  int32_t globalM,
-  int32_t N,
-  hyacinPrecision_t Atype,
   int32_t* vexp, // device-pointer
   int32_t* cPanels, // host-pointer
-  int32_t* lPanels, // host-pointer
-  int32_t* u_floor // host-pointer
+  int32_t* lPanels // host-pointer
 ); // returns u
 
 void hyacinXherk(
@@ -109,11 +101,11 @@ void hyacinXdequantize(
 void hyacinXherkBatchCreate(
   void** param, // host-pointer
   char alg,
+  double epi,
+  int32_t u_corr,
   int32_t batchK,
   int32_t N,
   hyacinPrecision_t Atype,
-  int32_t u_ceil,
-  int32_t u_floor,
   uint64_t* bytesBatch // host-pointer
 );
 
@@ -195,12 +187,18 @@ void hyacinXtransform(
   int32_t ldx
 );
 
-void hyacinXAllReduce1Drow(
+void hyacinAllReduce1Drow(
   hyacinHandle_t handle,
   int32_t Complex,
   int32_t orderA,
   int64_t N,
   uint64_t* A // device-pointer
+);
+
+extern "C" void hyacinAllReduceVExp(
+  hyacinHandle_t handle,
+  int64_t N,
+  int32_t* vexp // device-pointer
 );
 
 int32_t hyacinXAllGatherV1Dcol(

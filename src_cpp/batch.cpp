@@ -5,7 +5,8 @@
 #include <charconv>
 #include <stdexcept>
 
-Batch::BatchArgs::BatchArgs(char algo, int32_t u_ceil, int32_t u_floor, int32_t K, int32_t Complex, int32_t elemBytes, int32_t& order) : tensor(), batchMaxK((K + 255) & (~255)) {
+Batch::BatchArgs::BatchArgs(char algo, int32_t u_ceil, int32_t K, int32_t Complex, int32_t elemBytes, int32_t& order) : tensor(), batchMaxK((std::max(0, K) + 255) & (~255)) {
+  int32_t u_floor = Complex;
   while (u_floor <= u_ceil) {
     char algi = algo; int32_t ui = u_floor;
     int32_t orderA = internal::int8::gram_algorithm(algi, batchMaxK, ui); u_floor = 1 + ui;
