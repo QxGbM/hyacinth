@@ -27,7 +27,7 @@ __global__ void vector_exponent_kernel(int32_t M, const matrix_t* __restrict__ A
   constexpr int32_t Complex = std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>;
   __shared__ typename cub::BlockReduce<reduc_t, BLOCK_THREADS>::TempStorage temp_reduce;
   _max cmp; reduc_t threadA = reduc_t(); A = &A[int64_t(blockIdx.x) * lda]; vexp = &vexp[blockIdx.x];
-  for (int32_t i = threadIdx.x; i < M; i += BLOCK_THREADS) {
+  for (int32_t i = int32_t(threadIdx.x); i < M; i += BLOCK_THREADS) {
     matrix_t Aij = A[i];
     if constexpr(Complex) { reduc_t r = _abs(Aij.x), i = _abs(Aij.y); threadA = cmp(threadA, cmp(r, i)); }
       else { reduc_t a = _abs(Aij); threadA = cmp(threadA, a); }
@@ -41,10 +41,10 @@ __global__ void vector_range_kernel(int32_t M, int32_t N, const matrix_t* __rest
   constexpr int32_t Complex = std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>;
   __shared__ typename cub::BlockReduce<int32_t, BLOCK_THREADS>::TempStorage temp_reduce;
   _max cmp; int32_t threadI = -1;
-  for (int32_t j = blockIdx.x; j < N; j += gridDim.x) {
+  for (int32_t j = int32_t(blockIdx.x); j < N; j += int32_t(gridDim.x)) {
     reduc_t threadA = reduc_t();
     const matrix_t* Aj = &A[int64_t(j) * lda];
-    for (int32_t i = threadIdx.x; i < M; i += BLOCK_THREADS) {
+    for (int32_t i = int32_t(threadIdx.x); i < M; i += BLOCK_THREADS) {
       matrix_t Aij = Aj[i];
       if constexpr(Complex) { reduc_t r = _abs(Aij.x), i = _abs(Aij.y); threadA = cmp(threadA, cmp(r, i)); }
         else { reduc_t a = _abs(Aij); threadA = cmp(threadA, a); }
@@ -57,7 +57,7 @@ __global__ void vector_range_kernel(int32_t M, int32_t N, const matrix_t* __rest
   if (threadIdx.x == 0) { vbuf[blockIdx.x] = threadI; } else { threadI = -1; }
   cooperative_groups::this_grid().sync();
   if (blockIdx.x == 0) {
-    for (int32_t i = threadIdx.x; i < gridDim.x; i += BLOCK_THREADS)
+    for (int32_t i = int32_t(threadIdx.x) + 1; i < int32_t(gridDim.x); i += BLOCK_THREADS)
     { threadI = cmp(threadI, vbuf[i]); }
     threadI = cub::BlockReduce<int32_t, BLOCK_THREADS>(temp_reduce).Reduce(threadI, cmp);
     if (threadIdx.x == 0) { *out = threadI; }
