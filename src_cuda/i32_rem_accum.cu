@@ -1,15 +1,7 @@
 
 #include <internal.hpp>
-#include <int_fp_quantize.hpp>
+#include <ext_arith.hpp>
 #include <crt_constants.hpp>
-
-template <int32_t orderX>
-__device__ __forceinline__ void loadX(int32_t (&x)[4], const int32_t* X, int64_t strideX) {
-  if constexpr(0 < orderX) { x[0] = *X; } else { x[0] = 0; }
-  if constexpr(1 < orderX) { x[1] = *(X += strideX); } else { x[1] = 0; }
-  if constexpr(2 < orderX) { x[2] = *(X += strideX); } else { x[2] = 0; }
-  if constexpr(3 < orderX) { x[3] = *(X += strideX); } else { x[3] = 0; }
-}
 
 template <int32_t x>
 __device__ __forceinline__ int64_t i32_i64_prod(int32_t y) {
@@ -17,20 +9,21 @@ __device__ __forceinline__ int64_t i32_i64_prod(int32_t y) {
   return int64_t(uint64_t(lo) | (uint64_t(hi) << 32));
 }
 
-template <int32_t orderX, int32_t x, uint32_t ORDER>
-__device__ __forceinline__ void add_pd(uint64_t (&a)[ORDER], int32_t i) {
-  if constexpr(x < orderX) {
-    constexpr int32_t m = U8CRT::mo[x], x6 = x * 6, pd[6]{ U8CRT::Constants<orderX>::pd[x6], U8CRT::Constants<orderX>::pd[x6 + 1], U8CRT::Constants<orderX>::pd[x6 + 2],
-      U8CRT::Constants<orderX>::pd[x6 + 3], U8CRT::Constants<orderX>::pd[x6 + 4], U8CRT::Constants<orderX>::pd[x6 + 5] };
+template <int32_t orderX, int32_t x, int32_t orderA>
+__device__ __forceinline__ void add_pd(uint64_t (&a)[orderA], int32_t i) {
+  using U8CRT::Constants;
+  constexpr int32_t x6 = x * 6, pd[6]{ Constants<orderX>::pd[x6], Constants<orderX>::pd[x6 + 1], Constants<orderX>::pd[x6 + 2],
+    Constants<orderX>::pd[x6 + 3], Constants<orderX>::pd[x6 + 4], Constants<orderX>::pd[x6 + 5] };
+  constexpr uint32_t MO = U8CRT::mo[x], MINV = Constants<orderX>::minv[x], R32 = Constants<orderX>::rem_e32[x];
 
-    i = (a[ORDER - 1] >> 63) ? i : (i - m);
-    if constexpr(pd[0]) { device::int8::add_shifted<0>(a, i32_i64_prod<pd[0]>(i)); }
-    if constexpr(pd[1]) { device::int8::add_shifted<31>(a, i32_i64_prod<pd[1]>(i)); }
-    if constexpr(pd[2]) { device::int8::add_shifted<62>(a, i32_i64_prod<pd[2]>(i)); }
-    if constexpr(pd[3]) { device::int8::add_shifted<93>(a, i32_i64_prod<pd[3]>(i)); }
-    if constexpr(pd[4]) { device::int8::add_shifted<124>(a, i32_i64_prod<pd[4]>(i)); }
-    if constexpr(pd[5]) { device::int8::add_shifted<155>(a, i32_i64_prod<pd[5]>(i)); }
-  }
+  uint32_t u = uint32_t(i), mask_sign = uint32_t(a[orderA - 1] >> 63) + 0x7fffffffu;
+  i = int32_t(device::barrett_reduc<MO>(device::mulx_reduc<MINV, MO>(u) + ((-(u >> 31)) & R32)) - (MO & mask_sign));
+  if constexpr(pd[0]) { device::add_shifted<0>(a, i32_i64_prod<pd[0]>(i)); }
+  if constexpr(pd[1]) { device::add_shifted<31>(a, i32_i64_prod<pd[1]>(i)); }
+  if constexpr(pd[2]) { device::add_shifted<62>(a, i32_i64_prod<pd[2]>(i)); }
+  if constexpr(pd[3]) { device::add_shifted<93>(a, i32_i64_prod<pd[3]>(i)); }
+  if constexpr(pd[4]) { device::add_shifted<124>(a, i32_i64_prod<pd[4]>(i)); }
+  if constexpr(pd[5]) { device::add_shifted<155>(a, i32_i64_prod<pd[5]>(i)); }
 }
 
 template<int32_t orderX, int32_t orderA, int32_t beta, char mode>
@@ -38,7 +31,7 @@ __global__ void i32_crt_accum_kernel(int64_t N, const int32_t* __restrict__ X, i
   int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
   bool pred; if constexpr(mode == 'U') { pred = y <= x; } else { pred = y < N; }
   if (pred) {
-    uint64_t acc[orderA]; int32_t rem[4];
+    uint64_t acc[orderA];
     A = &A[y + x * N]; X = &X[y + x * ldx];
 
     if constexpr(beta) {
@@ -52,71 +45,35 @@ __global__ void i32_crt_accum_kernel(int64_t N, const int32_t* __restrict__ X, i
       if constexpr(2 < orderA) { acc[2] = uint64_t(0); }
     }
 
-    if constexpr(0 < orderX) {
-      using U8CRT::mo, U8CRT::Constants;
-      constexpr uint64_t m_lo = uint64_t(mo[0]) | (uint64_t(mo[1]) << 16) | (uint64_t(mo[2]) << 32) | (uint64_t(mo[3]) << 48);
-      constexpr uint64_t i_lo = uint64_t(Constants<orderX>::minv[0]) | (uint64_t(Constants<orderX>::minv[1]) << 16) | (uint64_t(Constants<orderX>::minv[2]) << 32) | (uint64_t(Constants<orderX>::minv[3]) << 48);
-      constexpr uint64_t r_lo = uint64_t(Constants<orderX>::rem_e32[0]) | (uint64_t(Constants<orderX>::rem_e32[1]) << 16) | (uint64_t(Constants<orderX>::rem_e32[2]) << 32) | (uint64_t(Constants<orderX>::rem_e32[3]) << 48);
-      loadX<orderX>(rem, X, strideX);
-      device::int8::crt_recover<m_lo, i_lo, r_lo>(rem);
-      add_pd<orderX, 0>(acc, rem[0]); add_pd<orderX, 1>(acc, rem[1]); add_pd<orderX, 2>(acc, rem[2]); add_pd<orderX, 3>(acc, rem[3]);
-    }
-  
-    if constexpr(4 < orderX) {
-      using U8CRT::mo, U8CRT::Constants;
-      constexpr uint64_t m_hi = uint64_t(mo[4]) | (uint64_t(mo[5]) << 16) | (uint64_t(mo[6]) << 32) | (uint64_t(mo[7]) << 48);
-      constexpr uint64_t i_hi = uint64_t(Constants<orderX>::minv[4]) | (uint64_t(Constants<orderX>::minv[5]) << 16) | (uint64_t(Constants<orderX>::minv[6]) << 32) | (uint64_t(Constants<orderX>::minv[7]) << 48);
-      constexpr uint64_t r_hi = uint64_t(Constants<orderX>::rem_e32[4]) | (uint64_t(Constants<orderX>::rem_e32[5]) << 16) | (uint64_t(Constants<orderX>::rem_e32[6]) << 32) | (uint64_t(Constants<orderX>::rem_e32[7]) << 48);
-      loadX<orderX - 4>(rem, X += (strideX << 2), strideX);
-      device::int8::crt_recover<m_hi, i_hi, r_hi>(rem);
-      add_pd<orderX, 4>(acc, rem[0]); add_pd<orderX, 5>(acc, rem[1]); add_pd<orderX, 6>(acc, rem[2]); add_pd<orderX, 7>(acc, rem[3]);
-    }
-
-    if constexpr(8 < orderX) {
-      using U8CRT::mo, U8CRT::Constants;
-      constexpr uint64_t m_hi = uint64_t(mo[8]) | (uint64_t(mo[9]) << 16) | (uint64_t(mo[10]) << 32) | (uint64_t(mo[11]) << 48);
-      constexpr uint64_t i_hi = uint64_t(Constants<orderX>::minv[8]) | (uint64_t(Constants<orderX>::minv[9]) << 16) | (uint64_t(Constants<orderX>::minv[10]) << 32) | (uint64_t(Constants<orderX>::minv[11]) << 48);
-      constexpr uint64_t r_hi = uint64_t(Constants<orderX>::rem_e32[8]) | (uint64_t(Constants<orderX>::rem_e32[9]) << 16) | (uint64_t(Constants<orderX>::rem_e32[10]) << 32) | (uint64_t(Constants<orderX>::rem_e32[11]) << 48);
-      loadX<orderX - 8>(rem, X += (strideX << 2), strideX);
-      device::int8::crt_recover<m_hi, i_hi, r_hi>(rem);
-      add_pd<orderX, 8>(acc, rem[0]); add_pd<orderX, 9>(acc, rem[1]); add_pd<orderX, 10>(acc, rem[2]); add_pd<orderX, 11>(acc, rem[3]);
-    }
-
-    if constexpr(12 < orderX) {
-      using U8CRT::mo, U8CRT::Constants;
-      constexpr uint64_t m_hi = uint64_t(mo[12]) | (uint64_t(mo[13]) << 16) | (uint64_t(mo[14]) << 32) | (uint64_t(mo[15]) << 48);
-      constexpr uint64_t i_hi = uint64_t(Constants<orderX>::minv[12]) | (uint64_t(Constants<orderX>::minv[13]) << 16) | (uint64_t(Constants<orderX>::minv[14]) << 32) | (uint64_t(Constants<orderX>::minv[15]) << 48);
-      constexpr uint64_t r_hi = uint64_t(Constants<orderX>::rem_e32[12]) | (uint64_t(Constants<orderX>::rem_e32[13]) << 16) | (uint64_t(Constants<orderX>::rem_e32[14]) << 32) | (uint64_t(Constants<orderX>::rem_e32[15]) << 48);
-      loadX<orderX - 12>(rem, X += (strideX << 2), strideX);
-      device::int8::crt_recover<m_hi, i_hi, r_hi>(rem);
-      add_pd<orderX, 12>(acc, rem[0]); add_pd<orderX, 13>(acc, rem[1]); add_pd<orderX, 14>(acc, rem[2]); add_pd<orderX, 15>(acc, rem[3]);
-    }
-
-    if constexpr(16 < orderX) {
-      using U8CRT::mo, U8CRT::Constants;
-      constexpr uint64_t m_hi = uint64_t(mo[16]) | (uint64_t(mo[17]) << 16) | (uint64_t(mo[18]) << 32) | (uint64_t(mo[19]) << 48);
-      constexpr uint64_t i_hi = uint64_t(Constants<orderX>::minv[16]) | (uint64_t(Constants<orderX>::minv[17]) << 16) | (uint64_t(Constants<orderX>::minv[18]) << 32) | (uint64_t(Constants<orderX>::minv[19]) << 48);
-      constexpr uint64_t r_hi = uint64_t(Constants<orderX>::rem_e32[16]) | (uint64_t(Constants<orderX>::rem_e32[17]) << 16) | (uint64_t(Constants<orderX>::rem_e32[18]) << 32) | (uint64_t(Constants<orderX>::rem_e32[19]) << 48);
-      loadX<orderX - 16>(rem, X += (strideX << 2), strideX);
-      device::int8::crt_recover<m_hi, i_hi, r_hi>(rem);
-      add_pd<orderX, 16>(acc, rem[0]); add_pd<orderX, 17>(acc, rem[1]); add_pd<orderX, 18>(acc, rem[2]); add_pd<orderX, 19>(acc, rem[3]);
-    }
-
-    if constexpr(20 < orderX) {
-      using U8CRT::mo, U8CRT::Constants;
-      constexpr uint64_t m_hi = uint64_t(mo[20]) | (uint64_t(mo[21]) << 16) | (uint64_t(mo[22]) << 32) | (uint64_t(mo[23]) << 48);
-      constexpr uint64_t i_hi = uint64_t(Constants<orderX>::minv[20]) | (uint64_t(Constants<orderX>::minv[21]) << 16) | (uint64_t(Constants<orderX>::minv[22]) << 32) | (uint64_t(Constants<orderX>::minv[23]) << 48);
-      constexpr uint64_t r_hi = uint64_t(Constants<orderX>::rem_e32[20]) | (uint64_t(Constants<orderX>::rem_e32[21]) << 16) | (uint64_t(Constants<orderX>::rem_e32[22]) << 32) | (uint64_t(Constants<orderX>::rem_e32[23]) << 48);
-      loadX<orderX - 20>(rem, X += (strideX << 2), strideX);
-      device::int8::crt_recover<m_hi, i_hi, r_hi>(rem);
-      add_pd<orderX, 20>(acc, rem[0]); add_pd<orderX, 21>(acc, rem[1]); add_pd<orderX, 22>(acc, rem[2]); add_pd<orderX, 23>(acc, rem[3]);
-    }
+    if constexpr(0 < orderX) { add_pd<orderX, 0>(acc, *X); }
+    if constexpr(1 < orderX) { add_pd<orderX, 1>(acc, *(X += strideX)); }
+    if constexpr(2 < orderX) { add_pd<orderX, 2>(acc, *(X += strideX)); }
+    if constexpr(3 < orderX) { add_pd<orderX, 3>(acc, *(X += strideX)); }
+    if constexpr(4 < orderX) { add_pd<orderX, 4>(acc, *(X += strideX)); }
+    if constexpr(5 < orderX) { add_pd<orderX, 5>(acc, *(X += strideX)); }
+    if constexpr(6 < orderX) { add_pd<orderX, 6>(acc, *(X += strideX)); }
+    if constexpr(7 < orderX) { add_pd<orderX, 7>(acc, *(X += strideX)); }
+    if constexpr(8 < orderX) { add_pd<orderX, 8>(acc, *(X += strideX)); }
+    if constexpr(9 < orderX) { add_pd<orderX, 9>(acc, *(X += strideX)); }
+    if constexpr(10 < orderX) { add_pd<orderX, 10>(acc, *(X += strideX)); }
+    if constexpr(11 < orderX) { add_pd<orderX, 11>(acc, *(X += strideX)); }
+    if constexpr(12 < orderX) { add_pd<orderX, 12>(acc, *(X += strideX)); }
+    if constexpr(13 < orderX) { add_pd<orderX, 13>(acc, *(X += strideX)); }
+    if constexpr(14 < orderX) { add_pd<orderX, 14>(acc, *(X += strideX)); }
+    if constexpr(15 < orderX) { add_pd<orderX, 15>(acc, *(X += strideX)); }
+    if constexpr(16 < orderX) { add_pd<orderX, 16>(acc, *(X += strideX)); }
+    if constexpr(17 < orderX) { add_pd<orderX, 17>(acc, *(X += strideX)); }
+    if constexpr(18 < orderX) { add_pd<orderX, 18>(acc, *(X += strideX)); }
+    if constexpr(19 < orderX) { add_pd<orderX, 19>(acc, *(X += strideX)); }
+    if constexpr(20 < orderX) { add_pd<orderX, 20>(acc, *(X += strideX)); }
+    if constexpr(21 < orderX) { add_pd<orderX, 21>(acc, *(X += strideX)); }
+    if constexpr(22 < orderX) { add_pd<orderX, 22>(acc, *(X += strideX)); }
 
     if (acc[orderA - 1] >> 63) {
       constexpr int64_t p0 = U8CRT::Constants<orderX>::p[0], p1 = U8CRT::Constants<orderX>::p[1], p2 = U8CRT::Constants<orderX>::p[2];
-      if constexpr(p0) { device::int8::add_shifted<0>(acc, p0); }
-      if constexpr(p1) { device::int8::add_shifted<63>(acc, p1); }
-      if constexpr(p2) { device::int8::add_shifted<126>(acc, p2); }
+      if constexpr(p0) { device::add_shifted<0>(acc, p0); }
+      if constexpr(p1) { device::add_shifted<63>(acc, p1); }
+      if constexpr(p2) { device::add_shifted<126>(acc, p2); }
     }
 
     if constexpr(0 < orderA) { *A = acc[0]; }

@@ -1,39 +1,67 @@
 
 #include <internal.hpp>
-#include <int_fp_quantize.hpp>
+#include <ext_arith.hpp>
 #include <stdexcept>
-
-template <int32_t orderIn, int32_t ORDER> __device__ __forceinline__ void add_i(uint64_t (&a)[ORDER], const uint64_t* in, int64_t stride) {
-  if constexpr(0 < orderIn) { device::int8::add_shifted<0>(a, int64_t(*in)); }
-  if constexpr(1 < orderIn) { device::int8::add_shifted<63>(a, int64_t(*(in += stride))); }
-  if constexpr(2 < orderIn) { device::int8::add_shifted<126>(a, int64_t(*(in += stride))); }
-}
-
-template <int32_t orderIn, int32_t ORDER> __device__ __forceinline__ void add_i(uint64_t (&r)[ORDER], uint64_t (&i)[ORDER], const uint64_t* in, int64_t stride) {
-  if constexpr(0 < orderIn) { device::int8::add_shifted<0>(r, int64_t(*in)); }
-  if constexpr(1 < orderIn) { device::int8::add_shifted<63>(r, int64_t(*(in += stride))); }
-  if constexpr(2 < orderIn) { device::int8::add_shifted<126>(r, int64_t(*(in += stride))); }
-  if constexpr(0 < orderIn) { device::int8::add_shifted<0>(i, int64_t(*(in += stride))); }
-  if constexpr(1 < orderIn) { device::int8::add_shifted<63>(i, int64_t(*(in += stride))); }
-  if constexpr(2 < orderIn) { device::int8::add_shifted<126>(i, int64_t(*(in += stride))); }
-}
-
-template <int32_t ORDER>
-__device__ __forceinline__ void cross_sum(uint64_t (&rl)[ORDER], uint64_t (&im)[ORDER]) {
-  uint64_t t[ORDER]{};
-  if constexpr(0 < ORDER) { device::int8::add_shifted<0>(t, -int64_t(im[0])); }
-  if constexpr(1 < ORDER) { device::int8::add_shifted<63>(t, -int64_t(im[1])); }
-  if constexpr(2 < ORDER) { device::int8::add_shifted<126>(t, -int64_t(im[2])); }
-  if constexpr(0 < ORDER) { int64_t r = -int64_t(rl[0]); device::int8::add_shifted<0>(t, r); device::int8::add_shifted<0>(im, r); rl[0] = t[0]; }
-  if constexpr(1 < ORDER) { int64_t r = -int64_t(rl[1]); device::int8::add_shifted<63>(t, r); device::int8::add_shifted<63>(im, r); rl[1] = t[1]; }
-  if constexpr(2 < ORDER) { int64_t r = -int64_t(rl[2]); device::int8::add_shifted<126>(t, r); device::int8::add_shifted<126>(im, r); rl[2] = t[2]; }
-}
 
 template <int32_t orderIn, int32_t ORDER> __device__ __forceinline__ void load_i(uint64_t (&a)[ORDER], const uint64_t* in, int64_t stride) {
   constexpr uint64_t i63 = uint64_t(0x7fffffffffffffffllu);
   if constexpr(0 < orderIn) { a[0] = *in; } else if constexpr(0 < ORDER) { a[0] = uint64_t(0); }
   if constexpr(1 < orderIn) { a[1] = *(in += stride); } else if constexpr(1 < ORDER) { a[1] = -(a[0] >> 63); a[0] &= i63; }
   if constexpr(2 < orderIn) { a[2] = *(in += stride); } else if constexpr(2 < ORDER) { a[2] = -(a[1] >> 63); a[1] &= i63; }
+}
+
+template <int32_t ORDER> __device__ __forceinline__ void add_shifted_dyn(uint64_t (&a)[ORDER], int64_t i, uint32_t expon) {
+  constexpr uint64_t i63 = 0x7fffffffffffffffllu;
+  if constexpr(ORDER == 1) {
+    uint64_t m0 = -uint64_t(expon <= uint32_t(63));
+    uint32_t rem = expon & uint32_t(m0);
+    uint64_t q0 = uint64_t(i) << rem;
+    a[0] += q0 & m0;
+  } else if constexpr(ORDER == 2) {
+    uint64_t m0 = -uint64_t(expon < uint32_t(63));
+    uint64_t m1 = -uint64_t((expon - uint32_t(63)) <= uint32_t(63));
+    uint32_t rem = (expon - (uint32_t(63) & uint32_t(m1))) & (uint32_t(m0) | uint32_t(m1));
+    uint64_t q0 = uint64_t(i) << rem;
+    a[0] += q0 & m0 & i63;
+    uint64_t sign = -(uint64_t(i) >> 63), q1 = (sign << (uint32_t(1) + rem)) | (uint64_t(i) >> (uint32_t(63) - rem));
+    a[1] += ((q1 & m0) | (q0 & m1)) + (a[0] >> 63); a[0] &= i63;
+  } else if constexpr(ORDER == 3) {
+    uint64_t m0 = -uint64_t(expon < uint32_t(63));
+    uint64_t m1 = -uint64_t((expon - uint32_t(63)) < uint32_t(63));
+    uint64_t m2 = -uint64_t((expon - uint32_t(126)) <= uint32_t(63));
+    uint32_t rem = (expon - (uint32_t(63) & uint32_t(m1)) - (uint32_t(126) & uint32_t(m2))) & (uint32_t(m0) | uint32_t(m1) | uint32_t(m2));
+    uint64_t q0 = uint64_t(i) << rem;
+    a[0] += q0 & m0 & i63;
+    uint64_t sign = -(uint64_t(i) >> 63), q1 = (sign << (uint32_t(1) + rem)) | (uint64_t(i) >> (uint32_t(63) - rem));
+    a[1] += (((q1 & m0) | (q0 & m1)) & i63) + (a[0] >> 63); a[0] &= i63;
+    a[2] += ((sign & m0) | (q1 & m1) | (q0 & m2)) + (a[1] >> 63); a[1] &= i63;
+  }
+}
+
+template <int32_t orderIn, int32_t ORDER> __device__ __forceinline__ void add_i(uint64_t (&a)[ORDER], const uint64_t* in, int64_t stride) {
+  if constexpr(0 < orderIn) { device::add_shifted<0>(a, int64_t(*in)); }
+  if constexpr(1 < orderIn) { device::add_shifted<63>(a, int64_t(*(in += stride))); }
+  if constexpr(2 < orderIn) { device::add_shifted<126>(a, int64_t(*(in += stride))); }
+}
+
+template <int32_t orderIn, int32_t ORDER> __device__ __forceinline__ void add_i(uint64_t (&r)[ORDER], uint64_t (&i)[ORDER], const uint64_t* in, int64_t stride) {
+  if constexpr(0 < orderIn) { device::add_shifted<0>(r, int64_t(*in)); }
+  if constexpr(1 < orderIn) { device::add_shifted<63>(r, int64_t(*(in += stride))); }
+  if constexpr(2 < orderIn) { device::add_shifted<126>(r, int64_t(*(in += stride))); }
+  if constexpr(0 < orderIn) { device::add_shifted<0>(i, int64_t(*(in += stride))); }
+  if constexpr(1 < orderIn) { device::add_shifted<63>(i, int64_t(*(in += stride))); }
+  if constexpr(2 < orderIn) { device::add_shifted<126>(i, int64_t(*(in += stride))); }
+}
+
+template <int32_t ORDER>
+__device__ __forceinline__ void cross_sum(uint64_t (&rl)[ORDER], uint64_t (&im)[ORDER]) {
+  uint64_t t[ORDER]{};
+  if constexpr(0 < ORDER) { device::add_shifted<0>(t, -int64_t(im[0])); }
+  if constexpr(1 < ORDER) { device::add_shifted<63>(t, -int64_t(im[1])); }
+  if constexpr(2 < ORDER) { device::add_shifted<126>(t, -int64_t(im[2])); }
+  if constexpr(0 < ORDER) { int64_t r = -int64_t(rl[0]); device::add_shifted<0>(t, r); device::add_shifted<0>(im, r); rl[0] = t[0]; }
+  if constexpr(1 < ORDER) { int64_t r = -int64_t(rl[1]); device::add_shifted<63>(t, r); device::add_shifted<63>(im, r); rl[1] = t[1]; }
+  if constexpr(2 < ORDER) { int64_t r = -int64_t(rl[2]); device::add_shifted<126>(t, r); device::add_shifted<126>(im, r); rl[2] = t[2]; }
 }
 
 template <int32_t orderOut, int32_t ORDER> __device__ __forceinline__ void store_i(uint64_t (&a)[ORDER], uint64_t* out, int64_t stride) {
@@ -63,13 +91,13 @@ __global__ void triangle_pack_kernel(int64_t N, const uint64_t* __restrict__ A, 
 
       if (K) {
         ulonglong4_32a sy = vsum[y];
-        device::int8::add_shifted(acc_rl, sy.x, corr); if constexpr(1 < ORDER) { device::int8::add_shifted(acc_rl, sy.y, corr + uint32_t(63)); }
-        device::int8::add_shifted(acc_im, sy.z, corr); if constexpr(1 < ORDER) { device::int8::add_shifted(acc_im, sy.w, corr + uint32_t(63)); }
+        add_shifted_dyn(acc_rl, int64_t(sy.x), corr); if constexpr(1 < ORDER) { add_shifted_dyn(acc_rl, int64_t(sy.y), corr + uint32_t(63)); }
+        add_shifted_dyn(acc_im, int64_t(sy.z), corr); if constexpr(1 < ORDER) { add_shifted_dyn(acc_im, int64_t(sy.w), corr + uint32_t(63)); }
         ulonglong4_32a sx = vsum[x];
-        device::int8::add_shifted(acc_im, sx.x, corr); if constexpr(1 < ORDER) { device::int8::add_shifted(acc_im, sx.y, corr + uint32_t(63)); }
-        device::int8::add_shifted(acc_rl, sx.z, corr); if constexpr(1 < ORDER) { device::int8::add_shifted(acc_rl, sx.w, corr + uint32_t(63)); }
+        add_shifted_dyn(acc_im, int64_t(sx.x), corr); if constexpr(1 < ORDER) { add_shifted_dyn(acc_im, int64_t(sx.y), corr + uint32_t(63)); }
+        add_shifted_dyn(acc_rl, int64_t(sx.z), corr); if constexpr(1 < ORDER) { add_shifted_dyn(acc_rl, int64_t(sx.w), corr + uint32_t(63)); }
         cross_sum(acc_rl, acc_im);
-        device::int8::add_shifted(acc_rl, K << 1, corr << 1);
+        add_shifted_dyn(acc_rl, K << 1, corr << 1);
       }
       else { cross_sum(acc_rl, acc_im); }
       add_i<orderA>(acc_rl, A, strideA);
@@ -78,15 +106,15 @@ __global__ void triangle_pack_kernel(int64_t N, const uint64_t* __restrict__ A, 
       store_i<orderB>(acc_rl, acc_im, B, strideB);
     }
     else {
-      uint64_t acc[ORDER]{};
+      uint64_t acc[ORDER];
       load_i<orderA>(acc, A, strideA);
 
       if (K) {
         ulonglong2 sy = vsum[y];
-        device::int8::add_shifted(acc, -sy.x, corr); if constexpr(1 < ORDER) { device::int8::add_shifted(acc, -sy.y, corr + uint32_t(63)); }
+        add_shifted_dyn(acc, int64_t(-sy.x), corr); if constexpr(1 < ORDER) { add_shifted_dyn(acc, int64_t(-sy.y), corr + uint32_t(63)); }
         ulonglong2 sx = vsum[x];
-        device::int8::add_shifted(acc, -sx.x, corr); if constexpr(1 < ORDER) { device::int8::add_shifted(acc, -sx.y, corr + uint32_t(63)); }
-        device::int8::add_shifted(acc, K, corr << 1);
+        add_shifted_dyn(acc, int64_t(-sx.x), corr); if constexpr(1 < ORDER) { add_shifted_dyn(acc, int64_t(-sx.y), corr + uint32_t(63)); }
+        add_shifted_dyn(acc, K, corr << 1);
       }
       if constexpr(beta) { add_i<orderB>(acc, B, strideB); }
       store_i<orderB>(acc, B, strideB);

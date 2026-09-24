@@ -1,6 +1,5 @@
 
 #include <internal.hpp>
-#include <int_fp_quantize.hpp>
 #include <cub/cub.cuh>
 #include <cooperative_groups.h>
 #include <limits>

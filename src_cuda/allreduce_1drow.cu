@@ -3,7 +3,7 @@
 #ifndef NO_NCCL
 
 #include <internal.hpp>
-#include <int_fp_quantize.hpp>
+#include <ext_arith.hpp>
 #include <stdexcept>
 
 template <int32_t hi_bits> __device__ __forceinline__ uint64_t sign_bits(uint64_t a) {
@@ -94,12 +94,12 @@ template <int32_t op> __global__ void limbs_convert_kernel(int64_t N, uint64_t* 
 
 template <int32_t SFT, int32_t OFF, int32_t LEN, int32_t ORDER> __device__ __forceinline__ void accum_i(uint64_t (&a)[ORDER], const uint64_t* in, int64_t stride) {
   if constexpr(0 == OFF && 0 < LEN) { a[0] = *in; if constexpr(1 < ORDER) a[1] = uint64_t(0); if constexpr(2 < ORDER) a[2] = uint64_t(0); }
-    else if constexpr(0 < LEN) { device::int8::add_shifted<SFT * OFF>(a, int64_t(*in)); }
-  if constexpr(1 < LEN) { device::int8::add_shifted<SFT * (OFF + 1)>(a, int64_t(*(in += stride))); }
-  if constexpr(2 < LEN) { device::int8::add_shifted<SFT * (OFF + 2)>(a, int64_t(*(in += stride))); }
-  if constexpr(3 < LEN) { device::int8::add_shifted<SFT * (OFF + 3)>(a, int64_t(*(in += stride))); }
-  if constexpr(4 < LEN) { device::int8::add_shifted<SFT * (OFF + 4)>(a, int64_t(*(in += stride))); }
-  if constexpr(5 < LEN) { device::int8::add_shifted<SFT * (OFF + 5)>(a, int64_t(*(in += stride))); }
+    else if constexpr(0 < LEN) { device::add_shifted<SFT * OFF>(a, int64_t(*in)); }
+  if constexpr(1 < LEN) { device::add_shifted<SFT * (OFF + 1)>(a, int64_t(*(in += stride))); }
+  if constexpr(2 < LEN) { device::add_shifted<SFT * (OFF + 2)>(a, int64_t(*(in += stride))); }
+  if constexpr(3 < LEN) { device::add_shifted<SFT * (OFF + 3)>(a, int64_t(*(in += stride))); }
+  if constexpr(4 < LEN) { device::add_shifted<SFT * (OFF + 4)>(a, int64_t(*(in += stride))); }
+  if constexpr(5 < LEN) { device::add_shifted<SFT * (OFF + 5)>(a, int64_t(*(in += stride))); }
 }
 
 template <int32_t op> __global__ void limbs_accum_kernel(int64_t N, uint64_t* __restrict__ A, const uint64_t* __restrict__ E) {

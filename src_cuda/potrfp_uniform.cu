@@ -2,11 +2,36 @@
 #include <internal.hpp>
 #include <double_double.hpp>
 #include <quad_float.hpp>
-#include <float_max.hpp>
 
 #include <cuComplex.h>
 #include <cub/cub.cuh>
 #include <cooperative_groups.h>
+
+__device__ __forceinline__ void cmp_fl(double a, double b, bool& less, bool& par) { less = a < b; par = a == b; }
+__device__ __forceinline__ void cmp_fl(float a, float b, bool& less, bool& par) { less = a < b; par = a == b; }
+__device__ __forceinline__ void cmp_fl(double2 a, double2 b, bool& less, bool& par) {
+  bool l1 = a.x < b.x, l2 = a.y < b.y, p1 = a.x == b.x; less = l1 || (p1 && l2); par = p1 && (a.y == b.y);
+}
+__device__ __forceinline__ void cmp_fl(float4 a, float4 b, bool& less, bool& par) {
+  bool l1 = a.x < b.x, l2 = a.y < b.y, l3 = a.z < b.z, l4 = a.w < b.w;
+  bool p1 = a.x == b.x, p2 = p1 && (a.y == b.y), p3 = p2 && (a.z == b.z);
+  less = l1 || (p1 && l2) || (p2 && l3) || (p3 && l4); par = p3 && (a.w == b.w);
+}
+
+struct __align__(8) float_idx { float real; int32_t idx; };
+struct __align__(16) double_idx { double real; int32_t idx; };
+struct __align__(32) double2_idx { double2 real; int32_t idx; };
+struct __align__(32) float4_idx { float4 real; int32_t idx; };
+template <class idx_t> struct idx_max {
+  __device__ __forceinline__ idx_t operator()(idx_t a, idx_t b) {
+    bool less, par; cmp_fl(a.real, b.real, less, par); 
+    auto val = less ? b.real : a.real;
+    int32_t idx_min = a.idx < b.idx ? a.idx : b.idx;
+    int32_t idx_ab = less ? b.idx : a.idx;
+    int32_t id = par ? idx_min : idx_ab;
+    return idx_t({ val, id });
+  }
+};
 
 template <class matrix_t> __device__ __forceinline__ matrix_t real_sqrt(bool p, double epi, double_idx x, double_idx& rsq) {
   double sqx = sqrt(x.real); int32_t i = rsq.idx - int32_t(x.real < epi);
@@ -20,13 +45,13 @@ template <class matrix_t> __device__ __forceinline__ matrix_t real_sqrt(bool p, 
 }
 template <class matrix_t> __device__ __forceinline__ matrix_t real_sqrt(bool p, double2 epi, double2_idx x, double2_idx& rsq) {
   double2 sqx, rsqx; device::dd::frsqrt(x.real, sqx, rsqx);
-  bool less, par; device::cmp::cmp_double2(x.real, epi, less, par); int32_t i = rsq.idx - int32_t(less);
+  bool less, par; cmp_fl(x.real, epi, less, par); int32_t i = rsq.idx - int32_t(less);
   rsq = double2_idx({ rsqx, (p && (0 < x.idx)) ? i : -1 });
   if constexpr(std::is_same_v<matrix_t, complex_double2>) { return device::dd::make_complex_double2(sqx, make_double2(0., 0.)); } else { return sqx; }
 }
 template <class matrix_t> __device__ __forceinline__ matrix_t real_sqrt(bool p, float4 epi, float4_idx x, float4_idx& rsq) {
   float4 sqx, rsqx; device::qf::frsqrt(x.real, sqx, rsqx);
-  bool less, par; device::cmp::cmp_float4(x.real, epi, less, par); int32_t i = rsq.idx - int32_t(less);
+  bool less, par; cmp_fl(x.real, epi, less, par); int32_t i = rsq.idx - int32_t(less);
   rsq = float4_idx({ rsqx, (p && (0 < x.idx)) ? i : -1 });
   if constexpr(std::is_same_v<matrix_t, complex_float4>) { return device::qf::make_complex_float4(sqx, make_float4(0.f, 0.f, 0.f, 0.f)); } else { return sqx; }
 }
@@ -38,9 +63,8 @@ __device__ __forceinline__ float4 _mul(float4 a, float4 b) { return device::qf::
 
 template <int32_t BLOCK_THREADS, class real_t, class matrix_t, class idx_t>
 __global__ void potrf_init_kernel(real_t epi, int32_t p, int32_t N, matrix_t* __restrict__ A, int64_t lda_p1, int32_t* __restrict__ jpiv, real_t* __restrict__ D, idx_t* __restrict__ work) {
-  __shared__ typename cub::BlockReduce<idx_t, BLOCK_THREADS>::TempStorage temp_reduce;
-  auto grid = cooperative_groups::this_grid();
-  const int32_t nthreads = (grid.num_threads()); device::cmp::idx_max cmp_max;
+  __shared__ typename cub::BlockReduce<idx_t, BLOCK_THREADS>::TempStorage temp_reduce; idx_max<idx_t> cmp_max;
+  auto grid = cooperative_groups::this_grid(); const int32_t nthreads = (grid.num_threads());
 
   idx_t thread_x = idx_t();
   for (int32_t i = int32_t(grid.thread_rank()); i < N; i += nthreads) {
@@ -127,9 +151,11 @@ template <class real_t, class matrix_t> __device__ __forceinline__ matrix_t fma_
   if constexpr(std::is_same_v<real_t, float> && std::is_same_v<matrix_t, float>) { return fmaf(a, b, c); } else
   if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, double2>) { return device::dd::add(c, device::dd::mul(a, b)); } else
   if constexpr(std::is_same_v<real_t, float4> && std::is_same_v<matrix_t, float4>) { return device::qf::add(c, device::qf::mul(a, b)); } else
-  if constexpr(std::is_same_v<real_t, double> && std::is_same_v<matrix_t, cuDoubleComplex>) { return make_cuDoubleComplex(fma(a.x, b.x, c.x), fma(a.y, b.y, c.y)); } else
-  if constexpr(std::is_same_v<real_t, float> && std::is_same_v<matrix_t, cuComplex>) { return make_cuComplex(fmaf(a.x, b.x, c.x), fmaf(a.y, b.y, c.y)); } else
-  if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, complex_double2>) {
+  if constexpr(std::is_same_v<real_t, double> && std::is_same_v<matrix_t, cuDoubleComplex>) {
+    return make_cuDoubleComplex(fma(a.x, b.x, fma(a.y, b.y, c.x)), fma(a.x, b.y, fma(-a.y, b.x, c.y)));
+  } else if constexpr(std::is_same_v<real_t, float> && std::is_same_v<matrix_t, cuComplex>) {
+    return make_cuComplex(fmaf(a.x, b.x, fmaf(a.y, b.y, c.x)), fmaf(a.x, b.y, fmaf(-a.y, b.x, c.y)));
+  } else if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, complex_double2>) {
     using device::dd::add, device::dd::mul, device::dd::negate, device::dd::make_complex_double2;
     return make_complex_double2(add(mul(a.real, b.real), add(mul(a.imag, b.imag), c.real)), add(mul(a.real, b.imag), add(mul(negate(a.imag), b.real), c.imag)));
   } else if constexpr(std::is_same_v<real_t, float4> && std::is_same_v<matrix_t, complex_float4>) {
@@ -160,12 +186,10 @@ template <class real_t, class matrix_t> __device__ __forceinline__ matrix_t conj
 
 template <int32_t BLOCK_THREADS, class real_t, class matrix_t, class idx_t>
 __global__ void potrf_iter_kernel(int32_t iterMax, int32_t N, matrix_t* __restrict__ A, int64_t lda, int32_t* __restrict__ jpiv, real_t* __restrict__ D, idx_t* __restrict__ work, int32_t* __restrict__ out) {
-  __shared__ idx_t rsq; __shared__ int32_t j; add_fl<real_t, matrix_t> add_; device::cmp::idx_max cmp_max; 
+  __shared__ idx_t rsq; __shared__ int32_t j; add_fl<real_t, matrix_t> add_; idx_max<idx_t> cmp_max; 
   __shared__ typename cub::BlockReduce<matrix_t, BLOCK_THREADS>::TempStorage temp_gemv;
   __shared__ typename cub::BlockReduce<idx_t, BLOCK_THREADS>::TempStorage temp_reduce;
-
-  auto grid = cooperative_groups::this_grid();
-  const int32_t tid = int32_t(grid.thread_rank()), nthreads = int32_t(grid.num_threads());
+  auto grid = cooperative_groups::this_grid(); const int32_t tid = int32_t(grid.thread_rank()), nthreads = int32_t(grid.num_threads());
   if (int32_t(threadIdx.x) == 0) { rsq = work[0]; j = work[BLOCK_THREADS].idx; }
   cooperative_groups::this_thread_block().sync();
 

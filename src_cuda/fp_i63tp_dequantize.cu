@@ -1,7 +1,6 @@
 
 #include <hyacin.h>
 #include <internal.hpp>
-#include <int_fp_quantize.hpp>
 #include <double_double.hpp>
 #include <quad_float.hpp>
 #include <limits>
@@ -18,8 +17,7 @@ __device__ __forceinline__ matrix_t deq_i(const uint64_t* A, int64_t stride, int
     if constexpr(std::is_same_v<matrix_t, complex_double2>) { return device::dd::make_complex_double2(device::dd::conv_a63_dd(r, e), device::dd::conv_a63_dd(i, e)); } else
     if constexpr(std::is_same_v<matrix_t, complex_float4>) { return device::qf::make_complex_float4(device::qf::conv_a63_qf(r, e), device::qf::conv_a63_qf(i, e)); } else
     { return matrix_t(); }
-  }
-  else {
+  } else {
     uint64_t a[orderA];
     if constexpr(0 < orderA) { a[0] = *A; } if constexpr(1 < orderA) { a[1] = *(A += stride); } if constexpr(2 < orderA) { a[2] = *(A += stride); }
     if constexpr(std::is_same_v<matrix_t, double>) { return device::dd::conv_a63_f64(a, e); } else
