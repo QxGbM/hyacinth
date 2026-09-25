@@ -44,7 +44,7 @@ extern "C" int32_t hyacinXAllGatherV1Dcol(hyacinHandle_t handle, int32_t M, int3
   int32_t comm_rank, comm_size, hK = K ? *K : 0; ncclCommUserRank(handle.row_comm, &comm_rank); ncclCommCount(handle.row_comm, &comm_size);
   uint64_t work_bytes = std::max(uint64_t(Mi) * uint64_t(wcols), uint64_t(sizeof(int32_t))) * uint64_t(comm_size);
   uint8_t* dev_k = nullptr;
-  if (cudaSuccess != cudaMallocAsync((void**)&dev_k, work_bytes, handle.cudaStream))
+  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&dev_k, work_bytes, handle.mempool, handle.cudaStream))
   { throw std::runtime_error("Workspace allocation failed at All-gather."); }
 
   uint8_t* lk = &dev_k[int64_t(comm_rank) * sizeof(int32_t)];

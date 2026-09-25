@@ -34,6 +34,11 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle, int32_t create_timer) {
   cusolverDnCreate(&handle->cusolverHandle);
   cusolverDnSetStream(handle->cusolverHandle, handle->cudaStream);
   cusolverDnCreateParams(&handle->cusolverParams);
+  cudaMemPoolProps props = cudaMemPoolProps(); cudaGetDevice(&props.location.id);
+  props.allocType = cudaMemAllocationTypePinned; props.location.type = cudaMemLocationTypeDevice;
+  cudaMemPoolCreate(&handle->mempool, &props);
+  uint64_t threshold = size_t(1) << 32;
+  cudaMemPoolSetAttribute(handle->mempool, cudaMemPoolAttrReleaseThreshold, &threshold);
   cudaMallocHost(&handle->pinnedWorkspace, size_t(128));
 #ifndef NO_NCCL
   handle->col_comm = handle->row_comm = nullptr;
@@ -54,6 +59,7 @@ extern "C" void hyacinDestroy(hyacinHandle_t handle) {
   cublasDestroy(handle.cublasHandle);
   cusolverDnDestroy(handle.cusolverHandle);
   cusolverDnDestroyParams(handle.cusolverParams);
+  cudaMemPoolDestroy(handle.mempool);
   cudaFreeHost(handle.pinnedWorkspace);
   if (handle.timer) { delete (EventTimer*)(handle.timer); }
 }
@@ -100,4 +106,3 @@ extern "C" void hyacinSync_TimerSegments(hyacinHandle_t handle, double* kernelMs
   ((EventTimer*)handle.timer)->events.clear(); ((EventTimer*)handle.timer)->lastSegment = segment::none;
   if (kernelMs) { *kernelMs += k_time; } if (commMs) { *commMs += c_time; }
 }
-

@@ -143,7 +143,7 @@ extern "C" void hyacinAllReduce1Drow(hyacinHandle_t handle, int32_t Complex, int
   int32_t LimbCount = orderA + 1 + int32_t(orderA == 2 && 1048576 < comm_size) + int32_t(orderA == 3 && 32768 < comm_size) + int32_t(orderA == 3 && 33554432 < comm_size);
   int64_t lenA = int64_t(Complex) * int64_t(orderA) * N, lenE = int64_t(Complex) * int64_t(LimbCount - orderA) * N;
   uint64_t* devE = nullptr;
-  if (cudaSuccess != cudaMallocAsync((void**)&devE, uint64_t(lenE) * uint64_t(sizeof(uint64_t)), handle.cudaStream))
+  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&devE, uint64_t(lenE) * uint64_t(sizeof(uint64_t)), handle.mempool, handle.cudaStream))
     throw std::runtime_error("Workspace allocation failed at All-reduce.");
 
   if (Complex == 1 && orderA == 1 && LimbCount == 2) { conv_reduction<0>(handle.cudaStream, N, A, lenA, devE, lenE, handle.col_comm); } else

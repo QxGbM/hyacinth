@@ -67,25 +67,21 @@ __global__ void vector_range_kernel(int32_t M, int32_t N, const matrix_t* __rest
 template<class reduc_t, class matrix_t>
 inline void vector_exponents_dispatcher(cudaStream_t stream, int32_t M, int32_t N, const matrix_t* A, int32_t lda, int32_t u, int32_t beta, int32_t* vexp) {
   constexpr int32_t block_threads = 512;
-  int64_t lda64 = int64_t(lda); u = std::max(0, u);
+  int64_t lda64 = int64_t(lda);
   if (beta) { vector_exponent_kernel<1, block_threads, reduc_t> <<< N, block_threads, 0, stream >>> (M, A, lda64, u, vexp); }
     else { vector_exponent_kernel<0, block_threads, reduc_t> <<< N, block_threads, 0, stream >>> (M, A, lda64, u, vexp); }
 }
 
 template<class reduc_t, class matrix_t>
-inline void vector_range_dispatcher(cudaStream_t stream, int32_t M, int32_t N, const matrix_t* A, int32_t lda, int32_t* u, const int32_t* vexp) {
+inline void vector_range_dispatcher(cudaStream_t stream, int32_t M, int32_t N, const matrix_t* A, int32_t lda, int32_t* u, const int32_t* vexp, int32_t* vbuf) {
   constexpr int32_t block_threads = 512, grid_blocks = 512;
   int64_t lda64 = int64_t(lda);
   int32_t device_sms = internal::device_num_sms(), maxBlocksPerSM = 0;
   cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, vector_range_kernel<block_threads, reduc_t, matrix_t>, block_threads, 0);
   
-  int32_t grid = std::min(grid_blocks, std::min(N, device_sms * maxBlocksPerSM)), *vbuf = nullptr;
-  if (cudaSuccess != cudaMallocAsync((void**)&vbuf, uint64_t(grid) * sizeof(int32_t), stream))
-    throw std::runtime_error("Workspace allocation failed at Exponent Range.");
-
+  int32_t grid = std::min(grid_blocks, std::min(N, device_sms * maxBlocksPerSM));
   void* kernelArgs[]{ &M, &N, &A, &lda64, &vexp, &vbuf, &u };
   cudaLaunchCooperativeKernel(vector_range_kernel<block_threads, reduc_t, matrix_t>, grid, block_threads, kernelArgs, 0, stream);
-  cudaFreeAsync(vbuf, stream);
   cudaStreamSynchronize(stream);
 }
 
@@ -109,22 +105,22 @@ namespace internal::int8 {
   void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const __half2* A, int32_t lda, int32_t u, int32_t beta, int32_t* vexp)
   { vector_exponents_dispatcher<float>(stream, M, N, A, lda, u, beta, vexp); }
 
-  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int32_t* u, const int32_t* vexp)
-  { vector_range_dispatcher<double>(stream, M, N, A, lda, u, vexp); }
+  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int32_t* u, const int32_t* vexp, int32_t* vbuf)
+  { vector_range_dispatcher<double>(stream, M, N, A, lda, u, vexp, vbuf); }
 
-  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, int32_t* u, const int32_t* vexp)
-  { vector_range_dispatcher<float>(stream, M, N, A, lda, u, vexp); }
+  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, int32_t* u, const int32_t* vexp, int32_t* vbuf)
+  { vector_range_dispatcher<float>(stream, M, N, A, lda, u, vexp, vbuf); }
 
-  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const __half* A, int32_t lda, int32_t* u, const int32_t* vexp)
-  { vector_range_dispatcher<float>(stream, M, N, A, lda, u, vexp); }
+  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const __half* A, int32_t lda, int32_t* u, const int32_t* vexp, int32_t* vbuf)
+  { vector_range_dispatcher<float>(stream, M, N, A, lda, u, vexp, vbuf); }
 
-  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const cuDoubleComplex* A, int32_t lda, int32_t* u, const int32_t* vexp)
-  { vector_range_dispatcher<double>(stream, M, N, A, lda, u, vexp); }
+  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const cuDoubleComplex* A, int32_t lda, int32_t* u, const int32_t* vexp, int32_t* vbuf)
+  { vector_range_dispatcher<double>(stream, M, N, A, lda, u, vexp, vbuf); }
 
-  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const cuComplex* A, int32_t lda, int32_t* u, const int32_t* vexp)
-  { vector_range_dispatcher<float>(stream, M, N, A, lda, u, vexp); }
+  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const cuComplex* A, int32_t lda, int32_t* u, const int32_t* vexp, int32_t* vbuf)
+  { vector_range_dispatcher<float>(stream, M, N, A, lda, u, vexp, vbuf); }
 
-  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const __half2* A, int32_t lda, int32_t* u, const int32_t* vexp)
-  { vector_range_dispatcher<float>(stream, M, N, A, lda, u, vexp); }
+  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const __half2* A, int32_t lda, int32_t* u, const int32_t* vexp, int32_t* vbuf)
+  { vector_range_dispatcher<float>(stream, M, N, A, lda, u, vexp, vbuf); }
 
 }

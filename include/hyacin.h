@@ -28,6 +28,7 @@ typedef struct {
   cublasHandle_t cublasHandle;
   cusolverDnHandle_t cusolverHandle;
   cusolverDnParams_t cusolverParams;
+  cudaMemPool_t mempool;
   void* pinnedWorkspace; // A 128-byte pinned workspace on host for host reduction
   void* timer;
 #ifndef NO_NCCL

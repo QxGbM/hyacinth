@@ -50,7 +50,7 @@ template <> inline cudaDataType_t cuda_type<cuDoubleComplex>() { return CUDA_C_6
 template <> inline cudaDataType_t cuda_type<cuComplex>() { return CUDA_C_32F; }
 
 template <class real_t, class complex_t, class Stype, class Xtype>
-inline int32_t tevd(cudaStream_t stream, cusolverDnHandle_t handle, cusolverDnParams_t params, char fillmode, double epi, int32_t N, int32_t K, int32_t p, complex_t* G, int32_t ldg, Xtype* X, int32_t ldx, Stype* S, int32_t* pinned_work) {
+inline int32_t tevd(cudaStream_t stream, cudaMemPool_t mempool, cusolverDnHandle_t handle, cusolverDnParams_t params, char fillmode, double epi, int32_t N, int32_t K, int32_t p, complex_t* G, int32_t ldg, Xtype* X, int32_t ldx, Stype* S, int32_t* pinned_work) {
   cudaDataType_t type_c = cuda_type<complex_t>(), type_r = cuda_type<real_t>();
   K = std::min(K, N); uint64_t s_bytes = std::max(uint64_t(sizeof(int32_t)), uint64_t(sizeof(real_t)) * uint64_t(N));
   cublasFillMode_t fill = (fillmode == 'U' || fillmode == 'u') ? CUBLAS_FILL_MODE_UPPER : CUBLAS_FILL_MODE_LOWER;
@@ -59,7 +59,7 @@ inline int32_t tevd(cudaStream_t stream, cusolverDnHandle_t handle, cusolverDnPa
   cusolverDnXsyevd_bufferSize(handle, params, CUSOLVER_EIG_MODE_VECTOR, fill, N, type_c, G, ldg, type_r, nullptr, type_c, &workspaceInBytesOnDevice, &workspaceInBytesOnHost);
   std::vector<uint8_t> workspaceOnHost(workspaceInBytesOnHost);
   uint8_t* workspaceOnDevice = nullptr, *workspaceOnHostPtr = workspaceOnHost.empty() ? nullptr : workspaceOnHost.data();
-  if (cudaSuccess != cudaMallocAsync((void**)&workspaceOnDevice, workspaceInBytesOnDevice + s_bytes, stream))
+  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&workspaceOnDevice, workspaceInBytesOnDevice + s_bytes, mempool, stream))
     throw std::runtime_error("Workspace allocation failed at SYEVD.");
 
   real_t* dev_S = (real_t*)(&workspaceOnDevice[workspaceInBytesOnDevice]);
@@ -72,11 +72,11 @@ inline int32_t tevd(cudaStream_t stream, cusolverDnHandle_t handle, cusolverDnPa
 }
 
 template <class real_t, class complex_t, class GRtype, class Xtype, class Stype, class Gtype>
-inline int32_t tsvd(cudaStream_t stream, cublasHandle_t handle, cusolverDnHandle_t s_handle, cusolverDnParams_t params, char fillmode, double epi, int32_t N, int32_t K, int32_t p, Xtype* X, int32_t ldx, Stype* S, Gtype* G, int32_t ldg, int32_t* pinned_work) {
+inline int32_t tsvd(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t handle, cusolverDnHandle_t s_handle, cusolverDnParams_t params, char fillmode, double epi, int32_t N, int32_t K, int32_t p, Xtype* X, int32_t ldx, Stype* S, Gtype* G, int32_t ldg, int32_t* pinned_work) {
   uint64_t piv_bytes = uint64_t(N) * uint64_t(sizeof(int32_t));
   uint64_t matrix_bytes = uint64_t(std::max(int64_t(sizeof(complex_t)) * int64_t(N) * int64_t(std::min(N, K)), int64_t(65536) + int64_t(sizeof(GRtype)) * (int64_t(N) + int64_t(1))));
   uint8_t* dev_work = nullptr; 
-  if (cudaSuccess != cudaMallocAsync((void**)&dev_work, matrix_bytes + piv_bytes, stream))
+  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&dev_work, matrix_bytes + piv_bytes, mempool, stream))
     throw std::runtime_error("Workspace allocation failed at GESVD Preconditioning.");
 
   int32_t* piv = (int32_t*)(&dev_work[matrix_bytes]);
@@ -91,7 +91,7 @@ inline int32_t tsvd(cudaStream_t stream, cublasHandle_t handle, cusolverDnHandle
     std::vector<uint8_t> workspaceOnHost(workspaceInBytesOnHost);
     uint64_t s_bytes = std::max(uint64_t(sizeof(int32_t)), uint64_t(sizeof(real_t)) * uint64_t(K));
     uint8_t* workspaceOnDevice = nullptr, *workspaceOnHostPtr = workspaceOnHost.empty() ? nullptr : workspaceOnHost.data();
-    if (cudaSuccess != cudaMallocAsync((void**)&workspaceOnDevice, workspaceInBytesOnDevice + s_bytes, stream))
+    if (cudaSuccess != cudaMallocFromPoolAsync((void**)&workspaceOnDevice, workspaceInBytesOnDevice + s_bytes, mempool, stream))
       throw std::runtime_error("Workspace allocation failed at GESVD.");
 
     real_t* dev_S = (real_t*)(&workspaceOnDevice[workspaceInBytesOnDevice]);
@@ -114,47 +114,47 @@ extern "C" int32_t hyacinXGevPcsvd(hyacinHandle_t handle, char use_evd, char fil
 
   if (pred64 || pred32) switch (Gtype) {
     case HYACIN_F64: if (Atype == HYACIN_F64)
-    { return tevd<double>(handle.cudaStream, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (double*)G, ldg, (double*)X, ldx, (double*)S, rank_ptr); } else
+    { return tevd<double>(handle.cudaStream, handle.mempool, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (double*)G, ldg, (double*)X, ldx, (double*)S, rank_ptr); } else
     if (Atype == HYACIN_F32)
-    { return tevd<double>(handle.cudaStream, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (double*)G, ldg, (float*)X, ldx, (float*)S, rank_ptr); } else { return 0; }
+    { return tevd<double>(handle.cudaStream, handle.mempool, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (double*)G, ldg, (float*)X, ldx, (float*)S, rank_ptr); } else { return 0; }
     case HYACIN_F32: if (Atype == HYACIN_F32)
-    { return tevd<float>(handle.cudaStream, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (float*)G, ldg, (float*)X, ldx, (float*)S, rank_ptr); } else
+    { return tevd<float>(handle.cudaStream, handle.mempool, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (float*)G, ldg, (float*)X, ldx, (float*)S, rank_ptr); } else
     if (Atype == HYACIN_F16)
-    { return tevd<float>(handle.cudaStream, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (float*)G, ldg, (__half*)X, ldx, (__half*)S, rank_ptr); } else { return 0; }
+    { return tevd<float>(handle.cudaStream, handle.mempool, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (float*)G, ldg, (__half*)X, ldx, (__half*)S, rank_ptr); } else { return 0; }
     case HYACIN_F64_COMPLEX: if (Atype == HYACIN_F64_COMPLEX)
-    { return tevd<double>(handle.cudaStream, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (cuDoubleComplex*)G, ldg, (cuDoubleComplex*)X, ldx, (double*)S, rank_ptr); } else
+    { return tevd<double>(handle.cudaStream, handle.mempool, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (cuDoubleComplex*)G, ldg, (cuDoubleComplex*)X, ldx, (double*)S, rank_ptr); } else
     if (Atype == HYACIN_F32_COMPLEX)
-    { return tevd<double>(handle.cudaStream, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (cuDoubleComplex*)G, ldg, (cuComplex*)X, ldx, (float*)S, rank_ptr); } else { return 0; }
+    { return tevd<double>(handle.cudaStream, handle.mempool, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (cuDoubleComplex*)G, ldg, (cuComplex*)X, ldx, (float*)S, rank_ptr); } else { return 0; }
     case HYACIN_F32_COMPLEX: if (Atype == HYACIN_F32_COMPLEX)
-    { return tevd<float>(handle.cudaStream, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (cuComplex*)G, ldg, (cuComplex*)X, ldx, (float*)S, rank_ptr); } else
+    { return tevd<float>(handle.cudaStream, handle.mempool, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (cuComplex*)G, ldg, (cuComplex*)X, ldx, (float*)S, rank_ptr); } else
     if (Atype == HYACIN_F16_COMPLEX)
-    { return tevd<float>(handle.cudaStream, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (cuComplex*)G, ldg, (__half2*)X, ldx, (__half*)S, rank_ptr); } else { return 0; }
+    { return tevd<float>(handle.cudaStream, handle.mempool, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (cuComplex*)G, ldg, (__half2*)X, ldx, (__half*)S, rank_ptr); } else { return 0; }
     default: return 0;
   } else switch(Gtype) {
     case HYACIN_F64: if (Atype == HYACIN_F64)
-    { return tsvd<double, double, double>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (double*)X, ldx, (double*)S, (double*)G, ldg, rank_ptr); } else
+    { return tsvd<double, double, double>(handle.cudaStream, handle.mempool, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (double*)X, ldx, (double*)S, (double*)G, ldg, rank_ptr); } else
     if (Atype == HYACIN_F32)
-    { return tsvd<float, float, double>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (float*)X, ldx, (float*)S, (double*)G, ldg, rank_ptr); } else { return 0; }
+    { return tsvd<float, float, double>(handle.cudaStream, handle.mempool, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (float*)X, ldx, (float*)S, (double*)G, ldg, rank_ptr); } else { return 0; }
     case HYACIN_F32: if (Atype == HYACIN_F32)
-    { return tsvd<float, float, float>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (float*)X, ldx, (float*)S, (float*)G, ldg, rank_ptr); } else
+    { return tsvd<float, float, float>(handle.cudaStream, handle.mempool, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (float*)X, ldx, (float*)S, (float*)G, ldg, rank_ptr); } else
     if (Atype == HYACIN_F16)
-    { return tsvd<float, float, float>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (__half*)X, ldx, (__half*)S, (float*)G, ldg, rank_ptr); } else { return 0; }
+    { return tsvd<float, float, float>(handle.cudaStream, handle.mempool, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (__half*)X, ldx, (__half*)S, (float*)G, ldg, rank_ptr); } else { return 0; }
     case HYACIN_DD: if (Atype == HYACIN_F64)
-    { return tsvd<double, double, double2>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (double*)X, ldx, (double*)S, (double2*)G, ldg, rank_ptr); } else { return 0; }
+    { return tsvd<double, double, double2>(handle.cudaStream, handle.mempool, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (double*)X, ldx, (double*)S, (double2*)G, ldg, rank_ptr); } else { return 0; }
     case HYACIN_QF: if (Atype == HYACIN_F64)
-    { return tsvd<double, double, float4>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (double*)X, ldx, (double*)S, (float4*)G, ldg, rank_ptr); } else { return 0; }
+    { return tsvd<double, double, float4>(handle.cudaStream, handle.mempool, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (double*)X, ldx, (double*)S, (float4*)G, ldg, rank_ptr); } else { return 0; }
     case HYACIN_F64_COMPLEX: if (Atype == HYACIN_F64_COMPLEX)
-    { return tsvd<double, cuDoubleComplex, double>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (cuDoubleComplex*)X, ldx, (double*)S, (cuDoubleComplex*)G, ldg, rank_ptr); } else
+    { return tsvd<double, cuDoubleComplex, double>(handle.cudaStream, handle.mempool, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (cuDoubleComplex*)X, ldx, (double*)S, (cuDoubleComplex*)G, ldg, rank_ptr); } else
     if (Atype == HYACIN_F32_COMPLEX)
-    { return tsvd<float, cuComplex, double>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (cuComplex*)X, ldx, (float*)S, (cuDoubleComplex*)G, ldg, rank_ptr); } else { return 0; }
+    { return tsvd<float, cuComplex, double>(handle.cudaStream, handle.mempool, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (cuComplex*)X, ldx, (float*)S, (cuDoubleComplex*)G, ldg, rank_ptr); } else { return 0; }
     case HYACIN_F32_COMPLEX: if (Atype == HYACIN_F32_COMPLEX)
-    { return tsvd<float, cuComplex, float>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (cuComplex*)X, ldx, (float*)S, (cuComplex*)G, ldg, rank_ptr); } else
+    { return tsvd<float, cuComplex, float>(handle.cudaStream, handle.mempool, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (cuComplex*)X, ldx, (float*)S, (cuComplex*)G, ldg, rank_ptr); } else
     if (Atype == HYACIN_F16_COMPLEX)
-    { return tsvd<float, cuComplex, float>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (__half2*)X, ldx, (__half*)S, (cuComplex*)G, ldg, rank_ptr); } else { return 0; }
+    { return tsvd<float, cuComplex, float>(handle.cudaStream, handle.mempool, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (__half2*)X, ldx, (__half*)S, (cuComplex*)G, ldg, rank_ptr); } else { return 0; }
     case HYACIN_DD_COMPLEX: if (Atype == HYACIN_F64_COMPLEX)
-    { return tsvd<double, cuDoubleComplex, double2>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (cuDoubleComplex*)X, ldx, (double*)S, (complex_double2*)G, ldg, rank_ptr); } else { return 0; }
+    { return tsvd<double, cuDoubleComplex, double2>(handle.cudaStream, handle.mempool, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (cuDoubleComplex*)X, ldx, (double*)S, (complex_double2*)G, ldg, rank_ptr); } else { return 0; }
     case HYACIN_QF_COMPLEX: if (Atype == HYACIN_F64_COMPLEX)
-    { return tsvd<double, cuDoubleComplex, float4>(handle.cudaStream, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (cuDoubleComplex*)X, ldx, (double*)S, (complex_float4*)G, ldg, rank_ptr); } else { return 0; }
+    { return tsvd<double, cuDoubleComplex, float4>(handle.cudaStream, handle.mempool, handle.cublasHandle, handle.cusolverHandle, handle.cusolverParams, fillmode, epi, N, K, p, (cuDoubleComplex*)X, ldx, (double*)S, (complex_float4*)G, ldg, rank_ptr); } else { return 0; }
     default: return 0;
   }
 }
