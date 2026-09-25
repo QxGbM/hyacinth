@@ -74,10 +74,7 @@ __global__ void potrf_init_kernel(real_t epi, int32_t p, int32_t N, matrix_t* __
   idx_t r = idx_t({ real_t(), 0, p });
   if (BLOCK_THREADS == nthreads) {
     cooperative_groups::this_thread_block().sync();
-    if (int32_t(threadIdx.x) == 0) {
-      thread_x.p = 1 < N; A[0] = real_sqrt<matrix_t>(D[N] = mul_(epi, thread_x.real), thread_x, r); *work = r;
-      if (0 <= r.p && 0 < r.idx) { int32_t t = jpiv[0]; jpiv[0] = jpiv[r.idx]; jpiv[r.idx] = t; }
-    }
+    if (int32_t(threadIdx.x) == 0) { thread_x.p = 1 < N; A[0] = real_sqrt<matrix_t>(D[N] = mul_(epi, thread_x.real), thread_x, r); *work = r; }
   } else {
     if (int32_t(threadIdx.x) == 0) { work[blockIdx.x] = thread_x; } else { thread_x = idx_t(); }
     grid.sync();
@@ -85,10 +82,7 @@ __global__ void potrf_init_kernel(real_t epi, int32_t p, int32_t N, matrix_t* __
       for (int32_t i = int32_t(threadIdx.x) + 1; i < int32_t(gridDim.x); i += BLOCK_THREADS)
       { thread_x = cmp_max(thread_x, work[i]); }
       thread_x = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce).Reduce(thread_x, cmp_max);
-      if (int32_t(threadIdx.x) == 0) {
-        thread_x.p = 1 < N; A[0] = real_sqrt<matrix_t>(D[N] = mul_(epi, thread_x.real), thread_x, r); *work = r;
-        if (0 <= r.p && 0 < r.idx) { int32_t t = jpiv[0]; jpiv[0] = jpiv[r.idx]; jpiv[r.idx] = t; }
-      }
+      if (int32_t(threadIdx.x) == 0) { thread_x.p = 1 < N; A[0] = real_sqrt<matrix_t>(D[N] = mul_(epi, thread_x.real), thread_x, r); *work = r; }
     }
   }
 }
@@ -191,7 +185,10 @@ __global__ void potrf_iter_kernel(int32_t iterMax, int32_t N, matrix_t* __restri
 
     ++M; --N; shm_x[threadIdx.x] = idx_t();
     if (0 < r.idx) {
-      if (tid == 0) { real_t D0 = D[0]; *A_col_j = pp_func(r.real, *A_col_j, D0); shm_x[0] = cmp_max(shm_x[0], idx_t({ D[r.idx] = D0, r.idx, 0 })); }
+      if (tid == 0) {
+        int32_t j = r.idx, t = jpiv[0]; jpiv[0] = jpiv[j]; jpiv[j] = t; real_t D0 = D[0];
+        *A_col_j = pp_func(r.real, *A_col_j, D0); shm_x[0] = cmp_max(shm_x[0], idx_t({ D[j] = D0, j, 0 }));
+      }
       for (int32_t i = tid + 1; i < N; i += nthreads) {
         int32_t l = i + int32_t(r.idx <= i); real_t D_i = D[l]; matrix_t* A_col_i = &A[int64_t(l) * lda];
         *A_col_i = pp_func(r.real, A_col_j[l], D_i); A_col_i[r.idx] = conj<real_t>(A_col_j[l] = A[l]);
@@ -213,10 +210,7 @@ __global__ void potrf_iter_kernel(int32_t iterMax, int32_t N, matrix_t* __restri
       for (int32_t i = int32_t(threadIdx.x) + 1; i < active_blocks; i += BLOCK_THREADS)
       { thread_c = cmp_max(thread_c, work[i]); }
       thread_c = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce).Reduce(thread_c, cmp_max);
-      if (int32_t(threadIdx.x) == 0) {
-        thread_c.p = int32_t(1 < N && M < iterMax); *A = real_sqrt<matrix_t>(e, thread_c, r); *work = r;
-        if (0 <= r.p && 0 < r.idx) { int32_t t = jpiv[0]; jpiv[0] = jpiv[r.idx]; jpiv[r.idx] = t; }
-      }
+      if (int32_t(threadIdx.x) == 0) { thread_c.p = int32_t(1 < N && M < iterMax); *A = real_sqrt<matrix_t>(e, thread_c, r); *work = r; }
     }
     grid.sync();
     if (int32_t(threadIdx.x) == 0) { r = *work; }
