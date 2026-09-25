@@ -25,18 +25,16 @@ extern "C" int32_t hyacinXquantizeScale(hyacinHandle_t handle, double epi, int32
     if (cPanels) { *cPanels = c; } if (lPanels) { *lPanels = ((c + 63 + u + u) + int32_t(std::ceil(std::log2(double(std::max(1, globalM)))))) / 63; }
   }
   
-  if (0 < localM) {
-    Timer::register_kernel(handle.cudaStream, handle.timer);
-    switch(Atype) {
-      case HYACIN_F64: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const double*)A, lda, u, beta, vexp); return u;
-      case HYACIN_F32: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const float2*)A, lda, u, beta, vexp); return u;
-      case HYACIN_F16: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const __half*)A, lda, u, beta, vexp); return u;
-      case HYACIN_F64_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const cuDoubleComplex*)A, lda, u, beta, vexp); return u;
-      case HYACIN_F32_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const cuComplex*)A, lda, u, beta, vexp); return u;
-      case HYACIN_F16_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const __half2*)A, lda, u, beta, vexp); return u;
-      default: return u;
-    }
-  } else { return u; }
+  Timer::register_kernel(handle.cudaStream, handle.timer);
+  switch(Atype) {
+    case HYACIN_F64: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const double*)A, lda, u, beta, vexp); return u;
+    case HYACIN_F32: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const float2*)A, lda, u, beta, vexp); return u;
+    case HYACIN_F16: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const __half*)A, lda, u, beta, vexp); return u;
+    case HYACIN_F64_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const cuDoubleComplex*)A, lda, u, beta, vexp); return u;
+    case HYACIN_F32_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const cuComplex*)A, lda, u, beta, vexp); return u;
+    case HYACIN_F16_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const __half2*)A, lda, u, beta, vexp); return u;
+    default: return u;
+  }
 }
 
 int32_t internal::int8::gram_algorithm(char& alg, int32_t M, int32_t& u) {
@@ -252,7 +250,7 @@ inline void herk_dispatcher(cudaStream_t stream, cudaMemPool_t mempool, cublasHa
       throw std::runtime_error("Workspace (vbuf) allocation failed at Integer SY/HERK");
     internal::int8::vector_range(stream, M, N, A, lda, uptr, vexp, vbuf); u = *uptr; cudaFreeAsync(vbuf, stream);
   }
-  if (u < 0 && i == 0) { cudaMemsetAsync(C, 0, uint64_t(N) * uint64_t(N + 1) * uint64_t(orderC) * elem, stream); return; }
+  if ((u < 0 || M <= 0) && i == 0) { cudaMemsetAsync(C, 0, uint64_t(N) * uint64_t(N + 1) * uint64_t(orderC) * elem, stream); return; }
 
   int32_t uc = u + Complex, orderA = internal::int8::gram_algorithm(alg, M, uc);
   if (alg == 'L') {

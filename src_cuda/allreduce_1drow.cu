@@ -171,5 +171,5 @@ extern "C" void hyacinAllReduceVExp(hyacinHandle_t handle, int64_t N, int32_t* v
 
 #else
 extern "C" void hyacinAllReduce1Drow(hyacinHandle_t, int32_t, int32_t, int64_t, uint64_t*) {}
-extern "C" void hyacinAllReduceVExp(hyacinHandle_t handle, int64_t N, int32_t* vexp) {}
+extern "C" void hyacinAllReduceVExp(hyacinHandle_t, int64_t, int32_t*) {}
 #endif

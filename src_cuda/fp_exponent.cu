@@ -21,6 +21,7 @@ struct _max {
 __device__ __forceinline__ int32_t float_frexp(double a) { if (a < f64_min) { return int_max; } else { int32_t x; frexp(a, &x); return x; }}
 __device__ __forceinline__ int32_t float_frexp(float a) { if (a < f32_min) { return int_max; } else { int32_t x; frexpf(a, &x); return x; }}
 template <int32_t beta> __device__ __forceinline__ void exp_update(int32_t& e, int32_t i) { if constexpr(beta) { e = min(e, i); } else { e = i; }}
+__global__ void vector_exponent_init_kernel(int32_t N, int32_t* __restrict__ vexp) { int32_t i = (int32_t(blockIdx.x) << 9) + int32_t(threadIdx.x); if (i < N) { vexp[i] = int_max; }}
 
 template <int32_t beta, int32_t BLOCK_THREADS, class reduc_t, class matrix_t>
 __global__ void vector_exponent_kernel(int32_t M, const matrix_t* __restrict__ A, int64_t lda, int32_t u, int32_t* __restrict__ vexp) {
@@ -68,8 +69,9 @@ template<class reduc_t, class matrix_t>
 inline void vector_exponents_dispatcher(cudaStream_t stream, int32_t M, int32_t N, const matrix_t* A, int32_t lda, int32_t u, int32_t beta, int32_t* vexp) {
   constexpr int32_t block_threads = 512;
   int64_t lda64 = int64_t(lda);
-  if (beta) { vector_exponent_kernel<1, block_threads, reduc_t> <<< N, block_threads, 0, stream >>> (M, A, lda64, u, vexp); }
-    else { vector_exponent_kernel<0, block_threads, reduc_t> <<< N, block_threads, 0, stream >>> (M, A, lda64, u, vexp); }
+  if (beta == 0 && M <= 0) { vector_exponent_init_kernel <<< uint32_t(N + 511) >> 9, block_threads, 0, stream >>> (N, vexp); } else
+  if (beta == 1 && 0 < M) { vector_exponent_kernel<1, block_threads, reduc_t> <<< N, block_threads, 0, stream >>> (M, A, lda64, u, vexp); } else
+  if (beta == 0 && 0 < M) { vector_exponent_kernel<0, block_threads, reduc_t> <<< N, block_threads, 0, stream >>> (M, A, lda64, u, vexp); }
 }
 
 template<class reduc_t, class matrix_t>

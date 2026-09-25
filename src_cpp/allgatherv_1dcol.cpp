@@ -72,5 +72,5 @@ extern "C" int32_t hyacinXAllGatherV1Dcol(hyacinHandle_t handle, int32_t M, int3
 }
 
 #else
-extern "C" int32_t hyacinXAllGatherV1Dcol(hyacinHandle_t, int32_t, int32_t*, int32_t, void*, int32_t) { return 0; }
+extern "C" int32_t hyacinXAllGatherV1Dcol(hyacinHandle_t, int32_t, int32_t* K, int32_t, void*, int32_t) { if (K) { *K = 0; } return 0; }
 #endif
