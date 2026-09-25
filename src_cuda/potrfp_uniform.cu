@@ -7,15 +7,15 @@
 #include <cub/cub.cuh>
 #include <cooperative_groups.h>
 
-__device__ __forceinline__ bool cmp_fl(double a, double b, bool& less) { less = a < b; return a == b; }
-__device__ __forceinline__ bool cmp_fl(float a, float b, bool& less) { less = a < b; return a == b; }
-__device__ __forceinline__ bool cmp_fl(double2 a, double2 b, bool& less) {
-  bool l1 = a.x < b.x, l2 = a.y < b.y, p1 = a.x == b.x; less = l1 || (p1 && l2); return p1 && (a.y == b.y);
+__device__ __forceinline__ bool cmp_fl(double a, double b) { return a < b; }
+__device__ __forceinline__ bool cmp_fl(float a, float b) { return a < b; }
+__device__ __forceinline__ bool cmp_fl(double2 a, double2 b) {
+  bool l1 = a.x < b.x, l2 = a.y < b.y, p1 = a.x == b.x; return l1 || (p1 && l2);
 }
-__device__ __forceinline__ bool cmp_fl(float4 a, float4 b, bool& less) {
+__device__ __forceinline__ bool cmp_fl(float4 a, float4 b) {
   bool l1 = a.x < b.x, l2 = a.y < b.y, l3 = a.z < b.z, l4 = a.w < b.w;
   bool p1 = a.x == b.x, p2 = p1 && (a.y == b.y), p3 = p2 && (a.z == b.z);
-  less = l1 || (p1 && l2) || (p2 && l3) || (p3 && l4); return p3 && (a.w == b.w);
+  return l1 || (p1 && l2) || (p2 && l3) || (p3 && l4);
 }
 
 struct __align__(16) float_idx { float real; int32_t idx; int32_t p; };
@@ -24,9 +24,8 @@ struct __align__(32) double2_idx { double2 real; int32_t idx; int32_t p; };
 struct __align__(32) float4_idx { float4 real; int32_t idx; int32_t p; };
 template <class idx_t> struct idx_max {
   __device__ __forceinline__ idx_t operator()(idx_t a, idx_t b) {
-    bool less, par = cmp_fl(a.real, b.real, less); 
-    int32_t idx_min = a.idx < b.idx ? a.idx : b.idx, idx_ab = less ? b.idx : a.idx;
-    return idx_t({ less ? b.real : a.real, par ? idx_min : idx_ab, 0 });
+    bool less = cmp_fl(a.real, b.real); 
+    return idx_t({ less ? b.real : a.real, less ? b.idx : a.idx, 0 });
   }
 };
 
@@ -41,12 +40,12 @@ template <class matrix_t> __device__ __forceinline__ matrix_t real_sqrt(float ep
   if constexpr(std::is_same_v<matrix_t, cuComplex>) { return make_cuComplex(sqx, 0.f); } else { return sqx; }
 }
 template <class matrix_t> __device__ __forceinline__ matrix_t real_sqrt(double2 epi, double2_idx x, double2_idx& r) {
-  double2 sqx, rsqx; device::dd::frsqrt(x.real, sqx, rsqx); bool less; cmp_fl(x.real, epi, less); int32_t i = r.p - int32_t(less);
+  double2 sqx, rsqx; device::dd::frsqrt(x.real, sqx, rsqx); int32_t i = r.p - int32_t(cmp_fl(x.real, epi));
   r = double2_idx({ rsqx, x.idx - 1, (x.p && (0 < x.idx)) ? i : -1 });
   if constexpr(std::is_same_v<matrix_t, complex_double2>) { return device::dd::make_complex_double2(sqx, make_double2(0., 0.)); } else { return sqx; }
 }
 template <class matrix_t> __device__ __forceinline__ matrix_t real_sqrt(float4 epi, float4_idx x, float4_idx& r) {
-  float4 sqx, rsqx; device::qf::frsqrt(x.real, sqx, rsqx); bool less; cmp_fl(x.real, epi, less); int32_t i = r.p - int32_t(less);
+  float4 sqx, rsqx; device::qf::frsqrt(x.real, sqx, rsqx); int32_t i = r.p - int32_t(cmp_fl(x.real, epi));
   r = float4_idx({ rsqx, x.idx - 1, (x.p && (0 < x.idx)) ? i : -1 });
   if constexpr(std::is_same_v<matrix_t, complex_float4>) { return device::qf::make_complex_float4(sqx, make_float4(0.f, 0.f, 0.f, 0.f)); } else { return sqx; }
 }
@@ -77,7 +76,7 @@ __global__ void potrf_init_kernel(real_t epi, int32_t p, int32_t N, matrix_t* __
     cooperative_groups::this_thread_block().sync();
     if (int32_t(threadIdx.x) == 0) {
       thread_x.p = 1 < N; A[0] = real_sqrt<matrix_t>(D[N] = mul_(epi, thread_x.real), thread_x, r); *work = r;
-      if (0 <= r.p && 0 < r.idx) { matrix_t* A_jj = &A[int64_t(r.idx) * lda_p1]; *A_jj = A_jj[-r.idx]; D[r.idx] = D[0]; int32_t t = jpiv[0]; jpiv[0] = jpiv[r.idx]; jpiv[r.idx] = t; }
+      if (0 <= r.p && 0 < r.idx) { int32_t t = jpiv[0]; jpiv[0] = jpiv[r.idx]; jpiv[r.idx] = t; }
     }
   } else {
     if (int32_t(threadIdx.x) == 0) { work[blockIdx.x] = thread_x; } else { thread_x = idx_t(); }
@@ -88,7 +87,7 @@ __global__ void potrf_init_kernel(real_t epi, int32_t p, int32_t N, matrix_t* __
       thread_x = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce).Reduce(thread_x, cmp_max);
       if (int32_t(threadIdx.x) == 0) {
         thread_x.p = 1 < N; A[0] = real_sqrt<matrix_t>(D[N] = mul_(epi, thread_x.real), thread_x, r); *work = r;
-        if (0 <= r.p && 0 < r.idx) { matrix_t* A_jj = &A[int64_t(r.idx) * lda_p1]; *A_jj = A_jj[-r.idx]; D[r.idx] = D[0]; int32_t t = jpiv[0]; jpiv[0] = jpiv[r.idx]; jpiv[r.idx] = t; }
+        if (0 <= r.p && 0 < r.idx) { int32_t t = jpiv[0]; jpiv[0] = jpiv[r.idx]; jpiv[r.idx] = t; }
       }
     }
   }
@@ -148,16 +147,10 @@ template <class real_t, class matrix_t> __device__ __forceinline__ matrix_t fma_
     return make_cuComplex(fmaf(-a.x, b.x, fmaf(-a.y, b.y, c.x)), fmaf(-a.x, b.y, fmaf(a.y, b.x, c.y)));
   } else if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, complex_double2>) {
     using device::dd::add, device::dd::mul, device::dd::negate, device::dd::make_complex_double2;
-    /*c.real = add(negate(add(mul(a.real, b.real), mul(a.imag, b.imag))), c.real);
-    c.imag = add(add(mul(negate(a.real), b.imag), mul(a.imag, b.real)), c.imag);
-    return c;*/
     double2 p1 = mul(a.real, b.real), p2 = mul(a.imag, b.imag), p3 = mul(add(negate(a.real), a.imag), add(b.real, b.imag));
     return make_complex_double2(add(negate(add(p1, p2)), c.real), add(add(p1, negate(p2)), add(p3, c.imag)));
   } else if constexpr(std::is_same_v<real_t, float4> && std::is_same_v<matrix_t, complex_float4>) {
     using device::qf::add, device::qf::mul, device::qf::negate, device::qf::make_complex_float4;
-    /*c.real = add(negate(add(mul(a.real, b.real), mul(a.imag, b.imag))), c.real);
-    c.imag = add(add(mul(negate(a.real), b.imag), mul(a.imag, b.real)), c.imag);
-    return c;*/
     float4 p1 = mul(a.real, b.real), p2 = mul(a.imag, b.imag), p3 = mul(add(negate(a.real), a.imag), add(b.real, b.imag));
     return make_complex_float4(add(negate(add(p1, p2)), c.real), add(add(p1, negate(p2)), add(p3, c.imag)));
   } else { return matrix_t(); }
@@ -183,28 +176,35 @@ __global__ void potrf_iter_kernel(int32_t iterMax, int32_t N, matrix_t* __restri
 
   int32_t M = 0;
   while (0 <= r.p) {
-    matrix_t* A_col_j = &A[int64_t(r.idx) * lda]; shm_x[threadIdx.x] = idx_t();
+    matrix_t* A_col_j = &A[int64_t(r.idx) * lda];
     if (0 < M) {
       for (int32_t i = int32_t(blockIdx.x) + 1; i < N; i += int32_t(gridDim.x)) {
-        matrix_t threadB = threadIdx.x ? matrix_t() : A_col_j[i], *A_col_i = &A[int64_t(i != r.idx ? i : 0) * lda];
+        int32_t l = i - int32_t(i <= r.idx); matrix_t threadB = threadIdx.x ? matrix_t() : A_col_j[l], *A_col_i = &A[int64_t(l) * lda];
         for (int32_t k = int32_t(threadIdx.x) - M; k < 0; k += BLOCK_THREADS)
         { threadB = fma_<real_t>(A_col_i[k], A_col_j[k], threadB); }
         threadB = cub::BlockReduce<matrix_t, BLOCK_THREADS>(temp_gemv).Reduce(threadB, add_);
         cooperative_groups::this_thread_block().sync();
-        if (int32_t(threadIdx.x) == 0) { A_col_j[i] = threadB; }
+        if (int32_t(threadIdx.x) == 0) { A_col_j[l] = threadB; }
       }
       grid.sync();
-      if (0 < r.idx) for (int32_t i = tid - M; i < 0; i += nthreads)
-      { matrix_t t = A[i]; A[i] = A_col_j[i]; A_col_j[i] = t; }
-    }
-    for (int32_t i = tid + 1; i < N; i += nthreads) {
-      matrix_t* A_col_i = &A[int64_t(i) * lda]; real_t D_i = D[i];
-      A_col_i[0] = pp_func(r.real, A_col_j[i], D_i);
-      shm_x[threadIdx.x] = cmp_max(shm_x[threadIdx.x], idx_t({ D[i] = D_i, i, 0 }));
-      if (i != r.idx) { A_col_i[r.idx] = conj<real_t>(A_col_j[i] = A[i]); }
     }
 
-    A = &(++A)[lda]; ++M; --N; ++jpiv; ++D;
+    ++M; --N; shm_x[threadIdx.x] = idx_t();
+    if (0 < r.idx) {
+      if (tid == 0) { real_t D0 = D[0]; *A_col_j = pp_func(r.real, *A_col_j, D0); shm_x[0] = cmp_max(shm_x[0], idx_t({ D[r.idx] = D0, r.idx, 0 })); }
+      for (int32_t i = tid + 1; i < N; i += nthreads) {
+        int32_t l = i + int32_t(r.idx <= i); real_t D_i = D[l]; matrix_t* A_col_i = &A[int64_t(l) * lda];
+        *A_col_i = pp_func(r.real, A_col_j[l], D_i); A_col_i[r.idx] = conj<real_t>(A_col_j[l] = A[l]);
+        shm_x[threadIdx.x] = cmp_max(shm_x[threadIdx.x], idx_t({ D[l] = D_i, l, 0 }));
+      }
+      if (1 < M) for (int32_t i = nthreads - tid - M; i < 0; i += nthreads)
+      { matrix_t t = A[i]; A[i] = A_col_j[i]; A_col_j[i] = t; }
+    } else for (int32_t i = tid + 1; i <= N; i += nthreads) {
+      real_t D_i = D[i]; A[int64_t(i) * lda] = pp_func(r.real, A_col_j[i], D_i);
+      shm_x[threadIdx.x] = cmp_max(shm_x[threadIdx.x], idx_t({ D[i] = D_i, i, 0 }));
+    }
+
+    A = &(++A)[lda]; ++jpiv; ++D;
     idx_t thread_c = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce).Reduce(shm_x[threadIdx.x], cmp_max);
     if (int32_t(threadIdx.x) == 0 && tid < N) { work[blockIdx.x] = thread_c; } else { thread_c = idx_t(); }
     grid.sync();
@@ -215,7 +215,7 @@ __global__ void potrf_iter_kernel(int32_t iterMax, int32_t N, matrix_t* __restri
       thread_c = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce).Reduce(thread_c, cmp_max);
       if (int32_t(threadIdx.x) == 0) {
         thread_c.p = int32_t(1 < N && M < iterMax); *A = real_sqrt<matrix_t>(e, thread_c, r); *work = r;
-        if (0 <= r.p && 0 < r.idx) { A_col_j = &A[int64_t(r.idx) * lda]; A_col_j[r.idx] = *A_col_j; D[r.idx] = D[0]; int32_t t = jpiv[0]; jpiv[0] = jpiv[r.idx]; jpiv[r.idx] = t; }
+        if (0 <= r.p && 0 < r.idx) { int32_t t = jpiv[0]; jpiv[0] = jpiv[r.idx]; jpiv[r.idx] = t; }
       }
     }
     grid.sync();
