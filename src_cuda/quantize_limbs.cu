@@ -75,8 +75,7 @@ __global__ void quantize_limbs_kernel(int32_t M, const matrix_t* __restrict__ A,
 
 template <class matrix_t>
 inline void quantize_limbs_dispatcher(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const matrix_t* A, int32_t lda, const int32_t* vexp, int8_t* B, int32_t ldb) {
-  constexpr int32_t block_threads = 512;
-  int64_t lda64 = int64_t(lda), ldb64 = int64_t(ldb), strideB = int64_t(N) * ldb64;
+  constexpr int32_t block_threads = 256; int64_t lda64 = int64_t(lda), ldb64 = int64_t(ldb), strideB = int64_t(N) * ldb64;
   switch (orderA) {
     case 1: quantize_limbs_kernel<1> <<< N, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
     case 2: quantize_limbs_kernel<2> <<< N, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;

@@ -125,8 +125,7 @@ __global__ void quantize_crt_kernel(int32_t M, const matrix_t* __restrict__ A, i
 
 template <class matrix_t, class sum_t>
 inline void quantize_crt_dispatcher(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const matrix_t* A, int32_t lda, uint32_t corr, const int32_t* vexp, int8_t* B, int32_t ldb, sum_t* vsum) {
-  constexpr int32_t block_threads = 512;
-  int64_t lda64 = int64_t(lda), ldb64 = int64_t(ldb), strideB = int64_t(N) * ldb64;
+  constexpr int32_t block_threads = 256; int64_t lda64 = int64_t(lda), ldb64 = int64_t(ldb), strideB = int64_t(N) * ldb64;
   lint95_t init = corr < uint32_t(63) ? lint95_t({ 1llu << corr, 0u }) : lint95_t({ 0llu, 1u << (corr - uint32_t(63)) }); 
 
   switch (orderA) {
