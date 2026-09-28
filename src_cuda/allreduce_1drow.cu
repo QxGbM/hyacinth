@@ -123,27 +123,27 @@ template <int32_t op> __global__ void limbs_accum_kernel(int64_t N, uint64_t* __
   }
 }
 
-template <int32_t op> inline void conv_reduction(cudaStream_t stream, int64_t N, uint64_t* A, int64_t lenA, uint64_t* E, int64_t lenE, ncclComm_t col_comm) {
+template <int32_t op> inline void conv_reduction(cudaStream_t stream, uint64_t N, uint64_t* A, uint64_t lenA, uint64_t* E, uint64_t lenE, ncclComm_t col_comm) {
   constexpr int32_t block_threads = 512;
-  int32_t grid = int32_t((N + int64_t(511)) >> 9);
-  limbs_convert_kernel<op> <<< grid, block_threads, 0, stream >>> (N, A, E);
+  uint32_t grid = uint32_t((N + uint64_t(511)) >> 9);
+  limbs_convert_kernel<op> <<< grid, block_threads, 0, stream >>> (int64_t(N), A, E);
   ncclGroupStart();
   ncclAllReduce(A, A, lenA, ncclUint64, ncclSum, col_comm, stream);
   ncclAllReduce(E, E, lenE, ncclUint64, ncclSum, col_comm, stream);
   ncclGroupEnd();
-  limbs_accum_kernel<op> <<< grid, block_threads, 0, stream >>> (N, A, E);
+  limbs_accum_kernel<op> <<< grid, block_threads, 0, stream >>> (int64_t(N), A, E);
 }
 
-extern "C" void hyacinAllReduce1Drow(hyacinHandle_t handle, int32_t Complex, int32_t orderA, int64_t N, uint64_t* A) {
-  if (Complex <= 0 || orderA <= 0 || N <= int64_t(0) || handle.col_comm == nullptr) { return; }
+extern "C" void hyacinAllReduce1Drow(hyacinHandle_t handle, int32_t Complex, int32_t orderA, uint64_t N, uint64_t* A) {
+  if (Complex <= 0 || orderA <= 0 || N == uint64_t(0) || handle.col_comm == nullptr) { return; }
   Timer::register_comm(handle.cudaStream, handle.timer);
   int32_t comm_size; ncclCommCount(handle.col_comm, &comm_size);
   if (comm_size == 1) { return; } else if (comm_size <= 0) { throw std::runtime_error("Invalid NCCL communicator at All-reduce"); }
 
   int32_t LimbCount = orderA + 1 + int32_t(orderA == 2 && 1048576 < comm_size) + int32_t(orderA == 3 && 32768 < comm_size) + int32_t(orderA == 3 && 33554432 < comm_size);
-  int64_t lenA = int64_t(Complex) * int64_t(orderA) * N, lenE = int64_t(Complex) * int64_t(LimbCount - orderA) * N;
+  uint64_t lenA = uint64_t(Complex) * uint64_t(orderA) * N, lenE = uint64_t(Complex) * uint64_t(LimbCount - orderA) * N;
   uint64_t* devE = nullptr;
-  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&devE, uint64_t(lenE) * uint64_t(sizeof(uint64_t)), handle.mempool, handle.cudaStream))
+  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&devE, lenE * uint64_t(sizeof(uint64_t)), handle.mempool, handle.cudaStream))
     throw std::runtime_error("Workspace allocation failed at All-reduce.");
 
   if (Complex == 1 && orderA == 1 && LimbCount == 2) { conv_reduction<0>(handle.cudaStream, N, A, lenA, devE, lenE, handle.col_comm); } else
@@ -161,8 +161,8 @@ extern "C" void hyacinAllReduce1Drow(hyacinHandle_t handle, int32_t Complex, int
   cudaFreeAsync(devE, handle.cudaStream);
 }
 
-extern "C" void hyacinAllReduceVExp(hyacinHandle_t handle, int64_t N, int32_t* vexp) {
-  if (N <= int64_t(0) || handle.col_comm == nullptr) { return; }
+extern "C" void hyacinAllReduceVExp(hyacinHandle_t handle, uint64_t N, int32_t* vexp) {
+  if (N == uint64_t(0) || handle.col_comm == nullptr) { return; }
   Timer::register_comm(handle.cudaStream, handle.timer);
   int32_t comm_size; ncclCommCount(handle.col_comm, &comm_size);
   if (comm_size == 1) { return; } else if (comm_size <= 0) { throw std::runtime_error("Invalid NCCL communicator at All-reduce"); }
@@ -170,6 +170,6 @@ extern "C" void hyacinAllReduceVExp(hyacinHandle_t handle, int64_t N, int32_t* v
 }
 
 #else
-extern "C" void hyacinAllReduce1Drow(hyacinHandle_t, int32_t, int32_t, int64_t, uint64_t*) {}
-extern "C" void hyacinAllReduceVExp(hyacinHandle_t, int64_t, int32_t*) {}
+extern "C" void hyacinAllReduce1Drow(hyacinHandle_t, int32_t, int32_t, uint64_t, uint64_t*) {}
+extern "C" void hyacinAllReduceVExp(hyacinHandle_t, uint64_t, int32_t*) {}
 #endif

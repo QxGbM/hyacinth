@@ -62,7 +62,8 @@ int32_t hyacinXquantizeScale(
   int32_t beta,
   int32_t* vexp, // device-pointer
   int32_t* cPanels, // host-pointer
-  int32_t* lPanels // host-pointer
+  int32_t* lPanels, // host-pointer
+  uint64_t* stride
 ); // returns u
 
 hyacinPrecision_t hyacinXGautoType(
@@ -177,13 +178,13 @@ void hyacinAllReduce1Drow(
   hyacinHandle_t handle,
   int32_t Complex,
   int32_t orderA,
-  int64_t N,
+  uint64_t N,
   uint64_t* A // device-pointer
 );
 
 extern "C" void hyacinAllReduceVExp(
   hyacinHandle_t handle,
-  int64_t N,
+  uint64_t N,
   int32_t* vexp // device-pointer
 );
 

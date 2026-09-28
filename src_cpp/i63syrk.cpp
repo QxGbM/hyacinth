@@ -16,10 +16,11 @@ const std::vector<int32_t> type_bytes({ sizeof(double), sizeof(float), sizeof(__
 const std::vector<int32_t> type_mantissa({ 52, 23, 10, 105, 95, 52, 23, 10, 105, 95 });
 const cublasGemmAlgo_t cublas_algo = CUBLAS_GEMM_DEFAULT;
 
-extern "C" int32_t hyacinXquantizeScale(hyacinHandle_t handle, double epi, int32_t u_corr, int32_t localM, int32_t globalM, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t beta, int32_t* vexp, int32_t* cPanels, int32_t* lPanels) {
+extern "C" int32_t hyacinXquantizeScale(hyacinHandle_t handle, double epi, int32_t u_corr, int32_t localM, int32_t globalM, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t beta, int32_t* vexp, int32_t* cPanels, int32_t* lPanels, uint64_t* stride) {
   if (N <= 0) { return -1; }
   double epi_nrm = std::min(1., std::max(std::abs(epi), std::ldexp(1., -type_mantissa[int32_t(Atype)])));
   int32_t u = std::min(u_practical_limit, u_corr + int32_t(std::ceil(-std::log2(epi_nrm))));
+  if (stride) { uint64_t N64 = uint64_t(N); *stride = (N64 * N64 + N64) >> 1; }
   if (cPanels != nullptr || lPanels != nullptr) {
     int32_t c = 1 + int32_t(Atype != real_type[int32_t(Atype)]);
     if (cPanels) { *cPanels = c; } if (lPanels) { *lPanels = ((c + 63 + u + u) + int32_t(std::ceil(std::log2(double(std::max(1, globalM)))))) / 63; }
