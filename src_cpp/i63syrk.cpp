@@ -29,7 +29,7 @@ extern "C" int32_t hyacinXquantizeScale(hyacinHandle_t handle, double epi, int32
   Timer::register_kernel(handle.cudaStream, handle.timer);
   switch(Atype) {
     case HYACIN_F64: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const double*)A, lda, u, beta, vexp); return u;
-    case HYACIN_F32: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const float2*)A, lda, u, beta, vexp); return u;
+    case HYACIN_F32: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const float*)A, lda, u, beta, vexp); return u;
     case HYACIN_F16: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const __half*)A, lda, u, beta, vexp); return u;
     case HYACIN_F64_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const cuDoubleComplex*)A, lda, u, beta, vexp); return u;
     case HYACIN_F32_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const cuComplex*)A, lda, u, beta, vexp); return u;
