@@ -113,4 +113,4 @@ namespace internal::int8 {
   void quantize_limbs(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const __half2* A, int32_t lda, const int32_t* vexp, int8_t* B, int32_t ldb)
   { quantize_limbs_dispatcher(stream, M, N, orderA, A, lda, vexp, B, ldb); }
 
-}
+};

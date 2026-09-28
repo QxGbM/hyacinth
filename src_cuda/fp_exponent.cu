@@ -125,4 +125,4 @@ namespace internal::int8 {
   void vector_range(cudaStream_t stream, int32_t M, int32_t N, const __half2* A, int32_t lda, int32_t* u, const int32_t* vexp, int32_t* vbuf)
   { vector_range_dispatcher<float>(stream, M, N, A, lda, u, vexp, vbuf); }
 
-}
+};

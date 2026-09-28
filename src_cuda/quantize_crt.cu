@@ -175,4 +175,4 @@ namespace internal::int8 {
   void quantize_crt(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const __half2* A, int32_t lda, uint32_t corr, const int32_t* vexp, int8_t* B, int32_t ldb, ulonglong4_32a* vsum)
   { quantize_crt_dispatcher(stream, M, N, orderA, A, lda, corr += uint32_t(corr ? -1 : 0), vexp, B, ldb, vsum); }
 
-}
+};

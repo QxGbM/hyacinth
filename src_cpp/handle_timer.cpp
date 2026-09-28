@@ -2,6 +2,8 @@
 #include <hyacin.h>
 #include <internal.hpp>
 #include <algorithm>
+#include <limits>
+#include <stdexcept>
 
 int32_t device_sms = 0, device_f64_capable = 0;
 const std::vector<int32_t> f64_capable_sm_list({ 800, 900, 1000 }); // sm80,sm90,sm100
@@ -21,6 +23,54 @@ int32_t internal::device_num_sms() {
   if (device_sms == 0) { device_params(); } return device_sms;
 }
 
+Batch::BatchArgs::BatchArgs(cudaStream_t stream, cudaMemPool_t mempool, char algo, int32_t u_ceil, int32_t K, int32_t N, int32_t Complex, int32_t elemBytes) : tensor(), batchMaxK((std::max(0, K) + 255) & (~255)) {
+  int32_t u_floor = Complex;
+  while (u_floor <= u_ceil) {
+    char algi = algo; int32_t ui = u_floor;
+    int32_t orderA = internal::int8::gram_algorithm(algi, batchMaxK, ui); u_floor = 1 + ui;
+    if (algi == 'L') { tensor.insert(std::make_pair(ui, std::make_tuple(orderA, 0, 0, algi))); }
+  }
+
+  int32_t orderA = internal::int8::gram_algorithm(algo, batchMaxK, u_ceil);
+  tensor.insert(std::make_pair(u_ceil, std::make_tuple(orderA, 0, 0, algo)));
+  int32_t order = 0; int32_t panelsLimb = Complex ? 3 : 1;
+  for (auto& [key, value] : tensor)
+  { std::get<1>(value) = order; order += (std::get<3>(value) == 'C') ? elemBytes : (panelsLimb * std::get<0>(value)); }
+
+  uint64_t bytes = uint64_t(N) * uint64_t(batchMaxK) * uint64_t(order);
+  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&data, bytes, mempool, stream))
+    throw std::runtime_error("Batch Workspace allocation failed");
+}
+
+std::tuple<int32_t, int32_t, int32_t, int8_t*, char> Batch::BatchArgs::processA(int32_t M, int32_t N, int32_t uc, char alg, char& op) {
+  if (uc < 0 || M <= 0) { op = 'S'; return std::make_tuple(uc, 0, 0, data, alg); } else {
+    auto iter = tensor.lower_bound(uc);
+    if (iter == tensor.end() || batchMaxK < M) { op = 'E'; return std::make_tuple(uc, 0, 0, data, alg); } else {
+      int32_t rows = std::get<2>(iter->second);
+      if (M <= batchMaxK - rows) { op = 'Z'; std::get<2>(iter->second) = rows + M; }
+        else { op = 'F'; std::get<2>(iter->second) = M; }
+      int64_t prefix_elem = int64_t(N) * int64_t(batchMaxK) * int64_t(std::get<1>(iter->second));
+      return std::make_tuple(iter->first, std::get<0>(iter->second), rows, &data[prefix_elem], std::get<3>(iter->second));
+    }
+  }
+}
+
+void Batch::BatchArgs::flush(int32_t N, std::vector<std::tuple<int32_t, int32_t, int32_t, int8_t*, char>>& list) {
+  int64_t stride = int64_t(N) * int64_t(batchMaxK);
+  for (auto& [key, value] : tensor) if (std::get<2>(value)) {
+    int64_t prefix_elem = stride * int64_t(std::get<1>(value));
+    list.emplace_back(key, std::get<0>(value), std::get<2>(value), &data[prefix_elem], std::get<3>(value)); std::get<2>(value) = 0;
+  }
+}
+
+void Batch::BatchArgs::free_data(cudaStream_t stream) {
+  if (data) { cudaFreeAsync(data, stream); }
+}
+
+extern "C" void hyacinXherkBatchDestroy(hyacinHandle_t handle, void* param) {
+  if (param) { reinterpret_cast<Batch::BatchArgs*>(param)->free_data(handle.cudaStream); delete reinterpret_cast<Batch::BatchArgs*>(param); }
+}
+
 enum class segment { none, kernel, comm };
 struct EventTimer {
   std::vector<cudaEvent_t> events;
@@ -37,7 +87,7 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle, int32_t create_timer) {
   cudaMemPoolProps props = cudaMemPoolProps(); cudaGetDevice(&props.location.id);
   props.allocType = cudaMemAllocationTypePinned; props.location.type = cudaMemLocationTypeDevice;
   cudaMemPoolCreate(&handle->mempool, &props);
-  uint64_t threshold = size_t(1) << 32;
+  uint64_t threshold = std::numeric_limits<uint64_t>::max();
   cudaMemPoolSetAttribute(handle->mempool, cudaMemPoolAttrReleaseThreshold, &threshold);
   cudaMallocHost(&handle->pinnedWorkspace, size_t(128));
 #ifndef NO_NCCL

@@ -11,7 +11,6 @@ find_package(CUDAToolkit REQUIRED)
 
 set(CPP_SOURCES
   src_cpp/allgatherv_1dcol.cpp
-  src_cpp/batch.cpp
   src_cpp/gram_id.cpp
   src_cpp/handle_timer.cpp
   src_cpp/i63syrk.cpp

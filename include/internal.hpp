@@ -108,16 +108,17 @@ namespace Batch {
 
   class BatchArgs {
   private:
-    std::map<int32_t, std::tuple<int32_t, int32_t, int32_t, char>> tensor;
+    std::map<int32_t, std::tuple<int32_t, int32_t, int32_t, char>> tensor; int8_t* data;
     // tuple is [Tensor Order, Tensor Panel Prefix, Tensor Rows, Algorithm 'L' or 'C']
 
   public:
     const int32_t batchMaxK;
-    BatchArgs(char algo, int32_t u_ceil, int32_t K, int32_t Complex, int32_t elemBytes, int32_t& order);
+    BatchArgs(cudaStream_t stream, cudaMemPool_t mempool, char algo, int32_t u_ceil, int32_t K, int32_t N, int32_t Complex, int32_t elemBytes);
 
     // op: 'E'=eager eval; 'Z'=lazy batch; 'F'=lazy+flush; 'S'=skip;
-    std::tuple<int32_t, int32_t, int64_t, int32_t, char> processA(int32_t M, int32_t N, int32_t uc, char alg, char& op);
-    void flush(int32_t N, std::vector<std::tuple<int32_t, int32_t, int64_t, int32_t, char>>& list);
+    std::tuple<int32_t, int32_t, int32_t, int8_t*, char> processA(int32_t M, int32_t N, int32_t uc, char alg, char& op);
+    void flush(int32_t N, std::vector<std::tuple<int32_t, int32_t, int32_t, int8_t*, char>>& list);
+    void free_data(cudaStream_t stream);
   };
 
 };

@@ -65,21 +65,6 @@ int32_t hyacinXquantizeScale(
   int32_t* lPanels // host-pointer
 ); // returns u
 
-void hyacinXherk(
-  hyacinHandle_t handle,
-  char alg,
-  int32_t M,
-  int32_t N,
-  hyacinPrecision_t Atype,
-  const void* A, // device-pointer
-  int32_t lda,
-  int32_t u_hint, // HYACIN_QUERY_U for query
-  const int32_t* vexp, // device-pointer
-  int32_t beta,
-  int32_t orderC,
-  uint64_t* C // device-pointer
-);
-
 hyacinPrecision_t hyacinXGautoType(
   int32_t g_corr,
   int32_t globalM,
@@ -99,22 +84,22 @@ void hyacinXdequantize(
   int32_t ldg
 );
 
-void hyacinXherkBatchCreate(
-  void** param, // host-pointer
+void* hyacinXherkBatchCreate(
+  hyacinHandle_t handle,
   char alg,
   double epi,
   int32_t u_corr,
   int32_t batchK,
   int32_t N,
-  hyacinPrecision_t Atype,
-  uint64_t* bytesBatch // host-pointer
+  hyacinPrecision_t Atype
 );
 
 void hyacinXherkBatchDestroy(
-  void* param // host-pointer
+  hyacinHandle_t handle,
+  void* batch // host-pointer
 );
 
-void hyacinXherkBatchProcessA(
+void hyacinXherkBatch(
   hyacinHandle_t handle,
   char alg,
   int32_t M,
@@ -127,8 +112,7 @@ void hyacinXherkBatchProcessA(
   int32_t* beta, // host-pointer
   int32_t orderC,
   uint64_t* C, // device-pointer
-  void* param, // host-pointer
-  int8_t* batch // device-pointer
+  void* batch // host-pointer
 );
 
 void hyacinXherkBatchFlush(
@@ -139,8 +123,7 @@ void hyacinXherkBatchFlush(
   int32_t beta,
   int32_t orderC,
   uint64_t* C, // device-pointer
-  void* param, // host-pointer
-  int8_t* batch // device-pointer
+  void* batch // host-pointer
 );
 
 int32_t hyacinXGevPcsvd(
