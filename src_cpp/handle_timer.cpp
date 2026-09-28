@@ -5,17 +5,17 @@
 #include <limits>
 #include <stdexcept>
 
-int32_t device_sms = 0, device_f64_capable = 0;
+int32_t device_sms = 0; bool device_f64_capable = false;
 const std::vector<int32_t> f64_capable_sm_list({ 800, 900, 1000 }); // sm80,sm90,sm100
 inline void device_params() {
   int32_t device, major, minor; cudaGetDevice(&device);
   cudaDeviceGetAttribute(&device_sms, cudaDevAttrMultiProcessorCount, device);
   cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, device);
   cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, device);
-  device_f64_capable = int32_t(f64_capable_sm_list.end() != std::find(f64_capable_sm_list.begin(), f64_capable_sm_list.end(), 100 * major + minor));
+  device_f64_capable = (f64_capable_sm_list.end() != std::find(f64_capable_sm_list.begin(), f64_capable_sm_list.end(), 100 * major + minor));
 }
 
-int32_t internal::device_is_f64_capable() {
+bool internal::device_is_f64_capable() {
   if (device_sms == 0) { device_params(); } return device_f64_capable;
 }
 
@@ -71,9 +71,9 @@ extern "C" void hyacinXherkBatchDestroy(hyacinHandle_t handle, void* param) {
   if (param) { reinterpret_cast<Batch::BatchArgs*>(param)->free_data(handle.cudaStream); delete reinterpret_cast<Batch::BatchArgs*>(param); }
 }
 
-enum class segment { none, kernel, comm };
+enum class segment { none, dist_kernel, rep_kernel, comm };
 struct EventTimer {
-  std::vector<cudaEvent_t> events;
+  std::vector<std::pair<segment, cudaEvent_t>> events;
   segment lastSegment = segment::none;
 };
 
@@ -114,45 +114,40 @@ extern "C" void hyacinDestroy(hyacinHandle_t handle) {
   if (handle.timer) { delete (EventTimer*)(handle.timer); }
 }
 
-void Timer::register_kernel(cudaStream_t stream, void* timer) {
-  if (timer)
-    if (((EventTimer*)timer)->lastSegment != segment::kernel) {
-      cudaEvent_t e; cudaEventCreate(&e); cudaEventRecord(e, stream);
-      ((EventTimer*)timer)->lastSegment = segment::kernel;
-      ((EventTimer*)timer)->events.emplace_back(e);
-    }
+template <segment seg> inline void register_event(cudaStream_t stream, EventTimer* timer) {
+  if (timer) if (timer->lastSegment != seg) {
+    cudaEvent_t e; cudaEventCreate(&e); cudaEventRecord(e, stream);
+    segment prev = timer->lastSegment; timer->events.emplace_back(prev, e); timer->lastSegment = seg;
+  }
 }
 
-void Timer::register_comm(cudaStream_t stream, void* timer) {
-  if (timer)
-    if (((EventTimer*)timer)->lastSegment != segment::comm) {
-      cudaEvent_t e; cudaEventCreate(&e); cudaEventRecord(e, stream);
-      ((EventTimer*)timer)->lastSegment = segment::comm;
-      ((EventTimer*)timer)->events.emplace_back(e);
-    }
-}
+void Timer::register_distribute_kernel(cudaStream_t stream, void* timer) { register_event<segment::dist_kernel>(stream, (EventTimer*)timer); }
+void Timer::register_replicate_kernel(cudaStream_t stream, void* timer) { register_event<segment::rep_kernel>(stream, (EventTimer*)timer); }
+void Timer::register_comm(cudaStream_t stream, void* timer) { register_event<segment::comm>(stream, (EventTimer*)timer); }
 
-extern "C" void hyacinSync_TimerSegments(hyacinHandle_t handle, double* kernelMs, double* commMs) {
-  if (handle.timer == nullptr) 
-  { cudaStreamSynchronize(handle.cudaStream); *kernelMs = *commMs = 0.; return; }
+extern "C" void hyacinSync_TimerSegments(hyacinHandle_t handle, double* eventMs, int32_t lenMs) {
+  if (handle.timer == nullptr || eventMs == nullptr || lenMs <= 0) 
+  { cudaStreamSynchronize(handle.cudaStream); return; }
 
-  double k_time = 0., c_time = 0.;
+  double d_time = 0., r_time = 0., c_time = 0.;
   int32_t len = int32_t(((EventTimer*)handle.timer)->events.size());
   cudaEvent_t e; cudaEventCreate(&e); cudaEventRecord(e, handle.cudaStream); cudaEventSynchronize(e);
-  ((EventTimer*)handle.timer)->events.emplace_back(e);
+  ((EventTimer*)handle.timer)->events.emplace_back(((EventTimer*)handle.timer)->lastSegment, e);
 
-  if (len) {
-    segment seg = ((EventTimer*)handle.timer)->lastSegment;
-    for (int32_t i = len - 1; 0 <= i; --i) {
-      float milliseconds = 0.f;
-      cudaEventElapsedTime(&milliseconds, ((EventTimer*)handle.timer)->events[i], ((EventTimer*)handle.timer)->events[i + 1]);
-      if (seg == segment::kernel) { k_time += double(milliseconds); seg = segment::comm; }
-        else if (seg == segment::comm) { c_time += double(milliseconds); seg = segment::kernel; }
-    }
+  if (len) for (auto [seg, event] : ((EventTimer*)handle.timer)->events) {
+    float milliseconds = 0.f;
+    if (seg == segment::dist_kernel) { cudaEventElapsedTime(&milliseconds, e, event); e = event; d_time += double(milliseconds); } else
+    if (seg == segment::rep_kernel) { cudaEventElapsedTime(&milliseconds, e, event); e = event; r_time += double(milliseconds); } else
+    if (seg == segment::comm) { cudaEventElapsedTime(&milliseconds, e, event); e = event; c_time += double(milliseconds); } else
+    { e = event; }
   }
 
-  for (cudaEvent_t e : ((EventTimer*)handle.timer)->events)
-    cudaEventDestroy(e);
+  for (auto [seg, event] : ((EventTimer*)handle.timer)->events) { cudaEventDestroy(event); }
   ((EventTimer*)handle.timer)->events.clear(); ((EventTimer*)handle.timer)->lastSegment = segment::none;
-  if (kernelMs) { *kernelMs += k_time; } if (commMs) { *commMs += c_time; }
+  for (int32_t i = 0; i < lenMs; ++i) {
+    char req = static_cast<char>(eventMs[i]);
+    if (req == 'D' || req == 'd') { eventMs[i] = d_time; } else
+    if (req == 'R' || req == 'r') { eventMs[i] = r_time; } else
+    if (req == 'C' || req == 'c') { eventMs[i] = c_time; }
+  }
 }

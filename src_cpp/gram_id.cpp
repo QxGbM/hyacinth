@@ -32,7 +32,7 @@ inline int32_t interp(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t
 
 extern "C" int32_t hyacinXGinterp(hyacinHandle_t handle, char fillmode, double epi, int32_t N, int32_t K, int32_t p, hyacinPrecision_t Atype, void* X, int32_t ldx, int32_t* jpiv, hyacinPrecision_t Gtype, void* G, int32_t ldg) {
   if (N <= 0 || K <= 0) { return 0; }
-  Timer::register_kernel(handle.cudaStream, handle.timer);
+  Timer::register_replicate_kernel(handle.cudaStream, handle.timer);
   int32_t *rank_ptr = (int32_t*)handle.pinnedWorkspace;
 
   switch (Gtype) {

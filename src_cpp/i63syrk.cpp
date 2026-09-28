@@ -16,28 +16,6 @@ const std::vector<int32_t> type_bytes({ sizeof(double), sizeof(float), sizeof(__
 const std::vector<int32_t> type_mantissa({ 52, 23, 10, 105, 95, 52, 23, 10, 105, 95 });
 const cublasGemmAlgo_t cublas_algo = CUBLAS_GEMM_DEFAULT;
 
-extern "C" int32_t hyacinXquantizeScale(hyacinHandle_t handle, double epi, int32_t u_corr, int32_t localM, int32_t globalM, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t beta, int32_t* vexp, int32_t* cPanels, int32_t* lPanels, uint64_t* stride) {
-  if (N <= 0) { return -1; }
-  double epi_nrm = std::min(1., std::max(std::abs(epi), std::ldexp(1., -type_mantissa[int32_t(Atype)])));
-  int32_t u = std::min(u_practical_limit, u_corr + int32_t(std::ceil(-std::log2(epi_nrm))));
-  if (stride) { uint64_t N64 = uint64_t(N); *stride = (N64 * N64 + N64) >> 1; }
-  if (cPanels != nullptr || lPanels != nullptr) {
-    int32_t c = 1 + int32_t(Atype != real_type[int32_t(Atype)]);
-    if (cPanels) { *cPanels = c; } if (lPanels) { *lPanels = ((c + 63 + u + u) + int32_t(std::ceil(std::log2(double(std::max(1, globalM)))))) / 63; }
-  }
-  
-  Timer::register_kernel(handle.cudaStream, handle.timer);
-  switch(Atype) {
-    case HYACIN_F64: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const double*)A, lda, u, beta, vexp); return u;
-    case HYACIN_F32: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const float*)A, lda, u, beta, vexp); return u;
-    case HYACIN_F16: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const __half*)A, lda, u, beta, vexp); return u;
-    case HYACIN_F64_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const cuDoubleComplex*)A, lda, u, beta, vexp); return u;
-    case HYACIN_F32_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const cuComplex*)A, lda, u, beta, vexp); return u;
-    case HYACIN_F16_COMPLEX: internal::int8::vector_exponents(handle.cudaStream, localM, N, (const __half2*)A, lda, u, beta, vexp); return u;
-    default: return u;
-  }
-}
-
 int32_t internal::int8::gram_algorithm(char& alg, int32_t M, int32_t& u) {
   u = std::max(0, u); int32_t bitsM = 2 + int32_t(std::ceil(std::log2(double(std::max(1, M))))), bits = bitsM + (u + u);
   if (bits < 0 || b_practical_limit < bits) { throw std::runtime_error("Int range exceeded all suitable Gram matrix algorithm"); } 
@@ -48,16 +26,27 @@ int32_t internal::int8::gram_algorithm(char& alg, int32_t M, int32_t& u) {
   if (use_limbs) { alg = 'L'; u = (u <= 7) ? 7 : ((orderA_limbs << 3) - 2); return orderA_limbs; } else { alg = 'C'; u = (U8CRT::range[orderA_crt - 1] - bitsM) / 2; return orderA_crt; }
 }
 
-extern "C" hyacinPrecision_t hyacinXGautoType(int32_t g_corr, int32_t globalM, hyacinPrecision_t Atype, int32_t u, int32_t* gElemBytes) {
+extern "C" void hyacinXGautoType(double epi, int32_t u_corr, int32_t g_corr, int32_t globalM, int32_t N, hyacinPrecision_t Atype, int32_t* uA, int32_t* cPanels, int32_t* lPanels, uint64_t* stride, hyacinPrecision_t* Gtype, int32_t* gElemBytes) {
+  if (stride) { uint64_t N64 = uint64_t(N); *stride = (N64 * N64 + N64) >> 1; }
+  if (uA == nullptr && cPanels == nullptr && lPanels == nullptr && Gtype == nullptr && gElemBytes == nullptr) { return; }
+
   hyacinPrecision_t AtypeReal = real_type[int32_t(Atype)];
-  int32_t bits = (g_corr + 1) + int32_t(std::ceil(0.25 * std::log2(double(std::max(1, globalM))))) + (u + u);
-  hyacinPrecision_t GtypeReal = 
-    (bits <= type_mantissa[int32_t(HYACIN_F32)] && (AtypeReal == HYACIN_F32 || AtypeReal == HYACIN_F16)) ? HYACIN_F32 : (
-    bits <= type_mantissa[int32_t(HYACIN_F64)] ? HYACIN_F64 : (
-    (bits <= type_mantissa[int32_t(HYACIN_QF)] && !internal::device_is_f64_capable()) ? HYACIN_QF : HYACIN_DD));
-  hyacinPrecision_t Gtype = (Atype == AtypeReal) ? GtypeReal : complex_type[int32_t(GtypeReal)];
-  if (gElemBytes) { *gElemBytes = type_bytes[Gtype]; }
-  return Gtype;
+  double epi_nrm = std::min(1., std::max(std::abs(epi), std::ldexp(1., -type_mantissa[int32_t(Atype)])));
+  int32_t u = std::min(u_practical_limit, u_corr + int32_t(std::ceil(-std::log2(epi_nrm))));
+  if (uA) { *uA = u; }
+  if (cPanels != nullptr || lPanels != nullptr) {
+    int32_t c = 1 + int32_t(Atype != AtypeReal);
+    if (cPanels) { *cPanels = c; } if (lPanels) { *lPanels = ((c + 63 + u + u) + int32_t(std::ceil(std::log2(double(std::max(1, globalM)))))) / 63; }
+  }
+  if (Gtype != nullptr || gElemBytes != nullptr) {
+    int32_t bits = (g_corr + 1) + int32_t(std::ceil(0.25 * std::log2(double(std::max(1, globalM))))) + (u + u);
+    hyacinPrecision_t GtypeReal = 
+      (bits <= type_mantissa[int32_t(HYACIN_F32)] && (AtypeReal == HYACIN_F32 || AtypeReal == HYACIN_F16)) ? HYACIN_F32 : (
+      bits <= type_mantissa[int32_t(HYACIN_F64)] ? HYACIN_F64 : (
+      (bits <= type_mantissa[int32_t(HYACIN_QF)] && !internal::device_is_f64_capable()) ? HYACIN_QF : HYACIN_DD));
+    hyacinPrecision_t g = (Atype == AtypeReal) ? GtypeReal : complex_type[int32_t(GtypeReal)];
+    if(Gtype) { *Gtype = g; } if (gElemBytes) { *gElemBytes = type_bytes[g]; }
+  }
 }
 
 inline void gemm_accum(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, int32_t sft, int32_t orderA, const int8_t* AT, const int8_t* A, int32_t lda, int32_t beta, int32_t orderC, uint64_t* C, int32_t* W) {
@@ -282,7 +271,7 @@ inline void herk_batch_dispatcher(cudaStream_t stream, cudaMemPool_t mempool, cu
   constexpr int32_t Complex = int32_t(std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>);
   int32_t uc = *uptr, orderA, row, ldw = batch->batchMaxK; int8_t* W; char op;
   if (uc == HYACIN_QUERY_U && 0 < M) {
-    int32_t* vbuf = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&vbuf, 2048, mempool, stream))
+    int32_t* vbuf = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&vbuf, uint64_t(2048), mempool, stream))
       throw std::runtime_error("Workspace (vbuf) allocation failed at Integer SY/HERK");
     internal::int8::vector_range(stream, M, N, A, lda, uptr, vexp, vbuf); cudaFreeAsync(vbuf, stream); uc = *uptr + Complex;
   } else { uc += Complex; }
@@ -311,7 +300,7 @@ inline void herk_batch_dispatcher(cudaStream_t stream, cudaMemPool_t mempool, cu
 
 extern "C" void hyacinXherkBatch(hyacinHandle_t handle, char alg, int32_t M, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t u_hint, const int32_t* vexp, int32_t* beta, int32_t orderC, uint64_t* C, void* batch) {
   if (M <= 0 || N <= 0 || orderC <= 0) { return; }
-  Timer::register_kernel(handle.cudaStream, handle.timer);
+  Timer::register_distribute_kernel(handle.cudaStream, handle.timer);
   int32_t* uptr = (int32_t*)handle.pinnedWorkspace; *uptr = u_hint;
   if (batch == nullptr) switch(Atype) {
     case HYACIN_F64: herk_dispatcher(handle.cudaStream, handle.mempool, handle.cublasHandle, alg, M, N, (const double*)A, lda, vexp, beta, orderC, C, uptr); return;
@@ -338,16 +327,16 @@ inline void herk_flush_dispatcher(cudaStream_t stream, cudaMemPool_t mempool, cu
   constexpr uint64_t elem = uint64_t(Complex ? sizeof(uint64_t) : sizeof(uint32_t)); 
   std::vector<std::tuple<int32_t, int32_t, int32_t, int8_t*, char>> list; int32_t lda = 0;
   if (batch != nullptr) { lda = batch->batchMaxK; batch->flush(N, list); }
-  if (0 < lda) for (const auto& [uc, orderA, M, A, alg] : list) {
+  if (0 < lda) for (auto [u, orderA, M, A, alg] : list) {
     if (alg == 'L') { i8herk_limbs<Complex>(stream, mempool, handle, M, N, orderA, A, lda, beta, orderC, C); beta = 1; } else
-    if (alg == 'C') { i8herk_crt(stream, mempool, handle, M, N, orderA, (const matrix_t*)A, lda, vexp, uint32_t(uc), beta, orderC, C); beta = 1; }
+    if (alg == 'C') { i8herk_crt(stream, mempool, handle, M, N, orderA, (const matrix_t*)A, lda, vexp, uint32_t(u), beta, orderC, C); beta = 1; }
   }
   if (beta == 0) { cudaMemsetAsync(C, 0, uint64_t(N) * uint64_t(N + 1) * uint64_t(orderC) * elem, stream); }
 }
 
 extern "C" void hyacinXherkBatchFlush(hyacinHandle_t handle, int32_t N, hyacinPrecision_t Atype, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C, void* batch) {
   if (N <= 0 || orderC <= 0) { return; }
-  Timer::register_kernel(handle.cudaStream, handle.timer);
+  Timer::register_distribute_kernel(handle.cudaStream, handle.timer);
   switch(Atype) {
     case HYACIN_F64: herk_flush_dispatcher<double>(handle.cudaStream, handle.mempool, handle.cublasHandle, N, vexp, beta, orderC, C, (Batch::BatchArgs*)batch); break;
     case HYACIN_F32: herk_flush_dispatcher<float>(handle.cudaStream, handle.mempool, handle.cublasHandle, N, vexp, beta, orderC, C, (Batch::BatchArgs*)batch); break;

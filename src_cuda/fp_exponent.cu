@@ -1,4 +1,5 @@
 
+#include <hyacin.h>
 #include <internal.hpp>
 #include <cub/cub.cuh>
 #include <cooperative_groups.h>
@@ -74,6 +75,20 @@ inline void vector_exponents_dispatcher(cudaStream_t stream, int32_t M, int32_t 
   if (beta == 0 && 0 < M) { vector_exponent_kernel<0, block_threads, reduc_t> <<< N, block_threads, 0, stream >>> (M, A, lda64, u, vexp); }
 }
 
+extern "C" void hyacinXquantizeScale(hyacinHandle_t handle, int32_t M, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t uA, int32_t beta, int32_t* vexp) {
+  if (N <= 0) { return; }
+  Timer::register_distribute_kernel(handle.cudaStream, handle.timer);
+  switch(Atype) {
+    case HYACIN_F64: vector_exponents_dispatcher<double>(handle.cudaStream, M, N, (const double*)A, lda, uA, beta, vexp); return;
+    case HYACIN_F32: vector_exponents_dispatcher<float>(handle.cudaStream, M, N, (const float*)A, lda, uA, beta, vexp); return;
+    case HYACIN_F16: vector_exponents_dispatcher<float>(handle.cudaStream, M, N, (const __half*)A, lda, uA, beta, vexp); return;
+    case HYACIN_F64_COMPLEX: vector_exponents_dispatcher<double>(handle.cudaStream, M, N, (const cuDoubleComplex*)A, lda, uA, beta, vexp); return;
+    case HYACIN_F32_COMPLEX: vector_exponents_dispatcher<float>(handle.cudaStream, M, N, (const cuComplex*)A, lda, uA, beta, vexp); return;
+    case HYACIN_F16_COMPLEX: vector_exponents_dispatcher<float>(handle.cudaStream, M, N, (const __half2*)A, lda, uA, beta, vexp); return;
+    default: return;
+  }
+}
+
 template<class reduc_t, class matrix_t>
 inline void vector_range_dispatcher(cudaStream_t stream, int32_t M, int32_t N, const matrix_t* A, int32_t lda, int32_t* u, const int32_t* vexp, int32_t* vbuf) {
   constexpr int32_t block_threads = 512, grid_blocks = 512;
@@ -88,24 +103,6 @@ inline void vector_range_dispatcher(cudaStream_t stream, int32_t M, int32_t N, c
 }
 
 namespace internal::int8 {
-
-  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int32_t u, int32_t beta, int32_t* vexp)
-  { vector_exponents_dispatcher<double>(stream, M, N, A, lda, u, beta, vexp); }
-
-  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, int32_t u, int32_t beta, int32_t* vexp)
-  { vector_exponents_dispatcher<float>(stream, M, N, A, lda, u, beta, vexp); }
-
-  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const __half* A, int32_t lda, int32_t u, int32_t beta, int32_t* vexp)
-  { vector_exponents_dispatcher<float>(stream, M, N, A, lda, u, beta, vexp); }
-
-  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const cuDoubleComplex* A, int32_t lda, int32_t u, int32_t beta, int32_t* vexp)
-  { vector_exponents_dispatcher<double>(stream, M, N, A, lda, u, beta, vexp); }
-
-  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const cuComplex* A, int32_t lda, int32_t u, int32_t beta, int32_t* vexp)
-  { vector_exponents_dispatcher<float>(stream, M, N, A, lda, u, beta, vexp); }
-
-  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const __half2* A, int32_t lda, int32_t u, int32_t beta, int32_t* vexp)
-  { vector_exponents_dispatcher<float>(stream, M, N, A, lda, u, beta, vexp); }
 
   void vector_range(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int32_t* u, const int32_t* vexp, int32_t* vbuf)
   { vector_range_dispatcher<double>(stream, M, N, A, lda, u, vexp, vbuf); }

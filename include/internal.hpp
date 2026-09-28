@@ -25,13 +25,6 @@ namespace internal::Cholesky {
 
 namespace internal::int8 {
 
-  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int32_t u, int32_t beta, int32_t* vexp);
-  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, int32_t u, int32_t beta, int32_t* vexp);
-  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const __half* A, int32_t lda, int32_t u, int32_t beta, int32_t* vexp);
-  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const cuDoubleComplex* A, int32_t lda, int32_t u, int32_t beta, int32_t* vexp);
-  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const cuComplex* A, int32_t lda, int32_t u, int32_t beta, int32_t* vexp);
-  void vector_exponents(cudaStream_t stream, int32_t M, int32_t N, const __half2* A, int32_t lda, int32_t u, int32_t beta, int32_t* vexp);
-
   void vector_range(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int32_t* u, const int32_t* vexp, int32_t* vbuf);
   void vector_range(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, int32_t* u, const int32_t* vexp, int32_t* vbuf);
   void vector_range(cudaStream_t stream, int32_t M, int32_t N, const __half* A, int32_t lda, int32_t* u, const int32_t* vexp, int32_t* vbuf);
@@ -99,7 +92,7 @@ namespace internal {
   void scatter_matcopy(cudaStream_t stream, cublasHandle_t handle, char mode, int32_t M, int32_t N, const int32_t* jpiv, const complex_double2* A, int32_t lda, __half2* B, int32_t ldb);
   void scatter_matcopy(cudaStream_t stream, cublasHandle_t handle, char mode, int32_t M, int32_t N, const int32_t* jpiv, const complex_float4* A, int32_t lda, __half2* B, int32_t ldb);
 
-  int32_t device_is_f64_capable();
+  bool device_is_f64_capable();
   int32_t device_num_sms();
 
 };
@@ -124,6 +117,7 @@ namespace Batch {
 };
 
 namespace Timer {
-  void register_kernel(cudaStream_t stream, void* timer);
-  void register_comm(cudaStream_t stream, void* timer);
+void register_distribute_kernel(cudaStream_t stream, void* timer);
+void register_replicate_kernel(cudaStream_t stream, void* timer);
+void register_comm(cudaStream_t stream, void* timer);
 };

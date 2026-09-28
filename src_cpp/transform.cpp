@@ -54,7 +54,7 @@ template <> inline void ax_transform<__half2>(cudaStream_t stream, cudaMemPool_t
 
 extern "C" void hyacinXtransform(hyacinHandle_t handle, int32_t M, int32_t N, int32_t K, hyacinPrecision_t Atype, const void* Ain, int32_t lda_in, void* Aout, int32_t lda_out, const void* X, int32_t ldx) {
   if ((M <= 0) || (K <= 0)) return;
-  Timer::register_kernel(handle.cudaStream, handle.timer);
+  Timer::register_distribute_kernel(handle.cudaStream, handle.timer);
   if (N <= 0) switch(Atype) {
     case HYACIN_F64: internal::scatter_matcopy(handle.cudaStream, handle.cublasHandle, 'A', M, K, nullptr, (const double*)X, ldx, (double*)Aout, lda_out); return;
     case HYACIN_F32: internal::scatter_matcopy(handle.cudaStream, handle.cublasHandle, 'A', M, K, nullptr, (const float*)X, ldx, (float*)Aout, lda_out); return;

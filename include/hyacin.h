@@ -49,30 +49,32 @@ void hyacinDestroy(
   hyacinHandle_t handle
 );
 
-int32_t hyacinXquantizeScale(
-  hyacinHandle_t handle,
+void hyacinXGautoType(
   double epi,
   int32_t u_corr,
-  int32_t localM,
+  int32_t g_corr,
   int32_t globalM,
+  int32_t N,
+  hyacinPrecision_t Atype,
+  int32_t* uA, // host-pointer
+  int32_t* cPanels, // host-pointer
+  int32_t* lPanels, // host-pointer
+  uint64_t* stride, // host-pointer
+  hyacinPrecision_t* Gtype, // host-pointer
+  int32_t* gElemBytes // host-pointer
+);
+
+void hyacinXquantizeScale(
+  hyacinHandle_t handle,
+  int32_t M,
   int32_t N,
   hyacinPrecision_t Atype,
   const void* A, // device-pointer
   int32_t lda,
+  int32_t uA,
   int32_t beta,
-  int32_t* vexp, // device-pointer
-  int32_t* cPanels, // host-pointer
-  int32_t* lPanels, // host-pointer
-  uint64_t* stride
-); // returns u
-
-hyacinPrecision_t hyacinXGautoType(
-  int32_t g_corr,
-  int32_t globalM,
-  hyacinPrecision_t Atype,
-  int32_t u,
-  int32_t* gElemBytes // host-pointer
-); // returns Gtype
+  int32_t* vexp // device-pointer
+);
 
 void hyacinXdequantize(
   hyacinHandle_t handle,
@@ -210,8 +212,8 @@ void hyacinCreate2D(
 
 void hyacinSync_TimerSegments(
   hyacinHandle_t handle,
-  double* kernelMs, // host-pointer
-  double* commMs // host-pointer
+  double* eventMs, // host-pointer
+  int32_t lenMs
 );
 
 #ifdef __cplusplus
