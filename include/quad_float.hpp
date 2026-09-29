@@ -114,23 +114,24 @@ namespace device::qf {
 #endif
   }
 
-  __host__ __device__ __forceinline__ void frsqrt(float4 a, float4& sq, float4& rsq) {
+  __host__ __device__ __forceinline__ float4 frsqrt(float4& sq) {
     int32_t p;
 #ifndef __CUDA_ARCH__
-    float r = 1. / std::sqrt(a.x);
+    float r = 1. / std::sqrt(sq.x);
     float4 x = make_float4(std::frexp(r, &p), 0.f, 0.f, 0.f);
 #else
-    float r = rsqrtf(a.x);
+    float r = rsqrtf(sq.x);
     float4 x = make_float4(frexpf(r, &p), 0.f, 0.f, 0.f);
 #endif
     float4 c = make_float4(1.5f, 0.f, 0.f, 0.f);
-    float4 s = fldexp(negate(a), (p << 1) - 1);
+    float4 s = fldexp(negate(sq), (p << 1) - 1);
 
     x = mul(x, add(mul(x, mul(s, x)), c));
     x = mul(x, add(mul(x, mul(s, x)), c));
     x = mul(x, add(mul(x, mul(s, x)), c));
-    rsq = (x = fldexp(x, p));
-    sq = mul(a, x);
+    x = fldexp(x, p);
+    sq = mul(sq, x);
+    return x;
   }
 
   __host__ __device__ __forceinline__ float4 conv_i64_qf_m126(uint64_t i) {
