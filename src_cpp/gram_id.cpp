@@ -40,7 +40,9 @@ extern "C" int32_t hyacinXGinterp(hyacinHandle_t handle, char fillmode, double e
     { return interp<double, double>(handle.cudaStream, handle.mempool, handle.cublasHandle, fillmode, epi, N, K, p, jpiv, (double*)X, ldx, (double*)G, ldg, rank_ptr); } else
     if (Atype == HYACIN_F32)
     { return interp<float, double>(handle.cudaStream, handle.mempool, handle.cublasHandle, fillmode, epi, N, K, p, jpiv, (float*)X, ldx, (double*)G, ldg, rank_ptr); } else { return 0; }
-    case HYACIN_F32: if (Atype == HYACIN_F32)
+    case HYACIN_F32: if (Atype == HYACIN_F64)
+    { return interp<float, float>(handle.cudaStream, handle.mempool, handle.cublasHandle, fillmode, epi, N, K, p, jpiv, (double*)X, ldx, (float*)G, ldg, rank_ptr); } else
+    if (Atype == HYACIN_F32)
     { return interp<float, float>(handle.cudaStream, handle.mempool, handle.cublasHandle, fillmode, epi, N, K, p, jpiv, (float*)X, ldx, (float*)G, ldg, rank_ptr); } else
     if (Atype == HYACIN_F16)
     { return interp<float, float>(handle.cudaStream, handle.mempool, handle.cublasHandle, fillmode, epi, N, K, p, jpiv, (__half*)X, ldx, (float*)G, ldg, rank_ptr); } else { return 0; }
@@ -52,7 +54,9 @@ extern "C" int32_t hyacinXGinterp(hyacinHandle_t handle, char fillmode, double e
     { return interp<cuDoubleComplex, double>(handle.cudaStream, handle.mempool, handle.cublasHandle, fillmode, epi, N, K, p, jpiv, (cuDoubleComplex*)X, ldx, (cuDoubleComplex*)G, ldg, rank_ptr); } else
     if (Atype == HYACIN_F32_COMPLEX)
     { return interp<cuComplex, double>(handle.cudaStream, handle.mempool, handle.cublasHandle, fillmode, epi, N, K, p, jpiv, (cuComplex*)X, ldx, (cuDoubleComplex*)G, ldg, rank_ptr); } else { return 0; }
-    case HYACIN_F32_COMPLEX: if (Atype == HYACIN_F32_COMPLEX)
+    case HYACIN_F32_COMPLEX: if (Atype == HYACIN_F64_COMPLEX)
+    { return interp<cuComplex, float>(handle.cudaStream, handle.mempool, handle.cublasHandle, fillmode, epi, N, K, p, jpiv, (cuDoubleComplex*)X, ldx, (cuComplex*)G, ldg, rank_ptr); } else
+    if (Atype == HYACIN_F32_COMPLEX)
     { return interp<cuComplex, float>(handle.cudaStream, handle.mempool, handle.cublasHandle, fillmode, epi, N, K, p, jpiv, (cuComplex*)X, ldx, (cuComplex*)G, ldg, rank_ptr); } else
     if (Atype == HYACIN_F16_COMPLEX)
     { return interp<cuComplex, float>(handle.cudaStream, handle.mempool, handle.cublasHandle, fillmode, epi, N, K, p, jpiv, (__half2*)X, ldx, (cuComplex*)G, ldg, rank_ptr); } else { return 0; }

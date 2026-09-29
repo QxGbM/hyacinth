@@ -41,8 +41,8 @@ extern "C" void hyacinXGautoType(double epi, int32_t u_corr, int32_t g_corr, int
   if (Gtype != nullptr || gElemBytes != nullptr) {
     int32_t bits = (g_corr + 1) + int32_t(std::ceil(0.25 * std::log2(double(std::max(1, globalM))))) + (u + u);
     hyacinPrecision_t GtypeReal = 
-      (bits <= type_mantissa[int32_t(HYACIN_F32)] && (AtypeReal == HYACIN_F32 || AtypeReal == HYACIN_F16)) ? HYACIN_F32 : (
-      bits <= type_mantissa[int32_t(HYACIN_F64)] ? HYACIN_F64 : (
+      (AtypeReal == HYACIN_F16 || bits <= type_mantissa[int32_t(HYACIN_F32)]) ? HYACIN_F32 : (
+      (AtypeReal == HYACIN_F32 || bits <= type_mantissa[int32_t(HYACIN_F64)]) ? HYACIN_F64 : (
       (bits <= type_mantissa[int32_t(HYACIN_QF)] && !internal::device_is_f64_capable()) ? HYACIN_QF : HYACIN_DD));
     hyacinPrecision_t g = (Atype == AtypeReal) ? GtypeReal : complex_type[int32_t(GtypeReal)];
     if(Gtype) { *Gtype = g; } if (gElemBytes) { *gElemBytes = type_bytes[g]; }

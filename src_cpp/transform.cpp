@@ -1,7 +1,6 @@
 
 #include <hyacin.h>
 #include <internal.hpp>
-#include <cuComplex.h>
 #include <stdexcept>
 
 inline void nn_gemm(cublasHandle_t handle, int32_t M, int32_t N, int32_t K, const double* A, int32_t lda, const double* B, int32_t ldb, double* C, int32_t ldc)

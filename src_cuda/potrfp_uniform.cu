@@ -2,8 +2,6 @@
 #include <internal.hpp>
 #include <double_double.hpp>
 #include <quad_float.hpp>
-
-#include <cuComplex.h>
 #include <cub/cub.cuh>
 #include <cooperative_groups.h>
 
