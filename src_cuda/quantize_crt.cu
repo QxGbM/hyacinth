@@ -97,7 +97,7 @@ __global__ void quantize_crt_kernel(int32_t M, const matrix_t* __restrict__ A, i
       matrix_t A_i = A[i];
       lint95_t A_rl = round_i95(init, A_i.x, expon); rl[threadIdx.x] = acc(rl[threadIdx.x], A_rl);
       lint95_t A_im = round_i95(init, A_i.y, expon); im[threadIdx.x] = acc(im[threadIdx.x], A_im);
-      quantize_i8<ORDER>(lint95_t({ A_rl.x + A_im.x, A_rl.y + A_im.y }), quantize_i8<ORDER>(A_im, quantize_i8<ORDER>(A_rl, &B[i], strideB), strideB), strideB);
+      quantize_i8<ORDER>(A_im, quantize_i8<ORDER>(A_rl, quantize_i8<ORDER>(lint95_t({ A_rl.x + A_im.x, A_rl.y + A_im.y }), &B[i], strideB), strideB), strideB);
     }
 
     __shared__ typename cub::BlockReduce<ulonglong2, BLOCK_THREADS>::TempStorage rl_reduce, im_reduce;

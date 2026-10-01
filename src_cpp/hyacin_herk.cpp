@@ -121,7 +121,7 @@ inline void i8herk_limbs(cudaStream_t stream, cudaMemPool_t mempool, cublasHandl
   constexpr int32_t bits = Complex ? 62 : 60;
   int32_t orderB = (bits + int32_t(std::ceil(std::log2(double(std::max(1, M))))) + (orderA << 4)) / 63, algnM = (M + 255) & (~255), algnN = (N + 63) & (~63);
   int64_t colsA = int64_t(N) * int64_t(orderA), strideA = int64_t(lda) * colsA, strideB = int64_t(N) * int64_t(N) * int64_t(orderB);
-  uint64_t b_len = uint64_t(strideB); if constexpr(Complex) { b_len += b_len; strideA += strideA; }
+  uint64_t b_len = uint64_t(strideB); if constexpr(Complex) { b_len += b_len; }
 
   int32_t* scratch = nullptr; uint64_t* B = nullptr;
   if (cudaSuccess != cudaMallocFromPoolAsync((void**)&scratch, uint64_t(algnN) * uint64_t(colsA) * sizeof(int32_t), mempool, stream))
@@ -135,8 +135,8 @@ inline void i8herk_limbs(cudaStream_t stream, cudaMemPool_t mempool, cublasHandl
   }
 
   if constexpr(Complex) {
-    gemm_accum_iters<'U'>(stream, handle, algnN, N, algnM, orderA, &A[strideA], lda, orderB, B, scratch);
-    gemm_accum_iters<'F'>(stream, handle, algnN, N, algnM, orderA, A, lda, orderB, &B[strideB], scratch);
+    gemm_accum_iters<'U'>(stream, handle, algnN, N, algnM, orderA, A, lda, orderB, B, scratch);
+    gemm_accum_iters<'F'>(stream, handle, algnN, N, algnM, orderA, &A[strideA], lda, orderB, &B[strideB], scratch);
   } else { gemm_accum_iters<'U'>(stream, handle, algnN, N, algnM, orderA, A, lda, orderB, B, scratch); }
   cudaFreeAsync(scratch, stream);
 
@@ -188,7 +188,7 @@ inline void i8herk_crt(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_
   int32_t orderB = (U8CRT::range[orderA - 1] + 63) / 63, algnM = (divM.quot + 255) & (~255), algnN = (N + 63) & (~63);
   int64_t colsA = int64_t(N) * int64_t(orderA), strideW = int64_t(algnM) * colsA, strideB = int64_t(N) * int64_t(N) * int64_t(orderB);
   uint64_t b_len = uint64_t(strideB), w_len = uint64_t(algnN - N) * uint64_t(algnM);
-  if constexpr(Complex) { b_len += b_len; w_len += uint64_t(3) * uint64_t(strideW); strideW += strideW; } else { w_len += uint64_t(strideW); }
+  if constexpr(Complex) { b_len += b_len; w_len += uint64_t(3) * uint64_t(strideW); } else { w_len += uint64_t(strideW); }
 
   int8_t* W = nullptr; int32_t* scratch = nullptr; uint64_t* B = nullptr; sum_t *vsum = nullptr;
   if (cudaSuccess != cudaMallocFromPoolAsync((void**)&W, w_len, mempool, stream))
@@ -209,8 +209,8 @@ inline void i8herk_crt(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_
     int32_t rows = divM.quot + int32_t(segM <= (divM.rem + i));
     internal::int8::quantize_crt(stream, rows, N, orderA, A, lda, corr, vexp, W, algnM, vsum); A = &A[rows];
     if constexpr(Complex) {
-      gemm_accum_crt(stream, handle, 'U', algnN, N, algnM, orderA, &W[strideW], orderB, B, scratch);
-      gemm_accum_crt(stream, handle, 'A', algnN, N, algnM, orderA, W, orderB, &B[strideB], scratch);
+      gemm_accum_crt(stream, handle, 'U', algnN, N, algnM, orderA, W, orderB, B, scratch);
+      gemm_accum_crt(stream, handle, 'A', algnN, N, algnM, orderA, &W[strideW], orderB, &B[strideB], scratch);
     } else { gemm_accum_crt(stream, handle, 'U', algnN, N, algnM, orderA, W, orderB, B, scratch); }
     internal::int8::triangle_pack(stream, rows, N, orderB, B, vsum, corr, beta || int32_t(0 < i), orderC, C);
   }

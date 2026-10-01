@@ -62,10 +62,8 @@ __global__ void quantize_limbs_kernel(int32_t M, const matrix_t* __restrict__ A,
     { if constexpr(Complex) { write_zeros<ORDER * 3>(&B[i], strideB); } else { write_zeros<ORDER>(&B[i], strideB); }}
   } else if constexpr(Complex) {
     for (int32_t i = int32_t(threadIdx.x); i < M; i += int32_t(blockDim.x)) {
-      matrix_t A_i = A[i]; lint95_t A_rl = round_i95(A_i.x, expon), A_im = round_i95(A_i.y, expon);
-      int8_t* B_i = quantize_i8<ORDER>(A_im, quantize_i8<ORDER>(A_rl, &B[i], strideB), strideB);
-      A_rl.x += A_im.x; A_rl.y += A_im.y + uint32_t(A_rl.x >> 63); A_rl.x &= i63;
-      quantize_i8<ORDER>(A_rl, B_i, strideB);
+      matrix_t A_i = A[i]; lint95_t A_rl = round_i95(A_i.x, expon), A_im = round_i95(A_i.y, expon); uint64_t lo = A_rl.x + A_im.x;
+      quantize_i8<ORDER>(A_im, quantize_i8<ORDER>(A_rl, quantize_i8<ORDER>(lint95_t({ lo & i63, A_rl.y + A_im.y + uint32_t(lo >> 63) }), &B[i], strideB), strideB), strideB);
     }
   } else {
     for (int32_t i = int32_t(threadIdx.x); i < M; i += int32_t(blockDim.x))
