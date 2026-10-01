@@ -113,7 +113,7 @@ template <char mode> inline void gemm_accum_iters(cudaStream_t stream, cublasHan
   if constexpr(mode == 'U') {
     for (int32_t i = 1; i < orderA; ++i) { gemm_accum(stream, handle, M, N, K, i << 3, i, &A[int64_t(i) * strideA], A, lda, int32_t(1 < i), orderC, C, W); }
     gemm_accum_diag(stream, handle, M, N, K, orderA, A, lda, int32_t(1 < orderA), orderC, C, W);
-  } else { for (int32_t i = 0; i < orderA; ++i) { gemm_accum(stream, handle, M, N, K, i << 3, orderA, &A[int64_t(i) * strideA], &A[int64_t(i + orderA) * strideA], lda, int32_t(0 < i), orderC, C, W); }}
+  } else { for (int32_t i = 0; i < orderA; ++i) { gemm_accum(stream, handle, M, N, K, i << 3, orderA, &A[int64_t(i) * strideA], &A[int64_t(orderA) * strideA], lda, int32_t(0 < i), orderC, C, W); }}
 }
 
 template <int32_t Complex>
