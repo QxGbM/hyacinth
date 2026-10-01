@@ -77,12 +77,7 @@ template <int32_t ORDER> __device__ __forceinline__ int8_t* quantize_i8(lint95_t
   return &A[strideA];
 }
 
-struct u64_add {
-  __device__ __forceinline__ ulonglong2 operator()(ulonglong2 a, ulonglong2 b)
-  { a.x += b.x; a.y += b.y + (a.x >> 63); a.x &= i63; return a; }
-  __device__ __forceinline__ ulonglong4_32a operator()(ulonglong4_32a a, ulonglong4_32a b)
-  { a.x += b.x; a.z += b.z; a.y += b.y + (a.x >> 63); a.w += b.w + (a.z >> 63); a.x &= i63; a.z &= i63; return a; }
-};
+struct u64_add { __device__ __forceinline__ ulonglong2 operator()(ulonglong2 a, ulonglong2 b) { a.x += b.x; a.y += b.y + (a.x >> 63); a.x &= i63; return a; }};
 
 template <int32_t ORDER, int32_t BLOCK_THREADS, class matrix_t, class sum_t>
 __global__ void quantize_crt_kernel(int32_t M, const matrix_t* __restrict__ A, int64_t lda, lint95_t init, const int32_t* __restrict__ vexp, int8_t* __restrict__ B, int64_t ldb, int64_t strideB, sum_t* __restrict__ vsum) {
@@ -105,9 +100,10 @@ __global__ void quantize_crt_kernel(int32_t M, const matrix_t* __restrict__ A, i
       quantize_i8<ORDER>(A_rl, quantize_i8<ORDER>(A_im, B_i, strideB), strideB);
     }
 
-    __shared__ typename cub::BlockReduce<ulonglong4_32a, BLOCK_THREADS>::TempStorage temp_reduce;
-    ulonglong4_32a threadA = cub::BlockReduce<ulonglong4_32a, BLOCK_THREADS>(temp_reduce).Reduce(make_ulonglong4_32a(rl[threadIdx.x].x, rl[threadIdx.x].y, im[threadIdx.x].x, im[threadIdx.x].y), acc);
-    if (int32_t(threadIdx.x) == 0) { *vsum = threadA; }
+    __shared__ typename cub::BlockReduce<ulonglong2, BLOCK_THREADS>::TempStorage rl_reduce, im_reduce;
+    ulonglong2 threadR = cub::BlockReduce<ulonglong2, BLOCK_THREADS>(rl_reduce).Reduce(rl[threadIdx.x], acc);
+    ulonglong2 threadI = cub::BlockReduce<ulonglong2, BLOCK_THREADS>(im_reduce).Reduce(im[threadIdx.x], acc);
+    if (int32_t(threadIdx.x) == 0) { *vsum = make_ulonglong4_32a(threadR.x, threadR.y, threadI.x, threadI.y); }
   } else {
     __shared__ ulonglong2 rl[BLOCK_THREADS]; u64_add acc;
     rl[threadIdx.x] = make_ulonglong2(0llu, 0llu);
