@@ -63,9 +63,9 @@ __global__ void quantize_limbs_kernel(int32_t M, const matrix_t* __restrict__ A,
   } else if constexpr(Complex) {
     for (int32_t i = int32_t(threadIdx.x); i < M; i += int32_t(blockDim.x)) {
       matrix_t A_i = A[i]; lint95_t A_rl = round_i95(A_i.x, expon), A_im = round_i95(A_i.y, expon);
-      int8_t* B_i = quantize_i8<ORDER>(A_rl, &B[i], strideB);
+      int8_t* B_i = quantize_i8<ORDER>(A_im, quantize_i8<ORDER>(A_rl, &B[i], strideB), strideB);
       A_rl.x += A_im.x; A_rl.y += A_im.y + uint32_t(A_rl.x >> 63); A_rl.x &= i63;
-      quantize_i8<ORDER>(A_rl, quantize_i8<ORDER>(A_im, B_i, strideB), strideB);
+      quantize_i8<ORDER>(A_rl, B_i, strideB);
     }
   } else {
     for (int32_t i = int32_t(threadIdx.x); i < M; i += int32_t(blockDim.x))
