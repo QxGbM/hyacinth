@@ -1,12 +1,14 @@
 
 #include <hyacin.h>
 #include <internal.hpp>
+#include <crt_constants.hpp>
 #include <algorithm>
 #include <limits>
 #include <stdexcept>
 
 int32_t device_sms = 0; bool device_f64_capable = false;
 const std::vector<int32_t> f64_capable_sm_list({ 800, 900, 1000 }); // sm80,sm90,sm100
+
 inline void device_params() {
   int32_t device, major, minor; cudaGetDevice(&device);
   cudaDeviceGetAttribute(&device_sms, cudaDevAttrMultiProcessorCount, device);
@@ -23,43 +25,63 @@ int32_t internal::device_num_sms() {
   if (device_sms == 0) { device_params(); } return device_sms;
 }
 
+std::pair<int32_t, int32_t> internal::gram_algorithm(char& alg, int32_t M, int32_t& u, int32_t Complex) {
+  constexpr int32_t CRT_MIN_SEGMENT_K = 8192; constexpr double SBATCH_PENALTY = 1.4;
+  u = std::max(0, u);
+  int32_t orderA_limbs = (u <= 7) ? 1 : int32_t(uint32_t(u + 9) >> 3);
+  if (alg != 'L' && alg != 'l' && 3 < orderA_limbs) {
+    int32_t nrm_M = std::min(std::max(1, M), CRT_MIN_SEGMENT_K), crt_bits = (u + u + 2) + int32_t(std::ceil(std::log2(double(nrm_M)))), orderA_crt, cost_crt;
+    int32_t cost_limbs = int32_t(SBATCH_PENALTY * double(orderA_limbs)) + int32_t(uint32_t(orderA_limbs * (orderA_limbs - 1)) >> 1) + (Complex ? orderA_limbs * orderA_limbs : 0);
+    if (crt_bits <= U8CRT::range[22]) {
+      orderA_crt = 1 + int32_t(std::distance(&U8CRT::range[0], std::lower_bound(&U8CRT::range[1], &U8CRT::range[23], crt_bits)));
+      cost_crt = int32_t(SBATCH_PENALTY * double(Complex ? (orderA_crt + orderA_crt) : orderA_crt));
+    } else { orderA_crt = cost_crt = std::numeric_limits<int32_t>::max(); }
+    if (alg == 'C' || alg == 'c' || cost_crt < cost_limbs)
+    { alg = 'C'; std::div_t divM = std::div(M, nrm_M << (U8CRT::range[orderA_crt - 1] - crt_bits)); return std::make_pair(orderA_crt, divM.quot + int32_t(0 < divM.rem)); }
+  }
+  alg = 'L'; u = (u <= 7) ? 7 : ((orderA_limbs << 3) - 2);
+  return std::make_pair(orderA_limbs, 1);
+}
+
 Batch::BatchArgs::BatchArgs(cudaStream_t stream, cudaMemPool_t mempool, char algo, int32_t u_ceil, int32_t K, int32_t N, int32_t Complex, int32_t elemBytes) : tensor(), batchMaxK((std::max(0, K) + 255) & (~255)) {
   int32_t u_floor = Complex;
   while (u_floor <= u_ceil) {
     char algi = algo; int32_t ui = u_floor;
-    int32_t orderA = internal::int8::gram_algorithm(algi, batchMaxK, ui); u_floor = 1 + ui;
-    if (algi == 'L') { tensor.insert(std::make_pair(ui, std::make_tuple(orderA, 0, 0, algi))); }
+    std::pair<int32_t, int32_t> orderA = internal::gram_algorithm(algi, batchMaxK, ui, Complex);
+    if (algi == 'L') { u_floor = 1 + ui; tensor.insert(std::make_pair(ui, std::make_tuple(orderA.first, orderA.second, 0, 0, algi))); }
+      else { u_floor = 1 + u_ceil; }
   }
 
-  int32_t orderA = internal::int8::gram_algorithm(algo, batchMaxK, u_ceil);
-  tensor.insert(std::make_pair(u_ceil, std::make_tuple(orderA, 0, 0, algo)));
+  std::pair<int32_t, int32_t> orderA = internal::gram_algorithm(algo, batchMaxK, u_ceil, Complex);
+  tensor.insert(std::make_pair(u_ceil, std::make_tuple(orderA.first, orderA.second, 0, 0, algo)));
   int32_t order = 0; int32_t panelsLimb = Complex ? 3 : 1;
   for (auto& [key, value] : tensor)
-  { std::get<1>(value) = order; order += (std::get<3>(value) == 'C') ? elemBytes : (panelsLimb * std::get<0>(value)); }
+  { std::get<Prefix>(value) = order; order += (std::get<Algorithm>(value) == 'C') ? elemBytes : (panelsLimb * std::get<Order>(value)); }
 
   uint64_t bytes = uint64_t(N) * uint64_t(batchMaxK) * uint64_t(order);
   if (cudaSuccess != cudaMallocFromPoolAsync((void**)&data, bytes, mempool, stream))
     throw std::runtime_error("Batch Workspace allocation failed");
 }
 
-std::tuple<int32_t, int32_t, int32_t, int8_t*, char> Batch::BatchArgs::processA(int32_t M, int32_t N, int32_t uc, char alg, char& op) {
-  if (uc < 0 || M <= 0) { op = 'S'; return std::make_tuple(uc, 0, 0, data, alg); } else {
+std::tuple<int32_t, int32_t, int32_t, int32_t, int8_t*, char> Batch::BatchArgs::processA(int32_t M, int32_t N, int32_t uc, char alg, char& op) {
+  if (uc < 0) { op = 'S'; return std::make_tuple(uc, 0, 0, 0, data, alg); } else {
     auto iter = tensor.lower_bound(uc);
-    if (iter == tensor.end() || batchMaxK < M) { op = 'E'; return std::make_tuple(uc, 0, 0, data, alg); } else {
-      int32_t rows = std::get<2>(iter->second);
-      if (M <= batchMaxK - rows) { op = 'Z'; std::get<2>(iter->second) = rows + M; }
-        else { op = 'F'; std::get<2>(iter->second) = M; }
-      int64_t prefix_elem = int64_t(N) * int64_t(batchMaxK) * int64_t(std::get<1>(iter->second));
-      return std::make_tuple(iter->first, std::get<0>(iter->second), rows, &data[prefix_elem], std::get<3>(iter->second));
+    if (iter == tensor.end() || batchMaxK < M) { op = 'E'; return std::make_tuple(uc, 0, 0, 0, data, alg); } else {
+      std::tuple<int32_t, int32_t, int32_t, int32_t, char>& value = iter->second; int32_t rows = std::get<Rows>(value);
+      if (M <= batchMaxK - rows) { op = 'Z'; std::get<Rows>(value) = rows + M; }
+        else { op = 'F'; std::get<Rows>(value) = M; }
+      int64_t prefix_elem = int64_t(N) * int64_t(batchMaxK) * int64_t(std::get<Prefix>(value));
+      return std::make_tuple(iter->first, std::get<Order>(value), std::get<SegK>(value), rows, &data[prefix_elem], std::get<Algorithm>(value));
     }
   }
 }
 
-void Batch::BatchArgs::flush(int32_t N, std::vector<std::tuple<int32_t, int32_t, int32_t, int8_t*, char>>& list) {
+void Batch::BatchArgs::flush(int32_t N, std::vector<std::tuple<int32_t, int32_t, int32_t, int32_t, int8_t*, char>>& list) {
   int64_t stride = int64_t(N) * int64_t(batchMaxK);
-  for (auto& [key, value] : tensor) if (std::get<2>(value)) {
-    int64_t prefix_elem = stride * int64_t(std::get<1>(value));
-    list.emplace_back(key, std::get<0>(value), std::get<2>(value), &data[prefix_elem], std::get<3>(value)); std::get<2>(value) = 0;
+  for (auto& [key, value] : tensor) if (std::get<Rows>(value)) {
+    int64_t prefix_elem = stride * int64_t(std::get<Prefix>(value));
+    int32_t rows = std::get<Rows>(value), seg = int32_t(std::ceil(double(std::get<SegK>(value)) * (double(rows) / double(batchMaxK))));
+    list.emplace_back(key, std::get<Order>(value), seg, rows, &data[prefix_elem], std::get<Algorithm>(value)); std::get<Rows>(value) = 0;
   }
 }
 
@@ -71,7 +93,7 @@ extern "C" void hyacinXherkBatchDestroy(hyacinHandle_t handle, void* param) {
   if (param) { reinterpret_cast<Batch::BatchArgs*>(param)->free_data(handle.cudaStream); delete reinterpret_cast<Batch::BatchArgs*>(param); }
 }
 
-enum class segment { none, dist_kernel, rep_kernel, comm };
+enum class segment : unsigned char { none, dist_kernel, rep_kernel, comm };
 struct EventTimer {
   std::vector<std::pair<segment, cudaEvent_t>> events;
   segment lastSegment = segment::none;

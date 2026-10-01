@@ -50,7 +50,6 @@ namespace internal::int8 {
   void accumulate_remainder_i32tensor(cudaStream_t stream, char mode, int32_t beta, int32_t N, int32_t orderX, const int32_t* X, int32_t ldx, int32_t orderA, uint64_t* A);
   void triangle_pack(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const uint64_t* A, const ulonglong2* vsum, uint32_t corr, int32_t beta, int32_t orderB, uint64_t* B);
   void triangle_pack(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const uint64_t* A, const ulonglong4_32a* vsum, uint32_t corr, int32_t beta, int32_t orderB, uint64_t* B);
-  int32_t gram_algorithm(char& alg, int32_t M, int32_t& u);
 
 };
 
@@ -94,6 +93,7 @@ namespace internal {
 
   bool device_is_f64_capable();
   int32_t device_num_sms();
+  std::pair<int32_t, int32_t> gram_algorithm(char& alg, int32_t M, int32_t& u, int32_t Complex);
 
 };
 
@@ -101,16 +101,17 @@ namespace Batch {
 
   class BatchArgs {
   private:
-    std::map<int32_t, std::tuple<int32_t, int32_t, int32_t, char>> tensor; int8_t* data;
-    // tuple is [Tensor Order, Tensor Panel Prefix, Tensor Rows, Algorithm 'L' or 'C']
+    static constexpr unsigned char Order = 0, SegK = 1, Prefix = 2, Rows = 3, Algorithm = 4;
+    std::map<int32_t, std::tuple<int32_t, int32_t, int32_t, int32_t, char>> tensor; int8_t* data;
+    // tuple is [Tensor Order, Tensor SegK, Tensor Panel Prefix, Tensor Rows, Algorithm 'L' or 'C']
 
   public:
     const int32_t batchMaxK;
     BatchArgs(cudaStream_t stream, cudaMemPool_t mempool, char algo, int32_t u_ceil, int32_t K, int32_t N, int32_t Complex, int32_t elemBytes);
 
     // op: 'E'=eager eval; 'Z'=lazy batch; 'F'=lazy+flush; 'S'=skip;
-    std::tuple<int32_t, int32_t, int32_t, int8_t*, char> processA(int32_t M, int32_t N, int32_t uc, char alg, char& op);
-    void flush(int32_t N, std::vector<std::tuple<int32_t, int32_t, int32_t, int8_t*, char>>& list);
+    std::tuple<int32_t, int32_t, int32_t, int32_t, int8_t*, char> processA(int32_t M, int32_t N, int32_t uc, char alg, char& op);
+    void flush(int32_t N, std::vector<std::tuple<int32_t, int32_t, int32_t, int32_t, int8_t*, char>>& list);
     void free_data(cudaStream_t stream);
   };
 

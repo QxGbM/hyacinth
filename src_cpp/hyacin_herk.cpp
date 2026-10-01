@@ -8,7 +8,6 @@
 #include <stdexcept>
 
 const int32_t u_practical_limit = 80; // u <= 80 to satisfy implementation assumptions
-const int32_t b_practical_limit = U8CRT::range[22]; // b <= 177 to satisfy implementation assumptions
 // mappings vector for datatypes
 const std::vector<hyacinPrecision_t> real_type({ HYACIN_F64, HYACIN_F32, HYACIN_F16, HYACIN_DD, HYACIN_QF, HYACIN_F64, HYACIN_F32, HYACIN_F16, HYACIN_DD, HYACIN_QF });
 const std::vector<hyacinPrecision_t> complex_type({ HYACIN_F64_COMPLEX, HYACIN_F32_COMPLEX, HYACIN_F16_COMPLEX, HYACIN_DD_COMPLEX, HYACIN_QF_COMPLEX, HYACIN_F64_COMPLEX, HYACIN_F32_COMPLEX, HYACIN_F16_COMPLEX, HYACIN_DD_COMPLEX, HYACIN_QF_COMPLEX });
@@ -16,30 +15,21 @@ const std::vector<int32_t> type_bytes({ sizeof(double), sizeof(float), sizeof(__
 const std::vector<int32_t> type_mantissa({ 52, 23, 10, 105, 95, 52, 23, 10, 105, 95 });
 const cublasGemmAlgo_t cublas_algo = CUBLAS_GEMM_DEFAULT;
 
-int32_t internal::int8::gram_algorithm(char& alg, int32_t M, int32_t& u) {
-  u = std::max(0, u); int32_t bitsM = 2 + int32_t(std::ceil(std::log2(double(std::max(1, M))))), bits = bitsM + (u + u);
-  if (bits < 0 || b_practical_limit < bits) { throw std::runtime_error("Int range exceeded all suitable Gram matrix algorithm"); } 
-  int32_t orderA_limbs = (u <= 7) ? 1 : int32_t(uint32_t(u + 9) >> 3);
-  int32_t orderA_crt = 1 + int32_t(std::distance(&U8CRT::range[0], std::lower_bound(&U8CRT::range[1], &U8CRT::range[23], bits)));
-  int32_t cost_limbs = int32_t(uint32_t(orderA_limbs * (orderA_limbs + 1)) >> 1), cost_crt = orderA_crt + int32_t(uint32_t(orderA_crt) >> 3);
-  bool use_limbs = (alg == 'L' || alg == 'l') || (alg != 'C' && alg != 'c' && (orderA_limbs <= 3 || cost_limbs <= cost_crt));
-  if (use_limbs) { alg = 'L'; u = (u <= 7) ? 7 : ((orderA_limbs << 3) - 2); return orderA_limbs; } else { alg = 'C'; u = (U8CRT::range[orderA_crt - 1] - bitsM) / 2; return orderA_crt; }
-}
-
-extern "C" void hyacinXGautoType(double epi, int32_t u_corr, int32_t g_corr, int32_t globalM, int32_t N, hyacinPrecision_t Atype, int32_t* uA, int32_t* cPanels, int32_t* lPanels, uint64_t* stride, hyacinPrecision_t* Gtype, int32_t* gElemBytes) {
+extern "C" void hyacinXGautoType(double epi, int32_t u_corr, int32_t g_corr, uint64_t M, int32_t N, hyacinPrecision_t Atype, int32_t* uA, int32_t* cPanels, int32_t* lPanels, uint64_t* stride, hyacinPrecision_t* Gtype, int32_t* gElemBytes) {
   if (stride) { uint64_t N64 = uint64_t(N); *stride = (N64 * N64 + N64) >> 1; }
   if (uA == nullptr && cPanels == nullptr && lPanels == nullptr && Gtype == nullptr && gElemBytes == nullptr) { return; }
 
   hyacinPrecision_t AtypeReal = real_type[int32_t(Atype)];
-  double epi_nrm = std::min(1., std::max(std::abs(epi), std::ldexp(1., -type_mantissa[int32_t(Atype)])));
-  int32_t u = std::min(u_practical_limit, u_corr + int32_t(std::ceil(-std::log2(epi_nrm))));
-  if (uA) { *uA = u; }
-  if (cPanels != nullptr || lPanels != nullptr) {
-    int32_t c = 1 + int32_t(Atype != AtypeReal);
-    if (cPanels) { *cPanels = c; } if (lPanels) { *lPanels = ((c + 63 + u + u) + int32_t(std::ceil(std::log2(double(std::max(1, globalM)))))) / 63; }
+  if (uint64_t(1) < M) { --M; M |= M >> 1; M |= M >> 2; M |= M >> 4; M |= M >> 8; M |= M >> 16; M |= M >> 32; ++M; } else { M = uint64_t(1); }
+  double epi_nrm = std::min(1., std::max(std::abs(epi), std::ldexp(1., -type_mantissa[int32_t(Atype)]))), bitsM = std::log2(double(M));
+  int32_t u = int32_t(std::ceil(-std::log2(epi_nrm)));
+  if (uA != nullptr || cPanels != nullptr || lPanels != nullptr) {
+    u_corr = std::max(-1, std::min(u_practical_limit, u_corr + u)); if (uA) { *uA = u_corr; }
+    int32_t c = 1 + int32_t(Atype != AtypeReal); if (cPanels) { *cPanels = c; }
+    if (lPanels) { *lPanels = (0 <= u_corr) ? (((c + 63 + u_corr + u_corr) + int32_t(std::ceil(bitsM))) / 63) : 0; if (4 <= *lPanels) { throw std::runtime_error("i64-limb (g.e. 4) not supported"); }}
   }
   if (Gtype != nullptr || gElemBytes != nullptr) {
-    int32_t bits = (g_corr + 1) + int32_t(std::ceil(0.25 * std::log2(double(std::max(1, globalM))))) + (u + u);
+    int32_t bits = (g_corr + 1) + int32_t(std::floor(0.25 * bitsM)) + (u + u);
     hyacinPrecision_t GtypeReal = 
       (AtypeReal == HYACIN_F16 || bits <= type_mantissa[int32_t(HYACIN_F32)]) ? HYACIN_F32 : (
       (AtypeReal == HYACIN_F32 || bits <= type_mantissa[int32_t(HYACIN_F64)]) ? HYACIN_F64 : (
@@ -50,14 +40,14 @@ extern "C" void hyacinXGautoType(double epi, int32_t u_corr, int32_t g_corr, int
 }
 
 inline void gemm_accum(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, int32_t sft, int32_t orderA, const int8_t* AT, const int8_t* A, int32_t lda, int32_t beta, int32_t orderC, uint64_t* C, int32_t* W) {
-  constexpr int32_t iter_k = 131072, iter_h = iter_k / 2;
-  int32_t zero = 0, one = 1;
+  constexpr int32_t iter_k = 130816, iter_h = 65536;
+  const int32_t zero = 0, one = 1;
   if (K <= iter_k) {
     cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N * orderA, K, &one, AT, CUDA_R_8I, lda, A, CUDA_R_8I, lda,
       &zero, W, CUDA_R_32I, M, CUBLAS_COMPUTE_32I, cublas_algo);
     internal::int8::accumulate_i32tensor(stream, 'A', beta, N, sft, orderA, W, M, orderC, C);
   } else {
-    int32_t rem = K & (iter_k - 1); rem = rem < iter_h ? (rem + iter_k) : rem;
+    int32_t rem = K % iter_k; rem = rem < iter_h ? (rem + iter_k) : rem;
     int32_t range_k = K - rem;
 
     for (int32_t k = 0; k < range_k; k += iter_k) {
@@ -84,15 +74,15 @@ inline void gemm_accum(cudaStream_t stream, cublasHandle_t handle, int32_t M, in
 }
 
 inline void gemm_accum_diag(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, int32_t orderA, const int8_t* A, int32_t lda, int32_t beta, int32_t orderC, uint64_t* C, int32_t* W) {
-  constexpr int32_t iter_k = 131072, iter_h = iter_k / 2;
-  int32_t one = 1, zero = 0;
+  constexpr int32_t iter_k = 130816, iter_h = 65536;
+  const int32_t one = 1, zero = 0;
   int64_t strideA = int64_t(N) * int64_t(lda), strideC = int64_t(M) * int64_t(N);
   if (K <= iter_k) {
     cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, K, &one, A, CUDA_R_8I, lda, strideA, A, CUDA_R_8I, lda, strideA,
       &zero, W, CUDA_R_32I, M, strideC, orderA, CUBLAS_COMPUTE_32I, cublas_algo);
     internal::int8::accumulate_i32tensor(stream, 'T', beta, N, 0, orderA, W, M, orderC, C);
   } else {
-    int32_t rem = K & (iter_k - 1); rem = rem < iter_h ? (rem + iter_k) : rem;
+    int32_t rem = K % iter_k; rem = rem < iter_h ? (rem + iter_k) : rem;
     int32_t range_k = K - rem;
 
     for (int32_t k = 0; k < range_k; k += iter_k) {
@@ -118,17 +108,12 @@ inline void gemm_accum_diag(cudaStream_t stream, cublasHandle_t handle, int32_t 
   }
 }
 
-inline void i8GemmF(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, int32_t orderA, const int8_t* AT, const int8_t* A, int32_t lda, int32_t orderC, uint64_t* C, int32_t* W) {
+template <char mode> inline void gemm_accum_iters(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, int32_t orderA, const int8_t* A, int32_t lda, int32_t orderC, uint64_t* C, int32_t* W) {
   int64_t strideA = int64_t(N) * int64_t(lda);
-  for (int32_t i = 0; i < orderA; ++i)
-    gemm_accum(stream, handle, M, N, K, i << 3, orderA, &AT[int64_t(i) * strideA], A, lda, int32_t(0 < i), orderC, C, W);
-}
-
-inline void i8GemmU(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, int32_t orderA, const int8_t* A, int32_t lda, int32_t orderC, uint64_t* C, int32_t* W) {
-  int64_t strideA = int64_t(N) * int64_t(lda);
-  for (int32_t i = 1; i < orderA; ++i)
-    gemm_accum(stream, handle, M, N, K, i << 3, i, &A[int64_t(i) * strideA], A, lda, int32_t(1 < i), orderC, C, W);
-  gemm_accum_diag(stream, handle, M, N, K, orderA, A, lda, int32_t(1 < orderA), orderC, C, W);
+  if constexpr(mode == 'U') {
+    for (int32_t i = 1; i < orderA; ++i) { gemm_accum(stream, handle, M, N, K, i << 3, i, &A[int64_t(i) * strideA], A, lda, int32_t(1 < i), orderC, C, W); }
+    gemm_accum_diag(stream, handle, M, N, K, orderA, A, lda, int32_t(1 < orderA), orderC, C, W);
+  } else { for (int32_t i = 0; i < orderA; ++i) { gemm_accum(stream, handle, M, N, K, i << 3, orderA, &A[int64_t(i) * strideA], &A[int64_t(i + orderA) * strideA], lda, int32_t(0 < i), orderC, C, W); }}
 }
 
 template <int32_t Complex>
@@ -136,7 +121,7 @@ inline void i8herk_limbs(cudaStream_t stream, cudaMemPool_t mempool, cublasHandl
   constexpr int32_t bits = Complex ? 62 : 60;
   int32_t orderB = (bits + int32_t(std::ceil(std::log2(double(std::max(1, M))))) + (orderA << 4)) / 63, algnM = (M + 255) & (~255), algnN = (N + 63) & (~63);
   int64_t colsA = int64_t(N) * int64_t(orderA), strideA = int64_t(lda) * colsA, strideB = int64_t(N) * int64_t(N) * int64_t(orderB);
-  uint64_t b_len = uint64_t(strideB); if constexpr(Complex) { b_len += b_len; }
+  uint64_t b_len = uint64_t(strideB); if constexpr(Complex) { b_len += b_len; strideA += strideA; }
 
   int32_t* scratch = nullptr; uint64_t* B = nullptr;
   if (cudaSuccess != cudaMallocFromPoolAsync((void**)&scratch, uint64_t(algnN) * uint64_t(colsA) * sizeof(int32_t), mempool, stream))
@@ -144,15 +129,15 @@ inline void i8herk_limbs(cudaStream_t stream, cudaMemPool_t mempool, cublasHandl
   if (cudaSuccess != cudaMallocFromPoolAsync((void**)&B, b_len * sizeof(uint64_t), mempool, stream))
     throw std::runtime_error("Workspace (u64) allocation failed at Integer SY/HERK.");
 
-  if constexpr(Complex) {
-    if (M < algnM) { cudaMemset2DAsync(&A[M], uint64_t(lda), 0, uint64_t(algnM - M), uint64_t(colsA) * uint64_t(3), stream); }
-    int64_t strideA2 = strideA + strideA;
-    i8GemmU(stream, handle, algnN, N, algnM, orderA, &A[strideA2], lda, orderB, B, scratch);
-    i8GemmF(stream, handle, algnN, N, algnM, orderA, A, &A[strideA], lda, orderB, &B[strideB], scratch);
-  } else {
-    if (M < algnM) { cudaMemset2DAsync(&A[M], uint64_t(lda), 0, uint64_t(algnM - M), uint64_t(colsA), stream); }
-    i8GemmU(stream, handle, algnN, N, algnM, orderA, A, lda, orderB, B, scratch);
+  if (M < algnM) {
+    uint64_t cols = uint64_t(colsA); if constexpr(Complex) { cols *= uint64_t(3); }
+    cudaMemset2DAsync(&A[M], uint64_t(lda), 0, uint64_t(algnM - M), cols, stream);
   }
+
+  if constexpr(Complex) {
+    gemm_accum_iters<'U'>(stream, handle, algnN, N, algnM, orderA, &A[strideA], lda, orderB, B, scratch);
+    gemm_accum_iters<'F'>(stream, handle, algnN, N, algnM, orderA, A, lda, orderB, &B[strideB], scratch);
+  } else { gemm_accum_iters<'U'>(stream, handle, algnN, N, algnM, orderA, A, lda, orderB, B, scratch); }
   cudaFreeAsync(scratch, stream);
 
   if constexpr(Complex) { internal::int8::triangle_pack(stream, 0, N, orderB, B, (const ulonglong4_32a*)nullptr, uint32_t(0), beta, orderC, C); }
@@ -160,16 +145,17 @@ inline void i8herk_limbs(cudaStream_t stream, cudaMemPool_t mempool, cublasHandl
   cudaFreeAsync(B, stream);
 }
 
-inline void gemm_accum_crt(cudaStream_t stream, cublasHandle_t handle, char mode, int32_t M, int32_t N, int32_t K, int32_t orderA, const int8_t* AT, const int8_t* A, int32_t orderC, uint64_t* C, int32_t* W) {
-  constexpr int32_t iter_k = 131072, iter_h = iter_k / 2;
-  int32_t zero = 0, one = 1;
+inline void gemm_accum_crt(cudaStream_t stream, cublasHandle_t handle, char mode, int32_t M, int32_t N, int32_t K, int32_t orderA, const int8_t* AT, int32_t orderC, uint64_t* C, int32_t* W) {
+  constexpr int32_t iter_k = 130816, iter_h = 65536;
+  const int32_t zero = 0, one = 1;
   int64_t strideA = int64_t(N) * int64_t(K), strideC = int64_t(M) * int64_t(N);
+  const int8_t* A = (mode == 'U') ? AT : &AT[strideA * int64_t(orderA)];
   if (K <= iter_k) {
     cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, K, &one, AT, CUDA_R_8I, K, strideA, A, CUDA_R_8I, K, strideA,
       &zero, W, CUDA_R_32I, M, strideC, orderA, CUBLAS_COMPUTE_32I, cublas_algo);
     internal::int8::accumulate_remainder_i32tensor(stream, mode, 0, N, orderA, W, M, orderC, C);
   } else {
-    int32_t rem = K & (iter_k - 1); rem = rem < iter_h ? (rem + iter_k) : rem;
+    int32_t rem = K % iter_k; rem = rem < iter_h ? (rem + iter_k) : rem;
     int32_t range_k = K - rem;
 
     for (int32_t k = 0; k < range_k; k += iter_k) {
@@ -196,13 +182,13 @@ inline void gemm_accum_crt(cudaStream_t stream, cublasHandle_t handle, char mode
 }
 
 template <class matrix_t>
-inline void i8herk_crt(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, const matrix_t* A, int32_t lda, const int32_t* vexp, uint32_t corr, int32_t beta, int32_t orderC, uint64_t* C) {
+inline void i8herk_crt(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, int32_t segM, const matrix_t* A, int32_t lda, const int32_t* vexp, uint32_t corr, int32_t beta, int32_t orderC, uint64_t* C) {
   constexpr int32_t Complex = int32_t(std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>);
-  using sum_t = std::conditional_t<Complex, ulonglong4_32a, ulonglong2>;
-  int32_t orderB = (U8CRT::range[orderA - 1] + 63) / 63, algnM = (M + 255) & (~255), algnN = (N + 63) & (~63);
+  using sum_t = std::conditional_t<Complex, ulonglong4_32a, ulonglong2>; std::div_t divM = std::div(M, segM);
+  int32_t orderB = (U8CRT::range[orderA - 1] + 63) / 63, algnM = (divM.quot + 255) & (~255), algnN = (N + 63) & (~63);
   int64_t colsA = int64_t(N) * int64_t(orderA), strideW = int64_t(algnM) * colsA, strideB = int64_t(N) * int64_t(N) * int64_t(orderB);
   uint64_t b_len = uint64_t(strideB), w_len = uint64_t(algnN - N) * uint64_t(algnM);
-  if constexpr(Complex) { b_len += b_len; w_len += uint64_t(3) * uint64_t(strideW); } else { w_len += uint64_t(strideW); }
+  if constexpr(Complex) { b_len += b_len; w_len += uint64_t(3) * uint64_t(strideW); strideW += strideW; } else { w_len += uint64_t(strideW); }
 
   int8_t* W = nullptr; int32_t* scratch = nullptr; uint64_t* B = nullptr; sum_t *vsum = nullptr;
   if (cudaSuccess != cudaMallocFromPoolAsync((void**)&W, w_len, mempool, stream))
@@ -214,20 +200,21 @@ inline void i8herk_crt(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_
    if (cudaSuccess != cudaMallocFromPoolAsync((void**)&vsum, uint64_t(N) * sizeof(sum_t), mempool, stream))
     throw std::runtime_error("Workspace (vsum) allocation failed at Integer SY/HERK.");
 
-  internal::int8::quantize_crt(stream, M, N, orderA, A, lda, corr, vexp, W, algnM, vsum);
-  if constexpr(Complex) {
-    if (M < algnM) { cudaMemset2DAsync(&W[M], uint64_t(algnM), 0, uint64_t(algnM - M), uint64_t(colsA) * uint64_t(3), stream); }
-    int64_t strideW2 = strideW + strideW;
-    gemm_accum_crt(stream, handle, 'U', algnN, N, algnM, orderA, &W[strideW2], &W[strideW2], orderB, B, scratch);
-    gemm_accum_crt(stream, handle, 'A', algnN, N, algnM, orderA, W, &W[strideW], orderB, &B[strideB], scratch);
-  } else {
-    if (M < algnM) { cudaMemset2DAsync(&W[M], uint64_t(algnM), 0, uint64_t(algnM - M), uint64_t(colsA), stream); }
-    gemm_accum_crt(stream, handle, 'U', algnN, N, algnM, orderA, W, W, orderB, B, scratch);
+  if (divM.quot < algnM) {
+    uint64_t cols = uint64_t(colsA); if constexpr(Complex) { cols *= uint64_t(3); }
+    cudaMemset2DAsync(&W[divM.quot], uint64_t(algnM), 0, uint64_t(algnM - divM.quot), cols, stream);
   }
-  cudaFreeAsync(W, stream); cudaFreeAsync(scratch, stream);
 
-  internal::int8::triangle_pack(stream, M, N, orderB, B, vsum, corr, beta, orderC, C);
-  cudaFreeAsync(B, stream); cudaFreeAsync(vsum, stream);
+  for (int32_t i = 0; i < segM; ++i) {
+    int32_t rows = divM.quot + int32_t(segM <= (divM.rem + i));
+    internal::int8::quantize_crt(stream, rows, N, orderA, A, lda, corr, vexp, W, algnM, vsum); A = &A[rows];
+    if constexpr(Complex) {
+      gemm_accum_crt(stream, handle, 'U', algnN, N, algnM, orderA, &W[strideW], orderB, B, scratch);
+      gemm_accum_crt(stream, handle, 'A', algnN, N, algnM, orderA, W, orderB, &B[strideB], scratch);
+    } else { gemm_accum_crt(stream, handle, 'U', algnN, N, algnM, orderA, W, orderB, B, scratch); }
+    internal::int8::triangle_pack(stream, rows, N, orderB, B, vsum, corr, beta || int32_t(0 < i), orderC, C);
+  }
+  cudaFreeAsync(W, stream); cudaFreeAsync(scratch, stream); cudaFreeAsync(B, stream); cudaFreeAsync(vsum, stream);
 }
 
 template <class matrix_t>
@@ -242,7 +229,7 @@ inline void herk_dispatcher(cudaStream_t stream, cudaMemPool_t mempool, cublasHa
   }
   if ((u < 0 || M <= 0) && i == 0) { cudaMemsetAsync(C, 0, uint64_t(N) * uint64_t(N + 1) * uint64_t(orderC) * elem, stream); return; }
 
-  int32_t uc = u + Complex, orderA = internal::int8::gram_algorithm(alg, M, uc);
+  int32_t uc = u + Complex, orderA, segM; std::tie(orderA, segM) = internal::gram_algorithm(alg, M, uc, Complex);
   if (alg == 'L') {
     int32_t algnM = (M + 255) & (~255), algnN = (N + 63) & (~63);
     uint64_t strideA = uint64_t(algnM) * uint64_t(N) * uint64_t(orderA), a_len = uint64_t(algnM) * uint64_t(algnN - N);
@@ -255,7 +242,7 @@ inline void herk_dispatcher(cudaStream_t stream, cudaMemPool_t mempool, cublasHa
     internal::int8::quantize_limbs(stream, M, N, orderA, A, lda, vexp, W, algnM);
     i8herk_limbs<Complex>(stream, mempool, handle, M, N, orderA, W, algnM, i, orderC, C);
     cudaFreeAsync(W, stream);
-  } else { i8herk_crt(stream, mempool, handle, M, N, orderA, A, lda, vexp, uint32_t(uc), i, orderC, C); }
+  } else { i8herk_crt(stream, mempool, handle, M, N, orderA, segM, A, lda, vexp, uint32_t(uc), i, orderC, C); }
 }
 
 extern "C" void* hyacinXherkBatchCreate(hyacinHandle_t handle, char alg, double epi, int32_t u_corr, int32_t batchK, int32_t N, hyacinPrecision_t Atype) {
@@ -269,13 +256,13 @@ extern "C" void* hyacinXherkBatchCreate(hyacinHandle_t handle, char alg, double 
 template <class matrix_t>
 inline void herk_batch_dispatcher(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t handle, char alg, int32_t M, int32_t N, const matrix_t* A, int32_t lda, const int32_t* vexp, int32_t* beta, int32_t orderC, uint64_t* C, int32_t* uptr, Batch::BatchArgs* batch) {
   constexpr int32_t Complex = int32_t(std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>);
-  int32_t uc = *uptr, orderA, row, ldw = batch->batchMaxK; int8_t* W; char op;
+  int32_t uc = *uptr, orderA, seg, row, ldw = batch->batchMaxK; int8_t* W; char op;
   if (uc == HYACIN_QUERY_U && 0 < M) {
     int32_t* vbuf = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&vbuf, uint64_t(2048), mempool, stream))
       throw std::runtime_error("Workspace (vbuf) allocation failed at Integer SY/HERK");
     internal::int8::vector_range(stream, M, N, A, lda, uptr, vexp, vbuf); cudaFreeAsync(vbuf, stream); uc = *uptr + Complex;
   } else { uc += Complex; }
-  std::tie(uc, orderA, row, W, alg) = batch->processA(M, N, uc, alg, op);
+  std::tie(uc, orderA, seg, row, W, alg) = batch->processA(M, N, uc, alg, op);
 
   switch(op) {
     case 'E': {
@@ -290,7 +277,7 @@ inline void herk_batch_dispatcher(cudaStream_t stream, cudaMemPool_t mempool, cu
         i8herk_limbs<Complex>(stream, mempool, handle, row, N, orderA, W, ldw, i, orderC, C);
         internal::int8::quantize_limbs(stream, M, N, orderA, A, lda, vexp, W, ldw);
       } else if (alg == 'C') {
-        i8herk_crt(stream, mempool, handle, row, N, orderA, (const matrix_t*)W, ldw, vexp, uint32_t(uc), i, orderC, C);
+        i8herk_crt(stream, mempool, handle, row, N, orderA, seg, (const matrix_t*)W, ldw, vexp, uint32_t(uc), i, orderC, C);
         internal::scatter_matcopy(stream, handle, 'A', M, N, nullptr, A, lda, (matrix_t*)W, ldw);
       }
     } break;
@@ -325,11 +312,11 @@ template <class matrix_t>
 inline void herk_flush_dispatcher(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t handle, int32_t N, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C, Batch::BatchArgs* batch) {
   constexpr int32_t Complex = int32_t(std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>);
   constexpr uint64_t elem = uint64_t(Complex ? sizeof(uint64_t) : sizeof(uint32_t)); 
-  std::vector<std::tuple<int32_t, int32_t, int32_t, int8_t*, char>> list; int32_t lda = 0;
+  std::vector<std::tuple<int32_t, int32_t, int32_t, int32_t, int8_t*, char>> list; int32_t lda = 0;
   if (batch != nullptr) { lda = batch->batchMaxK; batch->flush(N, list); }
-  if (0 < lda) for (auto [u, orderA, M, A, alg] : list) {
+  if (0 < lda) for (auto [u, orderA, seg, M, A, alg] : list) {
     if (alg == 'L') { i8herk_limbs<Complex>(stream, mempool, handle, M, N, orderA, A, lda, beta, orderC, C); beta = 1; } else
-    if (alg == 'C') { i8herk_crt(stream, mempool, handle, M, N, orderA, (const matrix_t*)A, lda, vexp, uint32_t(u), beta, orderC, C); beta = 1; }
+    if (alg == 'C') { i8herk_crt(stream, mempool, handle, M, N, orderA, seg, (const matrix_t*)A, lda, vexp, uint32_t(u), beta, orderC, C); beta = 1; }
   }
   if (beta == 0) { cudaMemsetAsync(C, 0, uint64_t(N) * uint64_t(N + 1) * uint64_t(orderC) * elem, stream); }
 }

@@ -53,7 +53,7 @@ void hyacinXGautoType(
   double epi,
   int32_t u_corr,
   int32_t g_corr,
-  int32_t globalM,
+  uint64_t M,
   int32_t N,
   hyacinPrecision_t Atype,
   int32_t* uA, // host-pointer

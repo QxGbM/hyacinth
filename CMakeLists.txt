@@ -12,9 +12,9 @@ find_package(CUDAToolkit REQUIRED)
 set(CPP_SOURCES
   src_cpp/allgatherv_1dcol.cpp
   src_cpp/gram_id.cpp
-  src_cpp/handle_timer.cpp
-  src_cpp/i63syrk.cpp
+  src_cpp/hyacin_herk.cpp
   src_cpp/transform.cpp
+  src_cpp/utils.cpp
 )
 
 set(CU_SOURCES
@@ -22,10 +22,10 @@ set(CU_SOURCES
   src_cuda/fp_exponent.cu
   src_cuda/fp_i63tp_dequantize.cu
   src_cuda/gram_svd.cu
+  src_cuda/hyacin_potrfp.cu
   src_cuda/i32_accum.cu
   src_cuda/i32_rem_accum.cu
   src_cuda/matcopy.cu
-  src_cuda/potrfp_uniform.cu
   src_cuda/quantize_crt.cu
   src_cuda/quantize_limbs.cu
   src_cuda/zero_point.cu
