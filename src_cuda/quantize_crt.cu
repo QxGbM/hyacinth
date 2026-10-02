@@ -6,7 +6,7 @@
 #include <limits>
 
 constexpr int32_t int_max = std::numeric_limits<int32_t>::max();
-constexpr uint64_t i63 = uint64_t(std::numeric_limits<int64_t>::max());
+constexpr uint64_t i62 = std::numeric_limits<uint64_t>::max() >> 2;
 template <int32_t ORDER> __device__ __forceinline__ void write_zeros(int8_t* A, int64_t strideA) {
   constexpr int8_t zero = int8_t(0);
   if constexpr(0 < ORDER) { *A = zero; }
@@ -15,75 +15,100 @@ template <int32_t ORDER> __device__ __forceinline__ void write_zeros(int8_t* A, 
 }
 
 struct __align__(16) lint95_t { uint64_t x; uint32_t y; };
-__device__ __forceinline__ lint95_t round_i95(lint95_t a, double x, int32_t expon) {
+__device__ __forceinline__ lint95_t round_i95(const lint95_t& a, double x, int32_t expon, ulonglong2& c) {
   uint32_t e = uint32_t(__viaddmax_s32(ilogb(x), expon - 62, 0));
   uint64_t i = uint64_t(llrint(scalbn(x, expon - int32_t(e))));
-  uint64_t m0 = -uint64_t(e < uint32_t(63));
-  uint32_t m1 = ~uint32_t(m0), rem = (e - (uint32_t(63) & m1));
-  uint64_t q0 = i << rem;
-  uint32_t sign = -uint32_t(i >> 63), q1 = (sign << (uint32_t(1) + rem)) | uint32_t(i >> (uint32_t(63) - rem));
-  a.x += q0 & m0 & i63; a.y += ((q1 & uint32_t(m0)) | (uint32_t(q0) & m1)) + uint32_t(a.x >> 63); a.x &= i63;
-  return a;
+  uint64_t q0 = a.x + ((i << e) & i62); c.x += q0;
+  uint32_t q1 = a.y + (((-uint32_t(i >> 63)) << (uint32_t(2) + e)) | uint32_t(i >> (uint32_t(62) - e))); c.y += q1 + uint32_t(c.x >> 62); c.x &= i62;
+  return lint95_t({ q0 & i62, q1 + uint32_t(q0 >> 62) });
 }
 
-__device__ __forceinline__ lint95_t round_i95(lint95_t a, float x, int32_t expon) {
+__device__ __forceinline__ lint95_t round_i95(const lint95_t& a, float x, int32_t expon, ulonglong2& c) {
   uint32_t e = uint32_t(__viaddmax_s32(ilogbf(x), expon - 62, 0));
   uint64_t i = uint64_t(llrintf(scalbnf(x, expon - int32_t(e))));
-  uint64_t m0 = -uint64_t(e < uint32_t(63));
-  uint32_t m1 = ~uint32_t(m0), rem = (e - (uint32_t(63) & m1));
-  uint64_t q0 = i << rem;
-  uint32_t sign = -uint32_t(i >> 63), q1 = (sign << (uint32_t(1) + rem)) | uint32_t(i >> (uint32_t(63) - rem));
-  a.x += q0 & m0 & i63; a.y += ((q1 & uint32_t(m0)) | (uint32_t(q0) & m1)) + uint32_t(a.x >> 63); a.x &= i63;
-  return a;
+  uint64_t q0 = a.x + ((i << e) & i62); c.x += q0;
+  uint32_t q1 = a.y + (((-uint32_t(i >> 63)) << (uint32_t(2) + e)) | uint32_t(i >> (uint32_t(62) - e))); c.y += q1 + uint32_t(c.x >> 62); c.x &= i62;
+  return lint95_t({ q0 & i62, q1 + uint32_t(q0 >> 62) });
 }
 
-__device__ __forceinline__ lint95_t round_i95(lint95_t a, __half x, int32_t expon) {
-  return round_i95(a, __half2float(x), expon);
+__device__ __forceinline__ lint95_t round_i95(const lint95_t& a, __half x, int32_t expon, ulonglong2& c) {
+  return round_i95(a, __half2float(x), expon, c);
 }
 
-template <int32_t x> __device__ __forceinline__ int8_t remainder(uint32_t lo, uint32_t mi, uint32_t hi) {
-  using U8CRT::mo, U8CRT::rem_e32, U8CRT::rem_e63;
-  constexpr uint32_t MO = mo[x], R32 = rem_e32[x], R63 = rem_e63[x];
-  uint32_t r = device::barrett_reduc<MO>(device::mulx_reduc<uint32_t(1), MO>(lo) + device::mulx_reduc<R32, MO>(mi) + device::mulx_reduc<R63, MO>(hi));
-  uint32_t i8_mask = -uint32_t(uint32_t(127) < r);
-  return int8_t(r + (i8_mask & (-MO)));
+template <int32_t x> __device__ __forceinline__ int8_t* remainder(uint32_t lo, uint32_t mi, uint32_t hi, int8_t* A, int64_t strideA) {
+  constexpr uint32_t MO = U8CRT::mo[x], R32 = U8CRT::rem_e32[x], R62 = U8CRT::rem_e62[x], minus_MO = -MO;
+  uint32_t r = device::barrett_reduc<MO>(device::mulx_reduc<uint32_t(1), MO>(lo) + device::mulx_reduc<R32, MO>(mi) + device::mulx_reduc<R62, MO>(hi));
+  *A = int8_t(r + ((-uint32_t(127u < r)) & minus_MO)); return &A[strideA];
 }
 
-template <int32_t ORDER> __device__ __forceinline__ int8_t* quantize_i8(lint95_t i, int8_t* A, int64_t strideA) {
-  uint32_t lo = uint32_t(i.x), mi = uint32_t(i.x >> 32);
-  if constexpr(0 < ORDER) { *A = remainder<0>(lo, mi, i.y); } else { return A; }
-  if constexpr(1 < ORDER) { *(A += strideA) = remainder<1>(lo, mi, i.y); }
-  if constexpr(2 < ORDER) { *(A += strideA) = remainder<2>(lo, mi, i.y); }
-  if constexpr(3 < ORDER) { *(A += strideA) = remainder<3>(lo, mi, i.y); }
-  if constexpr(4 < ORDER) { *(A += strideA) = remainder<4>(lo, mi, i.y); }
-  if constexpr(5 < ORDER) { *(A += strideA) = remainder<5>(lo, mi, i.y); }
-  if constexpr(6 < ORDER) { *(A += strideA) = remainder<6>(lo, mi, i.y); }
-  if constexpr(7 < ORDER) { *(A += strideA) = remainder<7>(lo, mi, i.y); }
-  if constexpr(8 < ORDER) { *(A += strideA) = remainder<8>(lo, mi, i.y); }
-  if constexpr(9 < ORDER) { *(A += strideA) = remainder<9>(lo, mi, i.y); }
-  if constexpr(10 < ORDER) { *(A += strideA) = remainder<10>(lo, mi, i.y); }
-  if constexpr(11 < ORDER) { *(A += strideA) = remainder<11>(lo, mi, i.y); }
-  if constexpr(12 < ORDER) { *(A += strideA) = remainder<12>(lo, mi, i.y); }
-  if constexpr(13 < ORDER) { *(A += strideA) = remainder<13>(lo, mi, i.y); }
-  if constexpr(14 < ORDER) { *(A += strideA) = remainder<14>(lo, mi, i.y); }
-  if constexpr(15 < ORDER) { *(A += strideA) = remainder<15>(lo, mi, i.y); }
-  if constexpr(16 < ORDER) { *(A += strideA) = remainder<16>(lo, mi, i.y); }
-  if constexpr(17 < ORDER) { *(A += strideA) = remainder<17>(lo, mi, i.y); }
-  if constexpr(18 < ORDER) { *(A += strideA) = remainder<18>(lo, mi, i.y); }
-  if constexpr(19 < ORDER) { *(A += strideA) = remainder<19>(lo, mi, i.y); }
-  if constexpr(20 < ORDER) { *(A += strideA) = remainder<20>(lo, mi, i.y); }
-  if constexpr(21 < ORDER) { *(A += strideA) = remainder<21>(lo, mi, i.y); }
-  if constexpr(22 < ORDER) { *(A += strideA) = remainder<22>(lo, mi, i.y); }
+template <int32_t x> __device__ __forceinline__ int8_t* remainder(uint32_t lo_rl, uint32_t mi_rl, uint32_t hi_rl, uint32_t lo_im, uint32_t mi_im, uint32_t hi_im, int8_t* A, int64_t strideA) {
+  constexpr uint32_t MO = U8CRT::mo[x], R32 = U8CRT::rem_e32[x], R62 = U8CRT::rem_e62[x], minus_MO = -MO;
+  uint32_t r = device::barrett_reduc<MO>(device::mulx_reduc<uint32_t(1), MO>(lo_rl) + device::mulx_reduc<R32, MO>(mi_rl) + device::mulx_reduc<R62, MO>(hi_rl));
+  uint32_t i = device::barrett_reduc<MO>(device::mulx_reduc<uint32_t(1), MO>(lo_im) + device::mulx_reduc<R32, MO>(mi_im) + device::mulx_reduc<R62, MO>(hi_im));
+  uint32_t s = r + i; s = __viaddmin_u32(minus_MO, s, s);
+  *A = int8_t(s + ((-uint32_t(127u < s)) & minus_MO)); *(A += strideA) = int8_t(r + ((-uint32_t(127u < r)) & minus_MO)); *(A += strideA) = int8_t(i + ((-uint32_t(127u < i)) & minus_MO));
   return &A[strideA];
 }
 
-struct u64_add {
-  __device__ __forceinline__ ulonglong2 operator()(ulonglong2 a, ulonglong2 b) { a.x += b.x; a.y += b.y + (a.x >> 63); a.x &= i63; return a; }
-  __device__ __forceinline__ ulonglong2 operator()(ulonglong2 a, lint95_t b) { a.x += b.x; a.y += uint64_t(b.y) + (a.x >> 63); a.x &= i63; return a; }
-};
+template <int32_t ORDER> __device__ __forceinline__ void quantize_i8(lint95_t i, int8_t* A, int64_t strideA) {
+  uint32_t lo = uint32_t(i.x), mi = uint32_t(i.x >> 32);
+  if constexpr(0 < ORDER) { A = remainder<0>(lo, mi, i.y, A, strideA); } else { return A; }
+  if constexpr(1 < ORDER) { A = remainder<1>(lo, mi, i.y, A, strideA); }
+  if constexpr(2 < ORDER) { A = remainder<2>(lo, mi, i.y, A, strideA); }
+  if constexpr(3 < ORDER) { A = remainder<3>(lo, mi, i.y, A, strideA); }
+  if constexpr(4 < ORDER) { A = remainder<4>(lo, mi, i.y, A, strideA); }
+  if constexpr(5 < ORDER) { A = remainder<5>(lo, mi, i.y, A, strideA); }
+  if constexpr(6 < ORDER) { A = remainder<6>(lo, mi, i.y, A, strideA); }
+  if constexpr(7 < ORDER) { A = remainder<7>(lo, mi, i.y, A, strideA); }
+  if constexpr(8 < ORDER) { A = remainder<8>(lo, mi, i.y, A, strideA); }
+  if constexpr(9 < ORDER) { A = remainder<9>(lo, mi, i.y, A, strideA); }
+  if constexpr(10 < ORDER) { A = remainder<10>(lo, mi, i.y, A, strideA); }
+  if constexpr(11 < ORDER) { A = remainder<11>(lo, mi, i.y, A, strideA); }
+  if constexpr(12 < ORDER) { A = remainder<12>(lo, mi, i.y, A, strideA); }
+  if constexpr(13 < ORDER) { A = remainder<13>(lo, mi, i.y, A, strideA); }
+  if constexpr(14 < ORDER) { A = remainder<14>(lo, mi, i.y, A, strideA); }
+  if constexpr(15 < ORDER) { A = remainder<15>(lo, mi, i.y, A, strideA); }
+  if constexpr(16 < ORDER) { A = remainder<16>(lo, mi, i.y, A, strideA); }
+  if constexpr(17 < ORDER) { A = remainder<17>(lo, mi, i.y, A, strideA); }
+  if constexpr(18 < ORDER) { A = remainder<18>(lo, mi, i.y, A, strideA); }
+  if constexpr(19 < ORDER) { A = remainder<19>(lo, mi, i.y, A, strideA); }
+  if constexpr(20 < ORDER) { A = remainder<20>(lo, mi, i.y, A, strideA); }
+  if constexpr(21 < ORDER) { A = remainder<21>(lo, mi, i.y, A, strideA); }
+  if constexpr(22 < ORDER) { A = remainder<22>(lo, mi, i.y, A, strideA); }
+}
+
+template <int32_t ORDER> __device__ __forceinline__ void quantize_i8(lint95_t r, lint95_t i, int8_t* A, int64_t strideA) {
+  uint32_t lo_rl = uint32_t(r.x), mi_rl = uint32_t(r.x >> 32),  lo_im = uint32_t(i.x), mi_im = uint32_t(i.x >> 32);
+  if constexpr(0 < ORDER) { A = remainder<0>(lo_rl, mi_rl, r.y, lo_im, mi_im, i.y, A, strideA); } else { return A; }
+  if constexpr(1 < ORDER) { A = remainder<1>(lo_rl, mi_rl, r.y, lo_im, mi_im, i.y, A, strideA); }
+  if constexpr(2 < ORDER) { A = remainder<2>(lo_rl, mi_rl, r.y, lo_im, mi_im, i.y, A, strideA); }
+  if constexpr(3 < ORDER) { A = remainder<3>(lo_rl, mi_rl, r.y, lo_im, mi_im, i.y, A, strideA); }
+  if constexpr(4 < ORDER) { A = remainder<4>(lo_rl, mi_rl, r.y, lo_im, mi_im, i.y, A, strideA); }
+  if constexpr(5 < ORDER) { A = remainder<5>(lo_rl, mi_rl, r.y, lo_im, mi_im, i.y, A, strideA); }
+  if constexpr(6 < ORDER) { A = remainder<6>(lo_rl, mi_rl, r.y, lo_im, mi_im, i.y, A, strideA); }
+  if constexpr(7 < ORDER) { A = remainder<7>(lo_rl, mi_rl, r.y, lo_im, mi_im, i.y, A, strideA); }
+  if constexpr(8 < ORDER) { A = remainder<8>(lo_rl, mi_rl, r.y, lo_im, mi_im, i.y, A, strideA); }
+  if constexpr(9 < ORDER) { A = remainder<9>(lo_rl, mi_rl, r.y, lo_im, mi_im, i.y, A, strideA); }
+  if constexpr(10 < ORDER) { A = remainder<10>(lo_rl, mi_rl, r.y, lo_im, mi_im, i.y, A, strideA); }
+  if constexpr(11 < ORDER) { A = remainder<11>(lo_rl, mi_rl, r.y, lo_im, mi_im, i.y, A, strideA); }
+  if constexpr(12 < ORDER) { A = remainder<12>(lo_rl, mi_rl, r.y, lo_im, mi_im, i.y, A, strideA); }
+  if constexpr(13 < ORDER) { A = remainder<13>(lo_rl, mi_rl, r.y, lo_im, mi_im, i.y, A, strideA); }
+  if constexpr(14 < ORDER) { A = remainder<14>(lo_rl, mi_rl, r.y, lo_im, mi_im, i.y, A, strideA); }
+  if constexpr(15 < ORDER) { A = remainder<15>(lo_rl, mi_rl, r.y, lo_im, mi_im, i.y, A, strideA); }
+  if constexpr(16 < ORDER) { A = remainder<16>(lo_rl, mi_rl, r.y, lo_im, mi_im, i.y, A, strideA); }
+  if constexpr(17 < ORDER) { A = remainder<17>(lo_rl, mi_rl, r.y, lo_im, mi_im, i.y, A, strideA); }
+  if constexpr(18 < ORDER) { A = remainder<18>(lo_rl, mi_rl, r.y, lo_im, mi_im, i.y, A, strideA); }
+  if constexpr(19 < ORDER) { A = remainder<19>(lo_rl, mi_rl, r.y, lo_im, mi_im, i.y, A, strideA); }
+  if constexpr(20 < ORDER) { A = remainder<20>(lo_rl, mi_rl, r.y, lo_im, mi_im, i.y, A, strideA); }
+  if constexpr(21 < ORDER) { A = remainder<21>(lo_rl, mi_rl, r.y, lo_im, mi_im, i.y, A, strideA); }
+  if constexpr(22 < ORDER) { A = remainder<22>(lo_rl, mi_rl, r.y, lo_im, mi_im, i.y, A, strideA); }
+}
+
+struct u64_add { __device__ __forceinline__ ulonglong2 operator()(ulonglong2 a, ulonglong2 b) { a.x += b.x; a.y += b.y + (a.x >> 62); a.x &= i62; return a; }};
 
 template <int32_t ORDER, int32_t BLOCK_THREADS, class matrix_t, class sum_t>
-__global__ void quantize_crt_kernel(int32_t M, const matrix_t* __restrict__ A, int64_t lda, lint95_t init, const int32_t* __restrict__ vexp, int8_t* __restrict__ B, int64_t ldb, int64_t strideB, sum_t* __restrict__ vsum) {
+__global__ void quantize_crt_kernel(int32_t M, const matrix_t* __restrict__ A, int64_t lda, const lint95_t init, const int32_t* __restrict__ vexp, int8_t* __restrict__ B, int64_t ldb, int64_t strideB, sum_t* __restrict__ vsum) {
+  __shared__ typename cub::BlockReduce<ulonglong2, BLOCK_THREADS>::TempStorage rl_reduce;
   constexpr int32_t Complex = std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>;
   int32_t expon = vexp[blockIdx.x]; A = &A[int64_t(blockIdx.x) * lda]; B = &B[int64_t(blockIdx.x) * ldb]; vsum = &vsum[blockIdx.x];
   if (expon == int_max) {
@@ -91,30 +116,21 @@ __global__ void quantize_crt_kernel(int32_t M, const matrix_t* __restrict__ A, i
     { if constexpr(Complex) { write_zeros<ORDER * 3>(&B[i], strideB); } else { write_zeros<ORDER>(&B[i], strideB); }}
     if (int32_t(threadIdx.x) == 0) { *vsum = sum_t(); }
   } else if constexpr(Complex) {
-    __shared__ ulonglong2 rl[BLOCK_THREADS], im[BLOCK_THREADS]; u64_add acc;
-    rl[threadIdx.x] = im[threadIdx.x] = make_ulonglong2(0llu, 0llu);
-    for (int32_t i = int32_t(threadIdx.x); i < M; i += BLOCK_THREADS) {
-      matrix_t A_i = A[i];
-      lint95_t A_rl = round_i95(init, A_i.x, expon); rl[threadIdx.x] = acc(rl[threadIdx.x], A_rl);
-      lint95_t A_im = round_i95(init, A_i.y, expon); im[threadIdx.x] = acc(im[threadIdx.x], A_im);
-      quantize_i8<ORDER>(A_im, quantize_i8<ORDER>(A_rl, quantize_i8<ORDER>(lint95_t({ A_rl.x + A_im.x, A_rl.y + A_im.y }), &B[i], strideB), strideB), strideB);
-    }
+    ulonglong2 threadR = make_ulonglong2(0llu, 0llu), threadI = make_ulonglong2(0llu, 0llu); u64_add acc;
+    for (int32_t i = int32_t(threadIdx.x); i < M; i += BLOCK_THREADS)
+    { matrix_t A_i = A[i]; quantize_i8<ORDER>(round_i95(init, A_i.x, expon, threadR), round_i95(init, A_i.y, expon, threadI), &B[i], strideB); }
 
-    __shared__ typename cub::BlockReduce<ulonglong2, BLOCK_THREADS>::TempStorage rl_reduce, im_reduce;
-    ulonglong2 threadR = cub::BlockReduce<ulonglong2, BLOCK_THREADS>(rl_reduce).Reduce(rl[threadIdx.x], acc);
-    ulonglong2 threadI = cub::BlockReduce<ulonglong2, BLOCK_THREADS>(im_reduce).Reduce(im[threadIdx.x], acc);
+    __shared__ typename cub::BlockReduce<ulonglong2, BLOCK_THREADS>::TempStorage im_reduce;
+    threadR = cub::BlockReduce<ulonglong2, BLOCK_THREADS>(rl_reduce).Reduce(threadR, acc);
+    threadI = cub::BlockReduce<ulonglong2, BLOCK_THREADS>(im_reduce).Reduce(threadI, acc);
     if (int32_t(threadIdx.x) == 0) { *vsum = make_ulonglong4_32a(threadR.x, threadR.y, threadI.x, threadI.y); }
   } else {
-    __shared__ ulonglong2 rl[BLOCK_THREADS]; u64_add acc;
-    rl[threadIdx.x] = make_ulonglong2(0llu, 0llu);
-    for (int32_t i = int32_t(threadIdx.x); i < M; i += BLOCK_THREADS) {
-      lint95_t A_rl = round_i95(init, A[i], expon); rl[threadIdx.x] = acc(rl[threadIdx.x], A_rl);
-      quantize_i8<ORDER>(A_rl, &B[i], strideB);
-    }
+    ulonglong2 threadR = make_ulonglong2(0llu, 0llu); u64_add acc;
+    for (int32_t i = int32_t(threadIdx.x); i < M; i += BLOCK_THREADS)
+    { quantize_i8<ORDER>(round_i95(init, A[i], expon, threadR), &B[i], strideB); }
 
-    __shared__ typename cub::BlockReduce<ulonglong2, BLOCK_THREADS>::TempStorage temp_reduce;
-    ulonglong2 threadA = cub::BlockReduce<ulonglong2, BLOCK_THREADS>(temp_reduce).Reduce(rl[threadIdx.x], acc);
-    if (int32_t(threadIdx.x) == 0) { *vsum = threadA; }
+    threadR = cub::BlockReduce<ulonglong2, BLOCK_THREADS>(rl_reduce).Reduce(threadR, acc);
+    if (int32_t(threadIdx.x) == 0) { *vsum = threadR; }
   }
 };
 

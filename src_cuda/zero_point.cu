@@ -91,11 +91,11 @@ __global__ void triangle_pack_kernel(int64_t N, const uint64_t* __restrict__ A, 
 
       if (K) {
         ulonglong4_32a sy = vsum[y];
-        add_shifted_dyn(acc_rl, int64_t(sy.x), corr); if constexpr(1 < ORDER) { add_shifted_dyn(acc_rl, int64_t(sy.y), corr + uint32_t(63)); }
-        add_shifted_dyn(acc_im, int64_t(sy.z), corr); if constexpr(1 < ORDER) { add_shifted_dyn(acc_im, int64_t(sy.w), corr + uint32_t(63)); }
+        add_shifted_dyn(acc_rl, int64_t(sy.x), corr); add_shifted_dyn(acc_rl, int64_t(sy.y), corr + uint32_t(62));
+        add_shifted_dyn(acc_im, int64_t(sy.z), corr); add_shifted_dyn(acc_im, int64_t(sy.w), corr + uint32_t(62));
         ulonglong4_32a sx = vsum[x];
-        add_shifted_dyn(acc_im, int64_t(sx.x), corr); if constexpr(1 < ORDER) { add_shifted_dyn(acc_im, int64_t(sx.y), corr + uint32_t(63)); }
-        add_shifted_dyn(acc_rl, int64_t(sx.z), corr); if constexpr(1 < ORDER) { add_shifted_dyn(acc_rl, int64_t(sx.w), corr + uint32_t(63)); }
+        add_shifted_dyn(acc_im, int64_t(sx.x), corr); add_shifted_dyn(acc_im, int64_t(sx.y), corr + uint32_t(62));
+        add_shifted_dyn(acc_rl, int64_t(sx.z), corr); add_shifted_dyn(acc_rl, int64_t(sx.w), corr + uint32_t(62));
         cross_sum(acc_rl, acc_im);
         add_shifted_dyn(acc_rl, K << 1, corr << 1);
       }
@@ -111,9 +111,9 @@ __global__ void triangle_pack_kernel(int64_t N, const uint64_t* __restrict__ A, 
 
       if (K) {
         ulonglong2 sy = vsum[y];
-        add_shifted_dyn(acc, int64_t(-sy.x), corr); if constexpr(1 < ORDER) { add_shifted_dyn(acc, int64_t(-sy.y), corr + uint32_t(63)); }
+        add_shifted_dyn(acc, int64_t(-sy.x), corr); add_shifted_dyn(acc, int64_t(-sy.y), corr + uint32_t(62));
         ulonglong2 sx = vsum[x];
-        add_shifted_dyn(acc, int64_t(-sx.x), corr); if constexpr(1 < ORDER) { add_shifted_dyn(acc, int64_t(-sx.y), corr + uint32_t(63)); }
+        add_shifted_dyn(acc, int64_t(-sx.x), corr); add_shifted_dyn(acc, int64_t(-sx.y), corr + uint32_t(62));
         add_shifted_dyn(acc, K, corr << 1);
       }
       if constexpr(beta) { add_i<orderB>(acc, B, strideB); }

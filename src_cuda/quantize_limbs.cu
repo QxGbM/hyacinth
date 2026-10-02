@@ -3,7 +3,7 @@
 #include <limits>
 
 constexpr int32_t int_max = std::numeric_limits<int32_t>::max();
-constexpr uint64_t i63 = uint64_t(std::numeric_limits<int64_t>::max());
+constexpr uint64_t i63 = std::numeric_limits<uint64_t>::max() >> 1;
 template <int32_t ORDER> __device__ __forceinline__ void write_zeros(int8_t* A, int64_t strideA) {
   constexpr int8_t zero = int8_t(0);
   if constexpr(0 < ORDER) { *A = zero; }
@@ -15,21 +15,13 @@ struct __align__(16) lint95_t { uint64_t x; uint32_t y; };
 __device__ __forceinline__ lint95_t round_i95(double x, int32_t expon) {
   uint32_t e = uint32_t(__viaddmax_s32(ilogb(x), expon - 62, 0));
   uint64_t i = uint64_t(llrint(scalbn(x, expon - int32_t(e))));
-  uint64_t m0 = -uint64_t(e < uint32_t(63));
-  uint32_t m1 = ~uint32_t(m0), rem = (e - (uint32_t(63) & m1));
-  uint64_t q0 = i << rem;
-  uint32_t sign = -uint32_t(i >> 63), q1 = (sign << (uint32_t(1) + rem)) | uint32_t(i >> (uint32_t(63) - rem));
-  return lint95_t({ q0 & m0 & i63, (q1 & uint32_t(m0)) | (uint32_t(q0) & m1) });
+  return lint95_t({ (i << e) & i63, ((-uint32_t(i >> 63)) << (uint32_t(1) + e)) | uint32_t(i >> (uint32_t(63) - e)) });
 }
 
 __device__ __forceinline__ lint95_t round_i95(float x, int32_t expon) {
   uint32_t e = uint32_t(__viaddmax_s32(ilogbf(x), expon - 62, 0));
   uint64_t i = uint64_t(llrintf(scalbnf(x, expon - int32_t(e))));
-  uint64_t m0 = -uint64_t(e < uint32_t(63));
-  uint32_t m1 = ~uint32_t(m0), rem = (e - (uint32_t(63) & m1));
-  uint64_t q0 = i << rem;
-  uint32_t sign = -uint32_t(i >> 63), q1 = (sign << (uint32_t(1) + rem)) | uint32_t(i >> (uint32_t(63) - rem));
-  return lint95_t({ q0 & m0 & i63, (q1 & uint32_t(m0)) | (uint32_t(q0) & m1) });
+  return lint95_t({ (i << e) & i63, ((-uint32_t(i >> 63)) << (uint32_t(1) + e)) | uint32_t(i >> (uint32_t(63) - e)) });
 }
 
 __device__ __forceinline__ lint95_t round_i95(__half x, int32_t expon) {

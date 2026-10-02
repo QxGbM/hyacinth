@@ -31,16 +31,15 @@ def pd_print(pd, sft, limbs_pad = 6, chunk_size = 18):
 
 if all_ok:
   rem_e32 = [(1 << 32) % m for m in moduli_all]
-  rem_e63 = [(1 << 63) % m for m in moduli_all]
-  padded_len = (len(moduli_all) + 3) & (~3)
+  rem_e62 = [(1 << 62) % m for m in moduli_all]
   log2_prefix_sum = np.trunc(np.cumsum(np.log2(moduli_all))).astype(np.int32)
 
   print("#pragma once\n#include <cstdint>\nnamespace U8CRT {\n")
   print("  template <int32_t Moduli> struct Constants;")
-  print(f"  constexpr uint16_t range[{padded_len}] =" + " { " + ", ".join(f"{m}" for m in log2_prefix_sum) + " };")
-  print(f"  constexpr uint16_t mo[{padded_len}] =" + " { " + ", ".join(f"{m}" for m in moduli_all) + " };")
-  print(f"  constexpr uint16_t rem_e32[{padded_len}] =" + " { " + ", ".join(f"{m}" for m in rem_e32) + " };")
-  print(f"  constexpr uint16_t rem_e63[{padded_len}] =" + " { " + ", ".join(f"{m}" for m in rem_e63) + " };\n")
+  print(f"  constexpr uint16_t range[{len(moduli_all)}] =" + " { " + ", ".join(f"{m}" for m in log2_prefix_sum) + " };")
+  print(f"  constexpr uint16_t mo[{len(moduli_all)}] =" + " { " + ", ".join(f"{m}" for m in moduli_all) + " };")
+  print(f"  constexpr uint16_t rem_e32[{len(moduli_all)}] =" + " { " + ", ".join(f"{m}" for m in rem_e32) + " };")
+  print(f"  constexpr uint16_t rem_e62[{len(moduli_all)}] =" + " { " + ", ".join(f"{m}" for m in rem_e62) + " };\n")
 
   for n in range(2, len(moduli_all)+1):
     moduli = moduli_all[:n:]
@@ -53,11 +52,10 @@ if all_ok:
     P_div = [P // m for m in moduli]
     inv = [pow(Pd % m, -1, m) for Pd, m in zip(P_div, moduli)]
     rem_e32 = [(i * (-(1 << 32))) % m for i, m in zip(inv, moduli)]
-    padded_len = (n + 3) & (~3)
 
     print(f"  template<> struct Constants<{n}>" + " {")
-    print(f"    static constexpr uint16_t minv[{padded_len}] =" + " { " + ", ".join(f"{m}" for m in inv) + " };")
-    print(f"    static constexpr uint16_t rem_e32[{padded_len}] =" + " { " + ", ".join(f"{m}" for m in rem_e32) + " };")
+    print(f"    static constexpr uint16_t minv[{n}] =" + " { " + ", ".join(f"{m}" for m in inv) + " };")
+    print(f"    static constexpr uint16_t rem_e32[{n}] =" + " { " + ", ".join(f"{m}" for m in rem_e32) + " };")
     print(f"    static constexpr int64_t p[{len(p_limbs)}] =" + " { " + ", ".join(f"{l}ll" for l in p_limbs) + " };")
     pd_print(P_div, 31)
     print("  };\n")
