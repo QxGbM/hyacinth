@@ -76,7 +76,6 @@ inline int32_t tsvd(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t h
   K = internal::Cholesky::potrfp(stream, fillmode, epi, K, p, N, G, ldg, piv, potrf_work, rank_ptr);
   cudaFreeAsync(potrf_work, stream);
   if (0 < K) {
-    if constexpr(std::is_same_v<real_t, double>) { sweeps = internal::device_is_f64_capable() ? sweeps : 0; }
     complex_t* A = nullptr, *U = nullptr; real_t* sigma = nullptr;
     if (cudaSuccess != cudaMallocFromPoolAsync((void**)&A, uint64_t(N) * uint64_t(K) * uint64_t(sizeof(complex_t)), mempool, stream))
       throw std::runtime_error("Workspace allocation failed at GESVD.");
