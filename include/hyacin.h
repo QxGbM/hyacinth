@@ -27,7 +27,6 @@ typedef struct {
   cudaStream_t cudaStream;
   cublasHandle_t cublasHandle;
   cusolverDnHandle_t cusolverHandle;
-  cusolverDnParams_t cusolverParams;
   cudaMemPool_t mempool;
   void* pinnedWorkspace; // A 128-byte pinned workspace on host for host reduction
   void* timer;
@@ -129,11 +128,11 @@ void hyacinXherkBatchFlush(
   void* batch // host-pointer
 );
 
-int32_t hyacinXGevPcsvd(
+int32_t hyacinXGevd(
   hyacinHandle_t handle,
-  char use_evd,
   char fillmode,
   double epi,
+  int32_t jacobi_sweeps,
   int32_t N,
   int32_t K,
   int32_t p,

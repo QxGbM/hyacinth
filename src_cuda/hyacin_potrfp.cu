@@ -65,7 +65,7 @@ __global__ void potrf_init_kernel(real_t epi, int32_t p, int32_t N, matrix_t* __
   if (BLOCK_THREADS == nthreads) {
     cooperative_groups::this_thread_block().sync();
     if (int32_t(threadIdx.x) == 0)
-    { idx_t r = idx_t({ real_t(), 0, thread_x.idx < 0 ? -1 : p }); real_t d = real_sqrt(real_t(), thread_x, r); *work = r; D[N] = mul_(epi, d); *A = ext<matrix_t>(d); }
+    { idx_t r = idx_t({ real_t(), 0, thread_x.idx <= 0 ? -1 : p }); real_t d = real_sqrt(real_t(), thread_x, r); *work = r; D[N] = mul_(epi, d); *A = ext<matrix_t>(d); }
   } else {
     if (int32_t(threadIdx.x) == 0) { work[blockIdx.x] = thread_x; } else { thread_x = idx_t(); }
     grid.sync();
@@ -74,7 +74,7 @@ __global__ void potrf_init_kernel(real_t epi, int32_t p, int32_t N, matrix_t* __
       { thread_x = cmp_max(thread_x, work[i]); }
       thread_x = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce).Reduce(thread_x, cmp_max);
       if (int32_t(threadIdx.x) == 0)
-      { idx_t r = idx_t({ real_t(), 0, thread_x.idx < 0 ? -1 : p }); real_t d = real_sqrt(real_t(), thread_x, r); *work = r; D[N] = mul_(epi, d); *A = ext<matrix_t>(d); }
+      { idx_t r = idx_t({ real_t(), 0, thread_x.idx <= 0 ? -1 : p }); real_t d = real_sqrt(real_t(), thread_x, r); *work = r; D[N] = mul_(epi, d); *A = ext<matrix_t>(d); }
     }
   }
 }
@@ -218,7 +218,7 @@ inline int32_t potrfp_dispatcher(cudaStream_t stream, char fillmode, double epi,
   else if (fillmode == 'L' || fillmode == 'l')
     matrix_fill_upper_to_full<'L', real_t> <<< dim3(uint32_t(N + 511) >> 9, uint32_t(N)), 512, 0, stream >>> (A, lda);
 
-  K = std::min(N, K); K = (K == N) ? 1 : (N - K); p = std::max(0, p); epi = std::min(1., std::max(0., std::abs(epi)));
+  K = (K == N) ? 1 : (N - K); p = std::max(0, p); epi = std::min(1., std::max(0., std::abs(epi)));
   real_t epi_f;
   if constexpr(std::is_same_v<real_t, double>) { epi_f = epi; } else
   if constexpr(std::is_same_v<real_t, float>) { epi_f = float(epi); } else

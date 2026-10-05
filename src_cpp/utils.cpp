@@ -105,7 +105,6 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle, int32_t create_timer) {
   cublasSetStream(handle->cublasHandle, handle->cudaStream);
   cusolverDnCreate(&handle->cusolverHandle);
   cusolverDnSetStream(handle->cusolverHandle, handle->cudaStream);
-  cusolverDnCreateParams(&handle->cusolverParams);
   cudaMemPoolProps props = cudaMemPoolProps(); cudaGetDevice(&props.location.id);
   props.allocType = cudaMemAllocationTypePinned; props.location.type = cudaMemLocationTypeDevice;
   cudaMemPoolCreate(&handle->mempool, &props);
@@ -130,7 +129,6 @@ extern "C" void hyacinDestroy(hyacinHandle_t handle) {
   cudaStreamDestroy(handle.cudaStream);
   cublasDestroy(handle.cublasHandle);
   cusolverDnDestroy(handle.cusolverHandle);
-  cusolverDnDestroyParams(handle.cusolverParams);
   cudaMemPoolDestroy(handle.mempool);
   cudaFreeHost(handle.pinnedWorkspace);
   if (handle.timer) { delete (EventTimer*)(handle.timer); }

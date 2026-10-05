@@ -19,10 +19,13 @@ template<class T, class S> __device__ __forceinline__ T conv(S a) {
   { return T(a); }
 }
 
-template <class Atype, class Btype>
+template <char mode, class Atype, class Btype>
 __global__ void cvcpy_kernel(int64_t M, const Atype* __restrict__ A, int64_t lda, Btype* __restrict__ B, int64_t ldb) {
   int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
-  if (y < M) { B[y + x * ldb] = conv<Btype>(A[y + x * lda]); }
+  if (y < M) {
+    if constexpr(mode == 'U') { B[y + x * ldb] = x < y ? Btype() : conv<Btype>(A[y + x * lda]); }
+      else { B[y + x * ldb] = conv<Btype>(A[y + x * lda]); }
+  }
 };
 
 template <class T> __device__ __forceinline__ T float_one();
@@ -41,10 +44,10 @@ template <> __device__ __forceinline__ __half2 conj<__half2>(__half2 a) { return
 template <char mode, class Atype, class Btype>
 __global__ void scatter_conj_cvcpy_kernel(int64_t M, const int32_t* __restrict__ jpiv, const Atype* __restrict__ A, int64_t lda, Btype* __restrict__ B, int64_t ldb) {
   int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
-  int32_t pred; if constexpr(mode == 'I') { pred = int32_t(x < M) + int32_t(x == y); } else { pred = int32_t(x < y); }
+  int32_t pred; if constexpr(mode == 'I') { pred = int32_t(x < M); } else { pred = int32_t(x < y); }
   if (y < M) {
     B = &B[int64_t(jpiv[x] - 1) + (y * ldb)];
-    if (pred) { if constexpr(mode == 'I') { *B = (pred == 2) ? float_one<Btype>() : Btype(); } else { *B = Btype(); }}
+    if (pred) { if constexpr(mode == 'I') { *B = (x == y) ? float_one<Btype>() : Btype(); } else { *B = Btype(); }}
       else { *B = conj(conv<Btype>(A[y + x * lda])); }
   }
 };
@@ -56,7 +59,7 @@ inline void matcopy_dispatcher(cudaStream_t stream, cublasHandle_t handle, char 
   if (jpiv) {
     if (mode == 'I') { scatter_conj_cvcpy_kernel<'I'> <<< grid_x, 512, 0, stream >>> (M64, jpiv, A, lda64, B, ldb64); }
       else { scatter_conj_cvcpy_kernel<'U'> <<< grid_x, 512, 0, stream >>> (M64, jpiv, A, lda64, B, ldb64); }
-  }
+  } else if (mode == 'U') { cvcpy_kernel<'U'> <<< grid_x, 512, 0, stream >>> (M64, A, lda64, B, ldb64); }
   else {
     if constexpr(std::is_same_v<Atype, double> && std::is_same_v<Btype, double>)
     { double one = 1., zero = 0.; cublasDgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb); }
@@ -66,7 +69,7 @@ inline void matcopy_dispatcher(cudaStream_t stream, cublasHandle_t handle, char 
     { cuDoubleComplex one = make_cuDoubleComplex(1., 0.), zero = make_cuDoubleComplex(0., 0.); cublasZgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb); }
     else if constexpr(std::is_same_v<Atype, cuComplex> && std::is_same_v<Btype, cuComplex>)
     { cuComplex one = make_cuComplex(1.f, 0.f), zero = make_cuComplex(0.f, 0.f); cublasCgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb); }
-    else { cvcpy_kernel <<< grid_x, 512, 0, stream >>> (M64, A, lda64, B, ldb64); }
+    else { cvcpy_kernel<'A'> <<< grid_x, 512, 0, stream >>> (M64, A, lda64, B, ldb64); }
   }
 }
 

@@ -14,24 +14,27 @@ inline void ltrsm(cublasHandle_t handle, int32_t Mb, int32_t Nb, cuComplex* R, i
 
 template <class Btype, class Rtype, class Xtype, class Gtype>
 inline int32_t interp(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t handle, char fillmode, double epi, int32_t N, int32_t K, int32_t p, int32_t* jpiv, Xtype* X, int32_t ldx, Gtype* G, int32_t ldg, int32_t* pinned_work) {
-  uint64_t dev_work_bytes = uint64_t(std::max(int64_t(sizeof(Xtype)) * int64_t(N) * int64_t(std::min(N, K)), int64_t(65536) + int64_t(sizeof(Rtype)) * (int64_t(N) + int64_t(1))));
-  void* dev_work = nullptr; 
-  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&dev_work, dev_work_bytes, mempool, stream))
+  Rtype* potrf_work = nullptr;
+  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&potrf_work, uint64_t(65536) + (uint64_t(N) + uint64_t(1)) * uint64_t(sizeof(Rtype)), mempool, stream))
     throw std::runtime_error("Workspace allocation failed at Interpolative decomposition.");
 
-  K = internal::Cholesky::potrfp(stream, fillmode, epi, K, p, N, G, ldg, jpiv, (Rtype*)dev_work, pinned_work);
+  K = internal::Cholesky::potrfp(stream, fillmode, epi, K, p, N, G, ldg, jpiv, potrf_work, pinned_work);
+  cudaFreeAsync(potrf_work, stream);
   if (0 < K) {
-    Btype* B = (Btype*)dev_work;
-    internal::scatter_matcopy(stream, handle, 'A', K, N, nullptr, G, ldg, B, K);
+    Btype* B = nullptr;
+    if (cudaSuccess != cudaMallocFromPoolAsync((void**)&B, uint64_t(N) * uint64_t(K) * uint64_t(sizeof(Xtype)), mempool, stream))
+      throw std::runtime_error("Workspace allocation failed at Interpolative decomposition.");
+
+    internal::scatter_matcopy(stream, handle, 'U', K, N, nullptr, G, ldg, B, K);
     if (K < N) { ltrsm(handle, K, N - K, B, K); }
     internal::scatter_matcopy(stream, handle, 'I', K, N, jpiv, B, K, X, ldx);
+    cudaFreeAsync(B, stream);
   }
-  cudaFreeAsync(dev_work, stream);
   return K;
 }
 
 extern "C" int32_t hyacinXGinterp(hyacinHandle_t handle, char fillmode, double epi, int32_t N, int32_t K, int32_t p, hyacinPrecision_t Atype, void* X, int32_t ldx, int32_t* jpiv, hyacinPrecision_t Gtype, void* G, int32_t ldg) {
-  if (N <= 0 || K <= 0) { return 0; }
+  if (N <= 0 || K <= 0) { return 0; } K = K <= 0 ? N : std::min(N, K);
   Timer::register_replicate_kernel(handle.cudaStream, handle.timer);
   int32_t *rank_ptr = (int32_t*)handle.pinnedWorkspace;
 
