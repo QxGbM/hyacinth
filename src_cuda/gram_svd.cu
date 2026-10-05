@@ -119,7 +119,7 @@ inline int32_t tsvd(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t h
 }
 
 extern "C" int32_t hyacinXGevd(hyacinHandle_t handle, char fillmode, double epi, int32_t jacobi_sweeps, int32_t N, int32_t K, int32_t p, hyacinPrecision_t Atype, void* X, int32_t ldx, void* S, hyacinPrecision_t Gtype, void* G, int32_t ldg) {
-  if (N <= 0 || K <= 0) { return 0; } K = K <= 0 ? N : std::min(N, K);
+  if (N <= 0) { return 0; } K = K <= 0 ? N : std::min(N, K);
   Timer::register_replicate_kernel(handle.cudaStream, handle.timer);
   int32_t *rank_ptr = (int32_t*)handle.pinnedWorkspace;
   switch(Gtype) {
