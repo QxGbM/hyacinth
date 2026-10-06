@@ -92,7 +92,7 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle) {
   cudaMemPoolCreate(&handle->mempool, &props);
   uint64_t threshold = std::numeric_limits<uint64_t>::max();
   cudaMemPoolSetAttribute(handle->mempool, cudaMemPoolAttrReleaseThreshold, &threshold);
-  cudaMallocHost(&handle->pinnedWorkspace, size_t(128));
+  cudaMallocHost(&handle->pinnedWorkspace, sizeof(int32_t));
 #ifndef NO_NCCL
   handle->col_comm = handle->row_comm = nullptr;
 #endif
@@ -133,8 +133,8 @@ extern "C" void hyacinSync_TimerSegments(const hyacinHandle_t* handle, double* e
   if (handle->timer == nullptr || eventMs == nullptr || lenMs <= 0) 
   { cudaStreamSynchronize(handle->cudaStream); return; }
 
-  double d_time = 0., r_time = 0., c_time = 0.; EventTimer* t = (EventTimer*)(handle->timer);
-  int32_t len = int32_t(t->events.size());
+  double d_time = 0., r_time = 0., c_time = 0.;
+  EventTimer* t = (EventTimer*)(handle->timer); int32_t len = int32_t(t->events.size());
   cudaEvent_t e; cudaEventCreate(&e); cudaEventRecord(e, handle->cudaStream); cudaEventSynchronize(e);
   t->events.emplace_back(t->lastSegment, e);
 

@@ -28,13 +28,11 @@ __global__ void cvcpy_kernel(int64_t M, const Atype* __restrict__ A, int64_t lda
   }
 };
 
-template <class T> __device__ __forceinline__ T float_one();
-template <> __device__ __forceinline__ double float_one<double>() { return 1.; };
-template <> __device__ __forceinline__ float float_one<float>() { return 1.f; };
-template <> __device__ __forceinline__ __half float_one<__half>() { return CUDART_ONE_FP16; };
-template <> __device__ __forceinline__ cuDoubleComplex float_one<cuDoubleComplex>() { return make_cuDoubleComplex(1., 0.); };
-template <> __device__ __forceinline__ cuComplex float_one<cuComplex>() { return make_cuComplex(1.f, 0.f); };
-template <> __device__ __forceinline__ __half2 float_one<__half2>() { return make_half2(CUDART_ONE_FP16, CUDART_ZERO_FP16); };
+template <class T> __device__ __forceinline__ T float_one() {
+  if constexpr(std::is_same_v<double, T>) { return 1.; } else if constexpr(std::is_same_v<float, T>) { return 1.f; } else if constexpr(std::is_same_v<__half, T>) { return CUDART_ONE_FP16; } else
+  if constexpr(std::is_same_v<cuDoubleComplex, T>) { return make_cuDoubleComplex(1., 0.); } else if constexpr(std::is_same_v<cuComplex, T>) { return make_cuComplex(1.f, 0.f); } else
+  if constexpr(std::is_same_v<__half2, T>) { return make_half2(CUDART_ONE_FP16, CUDART_ZERO_FP16); } else { return T(); }
+}
 
 template <class T> __device__ __forceinline__ T conj(T a) { return a; }
 template <> __device__ __forceinline__ cuDoubleComplex conj<cuDoubleComplex>(cuDoubleComplex a) { return make_cuDoubleComplex(a.x, -a.y); };

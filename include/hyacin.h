@@ -159,9 +159,10 @@ void hyacinXtransform(
   int32_t lda_in,
   void* Aout, // device-pointer
   int32_t lda_out,
+  char Xtype,
   const void* X, // device-pointer
   int32_t ldx
-); // In-place mode: Ain == Aout && lda_in == lda_out; Identity mode: N <= 0
+); // In-place mode: Ain == Aout && lda_in == lda_out; Gather mode: Xtype == 'I'/'J', Identity mode: N <= 0
 
 void hyacinAllReduce1Drow(
   const hyacinHandle_t* handle,

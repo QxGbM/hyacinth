@@ -235,9 +235,7 @@ inline void herk_dispatcher(cudaStream_t stream, cudaMemPool_t mempool, cublasHa
     int32_t algnM = (M + 255) & (~255), algnN = (N + 63) & (~63);
     uint64_t strideA = uint64_t(algnM) * uint64_t(N) * uint64_t(orderA), a_len = uint64_t(algnM) * uint64_t(algnN - N);
     if constexpr(Complex) { a_len += strideA * uint64_t(3); } else { a_len += strideA; }
-
-    int8_t* W = nullptr;
-    if (cudaSuccess != cudaMallocFromPoolAsync((void**)&W, a_len, mempool, stream))
+    int8_t* W = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&W, a_len, mempool, stream))
       throw std::runtime_error("Workspace (i8) allocation failed at Integer SY/HERK");
 
     internal::int8::quantize_limbs(stream, M, N, orderA, A, lda, vexp, W, algnM);
@@ -299,12 +297,11 @@ inline void herk_batch_dispatcher(hyacinHandle_t* handle, int32_t M, int32_t N, 
   switch(op) {
     case 'E': {
       herk_dispatcher(stream, mempool, cublasH, alg, M, N, A, lda, vexp, beta, orderC, C, uptr);
-    } break;
-    case 'Z': {
+    } break; case 'Z': {
       if (alg == 'L') { internal::int8::quantize_limbs(stream, M, N, orderA, A, lda, vexp, &W[row], ldw); } else
       if (alg == 'C') { internal::scatter_matcopy(stream, cublasH, 'A', M, N, nullptr, A, lda, &((matrix_t*)W)[row], ldw); }
-    } break;
-    case 'F': { int32_t i = *beta; *beta = 1;
+    } break; case 'F': {
+      int32_t i = *beta; *beta = 1;
       if (alg == 'L') {
         i8herk_limbs<Complex>(stream, mempool, cublasH, row, N, orderA, W, ldw, i, orderC, C);
         internal::int8::quantize_limbs(stream, M, N, orderA, A, lda, vexp, W, ldw);
@@ -312,8 +309,7 @@ inline void herk_batch_dispatcher(hyacinHandle_t* handle, int32_t M, int32_t N, 
         i8herk_crt(stream, mempool, cublasH, row, N, orderA, seg, (const matrix_t*)W, ldw, vexp, uint32_t(uc), i, orderC, C);
         internal::scatter_matcopy(stream, cublasH, 'A', M, N, nullptr, A, lda, (matrix_t*)W, ldw);
       }
-    } break;
-    case 'S': default: break;
+    } break; case 'S': default: break;
   }
 }
 
