@@ -1,6 +1,5 @@
 
 #pragma once
-
 #include <stdint.h>
 #include <cublas_v2.h>
 #include <cusolverDn.h>
@@ -24,12 +23,14 @@ typedef enum {
 } hyacinPrecision_t;
 
 typedef struct {
+  char GramMatrixAlgorithm;
+  int32_t BatchK, QuantizeBitCorrection, GramBitCorrection, JacobiSVDSweeps, RankOversampling;
+  int32_t Batches; struct { int32_t U, Order, SegK, Prefix, Rows; char Algorithm; } *BatchTensor;
   cudaStream_t cudaStream;
   cublasHandle_t cublasHandle;
   cusolverDnHandle_t cusolverHandle;
   cudaMemPool_t mempool;
-  void* pinnedWorkspace; // A 128-byte pinned workspace on host for host reduction
-  void* timer;
+  void* timer, *pinnedWorkspace;
 #ifndef NO_NCCL
   ncclComm_t col_comm, row_comm;
 #endif
@@ -40,18 +41,50 @@ extern "C" {
 #endif
 
 void hyacinCreate(
-  hyacinHandle_t* handle, // host-pointer
-  int32_t create_timer
+  hyacinHandle_t* handle // host-pointer
 );
 
 void hyacinDestroy(
-  hyacinHandle_t handle
+  hyacinHandle_t* handle
+);
+
+void hyacinXherkBatchCreate(
+  hyacinHandle_t* handle,
+  double epi,
+  int32_t N,
+  hyacinPrecision_t Atype,
+  uint64_t* Bbytes // host-pointer
+);
+
+void hyacinXherkBatch(
+  hyacinHandle_t* handle,
+  int32_t M,
+  int32_t N,
+  hyacinPrecision_t Atype,
+  const void* A, // device-pointer
+  int32_t lda,
+  int32_t u_hint, // HYACIN_QUERY_U for query
+  const int32_t* vexp, // device-pointer
+  int32_t* beta, // host-pointer
+  int32_t orderC,
+  uint64_t* C, // device-pointer
+  int8_t* Bdata // device-pointer
+);
+
+void hyacinXherkBatchFlush(
+  hyacinHandle_t* handle,
+  int32_t N,
+  hyacinPrecision_t Atype,
+  const int32_t* vexp, // device-pointer
+  int32_t beta,
+  int32_t orderC,
+  uint64_t* C, // device-pointer
+  int8_t* Bdata // device-pointer
 );
 
 void hyacinXGautoType(
+  const hyacinHandle_t* handle,
   double epi,
-  int32_t u_corr,
-  int32_t g_corr,
   uint64_t M,
   int32_t N,
   hyacinPrecision_t Atype,
@@ -64,7 +97,7 @@ void hyacinXGautoType(
 );
 
 void hyacinXquantizeScale(
-  hyacinHandle_t handle,
+  const hyacinHandle_t* handle,
   int32_t M,
   int32_t N,
   hyacinPrecision_t Atype,
@@ -76,7 +109,7 @@ void hyacinXquantizeScale(
 );
 
 void hyacinXdequantize(
-  hyacinHandle_t handle,
+  const hyacinHandle_t* handle,
   int32_t N,
   int32_t orderC,
   const uint64_t* C, // device-pointer
@@ -86,56 +119,12 @@ void hyacinXdequantize(
   int32_t ldg
 );
 
-void* hyacinXherkBatchCreate(
-  hyacinHandle_t handle,
-  char alg,
-  double epi,
-  int32_t u_corr,
-  int32_t batchK,
-  int32_t N,
-  hyacinPrecision_t Atype
-);
-
-void hyacinXherkBatchDestroy(
-  hyacinHandle_t handle,
-  void* batch // host-pointer
-);
-
-void hyacinXherkBatch(
-  hyacinHandle_t handle,
-  char alg,
-  int32_t M,
-  int32_t N,
-  hyacinPrecision_t Atype,
-  const void* A, // device-pointer
-  int32_t lda,
-  int32_t u_hint, // HYACIN_QUERY_U for query
-  const int32_t* vexp, // device-pointer
-  int32_t* beta, // host-pointer
-  int32_t orderC,
-  uint64_t* C, // device-pointer
-  void* batch // host-pointer
-);
-
-void hyacinXherkBatchFlush(
-  hyacinHandle_t handle,
-  int32_t N,
-  hyacinPrecision_t Atype,
-  const int32_t* vexp, // device-pointer
-  int32_t beta,
-  int32_t orderC,
-  uint64_t* C, // device-pointer
-  void* batch // host-pointer
-);
-
 int32_t hyacinXGevd(
-  hyacinHandle_t handle,
+  const hyacinHandle_t* handle,
   char fillmode,
   double epi,
-  int32_t jacobi_sweeps,
   int32_t N,
   int32_t K,
-  int32_t p,
   hyacinPrecision_t Atype,
   void* X,
   int32_t ldx,
@@ -146,12 +135,11 @@ int32_t hyacinXGevd(
 ); // returns rank
 
 int32_t hyacinXGinterp(
-  hyacinHandle_t handle,
+  const hyacinHandle_t* handle,
   char fillmode,
   double epi,
   int32_t N,
   int32_t K,
-  int32_t p,
   hyacinPrecision_t Atype,
   void* X, // device-pointer
   int32_t ldx,
@@ -162,7 +150,7 @@ int32_t hyacinXGinterp(
 ); // returns rank
 
 void hyacinXtransform(
-  hyacinHandle_t handle,
+  const hyacinHandle_t* handle,
   int32_t M,
   int32_t N,
   int32_t K,
@@ -176,21 +164,21 @@ void hyacinXtransform(
 ); // In-place mode: Ain == Aout && lda_in == lda_out; Identity mode: N <= 0
 
 void hyacinAllReduce1Drow(
-  hyacinHandle_t handle,
+  const hyacinHandle_t* handle,
   int32_t Complex,
   int32_t orderA,
   uint64_t N,
   uint64_t* A // device-pointer
 );
 
-extern "C" void hyacinAllReduceVExp(
-  hyacinHandle_t handle,
+void hyacinAllReduceVExp(
+  const hyacinHandle_t* handle,
   uint64_t N,
   int32_t* vexp // device-pointer
 );
 
 int32_t hyacinXAllGatherV1Dcol(
-  hyacinHandle_t handle,
+  const hyacinHandle_t* handle,
   int32_t M,
   int32_t* K, // host-pointer
   int32_t AElemBytes,
@@ -203,14 +191,13 @@ int32_t hyacinXAllGatherV1Dcol(
 void hyacinCreate2D(
   hyacinHandle_t* handle, // host-pointer
   ncclComm_t col_comm,
-  ncclComm_t row_comm,
-  int32_t create_timer
+  ncclComm_t row_comm
 );
 
 #endif
 
 void hyacinSync_TimerSegments(
-  hyacinHandle_t handle,
+  const hyacinHandle_t* handle,
   double* eventMs, // host-pointer
   int32_t lenMs
 );

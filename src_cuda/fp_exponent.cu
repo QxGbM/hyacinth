@@ -76,16 +76,16 @@ inline void vector_exponents_dispatcher(cudaStream_t stream, int32_t M, int32_t 
   if (beta == 0 && 0 < M) { vector_exponent_kernel<0, block_threads, reduc_t> <<< N, block_threads, 0, stream >>> (M, A, lda64, u, vexp); }
 }
 
-extern "C" void hyacinXquantizeScale(hyacinHandle_t handle, int32_t M, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t uA, int32_t beta, int32_t* vexp) {
+extern "C" void hyacinXquantizeScale(const hyacinHandle_t* handle, int32_t M, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t uA, int32_t beta, int32_t* vexp) {
   if (N <= 0) { return; }
-  Timer::register_distribute_kernel(handle.cudaStream, handle.timer);
+  Timer::register_distribute_kernel(handle->cudaStream, handle->timer);
   switch(Atype) {
-    case HYACIN_F64: vector_exponents_dispatcher<double>(handle.cudaStream, M, N, (const double*)A, lda, uA, beta, vexp); return;
-    case HYACIN_F32: vector_exponents_dispatcher<float>(handle.cudaStream, M, N, (const float*)A, lda, uA, beta, vexp); return;
-    case HYACIN_F16: vector_exponents_dispatcher<float>(handle.cudaStream, M, N, (const __half*)A, lda, uA, beta, vexp); return;
-    case HYACIN_F64_COMPLEX: vector_exponents_dispatcher<double>(handle.cudaStream, M, N, (const cuDoubleComplex*)A, lda, uA, beta, vexp); return;
-    case HYACIN_F32_COMPLEX: vector_exponents_dispatcher<float>(handle.cudaStream, M, N, (const cuComplex*)A, lda, uA, beta, vexp); return;
-    case HYACIN_F16_COMPLEX: vector_exponents_dispatcher<float>(handle.cudaStream, M, N, (const __half2*)A, lda, uA, beta, vexp); return;
+    case HYACIN_F64: vector_exponents_dispatcher<double>(handle->cudaStream, M, N, (const double*)A, lda, uA, beta, vexp); return;
+    case HYACIN_F32: vector_exponents_dispatcher<float>(handle->cudaStream, M, N, (const float*)A, lda, uA, beta, vexp); return;
+    case HYACIN_F16: vector_exponents_dispatcher<float>(handle->cudaStream, M, N, (const __half*)A, lda, uA, beta, vexp); return;
+    case HYACIN_F64_COMPLEX: vector_exponents_dispatcher<double>(handle->cudaStream, M, N, (const cuDoubleComplex*)A, lda, uA, beta, vexp); return;
+    case HYACIN_F32_COMPLEX: vector_exponents_dispatcher<float>(handle->cudaStream, M, N, (const cuComplex*)A, lda, uA, beta, vexp); return;
+    case HYACIN_F16_COMPLEX: vector_exponents_dispatcher<float>(handle->cudaStream, M, N, (const __half2*)A, lda, uA, beta, vexp); return;
     default: return;
   }
 }

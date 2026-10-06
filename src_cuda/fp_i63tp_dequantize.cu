@@ -57,18 +57,18 @@ inline void tp_deq_dispatcher(cudaStream_t stream, int32_t N, int32_t orderA, co
   }
 }
 
-extern "C" void hyacinXdequantize(hyacinHandle_t handle, int32_t N, int32_t orderC, const uint64_t* C, const int32_t* vexp, hyacinPrecision_t Gtype, void* G, int32_t ldg) {
+extern "C" void hyacinXdequantize(const hyacinHandle_t* handle, int32_t N, int32_t orderC, const uint64_t* C, const int32_t* vexp, hyacinPrecision_t Gtype, void* G, int32_t ldg) {
   if (N <= 0) { return; }
-  Timer::register_replicate_kernel(handle.cudaStream, handle.timer);
+  Timer::register_replicate_kernel(handle->cudaStream, handle->timer);
   switch(Gtype) {
-    case HYACIN_F64: tp_deq_dispatcher<0>(handle.cudaStream, N, orderC, C, vexp, (double*)G, ldg); return;
-    case HYACIN_F32: tp_deq_dispatcher<0>(handle.cudaStream, N, orderC, C, vexp, (float*)G, ldg); return;
-    case HYACIN_DD: tp_deq_dispatcher<0>(handle.cudaStream, N, orderC, C, vexp, (double2*)G, ldg); return;
-    case HYACIN_QF: tp_deq_dispatcher<0>(handle.cudaStream, N, orderC, C, vexp, (float4*)G, ldg); return;
-    case HYACIN_F64_COMPLEX: tp_deq_dispatcher<1>(handle.cudaStream, N, orderC, C, vexp, (cuDoubleComplex*)G, ldg); return;
-    case HYACIN_F32_COMPLEX: tp_deq_dispatcher<1>(handle.cudaStream, N, orderC, C, vexp, (cuComplex*)G, ldg); return;
-    case HYACIN_DD_COMPLEX: tp_deq_dispatcher<1>(handle.cudaStream, N, orderC, C, vexp, (complex_double2*)G, ldg); return;
-    case HYACIN_QF_COMPLEX: tp_deq_dispatcher<1>(handle.cudaStream, N, orderC, C, vexp, (complex_float4*)G, ldg); return;
+    case HYACIN_F64: tp_deq_dispatcher<0>(handle->cudaStream, N, orderC, C, vexp, (double*)G, ldg); return;
+    case HYACIN_F32: tp_deq_dispatcher<0>(handle->cudaStream, N, orderC, C, vexp, (float*)G, ldg); return;
+    case HYACIN_DD: tp_deq_dispatcher<0>(handle->cudaStream, N, orderC, C, vexp, (double2*)G, ldg); return;
+    case HYACIN_QF: tp_deq_dispatcher<0>(handle->cudaStream, N, orderC, C, vexp, (float4*)G, ldg); return;
+    case HYACIN_F64_COMPLEX: tp_deq_dispatcher<1>(handle->cudaStream, N, orderC, C, vexp, (cuDoubleComplex*)G, ldg); return;
+    case HYACIN_F32_COMPLEX: tp_deq_dispatcher<1>(handle->cudaStream, N, orderC, C, vexp, (cuComplex*)G, ldg); return;
+    case HYACIN_DD_COMPLEX: tp_deq_dispatcher<1>(handle->cudaStream, N, orderC, C, vexp, (complex_double2*)G, ldg); return;
+    case HYACIN_QF_COMPLEX: tp_deq_dispatcher<1>(handle->cudaStream, N, orderC, C, vexp, (complex_float4*)G, ldg); return;
     default: return;
   }
 }

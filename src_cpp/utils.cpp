@@ -6,6 +6,28 @@
 #include <limits>
 #include <stdexcept>
 
+#ifndef HYACIN_DEFAULT_GRAM_ALGORITHM
+#define HYACIN_DEFAULT_GRAM_ALGORITHM 'A'
+#endif
+#ifndef HYACIN_DEFAULT_BATCH_K
+#define HYACIN_DEFAULT_BATCH_K 65536
+#endif
+#ifndef HYACIN_DEFAULT_QUANTIZE_BITS_CORR
+#define HYACIN_DEFAULT_QUANTIZE_BITS_CORR 5
+#endif
+#ifndef HYACIN_DEFAULT_GRAM_BITS_CORR
+#define HYACIN_DEFAULT_GRAM_BITS_CORR -5
+#endif
+#ifndef HYACIN_DEFAULT_JACOBI_SVD_SWEEPS
+#define HYACIN_DEFAULT_JACOBI_SVD_SWEEPS 15
+#endif
+#ifndef HYACIN_DEFAULT_PRECOND_OVERSAMPLING
+#define HYACIN_DEFAULT_PRECOND_OVERSAMPLING 10
+#endif
+#ifndef HYACIN_DEFAULT_CREATE_TIMER
+#define HYACIN_DEFAULT_CREATE_TIMER 1
+#endif
+
 int32_t device_sms = 0; bool device_f64_capable = false;
 const std::vector<int32_t> f64_capable_sm_list({ 800, 900, 1000 }); // sm80,sm90,sm100
 
@@ -43,63 +65,23 @@ std::pair<int32_t, int32_t> internal::gram_algorithm(char& alg, int32_t M, int32
   return std::make_pair(orderA_limbs, 1);
 }
 
-Batch::BatchArgs::BatchArgs(cudaStream_t stream, cudaMemPool_t mempool, char algo, int32_t u_ceil, int32_t K, int32_t N, int32_t Complex, int32_t elemBytes) : tensor(), batchMaxK((std::max(0, K) + 255) & (~255)) {
-  int32_t u_floor = Complex;
-  while (u_floor <= u_ceil) {
-    char algi = algo; int32_t ui = u_floor;
-    std::pair<int32_t, int32_t> orderA = internal::gram_algorithm(algi, batchMaxK, ui, Complex);
-    if (algi == 'L') { u_floor = 1 + ui; tensor.insert(std::make_pair(ui, std::make_tuple(orderA.first, orderA.second, 0, 0, algi))); }
-      else { u_floor = 1 + u_ceil; }
-  }
-
-  std::pair<int32_t, int32_t> orderA = internal::gram_algorithm(algo, batchMaxK, u_ceil, Complex);
-  tensor.insert(std::make_pair(u_ceil, std::make_tuple(orderA.first, orderA.second, 0, 0, algo)));
-  int32_t order = 0; int32_t panelsLimb = Complex ? 3 : 1;
-  for (auto& [key, value] : tensor)
-  { std::get<Prefix>(value) = order; order += (std::get<Algorithm>(value) == 'C') ? elemBytes : (panelsLimb * std::get<Order>(value)); }
-
-  uint64_t bytes = uint64_t(N) * uint64_t(batchMaxK) * uint64_t(order);
-  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&data, bytes, mempool, stream))
-    throw std::runtime_error("Batch Workspace allocation failed");
-}
-
-std::tuple<int32_t, int32_t, int32_t, int32_t, int8_t*, char> Batch::BatchArgs::processA(int32_t M, int32_t N, int32_t uc, char alg, char& op) {
-  if (uc < 0) { op = 'S'; return std::make_tuple(uc, 0, 0, 0, data, alg); } else {
-    auto iter = tensor.lower_bound(uc);
-    if (iter == tensor.end() || batchMaxK < M) { op = 'E'; return std::make_tuple(uc, 0, 0, 0, data, alg); } else {
-      std::tuple<int32_t, int32_t, int32_t, int32_t, char>& value = iter->second; int32_t rows = std::get<Rows>(value);
-      if (M <= batchMaxK - rows) { op = 'Z'; std::get<Rows>(value) = rows + M; }
-        else { op = 'F'; std::get<Rows>(value) = M; }
-      int64_t prefix_elem = int64_t(N) * int64_t(batchMaxK) * int64_t(std::get<Prefix>(value));
-      return std::make_tuple(iter->first, std::get<Order>(value), std::get<SegK>(value), rows, &data[prefix_elem], std::get<Algorithm>(value));
-    }
-  }
-}
-
-void Batch::BatchArgs::flush(int32_t N, std::vector<std::tuple<int32_t, int32_t, int32_t, int32_t, int8_t*, char>>& list) {
-  int64_t stride = int64_t(N) * int64_t(batchMaxK);
-  for (auto& [key, value] : tensor) if (std::get<Rows>(value)) {
-    int64_t prefix_elem = stride * int64_t(std::get<Prefix>(value));
-    int32_t rows = std::get<Rows>(value), seg = int32_t(std::ceil(double(std::get<SegK>(value)) * (double(rows) / double(batchMaxK))));
-    list.emplace_back(key, std::get<Order>(value), seg, rows, &data[prefix_elem], std::get<Algorithm>(value)); std::get<Rows>(value) = 0;
-  }
-}
-
-void Batch::BatchArgs::free_data(cudaStream_t stream) {
-  if (data) { cudaFreeAsync(data, stream); }
-}
-
-extern "C" void hyacinXherkBatchDestroy(hyacinHandle_t handle, void* param) {
-  if (param) { reinterpret_cast<Batch::BatchArgs*>(param)->free_data(handle.cudaStream); delete reinterpret_cast<Batch::BatchArgs*>(param); }
-}
-
 enum class segment : unsigned char { none, dist_kernel, rep_kernel, comm };
 struct EventTimer {
   std::vector<std::pair<segment, cudaEvent_t>> events;
   segment lastSegment = segment::none;
 };
 
-extern "C" void hyacinCreate(hyacinHandle_t* handle, int32_t create_timer) {
+extern "C" void hyacinCreate(hyacinHandle_t* handle) {
+  auto get_env = [](const std::string& key) { const char* val = std::getenv(key.c_str()); return val ? std::string(val) : std::string(""); };
+  std::string env_str;
+  handle->GramMatrixAlgorithm = ((env_str = get_env("HYACIN_GRAM_ALGORITHM")) == "") ? HYACIN_DEFAULT_GRAM_ALGORITHM : env_str[0];
+  handle->BatchK = ((env_str = get_env("HYACIN_BATCH_K")) == "") ? HYACIN_DEFAULT_BATCH_K : std::stoi(env_str);
+  handle->QuantizeBitCorrection = ((env_str = get_env("HYACIN_QUANTIZE_BITS_CORR")) == "") ? HYACIN_DEFAULT_QUANTIZE_BITS_CORR : std::stoi(env_str);
+  handle->GramBitCorrection = ((env_str = get_env("HYACIN_GRAM_BITS_CORR")) == "") ? HYACIN_DEFAULT_GRAM_BITS_CORR : std::stoi(env_str);
+  handle->JacobiSVDSweeps = ((env_str = get_env("HYACIN_JACOBI_SVD_SWEEPS")) == "") ? HYACIN_DEFAULT_JACOBI_SVD_SWEEPS : std::stoi(env_str);
+  handle->RankOversampling = ((env_str = get_env("HYACIN_PRECOND_OVERSAMPLING")) == "") ? HYACIN_DEFAULT_PRECOND_OVERSAMPLING : std::stoi(env_str);
+  handle->Batches = 0; handle->BatchTensor = nullptr;
+
   cudaStreamCreateWithFlags(&handle->cudaStream, cudaStreamNonBlocking);
   cublasCreate(&handle->cublasHandle);
   cublasSetStream(handle->cublasHandle, handle->cudaStream);
@@ -114,24 +96,26 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle, int32_t create_timer) {
 #ifndef NO_NCCL
   handle->col_comm = handle->row_comm = nullptr;
 #endif
-  handle->timer = create_timer ? (new EventTimer()) : nullptr;
+  handle->timer = (((env_str = get_env("HYACIN_CREATE_TIMER")) == "") ? HYACIN_DEFAULT_CREATE_TIMER : (env_str == "1" || env_str == "true" || env_str == "True")) ? (new EventTimer()) : nullptr;
 }
 
 #ifndef NO_NCCL
-extern "C" void hyacinCreate2D(hyacinHandle_t* handle, ncclComm_t col_comm, ncclComm_t row_comm, int32_t create_timer) {
-  hyacinCreate(handle, create_timer);
+extern "C" void hyacinCreate2D(hyacinHandle_t* handle, ncclComm_t col_comm, ncclComm_t row_comm) {
+  hyacinCreate(handle);
   handle->col_comm = col_comm;
   handle->row_comm = row_comm;
 }
 #endif
 
-extern "C" void hyacinDestroy(hyacinHandle_t handle) {
-  cudaStreamDestroy(handle.cudaStream);
-  cublasDestroy(handle.cublasHandle);
-  cusolverDnDestroy(handle.cusolverHandle);
-  cudaMemPoolDestroy(handle.mempool);
-  cudaFreeHost(handle.pinnedWorkspace);
-  if (handle.timer) { delete (EventTimer*)(handle.timer); }
+extern "C" void hyacinDestroy(hyacinHandle_t* handle) {
+  if (handle->cudaStream) { cudaStreamDestroy(handle->cudaStream); }
+  if (handle->cublasHandle) { cublasDestroy(handle->cublasHandle); }
+  if (handle->cusolverHandle) { cusolverDnDestroy(handle->cusolverHandle); }
+  if (handle->mempool) { cudaMemPoolDestroy(handle->mempool); }
+  if (handle->pinnedWorkspace) { cudaFreeHost(handle->pinnedWorkspace); }
+  if (handle->BatchTensor) { std::free(handle->BatchTensor); }
+  if (handle->timer) { delete (EventTimer*)(handle->timer); }
+  std::memset(handle, 0, sizeof(hyacinHandle_t));
 }
 
 template <segment seg> inline void register_event(cudaStream_t stream, EventTimer* timer) {
@@ -145,16 +129,16 @@ void Timer::register_distribute_kernel(cudaStream_t stream, void* timer) { regis
 void Timer::register_replicate_kernel(cudaStream_t stream, void* timer) { register_event<segment::rep_kernel>(stream, (EventTimer*)timer); }
 void Timer::register_comm(cudaStream_t stream, void* timer) { register_event<segment::comm>(stream, (EventTimer*)timer); }
 
-extern "C" void hyacinSync_TimerSegments(hyacinHandle_t handle, double* eventMs, int32_t lenMs) {
-  if (handle.timer == nullptr || eventMs == nullptr || lenMs <= 0) 
-  { cudaStreamSynchronize(handle.cudaStream); return; }
+extern "C" void hyacinSync_TimerSegments(const hyacinHandle_t* handle, double* eventMs, int32_t lenMs) {
+  if (handle->timer == nullptr || eventMs == nullptr || lenMs <= 0) 
+  { cudaStreamSynchronize(handle->cudaStream); return; }
 
-  double d_time = 0., r_time = 0., c_time = 0.;
-  int32_t len = int32_t(((EventTimer*)handle.timer)->events.size());
-  cudaEvent_t e; cudaEventCreate(&e); cudaEventRecord(e, handle.cudaStream); cudaEventSynchronize(e);
-  ((EventTimer*)handle.timer)->events.emplace_back(((EventTimer*)handle.timer)->lastSegment, e);
+  double d_time = 0., r_time = 0., c_time = 0.; EventTimer* t = (EventTimer*)(handle->timer);
+  int32_t len = int32_t(t->events.size());
+  cudaEvent_t e; cudaEventCreate(&e); cudaEventRecord(e, handle->cudaStream); cudaEventSynchronize(e);
+  t->events.emplace_back(t->lastSegment, e);
 
-  if (len) for (auto [seg, event] : ((EventTimer*)handle.timer)->events) {
+  if (len) for (auto [seg, event] : t->events) {
     float milliseconds = 0.f;
     if (seg == segment::dist_kernel) { cudaEventElapsedTime(&milliseconds, e, event); e = event; d_time += double(milliseconds); } else
     if (seg == segment::rep_kernel) { cudaEventElapsedTime(&milliseconds, e, event); e = event; r_time += double(milliseconds); } else
@@ -162,8 +146,8 @@ extern "C" void hyacinSync_TimerSegments(hyacinHandle_t handle, double* eventMs,
     { e = event; }
   }
 
-  for (auto [seg, event] : ((EventTimer*)handle.timer)->events) { cudaEventDestroy(event); }
-  ((EventTimer*)handle.timer)->events.clear(); ((EventTimer*)handle.timer)->lastSegment = segment::none;
+  for (auto [seg, event] : t->events) { cudaEventDestroy(event); }
+  t->events.clear(); t->lastSegment = segment::none;
   for (int32_t i = 0; i < lenMs; ++i) {
     char req = static_cast<char>(eventMs[i]);
     if (req == 'D' || req == 'd') { eventMs[i] = d_time; } else

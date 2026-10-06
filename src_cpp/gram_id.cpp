@@ -34,40 +34,40 @@ inline int32_t interp(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t
   return K;
 }
 
-extern "C" int32_t hyacinXGinterp(hyacinHandle_t handle, char fillmode, double epi, int32_t N, int32_t K, int32_t p, hyacinPrecision_t Atype, void* X, int32_t ldx, int32_t* jpiv, hyacinPrecision_t Gtype, void* G, int32_t ldg) {
+extern "C" int32_t hyacinXGinterp(const hyacinHandle_t* handle, char fillmode, double epi, int32_t N, int32_t K, hyacinPrecision_t Atype, void* X, int32_t ldx, int32_t* jpiv, hyacinPrecision_t Gtype, void* G, int32_t ldg) {
   if (N <= 0) { return 0; } K = K <= 0 ? N : std::min(N, K);
-  Timer::register_replicate_kernel(handle.cudaStream, handle.timer);
-  int32_t *rank_ptr = (int32_t*)handle.pinnedWorkspace;
-
+  cudaStream_t stream = handle->cudaStream; Timer::register_replicate_kernel(stream, handle->timer);
+  cudaMemPool_t mempool = handle->mempool; cublasHandle_t cublasH = handle->cublasHandle;
+  int32_t *rank_ptr = (int32_t*)handle->pinnedWorkspace, oversampling = handle->RankOversampling;
   switch (Gtype) {
     case HYACIN_F64: if (Atype == HYACIN_F64)
-    { return interp<double, double>(handle.cudaStream, handle.mempool, handle.cublasHandle, fillmode, epi, N, K, p, jpiv, (double*)X, ldx, (double*)G, ldg, rank_ptr); } else
+    { return interp<double, double>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (double*)X, ldx, (double*)G, ldg, rank_ptr); } else
     if (Atype == HYACIN_F32)
-    { return interp<float, double>(handle.cudaStream, handle.mempool, handle.cublasHandle, fillmode, epi, N, K, p, jpiv, (float*)X, ldx, (double*)G, ldg, rank_ptr); } else { return 0; }
+    { return interp<float, double>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (float*)X, ldx, (double*)G, ldg, rank_ptr); } else { return 0; }
     case HYACIN_F32: if (Atype == HYACIN_F64)
-    { return interp<float, float>(handle.cudaStream, handle.mempool, handle.cublasHandle, fillmode, epi, N, K, p, jpiv, (double*)X, ldx, (float*)G, ldg, rank_ptr); } else
+    { return interp<float, float>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (double*)X, ldx, (float*)G, ldg, rank_ptr); } else
     if (Atype == HYACIN_F32)
-    { return interp<float, float>(handle.cudaStream, handle.mempool, handle.cublasHandle, fillmode, epi, N, K, p, jpiv, (float*)X, ldx, (float*)G, ldg, rank_ptr); } else
+    { return interp<float, float>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (float*)X, ldx, (float*)G, ldg, rank_ptr); } else
     if (Atype == HYACIN_F16)
-    { return interp<float, float>(handle.cudaStream, handle.mempool, handle.cublasHandle, fillmode, epi, N, K, p, jpiv, (__half*)X, ldx, (float*)G, ldg, rank_ptr); } else { return 0; }
+    { return interp<float, float>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (__half*)X, ldx, (float*)G, ldg, rank_ptr); } else { return 0; }
     case HYACIN_DD: if (Atype == HYACIN_F64)
-    { return interp<double, double2>(handle.cudaStream, handle.mempool, handle.cublasHandle, fillmode, epi, N, K, p, jpiv, (double*)X, ldx, (double2*)G, ldg, rank_ptr); } else { return 0; }
+    { return interp<double, double2>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (double*)X, ldx, (double2*)G, ldg, rank_ptr); } else { return 0; }
     case HYACIN_QF: if (Atype == HYACIN_F64)
-    { return interp<double, float4>(handle.cudaStream, handle.mempool, handle.cublasHandle, fillmode, epi, N, K, p, jpiv, (double*)X, ldx, (float4*)G, ldg, rank_ptr); } else { return 0; }
+    { return interp<double, float4>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (double*)X, ldx, (float4*)G, ldg, rank_ptr); } else { return 0; }
     case HYACIN_F64_COMPLEX: if (Atype == HYACIN_F64_COMPLEX)
-    { return interp<cuDoubleComplex, double>(handle.cudaStream, handle.mempool, handle.cublasHandle, fillmode, epi, N, K, p, jpiv, (cuDoubleComplex*)X, ldx, (cuDoubleComplex*)G, ldg, rank_ptr); } else
+    { return interp<cuDoubleComplex, double>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (cuDoubleComplex*)X, ldx, (cuDoubleComplex*)G, ldg, rank_ptr); } else
     if (Atype == HYACIN_F32_COMPLEX)
-    { return interp<cuComplex, double>(handle.cudaStream, handle.mempool, handle.cublasHandle, fillmode, epi, N, K, p, jpiv, (cuComplex*)X, ldx, (cuDoubleComplex*)G, ldg, rank_ptr); } else { return 0; }
+    { return interp<cuComplex, double>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (cuComplex*)X, ldx, (cuDoubleComplex*)G, ldg, rank_ptr); } else { return 0; }
     case HYACIN_F32_COMPLEX: if (Atype == HYACIN_F64_COMPLEX)
-    { return interp<cuComplex, float>(handle.cudaStream, handle.mempool, handle.cublasHandle, fillmode, epi, N, K, p, jpiv, (cuDoubleComplex*)X, ldx, (cuComplex*)G, ldg, rank_ptr); } else
+    { return interp<cuComplex, float>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (cuDoubleComplex*)X, ldx, (cuComplex*)G, ldg, rank_ptr); } else
     if (Atype == HYACIN_F32_COMPLEX)
-    { return interp<cuComplex, float>(handle.cudaStream, handle.mempool, handle.cublasHandle, fillmode, epi, N, K, p, jpiv, (cuComplex*)X, ldx, (cuComplex*)G, ldg, rank_ptr); } else
+    { return interp<cuComplex, float>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (cuComplex*)X, ldx, (cuComplex*)G, ldg, rank_ptr); } else
     if (Atype == HYACIN_F16_COMPLEX)
-    { return interp<cuComplex, float>(handle.cudaStream, handle.mempool, handle.cublasHandle, fillmode, epi, N, K, p, jpiv, (__half2*)X, ldx, (cuComplex*)G, ldg, rank_ptr); } else { return 0; }
+    { return interp<cuComplex, float>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (__half2*)X, ldx, (cuComplex*)G, ldg, rank_ptr); } else { return 0; }
     case HYACIN_DD_COMPLEX: if (Atype == HYACIN_F64_COMPLEX)
-    { return interp<cuDoubleComplex, double2>(handle.cudaStream, handle.mempool, handle.cublasHandle, fillmode, epi, N, K, p, jpiv, (cuDoubleComplex*)X, ldx, (complex_double2*)G, ldg, rank_ptr); } else { return 0; }
+    { return interp<cuDoubleComplex, double2>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (cuDoubleComplex*)X, ldx, (complex_double2*)G, ldg, rank_ptr); } else { return 0; }
     case HYACIN_QF_COMPLEX: if (Atype == HYACIN_F64_COMPLEX)
-    { return interp<cuDoubleComplex, float4>(handle.cudaStream, handle.mempool, handle.cublasHandle, fillmode, epi, N, K, p, jpiv, (cuDoubleComplex*)X, ldx, (complex_float4*)G, ldg, rank_ptr); } else { return 0; }
+    { return interp<cuDoubleComplex, float4>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (cuDoubleComplex*)X, ldx, (complex_float4*)G, ldg, rank_ptr); } else { return 0; }
     default: return 0;
   }
 }

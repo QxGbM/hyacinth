@@ -97,26 +97,6 @@ namespace internal {
 
 };
 
-namespace Batch {
-
-  class BatchArgs {
-  private:
-    static constexpr unsigned char Order = 0, SegK = 1, Prefix = 2, Rows = 3, Algorithm = 4;
-    std::map<int32_t, std::tuple<int32_t, int32_t, int32_t, int32_t, char>> tensor; int8_t* data;
-    // tuple is [Tensor Order, Tensor SegK, Tensor Panel Prefix, Tensor Rows, Algorithm 'L' or 'C']
-
-  public:
-    const int32_t batchMaxK;
-    BatchArgs(cudaStream_t stream, cudaMemPool_t mempool, char algo, int32_t u_ceil, int32_t K, int32_t N, int32_t Complex, int32_t elemBytes);
-
-    // op: 'E'=eager eval; 'Z'=lazy batch; 'F'=lazy+flush; 'S'=skip;
-    std::tuple<int32_t, int32_t, int32_t, int32_t, int8_t*, char> processA(int32_t M, int32_t N, int32_t uc, char alg, char& op);
-    void flush(int32_t N, std::vector<std::tuple<int32_t, int32_t, int32_t, int32_t, int8_t*, char>>& list);
-    void free_data(cudaStream_t stream);
-  };
-
-};
-
 namespace Timer {
 void register_distribute_kernel(cudaStream_t stream, void* timer);
 void register_replicate_kernel(cudaStream_t stream, void* timer);

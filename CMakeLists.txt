@@ -13,6 +13,7 @@ set(CPP_SOURCES
   src_cpp/allgatherv_1dcol.cpp
   src_cpp/gram_id.cpp
   src_cpp/hyacin_herk.cpp
+  src_cpp/lra.cpp
   src_cpp/transform.cpp
   src_cpp/utils.cpp
 )
@@ -21,7 +22,7 @@ set(CU_SOURCES
   src_cuda/allreduce_1drow.cu
   src_cuda/fp_exponent.cu
   src_cuda/fp_i63tp_dequantize.cu
-  src_cuda/gram_svd.cu
+  src_cuda/gram_evd.cu
   src_cuda/hyacin_potrfp.cu
   src_cuda/i32_accum.cu
   src_cuda/i32_rem_accum.cu
@@ -69,7 +70,7 @@ else()
 endif()
 
 message(STATUS "Will install to: ${CMAKE_INSTALL_PREFIX}")
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/include/hyacin.h DESTINATION include)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/include/hyacin.h ${CMAKE_CURRENT_SOURCE_DIR}/include/hyacinLRA.hpp DESTINATION include)
 install(TARGETS hyacin EXPORT HyacinTargets LIBRARY DESTINATION lib ARCHIVE DESTINATION lib)
 install(EXPORT HyacinTargets FILE HyacinTargets.cmake NAMESPACE Hyacin:: DESTINATION lib/cmake)
 export(EXPORT HyacinTargets FILE HyacinTargets.cmake NAMESPACE Hyacin::)
