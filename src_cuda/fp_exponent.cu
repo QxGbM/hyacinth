@@ -100,7 +100,6 @@ inline void vector_range_dispatcher(cudaStream_t stream, int32_t M, int32_t N, c
   int32_t grid = std::min(grid_blocks, std::min(N, device_sms * maxBlocksPerSM));
   void* kernelArgs[]{ &M, &N, &A, &lda64, &vexp, &vbuf, &u };
   cudaLaunchCooperativeKernel(vector_range_kernel<block_threads, reduc_t, matrix_t>, grid, block_threads, kernelArgs, 0, stream);
-  cudaStreamSynchronize(stream);
 }
 
 namespace internal::int8 {

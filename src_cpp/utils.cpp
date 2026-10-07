@@ -9,9 +9,6 @@
 #ifndef HYACIN_DEFAULT_GRAM_ALGORITHM
 #define HYACIN_DEFAULT_GRAM_ALGORITHM 'A'
 #endif
-#ifndef HYACIN_DEFAULT_BATCH_K
-#define HYACIN_DEFAULT_BATCH_K 65536
-#endif
 #ifndef HYACIN_DEFAULT_QUANTIZE_BITS_CORR
 #define HYACIN_DEFAULT_QUANTIZE_BITS_CORR 5
 #endif
@@ -23,6 +20,9 @@
 #endif
 #ifndef HYACIN_DEFAULT_PRECOND_OVERSAMPLING
 #define HYACIN_DEFAULT_PRECOND_OVERSAMPLING 10
+#endif
+#ifndef HYACIN_DEFAULT_BATCH_K
+#define HYACIN_DEFAULT_BATCH_K 65536
 #endif
 #ifndef HYACIN_DEFAULT_CREATE_TIMER
 #define HYACIN_DEFAULT_CREATE_TIMER 1
@@ -75,12 +75,12 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle) {
   auto get_env = [](const std::string& key) { const char* val = std::getenv(key.c_str()); return val ? std::string(val) : std::string(""); };
   std::string env_str;
   handle->GramMatrixAlgorithm = ((env_str = get_env("HYACIN_GRAM_ALGORITHM")) == "") ? HYACIN_DEFAULT_GRAM_ALGORITHM : env_str[0];
-  handle->BatchK = ((env_str = get_env("HYACIN_BATCH_K")) == "") ? HYACIN_DEFAULT_BATCH_K : std::stoi(env_str);
   handle->QuantizeBitCorrection = ((env_str = get_env("HYACIN_QUANTIZE_BITS_CORR")) == "") ? HYACIN_DEFAULT_QUANTIZE_BITS_CORR : std::stoi(env_str);
   handle->GramBitCorrection = ((env_str = get_env("HYACIN_GRAM_BITS_CORR")) == "") ? HYACIN_DEFAULT_GRAM_BITS_CORR : std::stoi(env_str);
   handle->JacobiSVDSweeps = ((env_str = get_env("HYACIN_JACOBI_SVD_SWEEPS")) == "") ? HYACIN_DEFAULT_JACOBI_SVD_SWEEPS : std::stoi(env_str);
   handle->RankOversampling = ((env_str = get_env("HYACIN_PRECOND_OVERSAMPLING")) == "") ? HYACIN_DEFAULT_PRECOND_OVERSAMPLING : std::stoi(env_str);
-  handle->Batches = 0; handle->BatchTensor = nullptr;
+  handle->BatchK = ((env_str = get_env("HYACIN_BATCH_K")) == "") ? HYACIN_DEFAULT_BATCH_K : std::stoi(env_str);
+  handle->Batches = handle->ArenaLines = 0; handle->ArenaU = -1; handle->BatchTensor = nullptr;
 
   cudaStreamCreateWithFlags(&handle->cudaStream, cudaStreamNonBlocking);
   cublasCreate(&handle->cublasHandle);

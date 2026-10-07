@@ -3,7 +3,6 @@
 #include <stdint.h>
 #include <cublas_v2.h>
 #include <cusolverDn.h>
-#define HYACIN_QUERY_U (int32_t)(0x80000000)
 
 #ifndef NO_NCCL
 #include <nccl.h>
@@ -24,8 +23,8 @@ typedef enum {
 
 typedef struct {
   char GramMatrixAlgorithm;
-  int32_t BatchK, QuantizeBitCorrection, GramBitCorrection, JacobiSVDSweeps, RankOversampling;
-  int32_t Batches; struct { int32_t U, Order, SegK, Prefix, Rows; char Algorithm; } *BatchTensor;
+  int32_t QuantizeBitCorrection, GramBitCorrection, JacobiSVDSweeps, RankOversampling;
+  int32_t BatchK, Batches, ArenaLines, ArenaU; struct { int32_t U, Order, Prefix, Rows; } *BatchTensor;
   cudaStream_t cudaStream;
   cublasHandle_t cublasHandle;
   cusolverDnHandle_t cusolverHandle;
@@ -56,14 +55,26 @@ void hyacinXherkBatchCreate(
   uint64_t* Bbytes // host-pointer
 );
 
-void hyacinXherkBatch(
+void hyacinXherk(
   hyacinHandle_t* handle,
   int32_t M,
   int32_t N,
   hyacinPrecision_t Atype,
   const void* A, // device-pointer
   int32_t lda,
-  int32_t u_hint, // HYACIN_QUERY_U for query
+  int32_t u_hint,
+  const int32_t* vexp, // device-pointer
+  int32_t beta,
+  int32_t orderC,
+  uint64_t* C // device-pointer
+);
+
+void* hyacinXherkBatch(
+  hyacinHandle_t* handle,
+  int32_t CommitLines,
+  int32_t ReserveLines,
+  int32_t N,
+  hyacinPrecision_t Atype,
   const int32_t* vexp, // device-pointer
   int32_t* beta, // host-pointer
   int32_t orderC,
