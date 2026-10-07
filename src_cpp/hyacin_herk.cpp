@@ -278,40 +278,28 @@ extern "C" void hyacinXherkBatchCreate(hyacinHandle_t* handle, double epi, int32
   if (Bbytes) { *Bbytes = uint64_t(N) * uint64_t(batchK) * uint64_t(order); }
 }
 
-template <class matrix_t> inline matrix_t* herk_batch_dispatcher(hyacinHandle_t* handle, int32_t M, int32_t R, int32_t N, const int32_t* vexp, int32_t* beta, int32_t orderC, uint64_t* C, int8_t* W, int32_t* uptr) {
+template <class matrix_t> inline matrix_t* herk_batch_dispatcher(hyacinHandle_t* handle, int32_t M, int32_t R, int32_t N, const int32_t* vexp, int32_t* beta, int32_t orderC, uint64_t* C, int8_t* B, int32_t* uptr) {
   constexpr int32_t Complex = int32_t(std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>);
   cudaStream_t stream = handle->cudaStream; cudaMemPool_t mempool = handle->mempool; cublasHandle_t cublasH = handle->cublasHandle; 
-  int32_t uc = -1, orderA, row, K = handle->BatchK; char op;
-  const matrix_t* A = &((const matrix_t*)W)[handle->ArenaLines];
+  int32_t uc = -1, K = handle->BatchK; const matrix_t* A = &((const matrix_t*)B)[handle->ArenaLines];
   if (0 < M) {
     int32_t* vbuf = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&vbuf, uint64_t(2048), mempool, stream))
       throw std::runtime_error("Workspace (vbuf) allocation failed at Integer SY/HERK");
     internal::int8::vector_range(stream, M, N, A, K, uptr, vexp, vbuf); cudaFreeAsync(vbuf, stream); cudaStreamSynchronize(stream); uc = *uptr + Complex;
   }
 
-  if (uc < 0) { op = 'S'; orderA = row = 0; } else {
-    auto iter_end = &handle->BatchTensor[handle->Batches];
-    auto iter = std::find_if(&handle->BatchTensor[0], iter_end, [=](const auto& t) { return uc <= t.U; });
-    if (iter == iter_end || K < M) { op = 'E'; orderA = row = 0; } else {
-      auto& t = *iter; row = t.Rows;
-      if (M <= K - row) { op = 'Z'; t.Rows = row + M; W = &W[row]; } else { op = 'F'; t.Rows = M; }
-      uc = t.U; orderA = t.Order; W = &W[int64_t(N) * int64_t(K) * int64_t(t.Prefix)];
+  if (0 <= uc) {
+    auto iter_end = &handle->BatchTensor[handle->Batches], iter = std::find_if(&handle->BatchTensor[0], iter_end, [=](const auto& t) { return uc <= t.U; });
+    if (iter == iter_end) { handle->ArenaLines += M; handle->ArenaU = std::max(handle->ArenaU, uc); } else {
+      auto& t = *iter; int32_t row = t.Rows; int64_t stride = int64_t(N) * int64_t(K) * int64_t(t.Prefix);
+      if (M <= K - row) { internal::int8::quantize_limbs(stream, M, N, t.Order, A, K, vexp, &B[stride + int64_t(row)], K); t.Rows = row + M; } else
+      { i8herk_limbs<Complex>(stream, mempool, cublasH, row, N, t.Order, &B[stride], K, *beta, orderC, C); internal::int8::quantize_limbs(stream, M, N, t.Order, A, K, vexp, &B[stride], K); t.Rows = M; *beta = 1; }
     }
   }
 
-  switch(op) {
-    case 'E': { handle->ArenaLines += M; handle->ArenaU = std::max(handle->ArenaU, uc); break; }
-    case 'Z': { internal::int8::quantize_limbs(stream, M, N, orderA, A, K, vexp, W, K); break; }
-    case 'F': {
-      i8herk_limbs<Complex>(stream, mempool, cublasH, row, N, orderA, W, K, *beta, orderC, C); *beta = 1;
-      internal::int8::quantize_limbs(stream, M, N, orderA, A, K, vexp, W, K); break;
-    } default: { break; }
-  }
-
-  if (handle->ArenaLines + R <= K) { return &((matrix_t*)W)[handle->ArenaLines]; } else
-  if (R <= K) {
-    herk_dispatcher(stream, mempool, cublasH, handle->GramMatrixAlgorithm, handle->ArenaLines, N, (const matrix_t*)W, K, vexp, beta, orderC, C, &(handle->ArenaU));
-    handle->ArenaLines = 0; handle->ArenaU = -1; return (matrix_t*)W;
+  if (handle->ArenaLines + R <= K) { return &((matrix_t*)B)[handle->ArenaLines]; } else if (R <= K) {
+    herk_dispatcher(stream, mempool, cublasH, handle->GramMatrixAlgorithm, handle->ArenaLines, N, (const matrix_t*)B, K, vexp, beta, orderC, C, &(handle->ArenaU));
+    handle->ArenaLines = 0; handle->ArenaU = -1; return (matrix_t*)B;
   } else { return nullptr; }
 }
 
