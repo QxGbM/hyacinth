@@ -30,11 +30,8 @@ __global__ void vector_exponent_kernel(int32_t M, const matrix_t* __restrict__ A
   constexpr int32_t Complex = std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>;
   __shared__ typename cub::BlockReduce<reduc_t, BLOCK_THREADS>::TempStorage temp_reduce;
   _max cmp; reduc_t threadA = reduc_t(); A = &A[int64_t(blockIdx.x) * lda]; vexp = &vexp[blockIdx.x];
-  for (int32_t i = int32_t(threadIdx.x); i < M; i += BLOCK_THREADS) {
-    matrix_t Aij = A[i];
-    if constexpr(Complex) { reduc_t r = _abs(Aij.x), i = _abs(Aij.y); threadA = cmp(threadA, cmp(r, i)); }
-      else { reduc_t a = _abs(Aij); threadA = cmp(threadA, a); }
-  }
+  for (int32_t i = int32_t(threadIdx.x); i < M; i += BLOCK_THREADS)
+  { if constexpr(Complex) { matrix_t Aij = A[i]; reduc_t r = _abs(Aij.x), i = _abs(Aij.y); threadA = cmp(threadA, cmp(r, i)); } else { reduc_t a = _abs(A[i]); threadA = cmp(threadA, a); }}
   threadA = cub::BlockReduce<reduc_t, BLOCK_THREADS>(temp_reduce).Reduce(threadA, cmp);
   if (threadIdx.x == 0) { int32_t e = float_frexp(threadA); exp_update<beta>(vexp[0], (e == int_max) ? int_max : (u - e)); }
 }
@@ -47,11 +44,8 @@ __global__ void vector_range_kernel(int32_t M, int32_t N, const matrix_t* __rest
   for (int32_t j = int32_t(blockIdx.x); j < N; j += int32_t(gridDim.x)) {
     reduc_t threadA = reduc_t();
     const matrix_t* Aj = &A[int64_t(j) * lda];
-    for (int32_t i = int32_t(threadIdx.x); i < M; i += BLOCK_THREADS) {
-      matrix_t Aij = Aj[i];
-      if constexpr(Complex) { reduc_t r = _abs(Aij.x), i = _abs(Aij.y); threadA = cmp(threadA, cmp(r, i)); }
-        else { reduc_t a = _abs(Aij); threadA = cmp(threadA, a); }
-    }
+    for (int32_t i = int32_t(threadIdx.x); i < M; i += BLOCK_THREADS)
+    { if constexpr(Complex) { matrix_t Aij = Aj[i]; reduc_t r = _abs(Aij.x), i = _abs(Aij.y); threadA = cmp(threadA, cmp(r, i)); } else { reduc_t a = _abs(Aj[i]); threadA = cmp(threadA, a); }}
     int32_t e = float_frexp(threadA); if (e < int_max) { threadI = cmp(threadI, e + vexp[j]); }
   }
   threadI = cub::BlockReduce<int32_t, BLOCK_THREADS>(temp_reduce).Reduce(threadI, cmp);
@@ -60,8 +54,7 @@ __global__ void vector_range_kernel(int32_t M, int32_t N, const matrix_t* __rest
   if (threadIdx.x == 0) { vbuf[blockIdx.x] = threadI; } else { threadI = int_min; }
   cooperative_groups::this_grid().sync();
   if (blockIdx.x == 0) {
-    for (int32_t i = int32_t(threadIdx.x) + 1; i < int32_t(gridDim.x); i += BLOCK_THREADS)
-    { threadI = cmp(threadI, vbuf[i]); }
+    for (int32_t i = int32_t(threadIdx.x) + 1; i < int32_t(gridDim.x); i += BLOCK_THREADS) { threadI = cmp(threadI, vbuf[i]); }
     threadI = cub::BlockReduce<int32_t, BLOCK_THREADS>(temp_reduce).Reduce(threadI, cmp);
     if (threadIdx.x == 0) { *out = threadI; }
   }
@@ -79,7 +72,7 @@ inline void vector_exponents_dispatcher(cudaStream_t stream, int32_t M, int32_t 
 extern "C" void hyacinXquantizeScale(const hyacinHandle_t* handle, int32_t M, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t uA, int32_t beta, int32_t* vexp) {
   if (N <= 0) { return; }
   Timer::register_distribute_kernel(handle->cudaStream, handle->timer);
-  switch(Atype) {
+  switch (Atype) {
     case HYACIN_F64: vector_exponents_dispatcher<double>(handle->cudaStream, M, N, (const double*)A, lda, uA, beta, vexp); return;
     case HYACIN_F32: vector_exponents_dispatcher<float>(handle->cudaStream, M, N, (const float*)A, lda, uA, beta, vexp); return;
     case HYACIN_F16: vector_exponents_dispatcher<float>(handle->cudaStream, M, N, (const __half*)A, lda, uA, beta, vexp); return;

@@ -194,7 +194,7 @@ int32_t hyacinXAllGatherV1Dcol(
   const hyacinHandle_t* handle,
   int32_t M,
   int32_t* K, // host-pointer
-  int32_t AElemBytes,
+  hyacinPrecision_t Atype,
   void* A, // device-pointer
   int32_t lda
 ); // returns local Koffset

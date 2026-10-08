@@ -111,8 +111,8 @@ inline int32_t tsvd(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t c
       cudaFreeAsync(workspaceOnDevice, stream); U = A;
     }
 
-    find_srank_kernel<512> <<< 1, 512, 0, stream >>> (epi, K, sigma, S, r_ptr); cudaFreeAsync(sigma, stream); cudaStreamSynchronize(stream);
-    K = std::min(K, *r_ptr);
+    find_srank_kernel<512> <<< 1, 512, 0, stream >>> (epi, K, sigma, S, r_ptr); cudaStreamSynchronize(stream);
+    K = std::min(K, *r_ptr); cudaFreeAsync(sigma, stream);
     internal::scatter_matcopy(stream, cublasH, 'A', N, K, nullptr, U, N, X, ldx); cudaFreeAsync(U, stream); 
   } else { cudaFreeAsync(piv, stream); }
   return K;
@@ -123,7 +123,7 @@ extern "C" int32_t hyacinXGevd(const hyacinHandle_t* handle, char fillmode, doub
   cudaStream_t stream = handle->cudaStream; Timer::register_replicate_kernel(stream, handle->timer);
   cudaMemPool_t mempool = handle->mempool; cublasHandle_t cublasH = handle->cublasHandle; cusolverDnHandle_t cusolverH = handle->cusolverHandle;
   int32_t *r_ptr = (int32_t*)handle->pinnedWorkspace, sweeps = handle->JacobiSVDSweeps, oversampling = handle->RankOversampling; *r_ptr = handle->DeviceSMs;
-  switch(Gtype) {
+  switch (Gtype) {
     case HYACIN_F64: if (Atype == HYACIN_F64)
     { return tsvd<double, double, double>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (double*)X, ldx, (double*)S, (double*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F32)

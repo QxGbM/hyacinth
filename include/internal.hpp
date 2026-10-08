@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <vector>
 #include <cublas_v2.h>
 #include <cuda_fp16.h>
 
@@ -94,7 +93,7 @@ namespace internal {
 };
 
 namespace Timer {
-void register_distribute_kernel(cudaStream_t stream, void* timer);
-void register_replicate_kernel(cudaStream_t stream, void* timer);
-void register_comm(cudaStream_t stream, void* timer);
+  void register_distribute_kernel(cudaStream_t stream, void* timer);
+  void register_replicate_kernel(cudaStream_t stream, void* timer);
+  void register_comm(cudaStream_t stream, void* timer);
 };

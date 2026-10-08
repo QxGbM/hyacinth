@@ -2,6 +2,7 @@
 #include <hyacin.h>
 #include <internal.hpp>
 #include <crt_constants.hpp>
+#include <vector>
 #include <algorithm>
 #include <limits>
 #include <stdexcept>
@@ -64,10 +65,9 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle) {
   handle->JacobiSVDSweeps = ((env_str = get_env("HYACIN_JACOBI_SVD_SWEEPS")) == "") ? HYACIN_DEFAULT_JACOBI_SVD_SWEEPS : std::stoi(env_str);
   handle->RankOversampling = ((env_str = get_env("HYACIN_PRECOND_OVERSAMPLING")) == "") ? HYACIN_DEFAULT_PRECOND_OVERSAMPLING : std::stoi(env_str);
   handle->BatchK = (255 + ((env_str = get_env("HYACIN_BATCH_K")) == "") ? HYACIN_DEFAULT_BATCH_K : std::stoi(env_str)) & (~255);
-  handle->BatchTensor = nullptr;
   if (0 < handle->BatchK) {
     handle->BatchTensor = reinterpret_cast<decltype(handle->BatchTensor)>(std::malloc(sizeof(*(handle->BatchTensor)) * (uint64_t(1) + limbs_u_list.size())));
-    auto& arena = *(handle->BatchTensor); arena.U = -1; arena.Order = 1; arena.Prefix = arena.Rows = 0;
+    auto& arena = *(handle->BatchTensor); arena.U = -1; arena.Order = 1; arena.Rows = 0;
     for (int32_t i = 0; i < int32_t(limbs_u_list.size()); ++i)
     { auto& t = handle->BatchTensor[i + 1]; t.U = limbs_u_list[i]; t.Order = i + 1; t.Prefix = t.Rows = 0; }
   } else { handle->BatchTensor = nullptr; }

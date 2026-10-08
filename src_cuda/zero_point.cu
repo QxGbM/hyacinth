@@ -131,7 +131,7 @@ inline void triangle_pack_dispatcher(cudaStream_t stream, int32_t M, int32_t N, 
   int32_t mode = (1 <= orderA && orderA <= 3 && 1 <= orderB && orderB <= 3) ? ((orderA - 1) + ((orderB - 1) * 3)) : -1;
   vsum = 0 < M ? vsum : nullptr;
 
-  switch(mode) {
+  switch (mode) {
     case 0: triangle_pack_kernel<1, 1, beta> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, K64, vsum, corr, B, strideB); return;
     case 1: triangle_pack_kernel<2, 1, beta> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, K64, vsum, corr, B, strideB); return;
     case 2: triangle_pack_kernel<3, 1, beta> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, K64, vsum, corr, B, strideB); return;

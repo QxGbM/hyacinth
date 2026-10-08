@@ -39,8 +39,7 @@ __global__ void triangle_unpack_dequantize_kernel(int64_t N, const uint64_t* __r
   if (y <= x) {
     int32_t ex = vexp[x], ey = vexp[y];
     matrix_t f = (ex == int_max || ey == int_max) ? matrix_t() : deq_i<orderA, Complex, matrix_t>(&A[y + int64_t(uint64_t((x + int64_t(1)) * x) >> 1)], strideA, -(ex + ey));
-    if constexpr(Complex) { B[x + (y * ldb)] = conj(B[y + (x * ldb)] = f); }
-      else { B[x + (y * ldb)] = B[y + (x * ldb)] = f; }
+    if constexpr(Complex) { B[x + (y * ldb)] = conj(B[y + (x * ldb)] = f); } else { B[x + (y * ldb)] = B[y + (x * ldb)] = f; }
   }
 }
 
@@ -49,7 +48,7 @@ inline void tp_deq_dispatcher(cudaStream_t stream, int32_t N, int32_t orderA, co
   constexpr int32_t block_threads = 512;
   dim3 grid(uint32_t(N + 511) >> 9, uint32_t(N), uint32_t(1));
   int64_t N64 = int64_t(N), strideA = (N64 * N64 + N64) / int64_t(2), ldb64 = int64_t(ldb);
-  switch(orderA) {
+  switch (orderA) {
     case 1: triangle_unpack_dequantize_kernel<1, Complex> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, vexp, B, ldb64); return;
     case 2: triangle_unpack_dequantize_kernel<2, Complex> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, vexp, B, ldb64); return;
     case 3: triangle_unpack_dequantize_kernel<3, Complex> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, vexp, B, ldb64); return;
@@ -60,7 +59,7 @@ inline void tp_deq_dispatcher(cudaStream_t stream, int32_t N, int32_t orderA, co
 extern "C" void hyacinXdequantize(const hyacinHandle_t* handle, int32_t N, int32_t orderC, const uint64_t* C, const int32_t* vexp, hyacinPrecision_t Gtype, void* G, int32_t ldg) {
   if (N <= 0) { return; }
   Timer::register_replicate_kernel(handle->cudaStream, handle->timer);
-  switch(Gtype) {
+  switch (Gtype) {
     case HYACIN_F64: tp_deq_dispatcher<0>(handle->cudaStream, N, orderC, C, vexp, (double*)G, ldg); return;
     case HYACIN_F32: tp_deq_dispatcher<0>(handle->cudaStream, N, orderC, C, vexp, (float*)G, ldg); return;
     case HYACIN_DD: tp_deq_dispatcher<0>(handle->cudaStream, N, orderC, C, vexp, (double2*)G, ldg); return;
