@@ -1,8 +1,7 @@
 
 #include <hyacin.h>
 #include <internal.hpp>
-#include <double_double.hpp>
-#include <quad_float.hpp>
+#include <ext_arith.hpp>
 #include <crt_constants.hpp>
 #include <tuple>
 #include <vector>

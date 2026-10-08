@@ -1,7 +1,6 @@
 
 #include <internal.hpp>
-#include <double_double.hpp>
-#include <quad_float.hpp>
+#include <ext_arith.hpp>
 
 template<class T, class S> __device__ __forceinline__ T conv(S a) {
   constexpr bool cf128 = std::is_same_v<S, complex_double2> || std::is_same_v<S, complex_float4>;
@@ -14,8 +13,8 @@ template<class T, class S> __device__ __forceinline__ T conv(S a) {
   { if constexpr(cf128) return make_half2(conv<__half>(a.real), conv<__half>(a.imag)); else return make_half2(conv<__half>(a.x), conv<__half>(a.y)); } else
   if constexpr(std::is_same_v<T, __half>) { return __float2half(conv<float>(a)); } else
   if constexpr(std::is_same_v<S, __half>) { return conv<T>(__half2float(a)); } else
-  if constexpr(std::is_same_v<S, double2>) { return conv<T>(device::dd::dd2double(a)); } else
-  if constexpr(std::is_same_v<S, float4>) { return conv<T>(device::qf::qf2double(a)); } else
+  if constexpr(std::is_same_v<S, double2>) { return conv<T>(a.x + a.y); } else
+  if constexpr(std::is_same_v<S, float4>) { return conv<T>((double(a.x) + double(a.y)) + (double(a.z) + double(a.w))); } else
   { return T(a); }
 }
 
@@ -55,14 +54,14 @@ inline void matcopy_dispatcher(cudaStream_t stream, cublasHandle_t handle, char 
   } else if (mode == 'U') { cvcpy_kernel<'U'> <<< grid_x, 512, 0, stream >>> (M64, A, lda64, B, ldb64); }
   else {
     if constexpr(std::is_same_v<Atype, double> && std::is_same_v<Btype, double>)
-    { double one = 1., zero = 0.; cublasDgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb); }
-    else if constexpr(std::is_same_v<Atype, float> && std::is_same_v<Btype, float>)
-    { float one = 1.f, zero = 0.f; cublasSgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb); }
-    else if constexpr(std::is_same_v<Atype, cuDoubleComplex> && std::is_same_v<Btype, cuDoubleComplex>)
-    { cuDoubleComplex one = make_cuDoubleComplex(1., 0.), zero = make_cuDoubleComplex(0., 0.); cublasZgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb); }
-    else if constexpr(std::is_same_v<Atype, cuComplex> && std::is_same_v<Btype, cuComplex>)
-    { cuComplex one = make_cuComplex(1.f, 0.f), zero = make_cuComplex(0.f, 0.f); cublasCgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb); }
-    else { cvcpy_kernel<'A'> <<< grid_x, 512, 0, stream >>> (M64, A, lda64, B, ldb64); }
+    { double one = 1., zero = 0.; cublasDgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb); } else
+    if constexpr(std::is_same_v<Atype, float> && std::is_same_v<Btype, float>)
+    { float one = 1.f, zero = 0.f; cublasSgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb); } else
+    if constexpr(std::is_same_v<Atype, cuDoubleComplex> && std::is_same_v<Btype, cuDoubleComplex>)
+    { cuDoubleComplex one = make_cuDoubleComplex(1., 0.), zero = make_cuDoubleComplex(0., 0.); cublasZgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb); } else
+    if constexpr(std::is_same_v<Atype, cuComplex> && std::is_same_v<Btype, cuComplex>)
+    { cuComplex one = make_cuComplex(1.f, 0.f), zero = make_cuComplex(0.f, 0.f); cublasCgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb); } else
+    { cvcpy_kernel<'A'> <<< grid_x, 512, 0, stream >>> (M64, A, lda64, B, ldb64); }
   }
 }
 

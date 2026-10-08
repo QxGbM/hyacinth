@@ -1,8 +1,6 @@
 
 #include <hyacin.h>
 #include <internal.hpp>
-#include <double_double.hpp>
-#include <quad_float.hpp>
 #include <cooperative_groups.h>
 #include <cub/cub.cuh>
 #include <limits>

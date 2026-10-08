@@ -1,7 +1,6 @@
 
 #include <internal.hpp>
-#include <double_double.hpp>
-#include <quad_float.hpp>
+#include <ext_arith.hpp>
 #include <cub/cub.cuh>
 #include <cooperative_groups.h>
 
@@ -24,27 +23,84 @@ template <class idx_t> struct idx_max {
   __device__ __forceinline__ idx_t operator()(idx_t a, idx_t b) { return cmp_fl(a.real, b.real) ? b : a; }
 };
 
+__device__ __forceinline__ double2 operator-(const double2& a, const double2& b) { double sum, err, a2 = a.y - b.y; device::two_sum(a.x, -b.x, sum, err); return device::renormalize(make_double2(sum, a2 + err)); }
+__device__ __forceinline__ double2 operator*(const double2& a, const double2& b) { double p = a.x * b.x; return device::renormalize(make_double2(p, fma(a.x, b.y, a.y * b.x) + fma(a.x, b.x, -p))); }
+__device__ __forceinline__ double2 square(const double2& a) { double p = a.x * a.x; return device::renormalize(make_double2(p, fma(a.x + a.x, a.y, fma(a.x, a.x, -p)))); }
+__device__ __forceinline__ double2 increment(double2 x) { double c = 1.5; device::two_sum(x.x, c, x.x, c); x.y += c; return device::renormalize(x); }
+
+__device__ __forceinline__ float4 operator-(const float4& a, const float4& b) {
+  float2 a0, a1, a2;
+  device::two_sum(make_float2(a.x, a.y), make_float2(-b.x, -b.y), a0, a1); // 1122 - 1223
+  device::two_sum(a.z, -b.z, a2.x, a2.y); // 33 - 34, 4@a2.y
+
+  float r0 = a0.x; a2.y += a.w - b.w;
+  device::two_sum(make_float2(a0.y, a2.x), a1, a0, a1); // 2233 - 2334, 4@a1.y
+  device::two_sum(a0.y, a1.x, a0.y, a1.x); // 33 - 34, 4@a1.x
+  return device::renormalize(make_float4(r0, a0.x, a0.y, a2.y + (a1.y + a1.x)));
+}
+
+__device__ __forceinline__ float4 operator*(const float4& a, const float4& b) {
+  float2 prod = make_float2(a.x * b.x, a.y * b.y), err = make_float2(fmaf(a.x, b.x, -prod.x), fmaf(a.y, b.y, -prod.y));
+  float c1 = prod.x, c4 = fmaf(a.w, b.x, a.z * b.y) + fmaf(a.y, b.z, fmaf(a.x, b.w, err.y));
+  float2 c23 = make_float2(err.x, prod.y);
+
+  prod = make_float2(a.y * b.x, a.z * b.x); err = make_float2(fmaf(a.y, b.x, -prod.x), fmaf(a.z, b.x, -prod.y));
+  device::two_sum(c23, prod, c23, prod); device::two_sum(prod.x, err.x, prod.x, err.x); device::two_sum(c23.y, prod.x, c23.y, prod.x);
+  c4 += (prod.x + prod.y) + (err.x + err.y);
+
+  prod = make_float2(a.x * b.y, a.x * b.z); err = make_float2(fmaf(a.x, b.y, -prod.x), fmaf(a.x, b.z, -prod.y));
+  device::two_sum(c23, prod, c23, prod); device::two_sum(prod.x, err.x, prod.x, err.x); device::two_sum(c23.y, prod.x, c23.y, prod.x);
+  c4 += (prod.x + prod.y) + (err.x + err.y);
+  return device::renormalize(make_float4(c1, c23.x, c23.y, c4));
+}
+
+__device__ __forceinline__ float4 square(const float4& a) {
+  float2 prod = make_float2(a.x * a.x, a.y * a.y), err = make_float2(fmaf(a.x, a.x, -prod.x), fmaf(a.y, a.y, -prod.y)), c23 = make_float2(err.x, prod.y);
+  float a1 = a.x + a.x, c1 = prod.x, c4 = fmaf(a.w, a1, a.z * (a.y + a.y)) + err.y;
+
+  prod = make_float2(a.y * a1, a.z * a1); err = make_float2(fmaf(a.y, a1, -prod.x), fmaf(a.z, a1, -prod.y));
+  device::two_sum(c23, prod, c23, prod); device::two_sum(prod.x, err.x, prod.x, err.x); device::two_sum(c23.y, prod.x, c23.y, prod.x);
+  c4 += (prod.x + prod.y) + (err.x + err.y);
+  return device::renormalize(make_float4(c1, c23.x, c23.y, c4));
+}
+__device__ __forceinline__ float4 increment(float4 x)
+{ float c = 1.5f; device::two_sum(x.x, c, x.x, c); device::two_sum(x.y, c, x.y, c); device::two_sum(x.z, c, x.z, c); x.w += c; return device::renormalize(x); }
+
 __device__ __forceinline__ double real_sqrt(double epi, double_idx x, double_idx& r)
 { x.real = sqrt(x.real); r = double_idx({ 1. / x.real, x.idx - 1, r.p - int32_t(x.real < epi) }); return x.real; }
 __device__ __forceinline__ float real_sqrt(float epi, float_idx x, float_idx& r)
 { x.real = sqrtf(x.real); r = float_idx({ 1.f / x.real, x.idx - 1, r.p - int32_t(x.real < epi) }); return x.real; }
-__device__ __forceinline__ double2 real_sqrt(double2 epi, double2_idx x, double2_idx& r)
-{ double2 rsqx = device::dd::frsqrt(x.real); r = double2_idx({ rsqx, x.idx - 1, r.p - int32_t(cmp_fl(x.real, epi)) }); return x.real; }
-__device__ __forceinline__ float4 real_sqrt(float4 epi, float4_idx x, float4_idx& r)
-{ float4 rsqx = device::qf::frsqrt(x.real); r = float4_idx({ rsqx, x.idx - 1, r.p - int32_t(cmp_fl(x.real, epi)) }); return x.real; }
+
+__device__ __forceinline__ double2 real_sqrt(double2 epi, double2_idx x, double2_idx& r) {
+  int32_t e; double2 rx = make_double2(frexp(rsqrt(x.real.x), &e), 0.);
+  int32_t e2 = e + e - 1; double2 s = make_double2(scalbn(-x.real.x, e2), scalbn(-x.real.y, e2));
+
+  rx = rx * increment(s * square(rx));
+  rx = rx * increment(s * square(rx));
+  rx = make_double2(scalbn(rx.x, e), scalbn(rx.y, e)); x.real = x.real * rx;
+  r = double2_idx({ rx, x.idx - 1, r.p - int32_t(cmp_fl(x.real, epi)) });
+  return x.real;
+}
+
+__device__ __forceinline__ float4 real_sqrt(float4 epi, float4_idx x, float4_idx& r) {
+  int32_t e; float4 rx = make_float4(frexpf(rsqrtf(x.real.x), &e), 0.f, 0.f, 0.f);
+  int32_t e2 = e + e - 1; float4 s = make_float4(scalbnf(-x.real.x, e2), scalbnf(-x.real.y, e2), scalbnf(-x.real.z, e2), scalbnf(-x.real.w, e2));
+
+  rx = rx * increment(s * square(rx));
+  rx = rx * increment(s * square(rx));
+  rx = rx * increment(s * square(rx));
+  rx = make_float4(scalbnf(rx.x, e), scalbnf(rx.y, e), scalbnf(rx.z, e), scalbnf(rx.w, e)); x.real = x.real * rx;
+  r = float4_idx({ rx, x.idx - 1, r.p - int32_t(cmp_fl(x.real, epi)) });
+  return x.real;
+}
 
 template <class matrix_t, class real_t> __device__ __forceinline__ matrix_t ext(real_t x) {
   if constexpr(std::is_same_v<real_t, double> && std::is_same_v<matrix_t, cuDoubleComplex>) { return make_cuDoubleComplex(x, 0.); } else
   if constexpr(std::is_same_v<real_t, float> && std::is_same_v<matrix_t, cuComplex>) { return make_cuComplex(x, 0.f); } else
-  if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, complex_double2>) { return device::dd::make_complex_double2(x, make_double2(0., 0.)); } else
-  if constexpr(std::is_same_v<real_t, float4> && std::is_same_v<matrix_t, complex_float4>) { return device::qf::make_complex_float4(x, make_float4(0.f, 0.f, 0.f, 0.f)); } else
+  if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, complex_double2>) { return device::make_complex_double2(x, make_double2(0., 0.)); } else
+  if constexpr(std::is_same_v<real_t, float4> && std::is_same_v<matrix_t, complex_float4>) { return device::make_complex_float4(x, make_float4(0.f, 0.f, 0.f, 0.f)); } else
   { return x; }
 }
-
-__device__ __forceinline__ double mul_(double a, double b) { return a * b; }
-__device__ __forceinline__ float mul_(float a, float b) { return a * b; }
-__device__ __forceinline__ double2 mul_(double2 a, double2 b) { return device::dd::mul(a, b); }
-__device__ __forceinline__ float4 mul_(float4 a, float4 b) { return device::qf::mul(a, b); }
 
 template <int32_t BLOCK_THREADS, class real_t, class matrix_t, class idx_t>
 __global__ void potrf_init_kernel(real_t epi, int32_t p, int32_t N, matrix_t* __restrict__ A, int64_t lda_p1, int32_t* __restrict__ jpiv, real_t* __restrict__ D, idx_t* __restrict__ work) {
@@ -65,7 +121,7 @@ __global__ void potrf_init_kernel(real_t epi, int32_t p, int32_t N, matrix_t* __
   if (BLOCK_THREADS == nthreads) {
     cooperative_groups::this_thread_block().sync();
     if (int32_t(threadIdx.x) == 0)
-    { idx_t r = idx_t({ real_t(), 0, thread_x.idx <= 0 ? -1 : p }); real_t d = real_sqrt(real_t(), thread_x, r); *work = r; D[N] = mul_(epi, d); *A = ext<matrix_t>(d); }
+    { idx_t r = idx_t({ real_t(), 0, thread_x.idx <= 0 ? -1 : p }); real_t d = real_sqrt(real_t(), thread_x, r); *work = r; D[N] = epi * d; *A = ext<matrix_t>(d); }
   } else {
     if (int32_t(threadIdx.x) == 0) { work[blockIdx.x] = thread_x; } else { thread_x = idx_t(); }
     grid.sync();
@@ -74,7 +130,7 @@ __global__ void potrf_init_kernel(real_t epi, int32_t p, int32_t N, matrix_t* __
       { thread_x = cmp_max(thread_x, work[i]); }
       thread_x = cub::BlockReduce<idx_t, BLOCK_THREADS>(temp_reduce).Reduce(thread_x, cmp_max);
       if (int32_t(threadIdx.x) == 0)
-      { idx_t r = idx_t({ real_t(), 0, thread_x.idx <= 0 ? -1 : p }); real_t d = real_sqrt(real_t(), thread_x, r); *work = r; D[N] = mul_(epi, d); *A = ext<matrix_t>(d); }
+      { idx_t r = idx_t({ real_t(), 0, thread_x.idx <= 0 ? -1 : p }); real_t d = real_sqrt(real_t(), thread_x, r); *work = r; D[N] = epi * d; *A = ext<matrix_t>(d); }
     }
   }
 }
@@ -84,34 +140,32 @@ __device__ __forceinline__ double pp_func(double r, double c, double& d)
 __device__ __forceinline__ float pp_func(float r, float c, float& d)
 { c = r * c; d = fmaf(-c, c, d); return c; }
 __device__ __forceinline__ double2 pp_func(double2 r, double2 c, double2& d)
-{ c = device::dd::mul(r, c); d = device::dd::add(d, device::dd::negate(device::dd::square(c))); return c; }
+{ c = r * c; d = d - square(c); return c; }
 __device__ __forceinline__ float4 pp_func(float4 r, float4 c, float4& d)
-{ c = device::qf::mul(r, c); d = device::qf::add(d, device::qf::negate(device::qf::square(c))); return c; }
+{ c = r * c; d = d - square(c); return c; }
 __device__ __forceinline__ cuDoubleComplex pp_func(double r, cuDoubleComplex c, double& d)
 { c = make_cuDoubleComplex(r * c.x, -r * c.y); d = fma(-c.x, c.x, fma(-c.y, c.y, d)); return c; }
 __device__ __forceinline__ cuComplex pp_func(float r, cuComplex c, float& d)
 { c = make_cuComplex(r * c.x, -r * c.y); d = fmaf(-c.x, c.x, fmaf(-c.y, c.y, d)); return c; }
 __device__ __forceinline__ complex_double2 pp_func(double2 r, complex_double2 c, double2& d) {
-  using device::dd::add, device::dd::mul, device::dd::square, device::dd::negate;
-  c = device::dd::make_complex_double2(mul(r, c.real), negate(mul(r, c.imag)));
-  d = add(d, negate(add(square(c.real), square(c.imag)))); return c;
+  c = device::make_complex_double2(r * c.real, r * make_double2(-c.imag.x, -c.imag.y));
+  d = d - device::add(square(c.real), square(c.imag)); return c;
 }
 __device__ __forceinline__ complex_float4 pp_func(float4 r, complex_float4 c, float4& d) {
-  using device::qf::add, device::qf::mul, device::qf::square, device::qf::negate;
-  c = device::qf::make_complex_float4(mul(r, c.real), negate(mul(r, c.imag)));
-  d = add(d, negate(add(square(c.real), square(c.imag)))); return c;
+  c = device::make_complex_float4(r * c.real, r * make_float4(-c.imag.x, -c.imag.y, -c.imag.z, -c.imag.w));
+  d = d - device::add(square(c.real), square(c.imag)); return c;
 }
 
 template <class real_t, class matrix_t> struct add_fl {
   __device__ __forceinline__ matrix_t operator()(matrix_t a, matrix_t b) {
     if constexpr(std::is_same_v<real_t, double> && std::is_same_v<matrix_t, double>) { return a + b; } else
     if constexpr(std::is_same_v<real_t, float> && std::is_same_v<matrix_t, float>) { return a + b; } else
-    if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, double2>) { return device::dd::add(a, b); } else
-    if constexpr(std::is_same_v<real_t, float4> && std::is_same_v<matrix_t, float4>) { return device::qf::add(a, b); } else
+    if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, double2>) { return device::add(a, b); } else
+    if constexpr(std::is_same_v<real_t, float4> && std::is_same_v<matrix_t, float4>) { return device::add(a, b); } else
     if constexpr(std::is_same_v<real_t, double> && std::is_same_v<matrix_t, cuDoubleComplex>) { return make_cuDoubleComplex(a.x + b.x, a.y + b.y); } else
     if constexpr(std::is_same_v<real_t, float> && std::is_same_v<matrix_t, cuComplex>) { return make_cuComplex(a.x + b.x, a.y + b.y); } else
-    if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, complex_double2>) { return device::dd::make_complex_double2(device::dd::add(a.real, b.real), device::dd::add(a.imag, b.imag)); } else
-    if constexpr(std::is_same_v<real_t, float4> && std::is_same_v<matrix_t, complex_float4>) { return device::qf::make_complex_float4(device::qf::add(a.real, b.real), device::qf::add(a.imag, b.imag)); } else
+    if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, complex_double2>) { return device::make_complex_double2(device::add(a.real, b.real), device::add(a.imag, b.imag)); } else
+    if constexpr(std::is_same_v<real_t, float4> && std::is_same_v<matrix_t, complex_float4>) { return device::make_complex_float4(device::add(a.real, b.real), device::add(a.imag, b.imag)); } else
     { return matrix_t(); }
   }
 };
@@ -119,28 +173,26 @@ template <class real_t, class matrix_t> struct add_fl {
 template <class real_t, class matrix_t> __device__ __forceinline__ matrix_t fma_(matrix_t a, matrix_t b, matrix_t c) {
   if constexpr(std::is_same_v<real_t, double> && std::is_same_v<matrix_t, double>) { return fma(-a, b, c); } else
   if constexpr(std::is_same_v<real_t, float> && std::is_same_v<matrix_t, float>) { return fmaf(-a, b, c); } else
-  if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, double2>) { return device::dd::add(c, device::dd::mul(device::dd::negate(a), b)); } else
-  if constexpr(std::is_same_v<real_t, float4> && std::is_same_v<matrix_t, float4>) { return device::qf::add(c, device::qf::mul(device::qf::negate(a), b)); } else
+  if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, double2>) { return c - (a * b); } else
+  if constexpr(std::is_same_v<real_t, float4> && std::is_same_v<matrix_t, float4>) { return c - (a * b); } else
   if constexpr(std::is_same_v<real_t, double> && std::is_same_v<matrix_t, cuDoubleComplex>) {
     return make_cuDoubleComplex(fma(-a.x, b.x, fma(-a.y, b.y, c.x)), fma(-a.x, b.y, fma(a.y, b.x, c.y)));
   } else if constexpr(std::is_same_v<real_t, float> && std::is_same_v<matrix_t, cuComplex>) {
     return make_cuComplex(fmaf(-a.x, b.x, fmaf(-a.y, b.y, c.x)), fmaf(-a.x, b.y, fmaf(a.y, b.x, c.y)));
   } else if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, complex_double2>) {
-    using device::dd::add, device::dd::mul, device::dd::negate, device::dd::make_complex_double2;
-    double2 p1 = mul(a.real, b.real), p2 = mul(a.imag, b.imag), p3 = mul(add(negate(a.real), a.imag), add(b.real, b.imag));
-    return make_complex_double2(add(negate(add(p1, p2)), c.real), add(add(p1, negate(p2)), add(p3, c.imag)));
+    double2 p1 = a.real * b.real, p2 = a.imag * b.imag, p3 = (a.imag - a.real) * device::add(b.real, b.imag);
+    return device::make_complex_double2(c.real - device::add(p1, p2), device::add(p1 - p2, device::add(p3, c.imag)));
   } else if constexpr(std::is_same_v<real_t, float4> && std::is_same_v<matrix_t, complex_float4>) {
-    using device::qf::add, device::qf::mul, device::qf::negate, device::qf::make_complex_float4;
-    float4 p1 = mul(a.real, b.real), p2 = mul(a.imag, b.imag), p3 = mul(add(negate(a.real), a.imag), add(b.real, b.imag));
-    return make_complex_float4(add(negate(add(p1, p2)), c.real), add(add(p1, negate(p2)), add(p3, c.imag)));
+    float4 p1 = a.real * b.real, p2 = a.imag * b.imag, p3 = (a.imag - a.real) * device::add(b.real, b.imag);
+    return device::make_complex_float4(c.real - device::add(p1, p2), device::add(p1 - p2, device::add(p3, c.imag)));
   } else { return matrix_t(); }
 }
 
 template <class real_t, class matrix_t> __device__ __forceinline__ matrix_t conj(matrix_t a) {
   if constexpr(std::is_same_v<real_t, double> && std::is_same_v<matrix_t, cuDoubleComplex>) { return make_cuDoubleComplex(a.x, -a.y); } else
   if constexpr(std::is_same_v<real_t, float> && std::is_same_v<matrix_t, cuComplex>) { return make_cuComplex(a.x, -a.y); } else
-  if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, complex_double2>) { return device::dd::make_complex_double2(a.real, device::dd::negate(a.imag)); } else
-  if constexpr(std::is_same_v<real_t, float4> && std::is_same_v<matrix_t, complex_float4>) { return device::qf::make_complex_float4(a.real, device::qf::negate(a.imag)); } else
+  if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, complex_double2>) { return device::make_complex_double2(a.real, make_double2(-a.imag.x, -a.imag.y)); } else
+  if constexpr(std::is_same_v<real_t, float4> && std::is_same_v<matrix_t, complex_float4>) { return device::make_complex_float4(a.real, make_float4(-a.imag.x, -a.imag.y, -a.imag.z, -a.imag.w)); } else
   { return a; }
 }
 
@@ -222,8 +274,9 @@ inline int32_t potrfp_dispatcher(cudaStream_t stream, char fillmode, double epi,
   real_t epi_f;
   if constexpr(std::is_same_v<real_t, double>) { epi_f = epi; } else
   if constexpr(std::is_same_v<real_t, float>) { epi_f = float(epi); } else
-  if constexpr(std::is_same_v<real_t, double2>) { epi_f = device::dd::double2dd(epi); } else
-  if constexpr(std::is_same_v<real_t, float4>) { epi_f = device::qf::double2qf(epi); } else { epi_f = real_t(); }
+  if constexpr(std::is_same_v<real_t, double2>) { epi_f = make_double2(epi, 0.); } else
+  if constexpr(std::is_same_v<real_t, float4>) { float e0 = float(epi); epi -= double(e0); float e1 = float(epi); epi_f = make_float4(e0, e1, epi - double(e1), 0.f); } else
+  { epi_f = real_t(); }
 
   constexpr int32_t grid_blocks = 2048, block_threads = 128;
   int32_t device_sms = *rank, maxBlocksPerSM = 0;
