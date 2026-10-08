@@ -1,8 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <tuple>
-#include <map>
 #include <vector>
 #include <cublas_v2.h>
 #include <cuda_fp16.h>
@@ -91,8 +89,6 @@ namespace internal {
   void scatter_matcopy(cudaStream_t stream, cublasHandle_t handle, char mode, int32_t M, int32_t N, const int32_t* jpiv, const complex_double2* A, int32_t lda, __half2* B, int32_t ldb);
   void scatter_matcopy(cudaStream_t stream, cublasHandle_t handle, char mode, int32_t M, int32_t N, const int32_t* jpiv, const complex_float4* A, int32_t lda, __half2* B, int32_t ldb);
 
-  bool device_is_f64_capable();
-  int32_t device_num_sms();
   std::pair<int32_t, int32_t> gram_algorithm(char& alg, int32_t M, int32_t& u, int32_t Complex);
 
 };

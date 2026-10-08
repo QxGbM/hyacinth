@@ -93,8 +93,7 @@ extern "C" void hyacinXquantizeScale(const hyacinHandle_t* handle, int32_t M, in
 template<class reduc_t, class matrix_t>
 inline void vector_range_dispatcher(cudaStream_t stream, int32_t M, int32_t N, const matrix_t* A, int32_t lda, int32_t* u, const int32_t* vexp, int32_t* vbuf) {
   constexpr int32_t block_threads = 512, grid_blocks = 512;
-  int64_t lda64 = int64_t(lda);
-  int32_t device_sms = internal::device_num_sms(), maxBlocksPerSM = 0;
+  int32_t device_sms = *u, maxBlocksPerSM = 0; int64_t lda64 = int64_t(lda);
   cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, vector_range_kernel<block_threads, reduc_t, matrix_t>, block_threads, 0);
   
   int32_t grid = std::min(grid_blocks, std::min(N, device_sms * maxBlocksPerSM));

@@ -24,7 +24,8 @@ typedef enum {
 typedef struct {
   char GramMatrixAlgorithm;
   int32_t QuantizeBitCorrection, GramBitCorrection, JacobiSVDSweeps, RankOversampling;
-  int32_t BatchK, Batches, ArenaLines, ArenaU; struct { int32_t U, Order, Prefix, Rows; } *BatchTensor;
+  int32_t BatchK; struct { int32_t U, Order, Prefix, Rows; } *BatchTensor;
+  int32_t DeviceID, DeviceSMs, DeviceIsF64Capable;
   cudaStream_t cudaStream;
   cublasHandle_t cublasHandle;
   cusolverDnHandle_t cusolverHandle;
@@ -47,8 +48,8 @@ void hyacinDestroy(
   hyacinHandle_t* handle
 );
 
-void hyacinXherkBatchCreate(
-  hyacinHandle_t* handle,
+void hyacinXherkBatchInit(
+  const hyacinHandle_t* handle,
   double epi,
   int32_t N,
   hyacinPrecision_t Atype,
@@ -56,7 +57,7 @@ void hyacinXherkBatchCreate(
 );
 
 void hyacinXherk(
-  hyacinHandle_t* handle,
+  const hyacinHandle_t* handle,
   int32_t M,
   int32_t N,
   hyacinPrecision_t Atype,
@@ -70,7 +71,7 @@ void hyacinXherk(
 );
 
 void* hyacinXherkBatch(
-  hyacinHandle_t* handle,
+  const hyacinHandle_t* handle,
   int32_t CommitLines,
   int32_t ReserveLines,
   int32_t N,
@@ -83,7 +84,7 @@ void* hyacinXherkBatch(
 );
 
 void hyacinXherkBatchFlush(
-  hyacinHandle_t* handle,
+  const hyacinHandle_t* handle,
   int32_t N,
   hyacinPrecision_t Atype,
   const int32_t* vexp, // device-pointer

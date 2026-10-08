@@ -28,29 +28,13 @@
 #define HYACIN_DEFAULT_CREATE_TIMER 1
 #endif
 
-int32_t device_sms = 0; bool device_f64_capable = false;
-const std::vector<int32_t> f64_capable_sm_list({ 800, 900, 1000 }); // sm80,sm90,sm100
-
-inline void device_params() {
-  int32_t device, major, minor; cudaGetDevice(&device);
-  cudaDeviceGetAttribute(&device_sms, cudaDevAttrMultiProcessorCount, device);
-  cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, device);
-  cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, device);
-  device_f64_capable = (f64_capable_sm_list.end() != std::find(f64_capable_sm_list.begin(), f64_capable_sm_list.end(), 100 * major + minor));
-}
-
-bool internal::device_is_f64_capable() {
-  if (device_sms == 0) { device_params(); } return device_f64_capable;
-}
-
-int32_t internal::device_num_sms() {
-  if (device_sms == 0) { device_params(); } return device_sms;
-}
+const std::vector<int32_t> f64_capable_sm_list({ 80, 90, 100, 107 }); // sm80,sm90,sm100,sm107
+const std::vector<int32_t> limbs_u_list({ 7, 14, 22, 30, 38, 46, 54, 62, 70, 78, 86, 94 });
 
 std::pair<int32_t, int32_t> internal::gram_algorithm(char& alg, int32_t M, int32_t& u, int32_t Complex) {
   constexpr int32_t CRT_MIN_SEGMENT_K = 8192; constexpr double SBATCH_PENALTY = 1.4;
   u = std::max(0, u);
-  int32_t orderA_limbs = (u <= 7) ? 1 : int32_t(uint32_t(u + 9) >> 3);
+  int32_t orderA_limbs = 1 + std::distance(limbs_u_list.begin(), std::lower_bound(limbs_u_list.begin(), limbs_u_list.end(), u));
   if (alg != 'L' && alg != 'l' && 3 < orderA_limbs) {
     int32_t nrm_M = std::min(std::max(1, M), CRT_MIN_SEGMENT_K), crt_bits = (u + u + 2) + int32_t(std::ceil(std::log2(double(nrm_M)))), orderA_crt, cost_crt;
     int32_t cost_limbs = int32_t(SBATCH_PENALTY * double(orderA_limbs)) + int32_t(uint32_t(orderA_limbs * (orderA_limbs - 1)) >> 1) + (Complex ? orderA_limbs * orderA_limbs : 0);
@@ -61,7 +45,7 @@ std::pair<int32_t, int32_t> internal::gram_algorithm(char& alg, int32_t M, int32
     if (alg == 'C' || alg == 'c' || cost_crt < cost_limbs)
     { alg = 'C'; std::div_t divM = std::div(M, nrm_M << (U8CRT::range[orderA_crt - 1] - crt_bits)); return std::make_pair(orderA_crt, divM.quot + int32_t(0 < divM.rem)); }
   }
-  alg = 'L'; u = (u <= 7) ? 7 : ((orderA_limbs << 3) - 2);
+  alg = 'L'; u = limbs_u_list[orderA_limbs - 1];
   return std::make_pair(orderA_limbs, 1);
 }
 
@@ -79,8 +63,20 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle) {
   handle->GramBitCorrection = ((env_str = get_env("HYACIN_GRAM_BITS_CORR")) == "") ? HYACIN_DEFAULT_GRAM_BITS_CORR : std::stoi(env_str);
   handle->JacobiSVDSweeps = ((env_str = get_env("HYACIN_JACOBI_SVD_SWEEPS")) == "") ? HYACIN_DEFAULT_JACOBI_SVD_SWEEPS : std::stoi(env_str);
   handle->RankOversampling = ((env_str = get_env("HYACIN_PRECOND_OVERSAMPLING")) == "") ? HYACIN_DEFAULT_PRECOND_OVERSAMPLING : std::stoi(env_str);
-  handle->BatchK = ((env_str = get_env("HYACIN_BATCH_K")) == "") ? HYACIN_DEFAULT_BATCH_K : std::stoi(env_str);
-  handle->Batches = handle->ArenaLines = 0; handle->ArenaU = -1; handle->BatchTensor = nullptr;
+  handle->BatchK = (255 + ((env_str = get_env("HYACIN_BATCH_K")) == "") ? HYACIN_DEFAULT_BATCH_K : std::stoi(env_str)) & (~255);
+  handle->BatchTensor = nullptr;
+  if (0 < handle->BatchK) {
+    handle->BatchTensor = reinterpret_cast<decltype(handle->BatchTensor)>(std::malloc(sizeof(*(handle->BatchTensor)) * (uint64_t(1) + limbs_u_list.size())));
+    auto& arena = *(handle->BatchTensor); arena.U = -1; arena.Order = 1; arena.Prefix = arena.Rows = 0;
+    for (int32_t i = 0; i < int32_t(limbs_u_list.size()); ++i)
+    { auto& t = handle->BatchTensor[i + 1]; t.U = limbs_u_list[i]; t.Order = i + 1; t.Prefix = t.Rows = 0; }
+  } else { handle->BatchTensor = nullptr; }
+
+  cudaGetDevice(&handle->DeviceID); int32_t major, minor;
+  cudaDeviceGetAttribute(&handle->DeviceSMs, cudaDevAttrMultiProcessorCount, handle->DeviceID);
+  cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, handle->DeviceID);
+  cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, handle->DeviceID);
+  handle->DeviceIsF64Capable = int32_t(f64_capable_sm_list.end() != std::find(f64_capable_sm_list.begin(), f64_capable_sm_list.end(), 10 * major + minor));
 
   cudaStreamCreateWithFlags(&handle->cudaStream, cudaStreamNonBlocking);
   cublasCreate(&handle->cublasHandle);

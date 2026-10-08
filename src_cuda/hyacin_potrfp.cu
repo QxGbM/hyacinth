@@ -226,7 +226,7 @@ inline int32_t potrfp_dispatcher(cudaStream_t stream, char fillmode, double epi,
   if constexpr(std::is_same_v<real_t, float4>) { epi_f = device::qf::double2qf(epi); } else { epi_f = real_t(); }
 
   constexpr int32_t grid_blocks = 2048, block_threads = 128;
-  int32_t device_sms = internal::device_num_sms(), maxBlocksPerSM = 0;
+  int32_t device_sms = *rank, maxBlocksPerSM = 0;
   cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, potrf_init_kernel<block_threads, real_t, matrix_t, idx_t>, block_threads, 0);
   int32_t grid = std::min(std::min(grid_blocks, device_sms * maxBlocksPerSM), (N + block_threads - 1) / block_threads);
   uint8_t* diag = &((uint8_t*)D)[65536]; int64_t lda_p1 = lda + int64_t(1);
