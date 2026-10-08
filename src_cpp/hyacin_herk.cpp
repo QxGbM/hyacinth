@@ -4,6 +4,7 @@
 #include <double_double.hpp>
 #include <quad_float.hpp>
 #include <crt_constants.hpp>
+#include <tuple>
 #include <vector>
 #include <algorithm>
 #include <stdexcept>
