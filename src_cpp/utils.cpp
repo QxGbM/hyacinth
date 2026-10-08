@@ -126,28 +126,26 @@ void Timer::register_replicate_kernel(cudaStream_t stream, void* timer) { regist
 void Timer::register_comm(cudaStream_t stream, void* timer) { register_event<segment::comm>(stream, (EventTimer*)timer); }
 
 extern "C" void hyacinSync_TimerSegments(const hyacinHandle_t* handle, double* eventMs, int32_t lenMs) {
-  if (handle->timer == nullptr || eventMs == nullptr || lenMs <= 0) 
-  { cudaStreamSynchronize(handle->cudaStream); return; }
-
-  double d_time = 0., r_time = 0., c_time = 0.;
-  EventTimer* t = (EventTimer*)(handle->timer); int32_t len = int32_t(t->events.size());
+  if (handle->timer == nullptr) { cudaStreamSynchronize(handle->cudaStream); return; }
+  EventTimer* t = (EventTimer*)(handle->timer);
+  int32_t len = int32_t(t->events.size());
   cudaEvent_t e; cudaEventCreate(&e); cudaEventRecord(e, handle->cudaStream); cudaEventSynchronize(e);
   t->events.emplace_back(t->lastSegment, e);
 
-  if (len) for (auto [seg, event] : t->events) {
-    float milliseconds = 0.f;
-    if (seg == segment::dist_kernel) { cudaEventElapsedTime(&milliseconds, e, event); e = event; d_time += double(milliseconds); } else
-    if (seg == segment::rep_kernel) { cudaEventElapsedTime(&milliseconds, e, event); e = event; r_time += double(milliseconds); } else
-    if (seg == segment::comm) { cudaEventElapsedTime(&milliseconds, e, event); e = event; c_time += double(milliseconds); } else
-    { e = event; }
+  if (eventMs != nullptr && 0 < lenMs) {
+    double d_time = 0., r_time = 0., c_time = 0.;
+    if (len) for (auto [seg, event] : t->events) {
+      float ms = 0.f;
+      if (seg == segment::dist_kernel) { cudaEventElapsedTime(&ms, e, event); e = event; d_time += double(ms); } else
+      if (seg == segment::rep_kernel) { cudaEventElapsedTime(&ms, e, event); e = event; r_time += double(ms); } else
+      if (seg == segment::comm) { cudaEventElapsedTime(&ms, e, event); e = event; c_time += double(ms); } else { e = event; }
+    }
+    for (int32_t i = 0; i < lenMs; ++i) {
+      char req = static_cast<char>(eventMs[i]);
+      if (req == 'D' || req == 'd') { eventMs[i] = d_time; } else
+      if (req == 'R' || req == 'r') { eventMs[i] = r_time; } else
+      if (req == 'C' || req == 'c') { eventMs[i] = c_time; } else { eventMs[i] = 0.; }
+    }
   }
-
-  for (auto [seg, event] : t->events) { cudaEventDestroy(event); }
-  t->events.clear(); t->lastSegment = segment::none;
-  for (int32_t i = 0; i < lenMs; ++i) {
-    char req = static_cast<char>(eventMs[i]);
-    if (req == 'D' || req == 'd') { eventMs[i] = d_time; } else
-    if (req == 'R' || req == 'r') { eventMs[i] = r_time; } else
-    if (req == 'C' || req == 'c') { eventMs[i] = c_time; }
-  }
+  for (auto [seg, event] : t->events) { cudaEventDestroy(event); } t->events.clear(); t->lastSegment = segment::none;
 }
