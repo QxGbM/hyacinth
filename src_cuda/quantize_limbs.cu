@@ -54,7 +54,7 @@ __global__ void quantize_limbs_kernel(int32_t M, const matrix_t* __restrict__ A,
   } else if constexpr(Complex) {
     for (int32_t i = int32_t(threadIdx.x); i < M; i += int32_t(blockDim.x)) {
       matrix_t A_i = A[i]; uint64_t rl_lo, im_lo; uint32_t rl_hi, im_hi;
-      round_i95(A_i.x, expon, rl_lo, rl_hi); round_i95(A_i.y, expon, im_lo, im_hi); uint64_t lo = rl_lo + rl_hi; uint32_t hi = rl_hi + im_hi + uint32_t(lo >> 63); lo &= i63;
+      round_i95(A_i.x, expon, rl_lo, rl_hi); round_i95(A_i.y, expon, im_lo, im_hi); uint64_t lo = rl_lo + im_lo; uint32_t hi = rl_hi + im_hi + uint32_t(lo >> 63); lo &= i63;
       quantize_i8<ORDER>(im_lo, im_hi, quantize_i8<ORDER>(rl_lo, rl_hi, quantize_i8<ORDER>(lo, hi, &B[i], strideB), strideB), strideB);
     }
   } else {
