@@ -8,12 +8,10 @@
 #include <stdexcept>
 
 template <class T, class S> __device__ __forceinline__ S conv(S a, T& b) {
-  if constexpr(std::is_same_v<T, S>) { return b = a; }
-  else if constexpr(std::is_same_v<T, __half> && std::is_same_v<S, float>) { b = __float2half(a); return a; }
-  else if constexpr(std::is_same_v<T, __half2> && std::is_same_v<S, cuComplex>) { b.x = __float2half(a.x); b.y = __float2half(a.y); return a; }
-  else if constexpr(std::is_same_v<T, cuComplex> && std::is_same_v<S, cuDoubleComplex>) { b.x = float(a.x); b.y = float(a.y); return a; }
-  else if constexpr(std::is_same_v<T, cuDoubleComplex> && std::is_same_v<S, cuComplex>) { b.x = double(a.x); b.y = double(a.y); return a; }
-  else { b = T(a); return a; }
+  if constexpr(std::is_same_v<T, S>) { return b = a; } else
+  if constexpr(std::is_same_v<T, __half> && std::is_same_v<S, double>) { b = __double2half(a); return a; } else
+  if constexpr(std::is_same_v<T, __half> && std::is_same_v<S, float>) { b = __float2half(a); return a; } else
+  { b = T(a); return a; }
 }
 
 template <int32_t BLOCK_THREADS, class real_t, class Stype>
@@ -125,7 +123,9 @@ extern "C" int32_t hyacinXGevd(const hyacinHandle_t* handle, char fillmode, doub
     case HYACIN_F64: if (Atype == HYACIN_F64)
     { return tsvd<double, double, double>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (double*)X, ldx, (double*)S, (double*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F32)
-    { return tsvd<float, float, double>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (float*)X, ldx, (float*)S, (double*)G, ldg, r_ptr); } else { return 0; }
+    { return tsvd<float, float, double>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (float*)X, ldx, (float*)S, (double*)G, ldg, r_ptr); } else
+    if (Atype == HYACIN_F16)
+    { return tsvd<float, float, double>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (__half*)X, ldx, (__half*)S, (double*)G, ldg, r_ptr); } else { return 0; }
     case HYACIN_F32: if (Atype == HYACIN_F64)
     { return tsvd<float, float, float>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (double*)X, ldx, (double*)S, (float*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F32)
@@ -133,13 +133,23 @@ extern "C" int32_t hyacinXGevd(const hyacinHandle_t* handle, char fillmode, doub
     if (Atype == HYACIN_F16)
     { return tsvd<float, float, float>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (__half*)X, ldx, (__half*)S, (float*)G, ldg, r_ptr); } else { return 0; }
     case HYACIN_DD: if (Atype == HYACIN_F64)
-    { return tsvd<double, double, double2>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (double*)X, ldx, (double*)S, (double2*)G, ldg, r_ptr); } else { return 0; }
+    { return tsvd<double, double, double2>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (double*)X, ldx, (double*)S, (double2*)G, ldg, r_ptr); } else
+    if (Atype == HYACIN_F32)
+    { return tsvd<float, float, double2>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (float*)X, ldx, (float*)S, (double2*)G, ldg, r_ptr); } else { return 0; }
+    case HYACIN_TF: if (Atype == HYACIN_F64)
+    { return tsvd<double, double, float3>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (double*)X, ldx, (double*)S, (float3*)G, ldg, r_ptr); } else
+    if (Atype == HYACIN_F32)
+    { return tsvd<float, float, float3>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (float*)X, ldx, (float*)S, (float3*)G, ldg, r_ptr); } else { return 0; }
     case HYACIN_QF: if (Atype == HYACIN_F64)
-    { return tsvd<double, double, float4>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (double*)X, ldx, (double*)S, (float4*)G, ldg, r_ptr); } else { return 0; }
+    { return tsvd<double, double, float4>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (double*)X, ldx, (double*)S, (float4*)G, ldg, r_ptr); } else
+    if (Atype == HYACIN_F32)
+    { return tsvd<float, float, float4>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (float*)X, ldx, (float*)S, (float4*)G, ldg, r_ptr); } else { return 0; }
     case HYACIN_F64_COMPLEX: if (Atype == HYACIN_F64_COMPLEX)
     { return tsvd<double, cuDoubleComplex, double>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (cuDoubleComplex*)X, ldx, (double*)S, (cuDoubleComplex*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F32_COMPLEX)
-    { return tsvd<float, cuComplex, double>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (cuComplex*)X, ldx, (float*)S, (cuDoubleComplex*)G, ldg, r_ptr); } else { return 0; }
+    { return tsvd<float, cuComplex, double>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (cuComplex*)X, ldx, (float*)S, (cuDoubleComplex*)G, ldg, r_ptr); } else
+    if (Atype == HYACIN_F16_COMPLEX)
+    { return tsvd<float, cuComplex, double>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (__half2*)X, ldx, (__half*)S, (cuDoubleComplex*)G, ldg, r_ptr); } else { return 0; }
     case HYACIN_F32_COMPLEX: if (Atype == HYACIN_F64_COMPLEX)
     { return tsvd<float, cuComplex, float>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (cuDoubleComplex*)X, ldx, (double*)S, (cuComplex*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F32_COMPLEX)
@@ -147,9 +157,17 @@ extern "C" int32_t hyacinXGevd(const hyacinHandle_t* handle, char fillmode, doub
     if (Atype == HYACIN_F16_COMPLEX)
     { return tsvd<float, cuComplex, float>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (__half2*)X, ldx, (__half*)S, (cuComplex*)G, ldg, r_ptr); } else { return 0; }
     case HYACIN_DD_COMPLEX: if (Atype == HYACIN_F64_COMPLEX)
-    { return tsvd<double, cuDoubleComplex, double2>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (cuDoubleComplex*)X, ldx, (double*)S, (complex_double2*)G, ldg, r_ptr); } else { return 0; }
+    { return tsvd<double, cuDoubleComplex, double2>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (cuDoubleComplex*)X, ldx, (double*)S, (complex_double2*)G, ldg, r_ptr); } else
+    if (Atype == HYACIN_F32_COMPLEX)
+    { return tsvd<float, cuComplex, double2>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (cuComplex*)X, ldx, (float*)S, (complex_double2*)G, ldg, r_ptr); } else { return 0; }
+    case HYACIN_TF_COMPLEX: if (Atype == HYACIN_F64_COMPLEX)
+    { return tsvd<double, cuDoubleComplex, float3>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (cuDoubleComplex*)X, ldx, (double*)S, (complex_float3*)G, ldg, r_ptr); } else
+    if (Atype == HYACIN_F32_COMPLEX)
+    { return tsvd<float, cuComplex, float3>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (cuComplex*)X, ldx, (float*)S, (complex_float3*)G, ldg, r_ptr); } else { return 0; }
     case HYACIN_QF_COMPLEX: if (Atype == HYACIN_F64_COMPLEX)
-    { return tsvd<double, cuDoubleComplex, float4>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (cuDoubleComplex*)X, ldx, (double*)S, (complex_float4*)G, ldg, r_ptr); } else { return 0; }
+    { return tsvd<double, cuDoubleComplex, float4>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (cuDoubleComplex*)X, ldx, (double*)S, (complex_float4*)G, ldg, r_ptr); } else
+    if (Atype == HYACIN_F32_COMPLEX)
+    { return tsvd<float, cuComplex, float4>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (cuComplex*)X, ldx, (float*)S, (complex_float4*)G, ldg, r_ptr); } else { return 0; }
     default: return 0;
   }
 }

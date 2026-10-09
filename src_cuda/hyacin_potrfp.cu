@@ -24,51 +24,46 @@ template <class idx_t> struct idx_max {
 __device__ __forceinline__ double2 operator-(const double2& a, const double2& b) { double s, e; device::two_sum(a.x, -b.x, s, e); return device::renormalize(make_double2(s, (a.y - b.y) + e)); }
 __device__ __forceinline__ float3 operator-(const float3& a, const float3& b) {
   float2 s, e; device::two_sum(a.x, a.y, -b.x, -b.y, s.x, s.y, e.x, e.y); device::two_sum(s.y, e.x, s.y, e.x);
-  return device::renormalize(make_float3(s.x, s.y, (a.z - b.z) + (e.y + e.x)));
+  return device::renormalize(make_float3(s.x, s.y, (a.z - b.z) + (e.x + e.y)));
 }
 __device__ __forceinline__ float4 operator-(const float4& a, const float4& b) {
   float3 s, e;
   device::two_sum(a.x, a.y, a.z, -b.x, -b.y, -b.z, s.x, s.y, s.z, e.x, e.y, e.z);
-  device::two_sum(s.y, s.z, e.x, e.y, s.y, s.z, e.x, e.y); e.z += a.w - b.w;
+  device::two_sum(s.y, s.z, e.x, e.y, s.y, s.z, e.x, e.y);
   device::two_sum(s.z, e.x, s.z, e.x);
-  return device::renormalize(make_float4(s.x, s.y, s.z, e.x + e.y + e.z));
+  return device::renormalize(make_float4(s.x, s.y, s.z, (a.w - b.w) + (e.x + e.y + e.z)));
 }
 
 __device__ __forceinline__ double2 operator*(const double2& a, const double2& b) { double p = a.x * b.x; return device::renormalize(make_double2(p, fma(a.x, b.y, a.y * b.x) + fma(a.x, b.x, -p))); }
 __device__ __forceinline__ float3 operator*(const float3& a, const float3& b) {
-  float r0 = a.x * b.x, r1 = a.x * b.y, p = a.y * b.x, e0 = fmaf(a.x, b.x, -r0), e1 = fmaf(a.x, b.y, -r1), e2 = fmaf(a.y, b.x, -p);
-  float r2 = fmaf(a.z, b.x, fmaf(a.y, b.y, a.x * b.z));
-  device::two_sum(r1, e0, r1, e0); device::two_sum(r1, p, r1, p); r2 += (e0 + e1) + (e2 + p);
-  return device::renormalize(make_float3(r0, r1, r2));
+  float r0 = a.x * b.x, r1 = a.x * b.y, p = a.y * b.x, e = fmaf(a.x, b.x, -r0);
+  float r2 = fmaf(a.z, b.x, fmaf(a.y, b.y, fmaf(a.x, b.z, fmaf(a.x, b.y, -r1) + fmaf(a.y, b.x, -p))));
+  device::two_sum(r1, e, r1, e); device::two_sum(r1, p, r1, p);
+  return device::renormalize(make_float3(r0, r1, r2 + e + p));
 }
 __device__ __forceinline__ float4 operator*(const float4& a, const float4& b) {
-  float2 p = make_float2(a.x * b.x, a.y * b.y), e = make_float2(fmaf(a.x, b.x, -p.x), fmaf(a.y, b.y, -p.y)), r12 = make_float2(e.x, p.y);
-  float r0 = p.x, r3 = fmaf(a.w, b.x, a.z * b.y) + fmaf(a.y, b.z, fmaf(a.x, b.w, e.y));
+  float r0 = a.x * b.x, r1 = fmaf(a.x, b.x, -r0), r2 = a.y * b.y;
+  float r3 = fmaf(a.w, b.x, fmaf(a.z, b.y, fmaf(a.y, b.z, fmaf(a.x, b.w, fmaf(a.y, b.y, -r2)))));
 
-  p = make_float2(a.y * b.x, a.z * b.x); e = make_float2(fmaf(a.y, b.x, -p.x), fmaf(a.z, b.x, -p.y));
-  device::two_sum(r12.x, r12.y, p.x, p.y, r12.x, r12.y, p.x, p.y); device::two_sum(p.x, e.x, p.x, e.x); device::two_sum(r12.y, p.x, r12.y, p.x);
-  r3 += (p.x + p.y) + (e.x + e.y);
-
-  p = make_float2(a.x * b.y, a.x * b.z); e = make_float2(fmaf(a.x, b.y, -p.x), fmaf(a.x, b.z, -p.y));
-  device::two_sum(r12.x, r12.y, p.x, p.y, r12.x, r12.y, p.x, p.y); device::two_sum(p.x, e.x, p.x, e.x); device::two_sum(r12.y, p.x, r12.y, p.x);
-  r3 += (p.x + p.y) + (e.x + e.y);
-  return device::renormalize(make_float4(r0, r12.x, r12.y, r3));
+  float p0 = a.y * b.x, p1 = a.z * b.x, p2 = a.x * b.y, p3 = a.x * b.z;
+  float e0 = fmaf(a.y, b.x, -p0), e1 = fmaf(a.z, b.x, -p1), e2 = fmaf(a.x, b.y, -p2), e3 = fmaf(a.x, b.z, -p3);
+  device::two_sum(r1, r2, p0, p1, r1, r2, p0, p1); device::two_sum(r1, r2, p2, p3, r1, r2, p2, p3);
+  device::two_sum(p0, p2, e0, e2, p0, p2, e0, e2); device::two_sum(r2, p0, r2, p0); device::two_sum(r2, p2, r2, p2);
+  return device::renormalize(make_float4(r0, r1, r2, r3 + p0 + p1 + p2 + p3 + e0 + e1 + e2 + e3));
 }
 
 __device__ __forceinline__ double2 sqr(const double2& a) { double p = a.x * a.x; return device::renormalize(make_double2(p, fma(a.x + a.x, a.y, fma(a.x, a.x, -p)))); }
 __device__ __forceinline__ float3 sqr(const float3& a) {
-  float a1 = a.x + a.x, r0 = a.x * a.x, r1 = a.y * a1, e0 = fmaf(a.x, a.x, -r0), e1 = fmaf(a.y, a1, -r1), r2 = fmaf(a.z, a1, a.y * a.y);
-  device::two_sum(r1, e0, r1, e0); r2 += e0 + e1;
-  return device::renormalize(make_float3(r0, r1, r2));
+  float a1 = a.x + a.x, r0 = a.x * a.x, r1 = a.y * a1, e = fmaf(a.x, a.x, -r0), r2 = fmaf(a.y, a.y, fmaf(a1, a.z, fmaf(a.y, a1, -r1)));
+  device::two_sum(r1, e, r1, e); return device::renormalize(make_float3(r0, r1, r2 + e));
 }
 __device__ __forceinline__ float4 sqr(const float4& a) {
-  float2 p = make_float2(a.x * a.x, a.y * a.y), e = make_float2(fmaf(a.x, a.x, -p.x), fmaf(a.y, a.y, -p.y)), r12 = make_float2(e.x, p.y);
-  float a1 = a.x + a.x, r0 = p.x, r3 = fmaf(a.w, a1, a.z * (a.y + a.y)) + e.y;
+  float r0 = a.x * a.x, r2 = a.y * a.y, r1 = fmaf(a.x, a.x, -r0);
+  float a1 = a.x + a.x, r3 = fmaf(a.w, a1, fmaf(a.z, a.y + a.y, fmaf(a.y, a.y, -r2)));
 
-  p = make_float2(a.y * a1, a.z * a1); e = make_float2(fmaf(a.y, a1, -p.x), fmaf(a.z, a1, -p.y));
-  device::two_sum(r12.x, r12.y, p.x, p.y, r12.x, r12.y, p.x, p.y); device::two_sum(p.x, e.x, p.x, e.x); device::two_sum(r12.y, p.x, r12.y, p.x);
-  r3 += (p.x + p.y) + (e.x + e.y);
-  return device::renormalize(make_float4(r0, r12.x, r12.y, r3));
+  float p0 = a.y * a1, p1 = a.z * a1, e0 = fmaf(a.y, a1, -p0), e1 = fmaf(a.z, a1, -p1);
+  device::two_sum(r1, r2, p0, p1, r1, r2, p0, p1); device::two_sum(p0, e0, p0, e0); device::two_sum(r2, p0, r2, p0);
+  return device::renormalize(make_float4(r0, r1, r2, r3 + p0 + p1 + e0 + e1));
 }
 
 __device__ __forceinline__ double sqrt_fl(double epi, double_idx x, double_idx& r)

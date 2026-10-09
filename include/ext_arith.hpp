@@ -3,9 +3,9 @@
 #include <cmath>
 #include <cuda_runtime.h>
 
-struct __align__(32) complex_double2 { double2 real, imag; };
-struct __align__(16) complex_float3 { float3 real, imag; };
-struct __align__(32) complex_float4 { float4 real, imag; };
+struct __align__(alignof(double2) + alignof(double2)) complex_double2 { double2 real, imag; };
+struct __align__(alignof(float3) + alignof(float3)) complex_float3 { float3 real, imag; };
+struct __align__(alignof(float4) + alignof(float4)) complex_float4 { float4 real, imag; };
 
 namespace device {
 
@@ -102,13 +102,13 @@ namespace device {
 
   __host__ __device__ __forceinline__ float3 renormalize(const float3& a) {
     float x = a.x + a.y, y = (a.x - x) + a.y, s0 = x + a.z, z = (x - s0) + a.z, s1 = y + z;
-    return make_float3(s0, s1, z + (y - s1));
+    return make_float3(s0, s1, (y - s1) + z);
   }
 
   __host__ __device__ __forceinline__ float4 renormalize(const float4& a) {
-    float x = a.x + a.y, y = (a.x - x) + a.y, s0 = x + a.z, s1 = y + a.w, z = (x - s0) + a.z, w = (y - s1) + a.w;
-    x = s0; y = s1; s0 = x + w; s1 = y + z; w += x - s0; z += y - s1;
-    float s2 = z + w; return make_float4(s0, s1, s2, w + (z - s2));
+    float x = a.x + a.y, y = (a.x - x) + a.y, s0 = x + a.z, z = (x - s0) + a.z, s1 = y + z, s2 = (y - s1) + z;
+    x = s0 + a.w; float w = (s0 - x) + a.w; y = s1 + w; z = s2 + (w += s1 - y);
+    return make_float4(x, y, z, (s2 - z) + w); 
   }
 
   __host__ __device__ __forceinline__ double2 add(const double2& a, const double2& b)
@@ -116,15 +116,15 @@ namespace device {
 
   __host__ __device__ __forceinline__ float3 add(const float3& a, const float3& b) {
     float2 s, e; two_sum(a.x, a.y, b.x, b.y, s.x, s.y, e.x, e.y); two_sum(s.y, e.x, s.y, e.x);
-    return renormalize(make_float3(s.x, s.y, (a.z + b.z) + (e.y + e.x)));
+    return renormalize(make_float3(s.x, s.y, (a.z + b.z) + (e.x + e.y)));
   }
 
   __host__ __device__ __forceinline__ float4 add(const float4& a, const float4& b) {
     float3 s, e;
     two_sum(a.x, a.y, a.z, b.x, b.y, b.z, s.x, s.y, s.z, e.x, e.y, e.z);
-    two_sum(s.y, s.z, e.x, e.y, s.y, s.z, e.x, e.y); e.z += a.w + b.w;
+    two_sum(s.y, s.z, e.x, e.y, s.y, s.z, e.x, e.y);
     two_sum(s.z, e.x, s.z, e.x);
-    return renormalize(make_float4(s.x, s.y, s.z, e.x + e.y + e.z));
+    return renormalize(make_float4(s.x, s.y, s.z, (a.w + b.w) + (e.x + e.y + e.z)));
   }
 
 };
