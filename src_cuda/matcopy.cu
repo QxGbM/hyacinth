@@ -23,8 +23,7 @@ template<class T, class S> __device__ __forceinline__ T conv(S a) {
 template <char mode, class Atype, class Btype>
 __global__ void cvcpy_kernel(int64_t M, const Atype* __restrict__ A, int64_t lda, Btype* __restrict__ B, int64_t ldb) {
   int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
-  if (y < M)
-  { if constexpr(mode == 'U') { B[y + x * ldb] = x < y ? Btype() : conv<Btype>(A[y + x * lda]); } else { B[y + x * ldb] = conv<Btype>(A[y + x * lda]); }}
+  if (y < M) { if constexpr(mode == 'U') { B[y + x * ldb] = x < y ? Btype() : conv<Btype>(A[y + x * lda]); } else { B[y + x * ldb] = conv<Btype>(A[y + x * lda]); }}
 };
 
 template <class T> __device__ __forceinline__ T float_one() {
@@ -42,8 +41,7 @@ template <char mode, class Atype, class Btype>
 __global__ void scatter_conj_cvcpy_kernel(int64_t M, const int32_t* __restrict__ jpiv, const Atype* __restrict__ A, int64_t lda, Btype* __restrict__ B, int64_t ldb) {
   int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x), x = int64_t(blockIdx.y); B = &B[int64_t(jpiv[x] - 1) + (y * ldb)];
   int32_t pred; if constexpr(mode == 'I') { pred = int32_t(x < M); } else { pred = int32_t(x < y); }
-  if (y < M)
-  { if (pred) { if constexpr(mode == 'I') { *B = (x == y) ? float_one<Btype>() : Btype(); } else { *B = Btype(); }} else { *B = conj(conv<Btype>(A[y + x * lda])); }}
+  if (y < M) { if (pred) { if constexpr(mode == 'I') { *B = (x == y) ? float_one<Btype>() : Btype(); } else { *B = Btype(); }} else { *B = conj(conv<Btype>(A[y + x * lda])); }}
 };
 
 template <class Atype, class Btype>

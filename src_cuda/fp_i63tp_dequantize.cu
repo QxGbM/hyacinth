@@ -20,8 +20,9 @@ template <int32_t orderA> __device__ __forceinline__ double2 conv_a63_dd(uint64_
   return make_double2(scalbn(res.x, e), scalbn(res.y, e));
 }
 
+constexpr uint32_t i24 = std::numeric_limits<uint32_t>::max() >> 8;
 __device__ __forceinline__ float3 conv_i64_tf_m126(uint64_t i)
-{ constexpr uint32_t i24 = 0xffffff; return device::renormalize(make_float3(scalbnf(float(int16_t(i >> 48)), -78), scalbnf(float(uint32_t(i >> 24) & i24), -102), scalbnf(float(uint32_t(i) & i24), -126))); }
+{ return device::renormalize(make_float3(scalbnf(float(int16_t(i >> 48)), -78), scalbnf(float(uint32_t(i >> 24) & i24), -102), scalbnf(float(uint32_t(i) & i24), -126))); }
 template <int32_t orderA> __device__ __forceinline__ float3 conv_a63_tf(uint64_t const (&a)[orderA], int32_t e) {
   float3 res = conv_i64_tf_m126(a[orderA - 1]);
   if constexpr(2 < orderA) { res = device::add(make_float3(scalbnf(res.x, 63), scalbnf(res.y, 63), scalbnf(res.z, 63)), conv_i64_tf_m126(a[1])); }
