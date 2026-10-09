@@ -76,8 +76,7 @@ __device__ __forceinline__ double2 sqrt_fl(double2 epi, double2_idx x, double2_i
   int32_t e; double2 rx = make_double2(frexp(rsqrt(x.real.x), &e), 0.);
   int32_t e2 = e + e - 1; double2 s = make_double2(scalbn(-x.real.x, e2), scalbn(-x.real.y, e2));
 
-  rx = rx * increment(s * sqr(rx));
-  rx = rx * increment(s * sqr(rx));
+  rx = rx * increment(s * sqr(rx)); rx = rx * increment(s * sqr(rx));
   rx = make_double2(scalbn(rx.x, e), scalbn(rx.y, e)); x.real = x.real * rx;
   r = double2_idx({ rx, x.idx - 1, r.p - int32_t(cmp_fl(x.real, epi)) });
   return x.real;
@@ -88,9 +87,7 @@ __device__ __forceinline__ float3 sqrt_fl(float3 epi, float3_idx x, float3_idx& 
   int32_t e; float3 rx = make_float3(frexpf(rsqrtf(x.real.x), &e), 0.f, 0.f);
   int32_t e2 = e + e - 1; float3 s = make_float3(scalbnf(-x.real.x, e2), scalbnf(-x.real.y, e2), scalbnf(-x.real.z, e2));
 
-  rx = rx * increment(s * sqr(rx));
-  rx = rx * increment(s * sqr(rx));
-  rx = rx * increment(s * sqr(rx));
+  rx = rx * increment(s * sqr(rx)); rx = rx * increment(s * sqr(rx)); rx = rx * increment(s * sqr(rx));
   rx = make_float3(scalbnf(rx.x, e), scalbnf(rx.y, e), scalbnf(rx.z, e)); x.real = x.real * rx;
   r = float3_idx({ rx, x.idx - 1, r.p - int32_t(cmp_fl(x.real, epi)) });
   return x.real;
@@ -101,9 +98,7 @@ __device__ __forceinline__ float4 sqrt_fl(float4 epi, float4_idx x, float4_idx& 
   int32_t e; float4 rx = make_float4(frexpf(rsqrtf(x.real.x), &e), 0.f, 0.f, 0.f);
   int32_t e2 = e + e - 1; float4 s = make_float4(scalbnf(-x.real.x, e2), scalbnf(-x.real.y, e2), scalbnf(-x.real.z, e2), scalbnf(-x.real.w, e2));
 
-  rx = rx * increment(s * sqr(rx));
-  rx = rx * increment(s * sqr(rx));
-  rx = rx * increment(s * sqr(rx));
+  rx = rx * increment(s * sqr(rx)); rx = rx * increment(s * sqr(rx)); rx = rx * increment(s * sqr(rx));
   rx = make_float4(scalbnf(rx.x, e), scalbnf(rx.y, e), scalbnf(rx.z, e), scalbnf(rx.w, e)); x.real = x.real * rx;
   r = float4_idx({ rx, x.idx - 1, r.p - int32_t(cmp_fl(x.real, epi)) });
   return x.real;
@@ -122,15 +117,13 @@ template <int32_t BLOCK_THREADS, class real_t, class matrix_t, class idx_t>
 __global__ void potrf_init_kernel(real_t epi, int32_t p, int32_t N, matrix_t* __restrict__ A, int64_t lda_p1, int32_t* __restrict__ jpiv, real_t* __restrict__ D, idx_t* __restrict__ work) {
   __shared__ typename cub::BlockReduce<idx_t, BLOCK_THREADS>::TempStorage temp_reduce; idx_max<idx_t> cmp_max;
   auto grid = cooperative_groups::this_grid(); const int32_t nthreads = (grid.num_threads());
+  constexpr bool type_cuComplex = !std::is_same_v<real_t, matrix_t> && (std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex>);
+  constexpr bool type_stuComplex = !std::is_same_v<real_t, matrix_t> && (std::is_same_v<matrix_t, complex_double2> || std::is_same_v<matrix_t, complex_float3> || std::is_same_v<matrix_t, complex_float4>);
 
   idx_t thread_x = idx_t();
   for (int32_t i = int32_t(grid.thread_rank()); i < N; i += nthreads) {
     real_t x; int64_t loc = int64_t(i) * lda_p1;
-    if constexpr(std::is_same_v<real_t, double> && std::is_same_v<matrix_t, cuDoubleComplex>) { x = A[loc].x; } else
-    if constexpr(std::is_same_v<real_t, float> && std::is_same_v<matrix_t, cuComplex>) { x = A[loc].x; } else
-    if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, complex_double2>) { x = A[loc].real; } else
-    if constexpr(std::is_same_v<real_t, float3> && std::is_same_v<matrix_t, complex_float3>) { x = A[loc].real; } else
-    if constexpr(std::is_same_v<real_t, float4> && std::is_same_v<matrix_t, complex_float4>) { x = A[loc].real; } else { x = A[loc]; }
+    if constexpr(type_cuComplex) { x = A[loc].x; } else if constexpr(type_stuComplex) { x = A[loc].real; } else { x = A[loc]; }
     thread_x = cmp_max(thread_x, idx_t({ D[i] = x, jpiv[i] = i + 1, 0 }));
   }
 
