@@ -12,7 +12,7 @@ template <> inline hyacinPrecision_t hyacin_prec<__half2>() { return HYACIN_F16_
 
 template <class T> inline
 int32_t interp_dispatcher(const hyacinHandle_t* handle, double epi, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, int32_t* jpvt, T* U, int32_t ldu, T* V, int32_t ldv, int64_t globalM, int32_t batchIter, int32_t localMv, int32_t Nv, int32_t localVoffset) {
-  globalM = globalM <= int64_t(0) ? int64_t(M) : globalM; localMv = localMv <= 0 ? N : localMv; batchIter = batchIter <= 0 ? M : std::min(batchIter, handle->BatchK);
+  globalM = globalM <= int64_t(0) ? int64_t(M) : globalM; localMv = localMv <= 0 ? N : localMv; batchIter = batchIter <= 0 ? handle->BatchK : std::min(batchIter, handle->BatchK);
   cudaSetDevice(handle->DeviceID); hyacinPrecision_t Atype = hyacin_prec<T>(), Gtype;
   int32_t* vexp = nullptr, u, cPanels, lPanels, gElemBytes; uint64_t strideC, Bbytes;
   cudaMallocFromPoolAsync((void**)&vexp, uint64_t(N) * sizeof(int32_t), handle->mempool, handle->cudaStream);
@@ -52,7 +52,7 @@ int32_t interp_dispatcher(const hyacinHandle_t* handle, double epi, int32_t M, i
 
 template <class T, class R> inline
 int32_t svd_dispatcher(const hyacinHandle_t* handle, double epi, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, T* U, int32_t ldu, R* S, T* V, int32_t ldv, int64_t globalM, int32_t batchIter, int32_t localMv, int32_t Nv, int32_t localVoffset) {
-  globalM = globalM <= int64_t(0) ? int64_t(M) : globalM; localMv = localMv <= 0 ? N : localMv; batchIter = batchIter <= 0 ? M : std::min(batchIter, handle->BatchK);
+  globalM = globalM <= int64_t(0) ? int64_t(M) : globalM; localMv = localMv <= 0 ? N : localMv; batchIter = batchIter <= 0 ? handle->BatchK : std::min(batchIter, handle->BatchK);
   cudaSetDevice(handle->DeviceID); hyacinPrecision_t Atype = hyacin_prec<T>(), Gtype;
   int32_t* vexp = nullptr, u, cPanels, lPanels, gElemBytes; uint64_t strideC, Bbytes;
   cudaMallocFromPoolAsync((void**)&vexp, uint64_t(N) * sizeof(int32_t), handle->mempool, handle->cudaStream);
@@ -94,7 +94,7 @@ template <class T> inline
 double check_answer(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t rank, const T* U, int32_t ldu, const T* V, int32_t ldv, const T* A, int32_t lda) {
   if (M <= 0 || N <= 0) { return 0.; }
   constexpr int32_t Complex = std::is_same_v<T, cuDoubleComplex> || std::is_same_v<T, cuComplex> || std::is_same_v<T, __half2>;
-  using type = typename std::conditional<Complex, cuDoubleComplex, double>::type;
+  using type = typename std::conditional_t<Complex, cuDoubleComplex, double>;
   double err = 0.; constexpr int32_t block = 512; constexpr uint64_t bytes = uint64_t(block) * uint64_t(block) * uint64_t(sizeof(type));
   if (rank <= 0) {
     type* matA = nullptr; cudaMalloc((void**)&matA, bytes);
