@@ -11,37 +11,36 @@ template <int32_t ORDER> __device__ __forceinline__ void write_zeros(int8_t* A, 
   for (int32_t i = 1; i < ORDER; ++i) { *(A += strideA) = zero; }
 }
 
-struct __align__(16) lint95_t { uint64_t x; uint32_t y; };
-__device__ __forceinline__ lint95_t round_i95(double x, int32_t expon) {
+__device__ __forceinline__ void round_i95(const double& x, int32_t expon, uint64_t& lo, uint32_t& hi) {
   uint32_t e = uint32_t(__viaddmax_s32(ilogb(x), expon - 62, 0));
   uint64_t i = uint64_t(llrint(scalbn(x, expon - int32_t(e))));
-  return lint95_t({ (i << e) & i63, ((-uint32_t(i >> 63)) << (uint32_t(1) + e)) | uint32_t(i >> (uint32_t(63) - e)) });
+  lo = (i << e) & i63; hi = ((-uint32_t(i >> 63)) << (uint32_t(1) + e)) | uint32_t(i >> (uint32_t(63) - e));
 }
 
-__device__ __forceinline__ lint95_t round_i95(float x, int32_t expon) {
+__device__ __forceinline__ void round_i95(const float& x, int32_t expon, uint64_t& lo, uint32_t& hi) {
   uint32_t e = uint32_t(__viaddmax_s32(ilogbf(x), expon - 62, 0));
   uint64_t i = uint64_t(llrintf(scalbnf(x, expon - int32_t(e))));
-  return lint95_t({ (i << e) & i63, ((-uint32_t(i >> 63)) << (uint32_t(1) + e)) | uint32_t(i >> (uint32_t(63) - e)) });
+  lo = (i << e) & i63; hi = ((-uint32_t(i >> 63)) << (uint32_t(1) + e)) | uint32_t(i >> (uint32_t(63) - e));
 }
 
-__device__ __forceinline__ lint95_t round_i95(__half x, int32_t expon) {
-  return round_i95(__half2float(x), expon);
+__device__ __forceinline__ void round_i95(const __half& x, int32_t expon, uint64_t& lo, uint32_t& hi) {
+  round_i95(__half2float(x), expon, lo, hi);
 }
 
-template <int32_t ORDER> __device__ __forceinline__ int8_t* quantize_i8(lint95_t i, int8_t* A, int64_t strideA) {
+template <int32_t ORDER> __device__ __forceinline__ int8_t* quantize_i8(const uint64_t& lo, const uint32_t& hi, int8_t* A, int64_t strideA) {
   uint32_t a;
-  if constexpr(0 < ORDER) { a = uint8_t(i.x); *A = int8_t(a); } else { return A; }
-  if constexpr(1 < ORDER) { a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint8_t(i.x >> 8); *(A += strideA) = int8_t(a); }
-  if constexpr(2 < ORDER) { a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint8_t(i.x >> 16); *(A += strideA) = int8_t(a); }
-  if constexpr(3 < ORDER) { a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint8_t(i.x >> 24); *(A += strideA) = int8_t(a); }
-  if constexpr(4 < ORDER) { a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint8_t(i.x >> 32); *(A += strideA) = int8_t(a); }
-  if constexpr(5 < ORDER) { a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint8_t(i.x >> 40); *(A += strideA) = int8_t(a); }
-  if constexpr(6 < ORDER) { a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint8_t(i.x >> 48); *(A += strideA) = int8_t(a); }
-  if constexpr(7 < ORDER) { a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint8_t((i.y << 7) | (i.x >> 56)); *(A += strideA) = int8_t(a); }
-  if constexpr(8 < ORDER) { a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint8_t(i.y >> 1); *(A += strideA) = int8_t(a); }
-  if constexpr(9 < ORDER) { a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint8_t(i.y >> 9); *(A += strideA) = int8_t(a); }
-  if constexpr(10 < ORDER) { a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint8_t(i.y >> 17); *(A += strideA) = int8_t(a); }
-  if constexpr(11 < ORDER) { a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint8_t(i.y >> 25); *(A += strideA) = int8_t(a); }
+  if constexpr(0 < ORDER) { a = uint8_t(lo); *A = int8_t(a); } else { return A; }
+  if constexpr(1 < ORDER) { a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint8_t(lo >> 8); *(A += strideA) = int8_t(a); }
+  if constexpr(2 < ORDER) { a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint8_t(lo >> 16); *(A += strideA) = int8_t(a); }
+  if constexpr(3 < ORDER) { a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint8_t(lo >> 24); *(A += strideA) = int8_t(a); }
+  if constexpr(4 < ORDER) { a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint8_t(lo >> 32); *(A += strideA) = int8_t(a); }
+  if constexpr(5 < ORDER) { a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint8_t(lo >> 40); *(A += strideA) = int8_t(a); }
+  if constexpr(6 < ORDER) { a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint8_t(lo >> 48); *(A += strideA) = int8_t(a); }
+  if constexpr(7 < ORDER) { a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint8_t((hi << 7) | (lo >> 56)); *(A += strideA) = int8_t(a); }
+  if constexpr(8 < ORDER) { a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint8_t(hi >> 1); *(A += strideA) = int8_t(a); }
+  if constexpr(9 < ORDER) { a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint8_t(hi >> 9); *(A += strideA) = int8_t(a); }
+  if constexpr(10 < ORDER) { a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint8_t(hi >> 17); *(A += strideA) = int8_t(a); }
+  if constexpr(11 < ORDER) { a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint8_t(hi >> 25); *(A += strideA) = int8_t(a); }
   return &A[strideA];
 }
 
@@ -54,12 +53,13 @@ __global__ void quantize_limbs_kernel(int32_t M, const matrix_t* __restrict__ A,
     { if constexpr(Complex) { write_zeros<ORDER * 3>(&B[i], strideB); } else { write_zeros<ORDER>(&B[i], strideB); }}
   } else if constexpr(Complex) {
     for (int32_t i = int32_t(threadIdx.x); i < M; i += int32_t(blockDim.x)) {
-      matrix_t A_i = A[i]; lint95_t A_rl = round_i95(A_i.x, expon), A_im = round_i95(A_i.y, expon); uint64_t lo = A_rl.x + A_im.x;
-      quantize_i8<ORDER>(A_im, quantize_i8<ORDER>(A_rl, quantize_i8<ORDER>(lint95_t({ lo & i63, A_rl.y + A_im.y + uint32_t(lo >> 63) }), &B[i], strideB), strideB), strideB);
+      matrix_t A_i = A[i]; uint64_t rl_lo, im_lo; uint32_t rl_hi, im_hi;
+      round_i95(A_i.x, expon, rl_lo, rl_hi); round_i95(A_i.y, expon, im_lo, im_hi); uint64_t lo = rl_lo + rl_hi; uint32_t hi = rl_hi + im_hi + uint32_t(lo >> 63); lo &= i63;
+      quantize_i8<ORDER>(im_lo, im_hi, quantize_i8<ORDER>(rl_lo, rl_hi, quantize_i8<ORDER>(lo, hi, &B[i], strideB), strideB), strideB);
     }
   } else {
     for (int32_t i = int32_t(threadIdx.x); i < M; i += int32_t(blockDim.x))
-    { quantize_i8<ORDER>(round_i95(A[i], expon), &B[i], strideB); }
+    { uint64_t lo; uint32_t hi; round_i95(A[i], expon, lo, hi); quantize_i8<ORDER>(lo, hi, &B[i], strideB); }
   }
 };
 

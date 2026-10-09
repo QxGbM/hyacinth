@@ -4,7 +4,6 @@
 #include <crt_constants.hpp>
 #include <vector>
 #include <algorithm>
-#include <limits>
 #include <stdexcept>
 
 #ifndef HYACIN_DEFAULT_GRAM_ALGORITHM
@@ -34,20 +33,26 @@ const std::vector<int32_t> limbs_u_list({ 7, 14, 22, 30, 38, 46, 54, 62, 70, 78,
 
 std::pair<int32_t, int32_t> internal::gram_algorithm(char& alg, int32_t M, int32_t& u, int32_t Complex) {
   constexpr int32_t CRT_MIN_SEGMENT_K = 8192; constexpr double SBATCH_PENALTY = 1.4;
-  u = std::max(0, u);
-  int32_t orderA_limbs = 1 + std::distance(limbs_u_list.begin(), std::lower_bound(limbs_u_list.begin(), limbs_u_list.end(), u));
-  if (alg != 'L' && alg != 'l' && 3 < orderA_limbs) {
-    int32_t nrm_M = std::min(std::max(1, M), CRT_MIN_SEGMENT_K), crt_bits = (u + u + 2) + int32_t(std::ceil(std::log2(double(nrm_M)))), orderA_crt, cost_crt;
-    int32_t cost_limbs = int32_t(SBATCH_PENALTY * double(orderA_limbs)) + int32_t(uint32_t(orderA_limbs * (orderA_limbs - 1)) >> 1) + (Complex ? orderA_limbs * orderA_limbs : 0);
+  int32_t nrm_M = std::min(std::max(1, M), CRT_MIN_SEGMENT_K), crt_bits = (u + u + 2) + int32_t(std::ceil(std::log2(double(nrm_M))));
+  if (alg == 'C' || alg == 'c') { alg = 'C';
     if (crt_bits <= U8CRT::range[22]) {
-      orderA_crt = 1 + int32_t(std::distance(&U8CRT::range[0], std::lower_bound(&U8CRT::range[1], &U8CRT::range[23], crt_bits)));
-      cost_crt = int32_t(SBATCH_PENALTY * double(Complex ? (orderA_crt + orderA_crt) : orderA_crt));
-    } else { orderA_crt = cost_crt = std::numeric_limits<int32_t>::max(); }
-    if (alg == 'C' || alg == 'c' || cost_crt < cost_limbs)
-    { alg = 'C'; std::div_t divM = std::div(M, nrm_M << (U8CRT::range[orderA_crt - 1] - crt_bits)); return std::make_pair(orderA_crt, divM.quot + int32_t(0 < divM.rem)); }
+      int32_t orderA_crt = 1 + int32_t(std::distance(&U8CRT::range[0], std::lower_bound(&U8CRT::range[1], &U8CRT::range[23], crt_bits)));
+      std::div_t divM = std::div(M, nrm_M << (U8CRT::range[orderA_crt - 1] - crt_bits)); return std::make_pair(orderA_crt, divM.quot + int32_t(0 < divM.rem));
+    } else { return std::make_pair(0, 0); }
+  } else {
+    u = std::max(0, u);
+    int32_t orderA_limbs = 1 + std::distance(limbs_u_list.begin(), std::lower_bound(limbs_u_list.begin(), limbs_u_list.end(), u));
+    if (alg != 'L' && alg != 'l' && 3 < orderA_limbs) {
+      int32_t cost_limbs = int32_t(SBATCH_PENALTY * double(orderA_limbs)) + int32_t(uint32_t(orderA_limbs * (orderA_limbs - 1)) >> 1) + (Complex ? orderA_limbs * orderA_limbs : 0);
+      if (crt_bits <= U8CRT::range[22]) {
+        int32_t orderA_crt = 1 + int32_t(std::distance(&U8CRT::range[0], std::lower_bound(&U8CRT::range[1], &U8CRT::range[23], crt_bits)));
+        int32_t cost_crt = int32_t(SBATCH_PENALTY * double(Complex ? (orderA_crt + orderA_crt) : orderA_crt));
+        if (cost_crt < cost_limbs)
+        { alg = 'C'; std::div_t divM = std::div(M, nrm_M << (U8CRT::range[orderA_crt - 1] - crt_bits)); return std::make_pair(orderA_crt, divM.quot + int32_t(0 < divM.rem)); }
+      }
+    }
+    alg = 'L'; u = limbs_u_list[orderA_limbs - 1]; return std::make_pair(orderA_limbs, 1);
   }
-  alg = 'L'; u = limbs_u_list[orderA_limbs - 1];
-  return std::make_pair(orderA_limbs, 1);
 }
 
 enum class segment : unsigned char { none, dist_kernel, rep_kernel, comm };
@@ -64,7 +69,7 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle) {
   handle->GramBitCorrection = ((env_str = get_env("HYACIN_GRAM_BITS_CORR")) == "") ? HYACIN_DEFAULT_GRAM_BITS_CORR : std::stoi(env_str);
   handle->JacobiSVDSweeps = ((env_str = get_env("HYACIN_JACOBI_SVD_SWEEPS")) == "") ? HYACIN_DEFAULT_JACOBI_SVD_SWEEPS : std::stoi(env_str);
   handle->RankOversampling = ((env_str = get_env("HYACIN_PRECOND_OVERSAMPLING")) == "") ? HYACIN_DEFAULT_PRECOND_OVERSAMPLING : std::stoi(env_str);
-  handle->BatchK = (255 + ((env_str = get_env("HYACIN_BATCH_K")) == "") ? HYACIN_DEFAULT_BATCH_K : std::stoi(env_str)) & (~255);
+  handle->BatchK = ((env_str = get_env("HYACIN_BATCH_K")) == "") ? HYACIN_DEFAULT_BATCH_K : ((std::stoi(env_str) + 255) & (~255));
   if (0 < handle->BatchK) {
     handle->BatchTensor = reinterpret_cast<decltype(handle->BatchTensor)>(std::malloc(sizeof(*(handle->BatchTensor)) * (uint64_t(1) + limbs_u_list.size())));
     auto& arena = *(handle->BatchTensor); arena.U = -1; arena.Order = 1; arena.Rows = 0;

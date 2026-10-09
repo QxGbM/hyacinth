@@ -270,7 +270,7 @@ extern "C" void hyacinXherkBatchInit(const hyacinHandle_t* handle, double epi, i
   double epi_nrm = std::min(1., std::max(std::abs(epi), std::ldexp(1., -type_mantissa[int32_t(Atype)])));
   int32_t u_ceil = Complex + std::min(u_practical_limit, handle->QuantizeBitCorrection + int32_t(std::ceil(-std::log2(epi_nrm))));
   int32_t batches = 1, u_floor = Complex; char algo = handle->GramMatrixAlgorithm;
-  if (algo != 'C' && algo != 'c') while (u_floor <= u_ceil) {
+  while (u_floor <= u_ceil) {
     char algi = algo; int32_t ui = u_floor; internal::gram_algorithm(algi, batchK, ui, Complex);
     if (algi == 'L') { u_floor = 1 + ui; ++batches; } else { u_floor = 1 + u_ceil; }
   }
