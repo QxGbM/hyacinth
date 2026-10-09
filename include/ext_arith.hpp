@@ -4,11 +4,13 @@
 #include <cuda_runtime.h>
 
 struct __align__(32) complex_double2 { double2 real, imag; };
+struct __align__(16) complex_float3 { float3 real, imag; };
 struct __align__(32) complex_float4 { float4 real, imag; };
 
 namespace device {
 
   __host__ __device__ __forceinline__ complex_double2 make_complex_double2(double2 real, double2 imag) { return complex_double2({ real, imag }); }
+  __host__ __device__ __forceinline__ complex_float3 make_complex_float3(float3 real, float3 imag) { return complex_float3({ real, imag }); }
   __host__ __device__ __forceinline__ complex_float4 make_complex_float4(float4 real, float4 imag) { return complex_float4({ real, imag }); }
 
   template <uint32_t expon> __host__ __device__ __forceinline__ void add_shifted(uint64_t (&a)[1], int64_t i) {
@@ -77,44 +79,52 @@ namespace device {
     } else return uint32_t(0);
   }
 
-  __host__ __device__ __forceinline__ void two_sum(const double a, const double b, double& sum, double& err)
-  { sum = a + b; double d = a - sum, sd = sum + d, bd = b + d; err = (a - sd) + bd; }
+  __host__ __device__ __forceinline__ void two_sum(const double a, const double b, double& s, double& e)
+  { s = a + b; double d = a - s, sd = s + d; e = (b + d) + (a - sd); }
 
-  __host__ __device__ __forceinline__ void two_sum(const float a, const float b, float& sum, float& err)
-  { sum = a + b; float d = a - sum, sd = sum + d, bd = b + d; err = (a - sd) + bd; }
+  __host__ __device__ __forceinline__ void two_sum(const float a, const float b, float& s, float& e)
+  { s = a + b; float d = a - s, sd = s + d; e = (b + d) + (a - sd); }
 
-  __host__ __device__ __forceinline__ void two_sum(const float2 a, const float2 b, float2& sum, float2& err) {
-    sum = make_float2(a.x + b.x, a.y + b.y);
-    float2 d = make_float2(a.x - sum.x, a.y - sum.y), sd = make_float2(sum.x + d.x, sum.y + d.y), bd = make_float2(b.x + d.x, b.y + d.y);
-    err = make_float2((a.x - sd.x) + bd.x, (a.y - sd.y) + bd.y);
+  __host__ __device__ __forceinline__ void two_sum(const float a0, const float a1, const float b0, const float b1, float& s0, float& s1, float& e0, float& e1) {
+    s0 = a0 + b0; s1 = a1 + b1;
+    float2 d = make_float2(a0 - s0, a1 - s1), sd = make_float2(s0 + d.x, s1 + d.y);
+    e0 = (b0 + d.x) + (a0 - sd.x); e1 = (b1 + d.y) + (a1 - sd.y);
+  }
+
+  __host__ __device__ __forceinline__ void two_sum(const float a0, const float a1, const float a2, const float b0, const float b1, const float b2, float& s0, float& s1, float& s2, float& e0, float& e1, float& e2) {
+    s0 = a0 + b0; s1 = a1 + b1; s2 = a2 + b2;
+    float3 d = make_float3(a0 - s0, a1 - s1, a2 - s2), sd = make_float3(s0 + d.x, s1 + d.y, s2 + d.z);
+    e0 = (b0 + d.x) + (a0 - sd.x); e1 = (b1 + d.y) + (a1 - sd.y); e2 = (b2 + d.z) + (a2 - sd.z);
   }
 
   __host__ __device__ __forceinline__ double2 renormalize(const double2& a)
-  { double sum = a.x + a.y, d = a.x - sum; return make_double2(sum, a.y + d); }
+  { double s = a.x + a.y, d = a.x - s; return make_double2(s, a.y + d); }
+
+  __host__ __device__ __forceinline__ float3 renormalize(const float3& a) {
+    float x = a.x + a.y, y = (a.x - x) + a.y, s0 = x + a.z, z = (x - s0) + a.z, s1 = y + z;
+    return make_float3(s0, s1, z + (y - s1));
+  }
 
   __host__ __device__ __forceinline__ float4 renormalize(const float4& a) {
-    float s0, s1, d0, d1, x, y, z, w;
-    s0 = a.x + a.y; d0 = a.x - s0; x = s0; y = a.y + d0;
-    s0 = x + a.z; d0 = x - s0; x = s0; z = a.z + d0;
-    s1 = y + a.w; d1 = y - s1; y = s1; w = a.w + d1;
-    s0 = x + w; d0 = x - s0; x = s0; w += d0;
-    s1 = y + z; d1 = y - s1; y = s1; z += d1;
-    s1 = z + w; d1 = z - s1; z = s1; w += d1;
-    return make_float4(x, y, z, w);
+    float x = a.x + a.y, y = (a.x - x) + a.y, s0 = x + a.z, s1 = y + a.w, z = (x - s0) + a.z, w = (y - s1) + a.w;
+    x = s0; y = s1; s0 = x + w; s1 = y + z; w += x - s0; z += y - s1;
+    float s2 = z + w; return make_float4(s0, s1, s2, w + (z - s2));
   }
 
   __host__ __device__ __forceinline__ double2 add(const double2& a, const double2& b)
-  { double sum, err, a2 = a.y + b.y; two_sum(a.x, b.x, sum, err); return renormalize(make_double2(sum, a2 + err)); }
+  { double s, e; two_sum(a.x, b.x, s, e); return renormalize(make_double2(s, (a.y + b.y) + e)); }
+
+  __host__ __device__ __forceinline__ float3 add(const float3& a, const float3& b) {
+    float2 s, e; two_sum(a.x, a.y, b.x, b.y, s.x, s.y, e.x, e.y); two_sum(s.y, e.x, s.y, e.x);
+    return renormalize(make_float3(s.x, s.y, (a.z + b.z) + (e.y + e.x)));
+  }
 
   __host__ __device__ __forceinline__ float4 add(const float4& a, const float4& b) {
-    float2 a0, a1, a2;
-    two_sum(make_float2(a.x, a.y), make_float2(b.x, b.y), a0, a1); // 1122 - 1223
-    two_sum(a.z, b.z, a2.x, a2.y); // 33 - 34, 4@a2.y
-
-    float r0 = a0.x; a2.y += a.w + b.w;
-    two_sum(make_float2(a0.y, a2.x), a1, a0, a1); // 2233 - 2334, 4@a1.y
-    two_sum(a0.y, a1.x, a0.y, a1.x); // 33 - 34, 4@a1.x
-    return renormalize(make_float4(r0, a0.x, a0.y, a2.y + (a1.y + a1.x)));
+    float3 s, e;
+    two_sum(a.x, a.y, a.z, b.x, b.y, b.z, s.x, s.y, s.z, e.x, e.y, e.z);
+    two_sum(s.y, s.z, e.x, e.y, s.y, s.z, e.x, e.y); e.z += a.w + b.w;
+    two_sum(s.z, e.x, s.z, e.x);
+    return renormalize(make_float4(s.x, s.y, s.z, e.x + e.y + e.z));
   }
 
 };

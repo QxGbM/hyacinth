@@ -20,17 +20,20 @@ template <int32_t orderA> __device__ __forceinline__ double2 conv_a63_dd(uint64_
   return make_double2(scalbn(res.x, e), scalbn(res.y, e));
 }
 
-__device__ __forceinline__ float4 conv_i64_qf_m126(uint64_t i) {
-  constexpr uint32_t i24 = 0xffffff;
-  float x = scalbnf(float(int16_t(i >> 48)), -78), y = scalbnf(float(uint32_t(i >> 24) & i24), -102), z = scalbnf(float(uint32_t(i) & i24), -126);
-  device::two_sum(x, y, x, y); device::two_sum(x, z, x, z); device::two_sum(y, z, y, z);
-  return make_float4(x, y, z, 0.f);
+__device__ __forceinline__ float3 conv_i64_tf_m126(uint64_t i)
+{ constexpr uint32_t i24 = 0xffffff; return device::renormalize(make_float3(scalbnf(float(int16_t(i >> 48)), -78), scalbnf(float(uint32_t(i >> 24) & i24), -102), scalbnf(float(uint32_t(i) & i24), -126))); }
+template <int32_t orderA> __device__ __forceinline__ float3 conv_a63_tf(uint64_t const (&a)[orderA], int32_t e) {
+  float3 res = conv_i64_tf_m126(a[orderA - 1]);
+  if constexpr(2 < orderA) { res = device::add(make_float3(scalbnf(res.x, 63), scalbnf(res.y, 63), scalbnf(res.z, 63)), conv_i64_tf_m126(a[1])); }
+  if constexpr(1 < orderA) { res = device::add(make_float3(scalbnf(res.x, 63), scalbnf(res.y, 63), scalbnf(res.z, 63)), conv_i64_tf_m126(a[0])); }
+  e += 126; return make_float3(scalbnf(res.x, e), scalbnf(res.y, e), scalbnf(res.z, e));
 }
 
+__device__ __forceinline__ float4 ext(float3 x) { return make_float4(x.x, x.y, x.z, 0.f); }
 template <int32_t orderA> __device__ __forceinline__ float4 conv_a63_qf(uint64_t const (&a)[orderA], int32_t e) {
-  float4 res = conv_i64_qf_m126(a[orderA - 1]);
-  if constexpr(2 < orderA) { res = device::add(make_float4(scalbnf(res.x, 63), scalbnf(res.y, 63), scalbnf(res.z, 63), scalbnf(res.w, 63)), conv_i64_qf_m126(a[1])); }
-  if constexpr(1 < orderA) { res = device::add(make_float4(scalbnf(res.x, 63), scalbnf(res.y, 63), scalbnf(res.z, 63), scalbnf(res.w, 63)), conv_i64_qf_m126(a[0])); }
+  float4 res = ext(conv_i64_tf_m126(a[orderA - 1]));
+  if constexpr(2 < orderA) { res = device::add(make_float4(scalbnf(res.x, 63), scalbnf(res.y, 63), scalbnf(res.z, 63), scalbnf(res.w, 63)), ext(conv_i64_tf_m126(a[1]))); }
+  if constexpr(1 < orderA) { res = device::add(make_float4(scalbnf(res.x, 63), scalbnf(res.y, 63), scalbnf(res.z, 63), scalbnf(res.w, 63)), ext(conv_i64_tf_m126(a[0]))); }
   e += 126; return make_float4(scalbnf(res.x, e), scalbnf(res.y, e), scalbnf(res.z, e), scalbnf(res.w, e));
 }
 
@@ -42,6 +45,7 @@ template <int32_t orderA, int32_t Complex, class matrix_t> __device__ __forceinl
     if constexpr(std::is_same_v<matrix_t, cuDoubleComplex>) { return make_cuDoubleComplex(conv_a63_f64(r, e), conv_a63_f64(i, e)); } else
     if constexpr(std::is_same_v<matrix_t, cuComplex>) { return make_cuComplex(float(conv_a63_f64(r, e)), float(conv_a63_f64(i, e))); } else
     if constexpr(std::is_same_v<matrix_t, complex_double2>) { return device::make_complex_double2(conv_a63_dd(r, e), conv_a63_dd(i, e)); } else
+    if constexpr(std::is_same_v<matrix_t, complex_float3>) { return device::make_complex_float3(conv_a63_tf(r, e), conv_a63_tf(i, e)); } else
     if constexpr(std::is_same_v<matrix_t, complex_float4>) { return device::make_complex_float4(conv_a63_qf(r, e), conv_a63_qf(i, e)); } else
     { return matrix_t(); }
   } else {
@@ -50,6 +54,7 @@ template <int32_t orderA, int32_t Complex, class matrix_t> __device__ __forceinl
     if constexpr(std::is_same_v<matrix_t, double>) { return conv_a63_f64(a, e); } else
     if constexpr(std::is_same_v<matrix_t, float>) { return float(conv_a63_f64(a, e)); } else
     if constexpr(std::is_same_v<matrix_t, double2>) { return conv_a63_dd(a, e); } else
+    if constexpr(std::is_same_v<matrix_t, float3>) { return conv_a63_tf(a, e); } else
     if constexpr(std::is_same_v<matrix_t, float4>) { return conv_a63_qf(a, e); } else
     { return matrix_t(); }
   }
@@ -58,6 +63,7 @@ template <int32_t orderA, int32_t Complex, class matrix_t> __device__ __forceinl
 __device__ __forceinline__ cuDoubleComplex conj(cuDoubleComplex a) { return make_cuDoubleComplex(a.x, -a.y); }
 __device__ __forceinline__ cuComplex conj(cuComplex a) { return make_cuComplex(a.x, -a.y); }
 __device__ __forceinline__ complex_double2 conj(complex_double2 a) { return device::make_complex_double2(a.real, make_double2(-a.imag.x, -a.imag.y)); }
+__device__ __forceinline__ complex_float3 conj(complex_float3 a) { return device::make_complex_float3(a.real, make_float3(-a.imag.x, -a.imag.y, -a.imag.z)); }
 __device__ __forceinline__ complex_float4 conj(complex_float4 a) { return device::make_complex_float4(a.real, make_float4(-a.imag.x, -a.imag.y, -a.imag.z, -a.imag.w)); }
 
 template<int32_t orderA, int32_t Complex, class matrix_t>
@@ -90,10 +96,12 @@ extern "C" void hyacinXdequantize(const hyacinHandle_t* handle, int32_t N, int32
     case HYACIN_F64: tp_deq_dispatcher<0>(handle->cudaStream, N, orderC, C, vexp, (double*)G, ldg); return;
     case HYACIN_F32: tp_deq_dispatcher<0>(handle->cudaStream, N, orderC, C, vexp, (float*)G, ldg); return;
     case HYACIN_DD: tp_deq_dispatcher<0>(handle->cudaStream, N, orderC, C, vexp, (double2*)G, ldg); return;
+    case HYACIN_TF: tp_deq_dispatcher<0>(handle->cudaStream, N, orderC, C, vexp, (float3*)G, ldg); return;
     case HYACIN_QF: tp_deq_dispatcher<0>(handle->cudaStream, N, orderC, C, vexp, (float4*)G, ldg); return;
     case HYACIN_F64_COMPLEX: tp_deq_dispatcher<1>(handle->cudaStream, N, orderC, C, vexp, (cuDoubleComplex*)G, ldg); return;
     case HYACIN_F32_COMPLEX: tp_deq_dispatcher<1>(handle->cudaStream, N, orderC, C, vexp, (cuComplex*)G, ldg); return;
     case HYACIN_DD_COMPLEX: tp_deq_dispatcher<1>(handle->cudaStream, N, orderC, C, vexp, (complex_double2*)G, ldg); return;
+    case HYACIN_TF_COMPLEX: tp_deq_dispatcher<1>(handle->cudaStream, N, orderC, C, vexp, (complex_float3*)G, ldg); return;
     case HYACIN_QF_COMPLEX: tp_deq_dispatcher<1>(handle->cudaStream, N, orderC, C, vexp, (complex_float4*)G, ldg); return;
     default: return;
   }

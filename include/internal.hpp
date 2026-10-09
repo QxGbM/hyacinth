@@ -5,18 +5,21 @@
 #include <cuda_fp16.h>
 
 struct complex_double2;
+struct complex_float3;
 struct complex_float4;
 
 namespace internal::Cholesky {
 
-  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t p, int32_t N, double* A, int32_t lda, int32_t* jpiv, double* dev_work, int32_t* pinned_work);
-  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t p, int32_t N, float* A, int32_t lda, int32_t* jpiv, float* dev_work, int32_t* pinned_work);
-  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t p, int32_t N, double2* A, int32_t lda, int32_t* jpiv, double2* dev_work, int32_t* pinned_work);
-  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t p, int32_t N, float4* A, int32_t lda, int32_t* jpiv, float4* dev_work, int32_t* pinned_work);
-  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t p, int32_t N, cuDoubleComplex* A, int32_t lda, int32_t* jpiv, double* dev_work, int32_t* pinned_work);
-  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t p, int32_t N, cuComplex* A, int32_t lda, int32_t* jpiv, float* dev_work, int32_t* pinned_work);
-  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t p, int32_t N, complex_double2* A, int32_t lda, int32_t* jpiv, double2* dev_work, int32_t* pinned_work);
-  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t p, int32_t N, complex_float4* A, int32_t lda, int32_t* jpiv, float4* dev_work, int32_t* pinned_work);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t p, int32_t N, double* A, int32_t lda, int32_t* jpiv, double* dev_work, int32_t* r);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t p, int32_t N, float* A, int32_t lda, int32_t* jpiv, float* dev_work, int32_t* r);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t p, int32_t N, double2* A, int32_t lda, int32_t* jpiv, double2* dev_work, int32_t* r);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t p, int32_t N, float3* A, int32_t lda, int32_t* jpiv, float3* dev_work, int32_t* r);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t p, int32_t N, float4* A, int32_t lda, int32_t* jpiv, float4* dev_work, int32_t* r);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t p, int32_t N, cuDoubleComplex* A, int32_t lda, int32_t* jpiv, double* dev_work, int32_t* r);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t p, int32_t N, cuComplex* A, int32_t lda, int32_t* jpiv, float* dev_work, int32_t* r);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t p, int32_t N, complex_double2* A, int32_t lda, int32_t* jpiv, double2* dev_work, int32_t* r);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t p, int32_t N, complex_float3* A, int32_t lda, int32_t* jpiv, float3* dev_work, int32_t* r);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t p, int32_t N, complex_float4* A, int32_t lda, int32_t* jpiv, float4* dev_work, int32_t* r);
 
 };
 
