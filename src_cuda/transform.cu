@@ -24,7 +24,7 @@ template <class matrix_t> inline void ax_transform(cudaStream_t stream, cudaMemP
     for (int32_t i = 0; i < M; i += rows) {
       int32_t m = std::min(M - i, rows), ld = std::min((m + 63) & (~63), rows);
       nn_gemm(handle, m, K, N, &Ain[i], lda_in, X, ldx, dev_work, ld);
-      internal::scatter_matcopy(stream, handle, 'A', m, K, nullptr, dev_work, ld, &Aout[i], lda_out);
+      internal::scatter_matcopy(stream, handle, 'A', m, K, dev_work, ld, &Aout[i], lda_out);
     }
     cudaFreeAsync(dev_work, stream);
   } else { nn_gemm(handle, M, K, N, Ain, lda_in, X, ldx, Aout, lda_out); }
@@ -41,12 +41,12 @@ template <> inline void ax_transform<__half2>(cudaStream_t stream, cudaMemPool_t
 
   cuComplex one = make_cuComplex(1.f, 0.f), zero = make_cuComplex(0.f, 0.f);
   cuComplex* f32a = (cuComplex*)&dev_work[dev_work_bytes], *f32x = (cuComplex*)&dev_work[dev_work_bytes + devA_bytes];
-  internal::scatter_matcopy(stream, handle, 'A', N, K, nullptr, X, ldx, f32x, N);
+  internal::scatter_matcopy(stream, handle, 'A', N, K, X, ldx, f32x, N);
   for (int32_t i = 0; i < M; i += rows) {
     int32_t m = std::min(M - i, rows), ld = std::min((m + 63) & (~63), rows);
-    internal::scatter_matcopy(stream, handle, 'A', m, N, nullptr, &Ain[i], lda_in, f32a, ld);
+    internal::scatter_matcopy(stream, handle, 'A', m, N, &Ain[i], lda_in, f32a, ld);
     cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_N, m, K, N, &one, f32a, CUDA_C_32F, ld, f32x, CUDA_C_32F, N, &zero, dev_work, CUDA_C_32F, ld, CUBLAS_COMPUTE_32F_FAST_16F, CUBLAS_GEMM_DEFAULT);
-    internal::scatter_matcopy(stream, handle, 'A', m, K, nullptr, (cuComplex*)dev_work, ld, &Aout[i], lda_out);
+    internal::scatter_matcopy(stream, handle, 'A', m, K, (cuComplex*)dev_work, ld, &Aout[i], lda_out);
   }
   cudaFreeAsync(dev_work, stream);
 }
@@ -66,7 +66,7 @@ template <class matrix_t> inline void gather(cudaStream_t stream, cudaMemPool_t 
     for (int32_t i = 0; i < M; i += rows) {
       int32_t m = std::min(M - i, rows), ld = std::min((m + 63) & (~63), rows);
       gather_cpy_kernel <<< dim3(uint32_t((uint64_t(m) + uint64_t(511)) >> 9), uint32_t(K)), 512, 0, stream >>> (int64_t(m), jpiv, Ain, int64_t(lda_in), dev_work, int64_t(ld));
-      internal::scatter_matcopy(stream, handle, 'A', m, K, nullptr, dev_work, ld, &Aout[i], lda_out);
+      internal::scatter_matcopy(stream, handle, 'A', m, K, dev_work, ld, &Aout[i], lda_out);
     }
     cudaFreeAsync(dev_work, stream);
   } else { gather_cpy_kernel <<< dim3(uint32_t((uint64_t(M) + uint64_t(511)) >> 9), uint32_t(K)), 512, 0, stream >>> (int64_t(M), jpiv, Ain, int64_t(lda_in), Aout, int64_t(lda_out)); }
@@ -84,12 +84,12 @@ extern "C" void hyacinXtransform(const hyacinHandle_t* handle, int32_t M, int32_
     case HYACIN_F16_COMPLEX: gather(stream, handle->mempool, handle->cublasHandle, M, K, (const __half2*)Ain, lda_in, (__half2*)Aout, lda_out, (const int32_t*)X); return;
     default: return;
   }} else { if (N <= 0) switch (Atype) {
-    case HYACIN_F64: internal::scatter_matcopy(stream, handle->cublasHandle, 'A', M, K, nullptr, (const double*)X, ldx, (double*)Aout, lda_out); return;
-    case HYACIN_F32: internal::scatter_matcopy(stream, handle->cublasHandle, 'A', M, K, nullptr, (const float*)X, ldx, (float*)Aout, lda_out); return;
-    case HYACIN_F16: internal::scatter_matcopy(stream, handle->cublasHandle, 'A', M, K, nullptr, (const __half*)X, ldx, (__half*)Aout, lda_out); return;
-    case HYACIN_F64_COMPLEX: internal::scatter_matcopy(stream, handle->cublasHandle, 'A', M, K, nullptr, (const cuDoubleComplex*)X, ldx, (cuDoubleComplex*)Aout, lda_out); return;
-    case HYACIN_F32_COMPLEX: internal::scatter_matcopy(stream, handle->cublasHandle, 'A', M, K, nullptr, (const cuComplex*)X, ldx, (cuComplex*)Aout, lda_out); return;
-    case HYACIN_F16_COMPLEX: internal::scatter_matcopy(stream, handle->cublasHandle, 'A', M, K, nullptr, (const __half2*)X, ldx, (__half2*)Aout, lda_out); return;
+    case HYACIN_F64: internal::scatter_matcopy(stream, handle->cublasHandle, 'A', M, K, (const double*)X, ldx, (double*)Aout, lda_out); return;
+    case HYACIN_F32: internal::scatter_matcopy(stream, handle->cublasHandle, 'A', M, K, (const float*)X, ldx, (float*)Aout, lda_out); return;
+    case HYACIN_F16: internal::scatter_matcopy(stream, handle->cublasHandle, 'A', M, K, (const __half*)X, ldx, (__half*)Aout, lda_out); return;
+    case HYACIN_F64_COMPLEX: internal::scatter_matcopy(stream, handle->cublasHandle, 'A', M, K, (const cuDoubleComplex*)X, ldx, (cuDoubleComplex*)Aout, lda_out); return;
+    case HYACIN_F32_COMPLEX: internal::scatter_matcopy(stream, handle->cublasHandle, 'A', M, K, (const cuComplex*)X, ldx, (cuComplex*)Aout, lda_out); return;
+    case HYACIN_F16_COMPLEX: internal::scatter_matcopy(stream, handle->cublasHandle, 'A', M, K, (const __half2*)X, ldx, (__half2*)Aout, lda_out); return;
     default: return;
   } else switch (Atype) {
     case HYACIN_F64: ax_transform(stream, handle->mempool, handle->cublasHandle, M, N, K, (const double*)Ain, lda_in, (double*)Aout, lda_out, (const double*)X, ldx); return;

@@ -29,7 +29,7 @@ int32_t interp_dispatcher(const hyacinHandle_t* handle, double epi, int32_t M, i
     T* Arena = (T*)hyacinXherkBatch(handle, 0, batchIter, N, Atype, vexp, &beta, lPanels, C, Bdata);
     for (int32_t i = 0; i < M; i += batchIter) {
       int32_t rows = std::min(M - i, batchIter);
-      internal::scatter_matcopy(handle->cudaStream, handle->cublasHandle, 'A', rows, N, nullptr, &A[i], lda, Arena, handle->BatchK);
+      internal::scatter_matcopy(handle->cudaStream, handle->cublasHandle, 'A', rows, N, &A[i], lda, Arena, handle->BatchK);
       Arena = (T*)hyacinXherkBatch(handle, rows, batchIter, N, Atype, vexp, &beta, lPanels, C, Bdata);
     }
     hyacinXherkBatchFlush(handle, N, Atype, vexp, beta, lPanels, C, Bdata);
@@ -69,7 +69,7 @@ int32_t svd_dispatcher(const hyacinHandle_t* handle, double epi, int32_t M, int3
     T* Arena = (T*)hyacinXherkBatch(handle, 0, batchIter, N, Atype, vexp, &beta, lPanels, C, Bdata);
     for (int32_t i = 0; i < M; i += batchIter) {
       int32_t rows = std::min(M - i, batchIter);
-      internal::scatter_matcopy(handle->cudaStream, handle->cublasHandle, 'A', rows, N, nullptr, &A[i], lda, Arena, handle->BatchK);
+      internal::scatter_matcopy(handle->cudaStream, handle->cublasHandle, 'A', rows, N, &A[i], lda, Arena, handle->BatchK);
       Arena = (T*)hyacinXherkBatch(handle, rows, batchIter, N, Atype, vexp, &beta, lPanels, C, Bdata);
     }
     hyacinXherkBatchFlush(handle, N, Atype, vexp, beta, lPanels, C, Bdata);
@@ -100,7 +100,7 @@ double check_answer(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32
     type* matA = nullptr; cudaMalloc((void**)&matA, bytes);
     for (int32_t i = 0; i < M; i += block) { int32_t rows = std::min(M - i, block);
       for (int32_t j = 0; j < N; j += block) { int32_t cols = std::min(N - j, block);
-        internal::scatter_matcopy(stream, handle, 'A', rows, cols, nullptr, &A[int64_t(i) + int64_t(j) * int64_t(lda)], lda, matA, rows);
+        internal::scatter_matcopy(stream, handle, 'A', rows, cols, &A[int64_t(i) + int64_t(j) * int64_t(lda)], lda, matA, rows);
         double nrm = 0.; cublasDnrm2(handle, rows * cols * (Complex + 1), (const double*)matA, 1, &nrm); err += std::pow(nrm, 2);
       }
     }
@@ -112,10 +112,10 @@ double check_answer(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32
     cublasOperation_t opt = CUBLAS_OP_T; cudaDataType Atype = CUDA_R_64F; if constexpr(Complex) { opt = CUBLAS_OP_C; Atype = CUDA_C_64F; }
     for (int32_t i = 0; i < M; i += block) { int32_t rows = std::min(M - i, block);
       for (int32_t j = 0; j < N; j += block) { int32_t cols = std::min(N - j, block);
-        internal::scatter_matcopy(stream, handle, 'A', rows, cols, nullptr, &A[int64_t(i) + int64_t(j) * int64_t(lda)], lda, matA, rows);
+        internal::scatter_matcopy(stream, handle, 'A', rows, cols, &A[int64_t(i) + int64_t(j) * int64_t(lda)], lda, matA, rows);
         for (int32_t k = 0; k < rank; k += block) {int32_t reduc = std::min(rank - k, block);
-          internal::scatter_matcopy(stream, handle, 'A', rows, reduc, nullptr, &U[int64_t(i) + int64_t(k) * int64_t(ldu)], ldu, matU, block);
-          internal::scatter_matcopy(stream, handle, 'A', cols, reduc, nullptr, &V[int64_t(j) + int64_t(k) * int64_t(ldv)], ldv, matV, block);
+          internal::scatter_matcopy(stream, handle, 'A', rows, reduc, &U[int64_t(i) + int64_t(k) * int64_t(ldu)], ldu, matU, block);
+          internal::scatter_matcopy(stream, handle, 'A', cols, reduc, &V[int64_t(j) + int64_t(k) * int64_t(ldv)], ldv, matV, block);
           cublasGemmEx(handle, CUBLAS_OP_N, opt, rows, cols, reduc, &minus_one, matU, Atype, block, matV, Atype, block, &one, matA, Atype, rows, CUBLAS_COMPUTE_64F_PEDANTIC, CUBLAS_GEMM_DEFAULT);
         }
         double nrm = 0.; cublasDnrm2(handle, rows * cols * (Complex + 1), (const double*)matA, 1, &nrm); err += std::pow(nrm, 2);

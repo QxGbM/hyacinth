@@ -67,20 +67,20 @@ inline int32_t tsvd(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t c
     std::conditional_t<std::is_same_v<Xtype, cuDoubleComplex>, cuDoubleComplex, cuComplex>, std::conditional_t<std::is_same_v<Xtype, double>, double, float>>;
   using real_t = typename std::conditional_t<std::is_same_v<matrix_t, cuDoubleComplex>, double, std::conditional_t<std::is_same_v<matrix_t, cuComplex>, float, matrix_t>>;
 
-  int32_t* piv = nullptr; Rtype* potrf_work = nullptr;
-  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&piv, uint64_t(N) * uint64_t(sizeof(int32_t)), mempool, stream))
+  int32_t* jpiv = nullptr; Rtype* potrf_work = nullptr;
+  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&jpiv, uint64_t(N) * uint64_t(sizeof(int32_t)), mempool, stream))
     throw std::runtime_error("Workspace allocation failed at GESVD Preconditioning.");
   if (cudaSuccess != cudaMallocFromPoolAsync((void**)&potrf_work, uint64_t(65536) + (uint64_t(N) + uint64_t(1)) * uint64_t(sizeof(Rtype)), mempool, stream))
     throw std::runtime_error("Workspace allocation failed at GESVD Preconditioning.");
 
-  K = internal::Cholesky::potrfp(stream, fillmode, epi, K, p, N, G, ldg, piv, potrf_work, r_ptr);
+  K = internal::Cholesky::potrfp(stream, fillmode, epi, K, p, N, G, ldg, jpiv, potrf_work, r_ptr);
   cudaFreeAsync(potrf_work, stream);
   if (0 < K) {
     matrix_t* A = nullptr, *U = nullptr; real_t* sigma = nullptr;
     if (cudaSuccess != cudaMallocFromPoolAsync((void**)&A, uint64_t(N) * uint64_t(K) * uint64_t(sizeof(matrix_t)), mempool, stream))
       throw std::runtime_error("Workspace allocation failed at GESVD.");
 
-    internal::scatter_matcopy(stream, cublasH, 'U', K, N, piv, G, ldg, A, N); cudaFreeAsync(piv, stream); 
+    internal::scatter_matcopy(stream, cublasH, 'U', K, N, G, ldg, A, N, jpiv); cudaFreeAsync(jpiv, stream); 
     if (cudaSuccess != cudaMallocFromPoolAsync((void**)&sigma, uint64_t(K) * uint64_t(sizeof(real_t)), mempool, stream))
       throw std::runtime_error("Workspace allocation failed at GESVD.");
 
@@ -113,8 +113,8 @@ inline int32_t tsvd(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t c
 
     find_srank_kernel<512> <<< 1, 512, 0, stream >>> (epi, K, sigma, S, r_ptr); cudaStreamSynchronize(stream);
     K = std::min(K, *r_ptr); cudaFreeAsync(sigma, stream);
-    internal::scatter_matcopy(stream, cublasH, 'A', N, K, nullptr, U, N, X, ldx); cudaFreeAsync(U, stream); 
-  } else { cudaFreeAsync(piv, stream); }
+    internal::scatter_matcopy(stream, cublasH, 'A', N, K, U, N, X, ldx); cudaFreeAsync(U, stream); 
+  } else { cudaFreeAsync(jpiv, stream); }
   return K;
 }
 
