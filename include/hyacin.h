@@ -47,8 +47,15 @@ void hyacinDestroy(
 void hyacinXherkBatchInit(
   const hyacinHandle_t* handle,
   double epi,
+  uint64_t M,
   int32_t N,
-  hyacinPrecision_t Atype
+  hyacinPrecision_t Atype,
+  int32_t* uA, // host-pointer
+  int32_t* cPanels, // host-pointer
+  int32_t* lPanels, // host-pointer
+  uint64_t* stride, // host-pointer
+  hyacinPrecision_t* Gtype, // host-pointer
+  int32_t* gElemBytes // host-pointer
 );
 
 void hyacinXherk(
@@ -85,20 +92,6 @@ void hyacinXherkBatchFlush(
   int32_t beta,
   int32_t orderC,
   uint64_t* C // device-pointer
-);
-
-void hyacinXGautoType(
-  const hyacinHandle_t* handle,
-  double epi,
-  uint64_t M,
-  int32_t N,
-  hyacinPrecision_t Atype,
-  int32_t* uA, // host-pointer
-  int32_t* cPanels, // host-pointer
-  int32_t* lPanels, // host-pointer
-  uint64_t* stride, // host-pointer
-  hyacinPrecision_t* Gtype, // host-pointer
-  int32_t* gElemBytes // host-pointer
 );
 
 void hyacinXquantizeScale(

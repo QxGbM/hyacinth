@@ -22,21 +22,25 @@ const std::vector<int32_t> type_bytes
 const std::vector<int32_t> type_mantissa
 ({ 52, 52, 23, 23, 10, 10, 105, 105, 71, 71, 95, 95 });
 
-extern "C" void hyacinXGautoType(const hyacinHandle_t* handle, double epi, uint64_t M, int32_t N, hyacinPrecision_t Atype, int32_t* uA, int32_t* cPanels, int32_t* lPanels, uint64_t* stride, hyacinPrecision_t* Gtype, int32_t* gElemBytes) {
-  if (stride) { uint64_t N64 = uint64_t(N); *stride = (N64 * N64 + N64) >> 1; }
-  if (uA == nullptr && cPanels == nullptr && lPanels == nullptr && Gtype == nullptr && gElemBytes == nullptr) { return; }
-
-  hyacinPrecision_t AtypeReal = real_type[int32_t(Atype)];
+extern "C" void hyacinXherkBatchInit(const hyacinHandle_t* handle, double epi, uint64_t M, int32_t N, hyacinPrecision_t Atype, int32_t* uA, int32_t* cPanels, int32_t* lPanels, uint64_t* stride, hyacinPrecision_t* Gtype, int32_t* gElemBytes) {
+  if (stride) { uint64_t N64 = uint64_t(std::max(0, N)); *stride = (N64 * N64 + N64) >> 1; }
+  hyacinPrecision_t AtypeReal = real_type[int32_t(Atype)]; int32_t Complex = int32_t(Atype != AtypeReal);
   if (uint64_t(1) < M) { --M; M |= M >> 1; M |= M >> 2; M |= M >> 4; M |= M >> 8; M |= M >> 16; M |= M >> 32; ++M; } else { M = uint64_t(1); }
   double epi_nrm = std::min(1., std::max(std::abs(epi), std::ldexp(1., -type_mantissa[int32_t(Atype)]))), bitsM = std::log2(double(M));
-  int32_t u = int32_t(std::ceil(-std::log2(epi_nrm))), u_corr = handle->QuantizeBitCorrection, g_corr = handle->GramBitCorrection;
-  if (uA != nullptr || cPanels != nullptr || lPanels != nullptr) {
-    u_corr = std::max(-1, std::min(u_practical_limit, u_corr + u)); if (uA) { *uA = u_corr; }
-    int32_t c = 1 + int32_t(Atype != AtypeReal); if (cPanels) { *cPanels = c; }
-    if (lPanels) { *lPanels = (0 <= u_corr) ? (((c + 63 + u_corr + u_corr) + int32_t(std::ceil(bitsM))) / 63) : 0; if (4 <= *lPanels) { throw std::runtime_error("i64-limb (g.e. 4) not supported"); }}
+  int32_t u = int32_t(std::ceil(-std::log2(epi_nrm))), u_corr = std::max(-1, std::min(u_practical_limit, handle->QuantizeBitCorrection + u));
+  if (0 < handle->BatchK && handle->BatchTensor != nullptr) {
+    int32_t batches = 1, batchK = handle->BatchK, u_floor = Complex, u_ceil = Complex + u_corr;
+    while (u_floor <= u_ceil) {
+      char algo = handle->GramMatrixAlgorithm; int32_t ui = u_floor; internal::gram_algorithm(algo, batchK, ui, Complex);
+      if (algo == 'L') { u_floor = 1 + ui; ++batches; } else { u_floor = 1 + u_ceil; }
+    } handle->BatchTensor->Order = batches;
   }
+
+  if (uA) { *uA = u_corr; }
+  if (cPanels) { *cPanels = 1 + Complex; }
+  if (lPanels) { *lPanels = (0 <= u_corr) ? (((Complex + 63 + u_corr + u_corr) + int32_t(std::ceil(bitsM))) / 63) : 0; if (4 <= *lPanels) { throw std::runtime_error("i64-limb (g.e. 4) not supported"); }}
   if (Gtype != nullptr || gElemBytes != nullptr) {
-    int32_t bits = (g_corr + 1) + int32_t(std::floor(0.25 * bitsM)) + (u + u);
+    int32_t bits = (handle->GramBitCorrection + 1) + int32_t(std::floor(0.25 * bitsM)) + (u + u);
     hyacinPrecision_t GtypeReal = 
       bits <= type_mantissa[int32_t(HYACIN_F32)] ? HYACIN_F32 : (
       (AtypeReal == HYACIN_F16 || bits <= type_mantissa[int32_t(HYACIN_F64)]) ? HYACIN_F64 : (
@@ -262,18 +266,6 @@ extern "C" void hyacinXherk(const hyacinHandle_t* handle, int32_t M, int32_t N, 
     case HYACIN_F16_COMPLEX: herk_dispatcher(handle, M, N, (const __half2*)A, lda, vexp, &beta, orderC, C, uptr); return;
     default: return;
   }
-}
-
-extern "C" void hyacinXherkBatchInit(const hyacinHandle_t* handle, double epi, int32_t N, hyacinPrecision_t Atype) {
-  if (handle->BatchK <= 0 || N <= 0 || handle->BatchTensor == nullptr) { return; }
-  int32_t Complex = int32_t(Atype != real_type[int32_t(Atype)]), batchK = handle->BatchK;
-  double epi_nrm = std::min(1., std::max(std::abs(epi), std::ldexp(1., -type_mantissa[int32_t(Atype)])));
-  int32_t u_ceil = Complex + std::min(u_practical_limit, handle->QuantizeBitCorrection + int32_t(std::ceil(-std::log2(epi_nrm))));
-  int32_t batches = 1, u_floor = Complex; char algo = handle->GramMatrixAlgorithm;
-  while (u_floor <= u_ceil) {
-    char algi = algo; int32_t ui = u_floor; internal::gram_algorithm(algi, batchK, ui, Complex);
-    if (algi == 'L') { u_floor = 1 + ui; ++batches; } else { u_floor = 1 + u_ceil; }
-  } handle->BatchTensor->Order = batches;
 }
 
 template <class matrix_t> inline matrix_t* herk_batch_dispatcher(const hyacinHandle_t* handle, int32_t M, int32_t R, int32_t N, const int32_t* vexp, int32_t* beta, int32_t orderC, uint64_t* C, int32_t* uptr) {
