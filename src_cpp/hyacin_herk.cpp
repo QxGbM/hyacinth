@@ -284,8 +284,8 @@ template <class matrix_t> inline matrix_t* herk_batch_dispatcher(const hyacinHan
     if (0 <= uc) {
       auto iter_end = &handle->BatchTensor[arena.Order], iter = std::find_if(&handle->BatchTensor[1], iter_end, [=](const auto& t) { return uc <= t.U; });
       if (iter == iter_end) { arena.Rows += M; arena.U = std::max(arena.U, uc); } else {
-        auto& t = *iter; int32_t row = t.Rows, order = t.Order;
-        if (t.Data == nullptr) if (cudaSuccess != cudaMallocFromPoolAsync((void**)&(t.Data), uint64_t(order) * uint64_t(N) * uint64_t(K), handle->mempool, handle->cudaStream))
+        auto& t = *iter; int32_t row = t.Rows, order = t.Order; uint64_t t_bytes = uint64_t(order) * uint64_t(N) * uint64_t(K); if constexpr(Complex) { t_bytes *= uint64_t(3); }
+        if (t.Data == nullptr) if (cudaSuccess != cudaMallocFromPoolAsync((void**)&(t.Data), t_bytes, handle->mempool, handle->cudaStream))
           throw std::runtime_error("Workspace (Batch Tensor) allocation failed at Integer SY/HERK");
         if (M <= K - row) { internal::int8::quantize_limbs(stream, M, N, order, A, K, vexp, &t.Data[row], K); t.Rows = row + M; } else
         { i8herk_limbs<Complex>(stream, mempool, cublasH, row, N, order, t.Data, K, *beta, orderC, C); internal::int8::quantize_limbs(stream, M, N, order, A, K, vexp, t.Data, K); t.Rows = M; *beta = 1; }

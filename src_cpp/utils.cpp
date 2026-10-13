@@ -84,15 +84,20 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle) {
   handle->DeviceIsF64Capable = int32_t(f64_capable_sm_list.end() != std::find(f64_capable_sm_list.begin(), f64_capable_sm_list.end(), 10 * major + minor));
 
   cudaStreamCreateWithFlags(&handle->cudaStream, cudaStreamNonBlocking);
+  cudaMemPoolProps props = cudaMemPoolProps();
+  props.location.id = handle->DeviceID; props.allocType = cudaMemAllocationTypePinned; props.location.type = cudaMemLocationTypeDevice;
+  cudaMemPoolCreate(&handle->mempool, &props);
+  constexpr uint64_t mib32 = uint64_t(32) << 20; uint64_t threshold = std::numeric_limits<uint64_t>::max();
+  cudaMemPoolSetAttribute(handle->mempool, cudaMemPoolAttrReleaseThreshold, &threshold);
+  handle->cublasWorkspace = reinterpret_cast<void**>(std::malloc(sizeof(void*)));
+  if (cudaSuccess != cudaMallocFromPoolAsync(handle->cublasWorkspace, mib32, handle->mempool, handle->cudaStream))
+    throw std::runtime_error("CUBLAS Workspace allocation failed at handle initialization.");
+
   cublasCreate(&handle->cublasHandle);
   cublasSetStream(handle->cublasHandle, handle->cudaStream);
+  cublasSetWorkspace(handle->cublasHandle, *(handle->cublasWorkspace), mib32);
   cusolverDnCreate(&handle->cusolverHandle);
   cusolverDnSetStream(handle->cusolverHandle, handle->cudaStream);
-  cudaMemPoolProps props = cudaMemPoolProps(); cudaGetDevice(&props.location.id);
-  props.allocType = cudaMemAllocationTypePinned; props.location.type = cudaMemLocationTypeDevice;
-  cudaMemPoolCreate(&handle->mempool, &props);
-  uint64_t threshold = std::numeric_limits<uint64_t>::max();
-  cudaMemPoolSetAttribute(handle->mempool, cudaMemPoolAttrReleaseThreshold, &threshold);
   cudaMallocHost(&handle->pinnedWorkspace, sizeof(int32_t));
 #ifndef NO_NCCL
   handle->col_comm = handle->row_comm = nullptr;
@@ -109,15 +114,29 @@ extern "C" void hyacinCreate2D(hyacinHandle_t* handle, ncclComm_t col_comm, nccl
 #endif
 
 extern "C" void hyacinDestroy(hyacinHandle_t* handle) {
-  if (handle->BatchTensor)
-  { for (int32_t i = 0; i < handle->BatchTensor->Order; ++i) { cudaFreeAsync(handle->BatchTensor[i].Data, handle->cudaStream); } std::free(handle->BatchTensor); }
-  if (handle->cudaStream) { cudaStreamDestroy(handle->cudaStream); }
+  if (handle->cudaStream) {
+    if (handle->BatchTensor) for (int32_t i = 0; i < handle->BatchTensor->Order; ++i) { cudaFreeAsync(handle->BatchTensor[i].Data, handle->cudaStream); }
+    if (handle->cublasWorkspace) { if (*(handle->cublasWorkspace)) { cudaFreeAsync(*(handle->cublasWorkspace), handle->cudaStream); }}
+    cudaStreamDestroy(handle->cudaStream);
+  }
+  if (handle->BatchTensor) { std::free(handle->BatchTensor); }
+  if (handle->cublasWorkspace) { std::free(handle->cublasWorkspace); }
   if (handle->cublasHandle) { cublasDestroy(handle->cublasHandle); }
   if (handle->cusolverHandle) { cusolverDnDestroy(handle->cusolverHandle); }
   if (handle->mempool) { cudaMemPoolDestroy(handle->mempool); }
   if (handle->pinnedWorkspace) { cudaFreeHost(handle->pinnedWorkspace); }
   if (handle->timer) { delete (EventTimer*)(handle->timer); }
   std::memset(handle, 0, sizeof(hyacinHandle_t));
+}
+
+extern "C" void hyacinSetcuBLASWorkspaceSize(const hyacinHandle_t* handle, uint64_t workBytes) {
+  constexpr uint64_t mib32 = uint64_t(32) << 20;
+  if (handle->cublasWorkspace) { if (*(handle->cublasWorkspace)) { cudaFreeAsync(*(handle->cublasWorkspace), handle->cudaStream); }}
+  size_t free, total; cudaMemGetInfo(&free, &total);
+  workBytes = std::max(mib32, std::min(uint64_t(free), workBytes));
+  if (cudaSuccess != cudaMallocFromPoolAsync(handle->cublasWorkspace, workBytes, handle->mempool, handle->cudaStream))
+    throw std::runtime_error("CUBLAS Workspace allocation failed at resizing.");
+  cublasSetWorkspace(handle->cublasHandle, *(handle->cublasWorkspace), workBytes);
 }
 
 template <segment seg> inline void register_event(cudaStream_t stream, EventTimer* timer) {

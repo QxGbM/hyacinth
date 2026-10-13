@@ -4,22 +4,25 @@
 #include <stdexcept>
 
 inline void nn_gemm(cublasHandle_t handle, int32_t M, int32_t N, int32_t K, const double* A, int32_t lda, const double* B, int32_t ldb, double* C, int32_t ldc)
-{ double one = 1., zero = 0.; cublasDgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &one, A, lda, B, ldb, &zero, C, ldc); }
+{ double one = 1., zero = 0.; cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &one, A, CUDA_R_64F, lda, B, CUDA_R_64F, ldb, &zero, C, CUDA_R_64F, ldc, CUBLAS_COMPUTE_64F_EMULATED_FIXEDPOINT, CUBLAS_GEMM_DEFAULT); }
 inline void nn_gemm(cublasHandle_t handle, int32_t M, int32_t N, int32_t K, const float* A, int32_t lda, const float* B, int32_t ldb, float* C, int32_t ldc)
-{ float one = 1.f, zero = 0.f; cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &one, A, lda, B, ldb, &zero, C, ldc); }
+{ float one = 1.f, zero = 0.f; cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &one, A, CUDA_R_32F, lda, B, CUDA_R_32F, ldb, &zero, C, CUDA_R_32F, ldc, CUBLAS_COMPUTE_32F_EMULATED_16BFX9, CUBLAS_GEMM_DEFAULT); }
 inline void nn_gemm(cublasHandle_t handle, int32_t M, int32_t N, int32_t K, const __half* A, int32_t lda, const __half* B, int32_t ldb, __half* C, int32_t ldc)
-{ __half one = CUDART_ONE_FP16, zero = CUDART_ZERO_FP16; cublasHgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &one, A, lda, B, ldb, &zero, C, ldc); }
-inline void nn_gemm(cublasHandle_t handle, int32_t M, int32_t N, int32_t K, const cuDoubleComplex* A, int32_t lda, const cuDoubleComplex* B, int32_t ldb, cuDoubleComplex* C, int32_t ldc)
-{ cuDoubleComplex one = make_cuDoubleComplex(1., 0.), zero = make_cuDoubleComplex(0., 0.); cublasZgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &one, A, lda, B, ldb, &zero, C, ldc); }
-inline void nn_gemm(cublasHandle_t handle, int32_t M, int32_t N, int32_t K, const cuComplex* A, int32_t lda, const cuComplex* B, int32_t ldb, cuComplex* C, int32_t ldc)
-{ cuComplex one = make_cuComplex(1.f, 0.f), zero = make_cuComplex(0.f, 0.f); cublasCgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &one, A, lda, B, ldb, &zero, C, ldc); }
+{ __half one = CUDART_ONE_FP16, zero = CUDART_ZERO_FP16; cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &one, A, CUDA_R_16F, lda, B, CUDA_R_16F, ldb, &zero, C, CUDA_R_16F, ldc, CUBLAS_COMPUTE_16F, CUBLAS_GEMM_DEFAULT); }
+inline void nn_gemm(cublasHandle_t handle, int32_t M, int32_t N, int32_t K, const cuDoubleComplex* A, int32_t lda, const cuDoubleComplex* B, int32_t ldb, cuDoubleComplex* C, int32_t ldc) {
+  cuDoubleComplex one = make_cuDoubleComplex(1., 0.), zero = make_cuDoubleComplex(0., 0.);
+  cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &one, A, CUDA_C_64F, lda, B, CUDA_C_64F, ldb, &zero, C, CUDA_C_64F, ldc, CUBLAS_COMPUTE_64F_EMULATED_FIXEDPOINT, CUBLAS_GEMM_DEFAULT);
+}
+inline void nn_gemm(cublasHandle_t handle, int32_t M, int32_t N, int32_t K, const cuComplex* A, int32_t lda, const cuComplex* B, int32_t ldb, cuComplex* C, int32_t ldc) {
+  cuComplex one = make_cuComplex(1.f, 0.f), zero = make_cuComplex(0.f, 0.f);
+  cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &one, A, CUDA_C_32F, lda, B, CUDA_C_32F, ldb, &zero, C, CUDA_C_32F, ldc, CUBLAS_COMPUTE_32F_EMULATED_16BFX9, CUBLAS_GEMM_DEFAULT);
+}
 
 template <class matrix_t> inline void ax_transform(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, const matrix_t* Ain, int32_t lda_in, matrix_t* Aout, int32_t lda_out, const matrix_t* X, int32_t ldx) {
   if (Ain == Aout && lda_in == lda_out) {
     const int32_t rows = 16384;
-    matrix_t* dev_work = nullptr;
-    uint64_t dev_work_bytes = uint64_t(rows) * uint64_t(K) * uint64_t(sizeof(matrix_t));
-    if (cudaSuccess != cudaMallocFromPoolAsync((void**)&dev_work, dev_work_bytes, mempool, stream))
+    uint64_t work_bytes = uint64_t(rows) * uint64_t(K) * uint64_t(sizeof(matrix_t));
+    matrix_t* dev_work = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&dev_work, work_bytes, mempool, stream))
       throw std::runtime_error("Workspace allocation failed at transforming A.");
     for (int32_t i = 0; i < M; i += rows) {
       int32_t m = std::min(M - i, rows), ld = std::min((m + 63) & (~63), rows);
@@ -32,15 +35,14 @@ template <class matrix_t> inline void ax_transform(cudaStream_t stream, cudaMemP
 
 template <> inline void ax_transform<__half2>(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, const __half2* Ain, int32_t lda_in, __half2* Aout, int32_t lda_out, const __half2* X, int32_t ldx) {
   const int32_t rows = 16384;
-  uint8_t* dev_work = nullptr;
-  uint64_t dev_work_bytes = uint64_t(rows) * uint64_t(K) * uint64_t(sizeof(cuComplex));
+  uint64_t work_bytes = uint64_t(rows) * uint64_t(K) * uint64_t(sizeof(cuComplex));
   uint64_t devA_bytes = uint64_t(rows) * uint64_t(N) * uint64_t(sizeof(cuComplex));
   uint64_t devX_bytes = uint64_t(N) * uint64_t(K) * uint64_t(sizeof(cuComplex));
-  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&dev_work, dev_work_bytes + devA_bytes + devX_bytes, mempool, stream))
+  uint8_t* dev_work = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&dev_work, work_bytes + devA_bytes + devX_bytes, mempool, stream))
     throw std::runtime_error("Workspace allocation failed at transforming A.");
 
   cuComplex one = make_cuComplex(1.f, 0.f), zero = make_cuComplex(0.f, 0.f);
-  cuComplex* f32a = (cuComplex*)&dev_work[dev_work_bytes], *f32x = (cuComplex*)&dev_work[dev_work_bytes + devA_bytes];
+  cuComplex* f32a = (cuComplex*)&dev_work[work_bytes], *f32x = (cuComplex*)&dev_work[work_bytes + devA_bytes];
   internal::scatter_matcopy(stream, handle, 'A', N, K, X, ldx, f32x, N);
   for (int32_t i = 0; i < M; i += rows) {
     int32_t m = std::min(M - i, rows), ld = std::min((m + 63) & (~63), rows);
@@ -59,9 +61,8 @@ template <class T> __global__ void gather_cpy_kernel(int64_t M, const int32_t* _
 template <class matrix_t> inline void gather(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t handle, int32_t M, int32_t K, const matrix_t* Ain, int32_t lda_in, matrix_t* Aout, int32_t lda_out, const int32_t* jpiv) {
   if (Ain == Aout && lda_in == lda_out) {
     const int32_t rows = 16384;
-    matrix_t* dev_work = nullptr;
-    uint64_t dev_work_bytes = uint64_t(rows) * uint64_t(K) * uint64_t(sizeof(matrix_t));
-    if (cudaSuccess != cudaMallocFromPoolAsync((void**)&dev_work, dev_work_bytes, mempool, stream))
+    uint64_t work_bytes = uint64_t(rows) * uint64_t(K) * uint64_t(sizeof(matrix_t));
+    matrix_t* dev_work = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&dev_work, work_bytes, mempool, stream))
       throw std::runtime_error("Workspace allocation failed at transforming A.");
     for (int32_t i = 0; i < M; i += rows) {
       int32_t m = std::min(M - i, rows), ld = std::min((m + 63) & (~63), rows);

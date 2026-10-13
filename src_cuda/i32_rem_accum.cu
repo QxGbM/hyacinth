@@ -12,18 +12,17 @@ __device__ __forceinline__ int64_t i32_i64_prod(int32_t y) {
 template <int32_t orderX, int32_t x, int32_t orderA>
 __device__ __forceinline__ void add_pd(uint64_t (&a)[orderA], int32_t i) {
   using U8CRT::Constants;
-  constexpr int32_t x6 = x * 6, pd[6]{ Constants<orderX>::pd[x6], Constants<orderX>::pd[x6 + 1], Constants<orderX>::pd[x6 + 2],
-    Constants<orderX>::pd[x6 + 3], Constants<orderX>::pd[x6 + 4], Constants<orderX>::pd[x6 + 5] };
+  constexpr int32_t x6 = x * 6;
   constexpr uint32_t MO = U8CRT::mo[x], MINV = Constants<orderX>::minv[x], R32 = Constants<orderX>::rem_e32[x];
 
   uint32_t u = uint32_t(i), mask_sign = uint32_t(a[orderA - 1] >> 63) + 0x7fffffffu;
   i = int32_t(device::barrett_reduc<MO>(device::mulx_reduc<MINV, MO>(u) + ((-(u >> 31)) & R32)) - (MO & mask_sign));
-  if constexpr(pd[0]) { device::add_shifted<0>(a, i32_i64_prod<pd[0]>(i)); }
-  if constexpr(pd[1]) { device::add_shifted<31>(a, i32_i64_prod<pd[1]>(i)); }
-  if constexpr(pd[2]) { device::add_shifted<62>(a, i32_i64_prod<pd[2]>(i)); }
-  if constexpr(pd[3]) { device::add_shifted<93>(a, i32_i64_prod<pd[3]>(i)); }
-  if constexpr(pd[4]) { device::add_shifted<124>(a, i32_i64_prod<pd[4]>(i)); }
-  if constexpr(pd[5]) { device::add_shifted<155>(a, i32_i64_prod<pd[5]>(i)); }
+  if constexpr(Constants<orderX>::pd[x6]) { device::add_shifted<0>(a, i32_i64_prod<Constants<orderX>::pd[x6]>(i)); }
+  if constexpr(Constants<orderX>::pd[x6 + 1]) { device::add_shifted<31>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 1]>(i)); }
+  if constexpr(Constants<orderX>::pd[x6 + 2]) { device::add_shifted<62>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 2]>(i)); }
+  if constexpr(Constants<orderX>::pd[x6 + 3]) { device::add_shifted<93>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 3]>(i)); }
+  if constexpr(Constants<orderX>::pd[x6 + 4]) { device::add_shifted<124>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 4]>(i)); }
+  if constexpr(Constants<orderX>::pd[x6 + 5]) { device::add_shifted<155>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 5]>(i)); }
 }
 
 template<int32_t orderX, int32_t orderA, int32_t beta, char mode>

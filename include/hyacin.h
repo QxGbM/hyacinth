@@ -26,7 +26,7 @@ typedef struct {
   cublasHandle_t cublasHandle;
   cusolverDnHandle_t cusolverHandle;
   cudaMemPool_t mempool;
-  void* timer, *pinnedWorkspace;
+  void* timer, **cublasWorkspace, *pinnedWorkspace;
 #ifndef NO_NCCL
   ncclComm_t col_comm, row_comm;
 #endif
@@ -37,11 +37,16 @@ extern "C" {
 #endif
 
 void hyacinCreate(
-  hyacinHandle_t* handle // host-pointer
+  hyacinHandle_t* handle
 );
 
 void hyacinDestroy(
   hyacinHandle_t* handle
+);
+
+void hyacinSetcuBLASWorkspaceSize(
+  const hyacinHandle_t* handle,
+  uint64_t workBytes
 );
 
 void hyacinXherkBatchInit(
