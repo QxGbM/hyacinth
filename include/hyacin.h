@@ -20,7 +20,7 @@ typedef enum {
 typedef struct {
   char GramMatrixAlgorithm;
   int32_t QuantizeBitCorrection, GramBitCorrection, JacobiSVDSweeps, RankOversampling;
-  int32_t BatchK; struct { int32_t U, Order, Prefix, Rows; } *BatchTensor;
+  int32_t BatchK; struct { int32_t U, Order, Rows; int8_t* Data; } *BatchTensor;
   int32_t DeviceID, DeviceSMs, DeviceIsF64Capable;
   cudaStream_t cudaStream;
   cublasHandle_t cublasHandle;
@@ -48,8 +48,7 @@ void hyacinXherkBatchInit(
   const hyacinHandle_t* handle,
   double epi,
   int32_t N,
-  hyacinPrecision_t Atype,
-  uint64_t* Bbytes // host-pointer
+  hyacinPrecision_t Atype
 );
 
 void hyacinXherk(
@@ -75,8 +74,7 @@ void* hyacinXherkBatch(
   const int32_t* vexp, // device-pointer
   int32_t* beta, // host-pointer
   int32_t orderC,
-  uint64_t* C, // device-pointer
-  int8_t* Bdata // device-pointer
+  uint64_t* C // device-pointer
 );
 
 void hyacinXherkBatchFlush(
@@ -86,8 +84,7 @@ void hyacinXherkBatchFlush(
   const int32_t* vexp, // device-pointer
   int32_t beta,
   int32_t orderC,
-  uint64_t* C, // device-pointer
-  int8_t* Bdata // device-pointer
+  uint64_t* C // device-pointer
 );
 
 void hyacinXGautoType(

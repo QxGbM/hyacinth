@@ -14,7 +14,7 @@ template <class T> inline
 int32_t interp_dispatcher(const hyacinHandle_t* handle, double epi, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, int32_t* jpvt, T* U, int32_t ldu, T* V, int32_t ldv, int64_t globalM, int32_t batchIter, int32_t localMv, int32_t Nv, int32_t localVoffset) {
   globalM = globalM <= int64_t(0) ? int64_t(M) : globalM; localMv = localMv <= 0 ? N : localMv; batchIter = batchIter <= 0 ? handle->BatchK : std::min(batchIter, handle->BatchK);
   cudaSetDevice(handle->DeviceID); hyacinPrecision_t Atype = hyacin_prec<T>(), Gtype;
-  int32_t* vexp = nullptr, u, cPanels, lPanels, gElemBytes; uint64_t strideC, Bbytes;
+  int32_t* vexp = nullptr, u, cPanels, lPanels, gElemBytes; uint64_t strideC;
   cudaMallocFromPoolAsync((void**)&vexp, uint64_t(N) * sizeof(int32_t), handle->mempool, handle->cudaStream);
   hyacinXGautoType(handle, epi, globalM, N, Atype, &u, &cPanels, &lPanels, &strideC, &Gtype, &gElemBytes);
   hyacinXquantizeScale(handle, M, N, Atype, A, lda, u, 0, vexp);
@@ -22,18 +22,15 @@ int32_t interp_dispatcher(const hyacinHandle_t* handle, double epi, int32_t M, i
 
   uint64_t* C = nullptr; cudaMallocFromPoolAsync((void**)&C, uint64_t(cPanels) * uint64_t(lPanels) * strideC * sizeof(uint64_t), handle->mempool, handle->cudaStream);
   if (handle->BatchK <= 0) { hyacinXherk(handle, M, N, Atype, A, lda, u, vexp, 0, lPanels, C); } else {
-    int8_t* Bdata = nullptr; hyacinXherkBatchInit(handle, epi, N, Atype, &Bbytes);
-    cudaMallocFromPoolAsync((void**)&Bdata, Bbytes, handle->mempool, handle->cudaStream);
-
+    hyacinXherkBatchInit(handle, epi, N, Atype);
     int32_t beta = 0;
-    T* Arena = (T*)hyacinXherkBatch(handle, 0, batchIter, N, Atype, vexp, &beta, lPanels, C, Bdata);
+    T* Arena = (T*)hyacinXherkBatch(handle, 0, batchIter, N, Atype, vexp, &beta, lPanels, C);
     for (int32_t i = 0; i < M; i += batchIter) {
       int32_t rows = std::min(M - i, batchIter);
       internal::scatter_matcopy(handle->cudaStream, handle->cublasHandle, 'A', rows, N, &A[i], lda, Arena, handle->BatchK);
-      Arena = (T*)hyacinXherkBatch(handle, rows, batchIter, N, Atype, vexp, &beta, lPanels, C, Bdata);
+      Arena = (T*)hyacinXherkBatch(handle, rows, batchIter, N, Atype, vexp, &beta, lPanels, C);
     }
-    hyacinXherkBatchFlush(handle, N, Atype, vexp, beta, lPanels, C, Bdata);
-    cudaFreeAsync(Bdata, handle->cudaStream);
+    hyacinXherkBatchFlush(handle, N, Atype, vexp, beta, lPanels, C);
   }
   hyacinAllReduce1Drow(handle, cPanels, lPanels, strideC, C);
 
@@ -54,7 +51,7 @@ template <class T, class R> inline
 int32_t svd_dispatcher(const hyacinHandle_t* handle, double epi, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, T* U, int32_t ldu, R* S, T* V, int32_t ldv, int64_t globalM, int32_t batchIter, int32_t localMv, int32_t Nv, int32_t localVoffset) {
   globalM = globalM <= int64_t(0) ? int64_t(M) : globalM; localMv = localMv <= 0 ? N : localMv; batchIter = batchIter <= 0 ? handle->BatchK : std::min(batchIter, handle->BatchK);
   cudaSetDevice(handle->DeviceID); hyacinPrecision_t Atype = hyacin_prec<T>(), Gtype;
-  int32_t* vexp = nullptr, u, cPanels, lPanels, gElemBytes; uint64_t strideC, Bbytes;
+  int32_t* vexp = nullptr, u, cPanels, lPanels, gElemBytes; uint64_t strideC;
   cudaMallocFromPoolAsync((void**)&vexp, uint64_t(N) * sizeof(int32_t), handle->mempool, handle->cudaStream);
   hyacinXGautoType(handle, epi, globalM, N, Atype, &u, &cPanels, &lPanels, &strideC, &Gtype, &gElemBytes);
   hyacinXquantizeScale(handle, M, N, Atype, A, lda, u, 0, vexp);
@@ -62,18 +59,15 @@ int32_t svd_dispatcher(const hyacinHandle_t* handle, double epi, int32_t M, int3
 
   uint64_t* C = nullptr; cudaMallocFromPoolAsync((void**)&C, uint64_t(cPanels) * uint64_t(lPanels) * strideC * sizeof(uint64_t), handle->mempool, handle->cudaStream);
   if (handle->BatchK <= 0) { hyacinXherk(handle, M, N, Atype, A, lda, u, vexp, 0, lPanels, C); } else {
-    int8_t* Bdata = nullptr; hyacinXherkBatchInit(handle, epi, N, Atype, &Bbytes);
-    cudaMallocFromPoolAsync((void**)&Bdata, Bbytes, handle->mempool, handle->cudaStream);
-
+    hyacinXherkBatchInit(handle, epi, N, Atype);
     int32_t beta = 0;
-    T* Arena = (T*)hyacinXherkBatch(handle, 0, batchIter, N, Atype, vexp, &beta, lPanels, C, Bdata);
+    T* Arena = (T*)hyacinXherkBatch(handle, 0, batchIter, N, Atype, vexp, &beta, lPanels, C);
     for (int32_t i = 0; i < M; i += batchIter) {
       int32_t rows = std::min(M - i, batchIter);
       internal::scatter_matcopy(handle->cudaStream, handle->cublasHandle, 'A', rows, N, &A[i], lda, Arena, handle->BatchK);
-      Arena = (T*)hyacinXherkBatch(handle, rows, batchIter, N, Atype, vexp, &beta, lPanels, C, Bdata);
+      Arena = (T*)hyacinXherkBatch(handle, rows, batchIter, N, Atype, vexp, &beta, lPanels, C);
     }
-    hyacinXherkBatchFlush(handle, N, Atype, vexp, beta, lPanels, C, Bdata);
-    cudaFreeAsync(Bdata, handle->cudaStream);
+    hyacinXherkBatchFlush(handle, N, Atype, vexp, beta, lPanels, C);
   }
   hyacinAllReduce1Drow(handle, cPanels, lPanels, strideC, C);
 

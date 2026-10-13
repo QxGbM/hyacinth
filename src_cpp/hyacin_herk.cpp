@@ -264,8 +264,8 @@ extern "C" void hyacinXherk(const hyacinHandle_t* handle, int32_t M, int32_t N, 
   }
 }
 
-extern "C" void hyacinXherkBatchInit(const hyacinHandle_t* handle, double epi, int32_t N, hyacinPrecision_t Atype, uint64_t* Bbytes) {
-  if (handle->BatchK <= 0 || N <= 0) { if (Bbytes) { *Bbytes = uint64_t(0); } return; }
+extern "C" void hyacinXherkBatchInit(const hyacinHandle_t* handle, double epi, int32_t N, hyacinPrecision_t Atype) {
+  if (handle->BatchK <= 0 || N <= 0 || handle->BatchTensor == nullptr) { return; }
   int32_t Complex = int32_t(Atype != real_type[int32_t(Atype)]), batchK = handle->BatchK;
   double epi_nrm = std::min(1., std::max(std::abs(epi), std::ldexp(1., -type_mantissa[int32_t(Atype)])));
   int32_t u_ceil = Complex + std::min(u_practical_limit, handle->QuantizeBitCorrection + int32_t(std::ceil(-std::log2(epi_nrm))));
@@ -273,78 +273,81 @@ extern "C" void hyacinXherkBatchInit(const hyacinHandle_t* handle, double epi, i
   while (u_floor <= u_ceil) {
     char algi = algo; int32_t ui = u_floor; internal::gram_algorithm(algi, batchK, ui, Complex);
     if (algi == 'L') { u_floor = 1 + ui; ++batches; } else { u_floor = 1 + u_ceil; }
-  }
-
-  auto iter = handle->BatchTensor, iter_end = &iter[batches];
-  if (iter) { iter->U = -1; iter->Order = batches; iter->Rows = 0; }
-  int32_t order = type_bytes[int32_t(Atype)], panelsLimb = Complex ? 3 : 1;
-  while (++iter != iter_end) { iter->Prefix = order; iter->Rows = 0; order += panelsLimb * iter->Order; }
-  if (Bbytes) { *Bbytes = uint64_t(N) * uint64_t(batchK) * uint64_t(order); }
+  } handle->BatchTensor->Order = batches;
 }
 
-template <class matrix_t> inline matrix_t* herk_batch_dispatcher(const hyacinHandle_t* handle, int32_t M, int32_t R, int32_t N, const int32_t* vexp, int32_t* beta, int32_t orderC, uint64_t* C, int8_t* B, int32_t* uptr) {
-  constexpr int32_t Complex = int32_t(std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>);
+template <class matrix_t> inline matrix_t* herk_batch_dispatcher(const hyacinHandle_t* handle, int32_t M, int32_t R, int32_t N, const int32_t* vexp, int32_t* beta, int32_t orderC, uint64_t* C, int32_t* uptr) {
   cudaStream_t stream = handle->cudaStream; cudaMemPool_t mempool = handle->mempool; cublasHandle_t cublasH = handle->cublasHandle; 
-  int32_t uc = -1, K = handle->BatchK; auto& arena = *(handle->BatchTensor); const matrix_t* A = &((const matrix_t*)B)[arena.Rows];
-  if (0 < M) {
-    int32_t* vbuf = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&vbuf, uint64_t(2048), mempool, stream))
+  int32_t K = handle->BatchK; auto& arena = *(handle->BatchTensor);
+  if (0 < R && R <= K && arena.Data == nullptr) {
+    if (cudaSuccess != cudaMallocFromPoolAsync((void**)&(arena.Data), uint64_t(sizeof(matrix_t)) * uint64_t(N) * uint64_t(K), handle->mempool, handle->cudaStream))
+      throw std::runtime_error("Workspace (Batch Arena) allocation failed at Integer SY/HERK");
+  } else if (0 < M && (arena.Rows + M) <= K && arena.Data != nullptr) {
+    constexpr int32_t Complex = int32_t(std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>);
+    const matrix_t* A = &((const matrix_t*)arena.Data)[arena.Rows];
+    int32_t uc = -1, *vbuf = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&vbuf, uint64_t(2048), mempool, stream))
       throw std::runtime_error("Workspace (vbuf) allocation failed at Integer SY/HERK");
     *uptr = handle->DeviceSMs; internal::int8::vector_range(stream, M, N, A, K, uptr, vexp, vbuf); cudaFreeAsync(vbuf, stream); cudaStreamSynchronize(stream); uc = *uptr + Complex;
-  }
 
-  if (0 <= uc) {
-    auto iter_end = &handle->BatchTensor[arena.Order], iter = std::find_if(&handle->BatchTensor[1], iter_end, [=](const auto& t) { return uc <= t.U; });
-    if (iter == iter_end) { arena.Rows += M; arena.U = std::max(arena.U, uc); } else {
-      auto& t = *iter; int32_t row = t.Rows; int64_t prefix = int64_t(N) * int64_t(K) * int64_t(t.Prefix);
-      if (M <= K - row) { internal::int8::quantize_limbs(stream, M, N, t.Order, A, K, vexp, &B[prefix + int64_t(row)], K); t.Rows = row + M; } else
-      { i8herk_limbs<Complex>(stream, mempool, cublasH, row, N, t.Order, &B[prefix], K, *beta, orderC, C); internal::int8::quantize_limbs(stream, M, N, t.Order, A, K, vexp, &B[prefix], K); t.Rows = M; *beta = 1; }
+    if (0 <= uc) {
+      auto iter_end = &handle->BatchTensor[arena.Order], iter = std::find_if(&handle->BatchTensor[1], iter_end, [=](const auto& t) { return uc <= t.U; });
+      if (iter == iter_end) { arena.Rows += M; arena.U = std::max(arena.U, uc); } else {
+        auto& t = *iter; int32_t row = t.Rows, order = t.Order;
+        if (t.Data == nullptr) if (cudaSuccess != cudaMallocFromPoolAsync((void**)&(t.Data), uint64_t(order) * uint64_t(N) * uint64_t(K), handle->mempool, handle->cudaStream))
+          throw std::runtime_error("Workspace (Batch Tensor) allocation failed at Integer SY/HERK");
+        if (M <= K - row) { internal::int8::quantize_limbs(stream, M, N, order, A, K, vexp, &t.Data[row], K); t.Rows = row + M; } else
+        { i8herk_limbs<Complex>(stream, mempool, cublasH, row, N, order, t.Data, K, *beta, orderC, C); internal::int8::quantize_limbs(stream, M, N, order, A, K, vexp, t.Data, K); t.Rows = M; *beta = 1; }
+      }
     }
   }
 
-  if (arena.Rows + R <= K) { return &((matrix_t*)B)[arena.Rows]; } else if (R <= K) {
-    herk_dispatcher(handle, arena.Rows, N, (const matrix_t*)B, K, vexp, beta, orderC, C, &(arena.U));
-    arena.Rows = 0; arena.U = -1; return (matrix_t*)B;
+  if (arena.Rows + R <= K) { return &((matrix_t*)arena.Data)[arena.Rows]; } else if (R <= K) {
+    herk_dispatcher(handle, arena.Rows, N, (const matrix_t*)arena.Data, K, vexp, beta, orderC, C, &(arena.U));
+    arena.Rows = 0; arena.U = -1; return (matrix_t*)arena.Data;
   } else { return nullptr; }
 }
 
-extern "C" void* hyacinXherkBatch(const hyacinHandle_t* handle, int32_t CommitLines, int32_t ReserveLines, int32_t N, hyacinPrecision_t Atype, const int32_t* vexp, int32_t* beta, int32_t orderC, uint64_t* C, int8_t* Bdata) {
+extern "C" void* hyacinXherkBatch(const hyacinHandle_t* handle, int32_t CommitLines, int32_t ReserveLines, int32_t N, hyacinPrecision_t Atype, const int32_t* vexp, int32_t* beta, int32_t orderC, uint64_t* C) {
   if (handle->BatchK <= 0 || N <= 0 || orderC <= 0) { return nullptr; }
   Timer::register_distribute_kernel(handle->cudaStream, handle->timer);
   int32_t* uptr = (int32_t*)handle->pinnedWorkspace; *uptr = -1;
   switch (Atype) {
-    case HYACIN_F64: return herk_batch_dispatcher<double>(handle, CommitLines, ReserveLines, N, vexp, beta, orderC, C, Bdata, uptr);
-    case HYACIN_F32: return herk_batch_dispatcher<float>(handle, CommitLines, ReserveLines, N, vexp, beta, orderC, C, Bdata, uptr);
-    case HYACIN_F16: return herk_batch_dispatcher<__half>(handle, CommitLines, ReserveLines, N, vexp, beta, orderC, C, Bdata, uptr);
-    case HYACIN_F64_COMPLEX: return herk_batch_dispatcher<cuDoubleComplex>(handle, CommitLines, ReserveLines, N, vexp, beta, orderC, C, Bdata, uptr);
-    case HYACIN_F32_COMPLEX: return herk_batch_dispatcher<cuComplex>(handle, CommitLines, ReserveLines, N, vexp, beta, orderC, C, Bdata, uptr);
-    case HYACIN_F16_COMPLEX: return herk_batch_dispatcher<__half2>(handle, CommitLines, ReserveLines, N, vexp, beta, orderC, C, Bdata, uptr);
+    case HYACIN_F64: return herk_batch_dispatcher<double>(handle, CommitLines, ReserveLines, N, vexp, beta, orderC, C, uptr);
+    case HYACIN_F32: return herk_batch_dispatcher<float>(handle, CommitLines, ReserveLines, N, vexp, beta, orderC, C, uptr);
+    case HYACIN_F16: return herk_batch_dispatcher<__half>(handle, CommitLines, ReserveLines, N, vexp, beta, orderC, C, uptr);
+    case HYACIN_F64_COMPLEX: return herk_batch_dispatcher<cuDoubleComplex>(handle, CommitLines, ReserveLines, N, vexp, beta, orderC, C, uptr);
+    case HYACIN_F32_COMPLEX: return herk_batch_dispatcher<cuComplex>(handle, CommitLines, ReserveLines, N, vexp, beta, orderC, C, uptr);
+    case HYACIN_F16_COMPLEX: return herk_batch_dispatcher<__half2>(handle, CommitLines, ReserveLines, N, vexp, beta, orderC, C, uptr);
     default: return nullptr;
   }
 }
 
-template <class matrix_t> inline void herk_flush_dispatcher(const hyacinHandle_t* handle, int32_t N, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C, int8_t* Bdata) {
+template <class matrix_t> inline void herk_flush_dispatcher(const hyacinHandle_t* handle, int32_t N, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C) {
   constexpr int32_t Complex = int32_t(std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>);
   constexpr uint64_t elem = uint64_t(Complex ? sizeof(uint64_t) : sizeof(uint32_t));
   cudaStream_t stream = handle->cudaStream; cudaMemPool_t mempool = handle->mempool; cublasHandle_t cublasH = handle->cublasHandle; 
   if (0 < handle->BatchK) {
-    auto& arena = *(handle->BatchTensor); int64_t stride = int64_t(N) * int64_t(handle->BatchK);
-    for (int32_t i = 1; i < arena.Order; ++i)
-    { auto& t = handle->BatchTensor[i]; if (0 < t.Rows) { i8herk_limbs<Complex>(stream, mempool, cublasH, t.Rows, N, t.Order, &Bdata[stride * int64_t(t.Prefix)], handle->BatchK, beta, orderC, C); beta = 1; t.Rows = 0; }}
-    if (0 < arena.Rows)
-    { herk_dispatcher(handle, arena.Rows, N, (const matrix_t*)Bdata, handle->BatchK, vexp, &beta, orderC, C, &(arena.U)); arena.Rows = 0; arena.U = -1; }
+    auto& arena = *(handle->BatchTensor);
+    for (int32_t i = 1; i < arena.Order; ++i) {
+      auto& t = handle->BatchTensor[i];
+      if (0 < t.Rows) { i8herk_limbs<Complex>(stream, mempool, cublasH, t.Rows, N, t.Order, t.Data, handle->BatchK, beta, orderC, C); beta = 1; t.Rows = 0; }
+      if (t.Data != nullptr) { cudaFreeAsync(t.Data, stream); t.Data = nullptr; }
+    }
+    if (0 < arena.Rows) { herk_dispatcher(handle, arena.Rows, N, (const matrix_t*)arena.Data, handle->BatchK, vexp, &beta, orderC, C, &(arena.U)); arena.Rows = 0; arena.U = -1; }
+    if (arena.Data != nullptr) { cudaFreeAsync(arena.Data, stream); arena.Data = nullptr; }
   } if (beta == 0) { cudaMemsetAsync(C, 0, uint64_t(N) * uint64_t(N + 1) * uint64_t(orderC) * elem, stream); }
 }
 
-extern "C" void hyacinXherkBatchFlush(const hyacinHandle_t* handle, int32_t N, hyacinPrecision_t Atype, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C, int8_t* Bdata) {
+extern "C" void hyacinXherkBatchFlush(const hyacinHandle_t* handle, int32_t N, hyacinPrecision_t Atype, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C) {
   if (N <= 0 || orderC <= 0) { return; }
   Timer::register_distribute_kernel(handle->cudaStream, handle->timer);
   switch (Atype) {
-    case HYACIN_F64: herk_flush_dispatcher<double>(handle, N, vexp, beta, orderC, C, Bdata); break;
-    case HYACIN_F32: herk_flush_dispatcher<float>(handle, N, vexp, beta, orderC, C, Bdata); break;
-    case HYACIN_F16: herk_flush_dispatcher<__half>(handle, N, vexp, beta, orderC, C, Bdata); break;
-    case HYACIN_F64_COMPLEX: herk_flush_dispatcher<cuDoubleComplex>(handle, N, vexp, beta, orderC, C, Bdata); break;
-    case HYACIN_F32_COMPLEX: herk_flush_dispatcher<cuComplex>(handle, N, vexp, beta, orderC, C, Bdata); break;
-    case HYACIN_F16_COMPLEX: herk_flush_dispatcher<__half2>(handle, N, vexp, beta, orderC, C, Bdata); break;
+    case HYACIN_F64: herk_flush_dispatcher<double>(handle, N, vexp, beta, orderC, C); break;
+    case HYACIN_F32: herk_flush_dispatcher<float>(handle, N, vexp, beta, orderC, C); break;
+    case HYACIN_F16: herk_flush_dispatcher<__half>(handle, N, vexp, beta, orderC, C); break;
+    case HYACIN_F64_COMPLEX: herk_flush_dispatcher<cuDoubleComplex>(handle, N, vexp, beta, orderC, C); break;
+    case HYACIN_F32_COMPLEX: herk_flush_dispatcher<cuComplex>(handle, N, vexp, beta, orderC, C); break;
+    case HYACIN_F16_COMPLEX: herk_flush_dispatcher<__half2>(handle, N, vexp, beta, orderC, C); break;
     default: break;
   }
 }

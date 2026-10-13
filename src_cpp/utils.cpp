@@ -72,9 +72,9 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle) {
   handle->BatchK = ((env_str = get_env("HYACIN_BATCH_K")) == "") ? HYACIN_DEFAULT_BATCH_K : ((std::stoi(env_str) + 255) & (~255));
   if (0 < handle->BatchK) {
     handle->BatchTensor = reinterpret_cast<decltype(handle->BatchTensor)>(std::malloc(sizeof(*(handle->BatchTensor)) * (uint64_t(1) + limbs_u_list.size())));
-    auto& arena = *(handle->BatchTensor); arena.U = -1; arena.Order = 1; arena.Rows = 0;
+    auto& arena = *(handle->BatchTensor); arena.U = -1; arena.Order = 1; arena.Rows = 0; arena.Data = nullptr;
     for (int32_t i = 0; i < int32_t(limbs_u_list.size()); ++i)
-    { auto& t = handle->BatchTensor[i + 1]; t.U = limbs_u_list[i]; t.Order = i + 1; t.Prefix = t.Rows = 0; }
+    { auto& t = handle->BatchTensor[i + 1]; t.U = limbs_u_list[i]; t.Order = i + 1; t.Rows = 0; t.Data = nullptr; }
   } else { handle->BatchTensor = nullptr; }
 
   cudaGetDevice(&handle->DeviceID); int32_t major, minor;
@@ -109,12 +109,13 @@ extern "C" void hyacinCreate2D(hyacinHandle_t* handle, ncclComm_t col_comm, nccl
 #endif
 
 extern "C" void hyacinDestroy(hyacinHandle_t* handle) {
+  if (handle->BatchTensor)
+  { for (int32_t i = 0; i < handle->BatchTensor->Order; ++i) { cudaFreeAsync(handle->BatchTensor[i].Data, handle->cudaStream); } std::free(handle->BatchTensor); }
   if (handle->cudaStream) { cudaStreamDestroy(handle->cudaStream); }
   if (handle->cublasHandle) { cublasDestroy(handle->cublasHandle); }
   if (handle->cusolverHandle) { cusolverDnDestroy(handle->cusolverHandle); }
   if (handle->mempool) { cudaMemPoolDestroy(handle->mempool); }
   if (handle->pinnedWorkspace) { cudaFreeHost(handle->pinnedWorkspace); }
-  if (handle->BatchTensor) { std::free(handle->BatchTensor); }
   if (handle->timer) { delete (EventTimer*)(handle->timer); }
   std::memset(handle, 0, sizeof(hyacinHandle_t));
 }
