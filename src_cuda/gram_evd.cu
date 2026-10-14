@@ -7,23 +7,22 @@
 #include <algorithm>
 #include <stdexcept>
 
-template <class T, class S> __device__ __forceinline__ S conv(S a, T& b) {
-  if constexpr(std::is_same_v<T, S>) { return b = a; } else
-  if constexpr(std::is_same_v<T, __half> && std::is_same_v<S, double>) { b = __double2half(a); return a; } else
-  if constexpr(std::is_same_v<T, __half> && std::is_same_v<S, float>) { b = __float2half(a); return a; } else
-  { b = T(a); return a; }
-}
-
 template <int32_t BLOCK_THREADS, class real_t, class Stype>
-__global__ void find_srank_kernel(double epi, int32_t N, const real_t* __restrict__ X, Stype* __restrict__ reX, int32_t* __restrict__ rank) {
+__global__ void find_srank_kernel(double epi, int32_t K, const real_t* __restrict__ X, Stype* __restrict__ reX, int32_t* __restrict__ rank) {
   __shared__ double s0; __shared__ typename cub::BlockReduce<int32_t, BLOCK_THREADS>::TempStorage temp_reduce;
   if (threadIdx.x == 0) { s0 = epi * double(X[0]); }
   cooperative_groups::this_thread_block().sync();
 
   int32_t thread_x = 0;
-  for (int32_t i = int32_t(threadIdx.x); i < N; i += BLOCK_THREADS)
-  { thread_x += int32_t(s0 <= double(conv(X[i], reX[i]))); }
-
+  for (int32_t i = int32_t(threadIdx.x); i < K; i += BLOCK_THREADS) {
+    real_t x = X[i]; bool pred = s0 <= double(x); thread_x += int32_t(pred);
+    if (pred) {
+      if constexpr(std::is_same_v<Stype, real_t>) { reX[i] = x; } else
+      if constexpr(std::is_same_v<Stype, __half> && std::is_same_v<real_t, double>) { reX[i] = __double2half(x); } else
+      if constexpr(std::is_same_v<Stype, __half> && std::is_same_v<real_t, float>) { reX[i] = __float2half(x); } else
+      { reX[i] = Stype(x); }
+    }
+  }
   thread_x = cub::BlockReduce<int32_t, BLOCK_THREADS>(temp_reduce).Sum(thread_x);
   if (threadIdx.x == 0) { *rank = thread_x; }
 }
@@ -73,48 +72,46 @@ inline int32_t tsvd(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t c
   if (cudaSuccess != cudaMallocFromPoolAsync((void**)&potrf_work, uint64_t(65536) + (uint64_t(N) + uint64_t(1)) * uint64_t(sizeof(Rtype)), mempool, stream))
     throw std::runtime_error("Workspace allocation failed at GESVD Preconditioning.");
 
-  K = internal::Cholesky::potrfp(stream, fillmode, epi, K, p, N, G, ldg, jpiv, potrf_work, r_ptr);
+  int32_t rank = internal::Cholesky::potrfp(stream, fillmode, epi, K, p, N, G, ldg, jpiv, potrf_work, r_ptr);
   cudaFreeAsync(potrf_work, stream);
-  if (0 < K) {
+  if (0 < rank) {
     matrix_t* A = nullptr, *U = nullptr; real_t* sigma = nullptr;
-    if (cudaSuccess != cudaMallocFromPoolAsync((void**)&A, uint64_t(N) * uint64_t(K) * uint64_t(sizeof(matrix_t)), mempool, stream))
+    if (cudaSuccess != cudaMallocFromPoolAsync((void**)&A, uint64_t(N) * uint64_t(rank) * uint64_t(sizeof(matrix_t)), mempool, stream))
       throw std::runtime_error("Workspace allocation failed at GESVD.");
 
-    internal::scatter_matcopy(stream, cublasH, 'U', K, N, G, ldg, A, N, jpiv); cudaFreeAsync(jpiv, stream); 
-    if (cudaSuccess != cudaMallocFromPoolAsync((void**)&sigma, uint64_t(K) * uint64_t(sizeof(real_t)), mempool, stream))
+    internal::scatter_matcopy(stream, cublasH, 'U', rank, N, G, ldg, A, N, jpiv); cudaFreeAsync(jpiv, stream); 
+    if (cudaSuccess != cudaMallocFromPoolAsync((void**)&sigma, uint64_t(rank) * uint64_t(sizeof(real_t)), mempool, stream))
       throw std::runtime_error("Workspace allocation failed at GESVD.");
-    if (cudaSuccess != cudaMallocFromPoolAsync((void**)&U, uint64_t(N) * uint64_t(econ ? K : N) * uint64_t(sizeof(matrix_t)), mempool, stream))
+    if (cudaSuccess != cudaMallocFromPoolAsync((void**)&U, uint64_t(N) * uint64_t(econ ? rank : N) * uint64_t(sizeof(matrix_t)), mempool, stream))
       throw std::runtime_error("Workspace allocation failed at GESVD.");
 
     if (0 < sweeps) {
-      matrix_t* V = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&V, uint64_t(K) * uint64_t(K) * uint64_t(sizeof(matrix_t)), mempool, stream))
+      matrix_t* V = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&V, uint64_t(rank) * uint64_t(rank) * uint64_t(sizeof(matrix_t)), mempool, stream))
         throw std::runtime_error("Workspace allocation failed at GESVDJ.");
 
       gesvdjInfo_t gesvdj_params = nullptr; cusolverDnCreateGesvdjInfo(&gesvdj_params);
       cusolverDnXgesvdjSetTolerance(gesvdj_params, std::min(1., std::max(double(std::numeric_limits<real_t>::epsilon()), std::abs(epi))));
       cusolverDnXgesvdjSetMaxSweeps(gesvdj_params, sweeps);
-      int32_t lwork = 0; Xgesvj_bufferSize(cusolverH, econ, N, K, A, N, sigma, U, N, V, K, &lwork, gesvdj_params);
-      matrix_t* workspaceOnDevice = nullptr;
-      if (cudaSuccess != cudaMallocFromPoolAsync((void**)&workspaceOnDevice, uint64_t(lwork) * uint64_t(sizeof(matrix_t)), mempool, stream))
+      int32_t lwork = 0; Xgesvj_bufferSize(cusolverH, econ, N, rank, A, N, sigma, U, N, V, rank, &lwork, gesvdj_params);
+      matrix_t* workspaceOnDevice = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&workspaceOnDevice, uint64_t(lwork) * uint64_t(sizeof(matrix_t)), mempool, stream))
         throw std::runtime_error("Workspace allocation failed at GESVDJ.");
 
-      Xgesvj(cusolverH, econ, N, K, A, N, sigma, U, N, V, K, workspaceOnDevice, lwork, gesvdj_params);
+      Xgesvj(cusolverH, econ, N, rank, A, N, sigma, U, N, V, rank, workspaceOnDevice, lwork, gesvdj_params);
       cudaFreeAsync(V, stream); cudaFreeAsync(workspaceOnDevice, stream); cusolverDnDestroyGesvdjInfo(gesvdj_params);
     } else {
-      int32_t lwork = 0; Xgesvd_bufferSize<matrix_t>(cusolverH, N, K, &lwork);
-      matrix_t* workspaceOnDevice = nullptr;
-      if (cudaSuccess != cudaMallocFromPoolAsync((void**)&workspaceOnDevice, uint64_t(lwork) * uint64_t(sizeof(matrix_t)) + uint64_t(K) * uint64_t(sizeof(real_t)), mempool, stream))
+      int32_t lwork = 0; Xgesvd_bufferSize<matrix_t>(cusolverH, N, rank, &lwork);
+      matrix_t* workspaceOnDevice = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&workspaceOnDevice, uint64_t(lwork) * uint64_t(sizeof(matrix_t)) + uint64_t(rank) * uint64_t(sizeof(real_t)), mempool, stream))
         throw std::runtime_error("Workspace allocation failed at GESVD.");
 
-      Xgesvd(cusolverH, econ, N, K, A, N, sigma, U, N, workspaceOnDevice, lwork, (real_t*)(&workspaceOnDevice[lwork]));
+      Xgesvd(cusolverH, econ, N, rank, A, N, sigma, U, N, workspaceOnDevice, lwork, (real_t*)(&workspaceOnDevice[lwork]));
       cudaFreeAsync(workspaceOnDevice, stream);
     }
 
-    cudaFreeAsync(A, stream); find_srank_kernel<512> <<< 1, 512, 0, stream >>> (epi, K, sigma, S, r_ptr); cudaStreamSynchronize(stream);
-    K = std::min(K, *r_ptr); cudaFreeAsync(sigma, stream);
-    internal::scatter_matcopy(stream, cublasH, 'A', N, econ ? K : N, U, N, X, ldx); cudaFreeAsync(U, stream); 
+    cudaFreeAsync(A, stream); find_srank_kernel<512> <<< 1, 512, 0, stream >>> (epi, rank, sigma, S, r_ptr); cudaStreamSynchronize(stream);
+    rank = std::min(rank, *r_ptr); cudaFreeAsync(sigma, stream);
+    internal::scatter_matcopy(stream, cublasH, 'A', N, econ ? rank : N, U, N, X, ldx); cudaFreeAsync(U, stream); 
   } else { cudaFreeAsync(jpiv, stream); }
-  return K;
+  return rank;
 }
 
 extern "C" int32_t hyacinXGevd(const hyacinHandle_t* handle, char fillmode, double epi, int32_t econX, int32_t N, int32_t K, hyacinPrecision_t Atype, void* X, int32_t ldx, void* S, hyacinPrecision_t Gtype, void* G, int32_t ldg) {

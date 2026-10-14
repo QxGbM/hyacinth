@@ -49,6 +49,21 @@ void hyacinSetcuBLASWorkspaceSize(
   uint64_t workBytes
 );
 
+void hyacinXpreprocess(
+  const hyacinHandle_t* handle,
+  char transpose,
+  int32_t M,
+  int32_t N,
+  int32_t Vcols,
+  hyacinPrecision_t Atype,
+  const void* A, // device-pointer
+  int32_t lda,
+  const void* V, // device-pointer
+  int32_t ldv,
+  void* B, // device-pointer
+  int32_t ldb
+); // B = op(A)*(I-vv^H)
+
 void hyacinXherkBatchInit(
   const hyacinHandle_t* handle,
   double epi,
@@ -193,7 +208,7 @@ int32_t hyacinXAllGatherV1Dcol(
 
 #ifndef NO_NCCL
 
-void hyacinCreate2D(
+void hyacinSetCommunicator(
   hyacinHandle_t* handle, // host-pointer
   ncclComm_t col_comm,
   ncclComm_t row_comm

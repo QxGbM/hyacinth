@@ -74,7 +74,7 @@ template <class matrix_t> inline void gather(cudaStream_t stream, cudaMemPool_t 
 }
 
 extern "C" void hyacinXtransform(const hyacinHandle_t* handle, int32_t M, int32_t N, int32_t K, hyacinPrecision_t Atype, const void* Ain, int32_t lda_in, void* Aout, int32_t lda_out, char Xtype, const void* X, int32_t ldx) {
-  if ((M <= 0) || (K <= 0)) return;
+  if ((M <= 0) || (K <= 0)) { return; }
   cudaStream_t stream = handle->cudaStream; Timer::register_distribute_kernel(stream, handle->timer);
   if (Xtype == 'I' || Xtype == 'i' || Xtype == 'J' || Xtype == 'j') { if (K <= N) switch (Atype) {
     case HYACIN_F64: gather(stream, handle->mempool, handle->cublasHandle, M, K, (const double*)Ain, lda_in, (double*)Aout, lda_out, (const int32_t*)X); return;
