@@ -36,8 +36,7 @@ __global__ void i32_accum_kernel(int64_t N, const int32_t* __restrict__ X, int64
         if constexpr(1 < orderA) { device::add_shifted<63>(acc, int64_t(*(AT += strideA))); }
         if constexpr(2 < orderA) { device::add_shifted<126>(acc, int64_t(*(AT += strideA))); }
       }
-    }
-    else {
+    } else {
       if constexpr(0 < orderA) { acc[0] = uint64_t(0); }
       if constexpr(1 < orderA) { acc[1] = uint64_t(0); }
       if constexpr(2 < orderA) { acc[2] = uint64_t(0); }

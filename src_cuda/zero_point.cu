@@ -10,34 +10,6 @@ template <int32_t orderIn, int32_t ORDER> __device__ __forceinline__ void load_i
   if constexpr(2 < orderIn) { a[2] = *(in += stride); } else if constexpr(2 < ORDER) { a[2] = -(a[1] >> 63); a[1] &= i63; }
 }
 
-template <int32_t ORDER> __device__ __forceinline__ void add_shifted_dyn(uint64_t (&a)[ORDER], int64_t i, uint32_t expon) {
-  constexpr uint64_t i63 = 0x7fffffffffffffffllu;
-  if constexpr(ORDER == 1) {
-    uint64_t m0 = -uint64_t(expon <= uint32_t(63));
-    uint32_t rem = expon & uint32_t(m0);
-    uint64_t q0 = uint64_t(i) << rem;
-    a[0] += q0 & m0;
-  } else if constexpr(ORDER == 2) {
-    uint64_t m0 = -uint64_t(expon < uint32_t(63));
-    uint64_t m1 = -uint64_t((expon - uint32_t(63)) <= uint32_t(63));
-    uint32_t rem = (expon - (uint32_t(63) & uint32_t(m1))) & (uint32_t(m0) | uint32_t(m1));
-    uint64_t q0 = uint64_t(i) << rem;
-    a[0] += q0 & m0 & i63;
-    uint64_t sign = -(uint64_t(i) >> 63), q1 = (sign << (uint32_t(1) + rem)) | (uint64_t(i) >> (uint32_t(63) - rem));
-    a[1] += ((q1 & m0) | (q0 & m1)) + (a[0] >> 63); a[0] &= i63;
-  } else if constexpr(ORDER == 3) {
-    uint64_t m0 = -uint64_t(expon < uint32_t(63));
-    uint64_t m1 = -uint64_t((expon - uint32_t(63)) < uint32_t(63));
-    uint64_t m2 = -uint64_t((expon - uint32_t(126)) <= uint32_t(63));
-    uint32_t rem = (expon - (uint32_t(63) & uint32_t(m1)) - (uint32_t(126) & uint32_t(m2))) & (uint32_t(m0) | uint32_t(m1) | uint32_t(m2));
-    uint64_t q0 = uint64_t(i) << rem;
-    a[0] += q0 & m0 & i63;
-    uint64_t sign = -(uint64_t(i) >> 63), q1 = (sign << (uint32_t(1) + rem)) | (uint64_t(i) >> (uint32_t(63) - rem));
-    a[1] += (((q1 & m0) | (q0 & m1)) & i63) + (a[0] >> 63); a[0] &= i63;
-    a[2] += ((sign & m0) | (q1 & m1) | (q0 & m2)) + (a[1] >> 63); a[1] &= i63;
-  }
-}
-
 template <int32_t orderIn, int32_t ORDER> __device__ __forceinline__ void add_i(uint64_t (&a)[ORDER], const uint64_t* in, int64_t stride) {
   if constexpr(0 < orderIn) { device::add_shifted<0>(a, int64_t(*in)); }
   if constexpr(1 < orderIn) { device::add_shifted<63>(a, int64_t(*(in += stride))); }
@@ -77,9 +49,9 @@ template <int32_t orderOut, int32_t ORDER> __device__ __forceinline__ void store
   if constexpr(0 < orderOut) { *(out += stride) = i[0]; } if constexpr(1 < orderOut) { *(out += stride) = i[1]; } if constexpr(2 < orderOut) { *(out += stride) = i[2]; }
 }
 
-template<int32_t orderA, int32_t orderB, int32_t beta, class sum_t>
-__global__ void triangle_pack_kernel(int64_t N, const uint64_t* __restrict__ A, int64_t strideA, int64_t K, const sum_t* __restrict__ vsum, uint32_t corr, uint64_t* __restrict__ B, int64_t strideB) {
-  constexpr int32_t ORDER = orderA < orderB ? orderB : orderA, Complex = std::is_same_v<sum_t, ulonglong4_32a>;
+template<int32_t orderA, int32_t orderB, int32_t beta, int32_t Complex>
+__global__ void triangle_pack_kernel(int64_t N, const uint64_t* __restrict__ A, int64_t strideA, uint64_t* __restrict__ B, int64_t strideB) {
+  constexpr int32_t ORDER = orderA < orderB ? orderB : orderA;
   int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
   if (y <= x) {
     A = &A[y + (x * N)]; B = &B[y + int64_t(uint64_t((x + int64_t(1)) * x) >> 1)];
@@ -88,70 +60,47 @@ __global__ void triangle_pack_kernel(int64_t N, const uint64_t* __restrict__ A, 
       uint64_t acc_rl[ORDER], acc_im[ORDER];
       load_i<orderA>(acc_rl, &A[strideImT], strideA);
       load_i<orderA>(acc_im, &A[strideIm], strideA);
-
-      if (K) {
-        ulonglong4_32a sy = vsum[y];
-        add_shifted_dyn(acc_rl, int64_t(sy.x), corr); add_shifted_dyn(acc_rl, int64_t(sy.y), corr + uint32_t(62));
-        add_shifted_dyn(acc_im, int64_t(sy.z), corr); add_shifted_dyn(acc_im, int64_t(sy.w), corr + uint32_t(62));
-        ulonglong4_32a sx = vsum[x];
-        add_shifted_dyn(acc_im, int64_t(sx.x), corr); add_shifted_dyn(acc_im, int64_t(sx.y), corr + uint32_t(62));
-        add_shifted_dyn(acc_rl, int64_t(sx.z), corr); add_shifted_dyn(acc_rl, int64_t(sx.w), corr + uint32_t(62));
-        cross_sum(acc_rl, acc_im);
-        add_shifted_dyn(acc_rl, K << 1, corr << 1);
-      }
-      else { cross_sum(acc_rl, acc_im); }
+      cross_sum(acc_rl, acc_im);
       add_i<orderA>(acc_rl, A, strideA);
 
       if constexpr(beta) { add_i<orderB>(acc_rl, acc_im, B, strideB); }
       store_i<orderB>(acc_rl, acc_im, B, strideB);
-    }
-    else {
+    } else {
       uint64_t acc[ORDER];
       load_i<orderA>(acc, A, strideA);
-
-      if (K) {
-        ulonglong2 sy = vsum[y];
-        add_shifted_dyn(acc, int64_t(-sy.x), corr); add_shifted_dyn(acc, int64_t(-sy.y), corr + uint32_t(62));
-        ulonglong2 sx = vsum[x];
-        add_shifted_dyn(acc, int64_t(-sx.x), corr); add_shifted_dyn(acc, int64_t(-sx.y), corr + uint32_t(62));
-        add_shifted_dyn(acc, K, corr << 1);
-      }
       if constexpr(beta) { add_i<orderB>(acc, B, strideB); }
       store_i<orderB>(acc, B, strideB);
     }
   }
 }
 
-template <int32_t beta, class sum_t>
-inline void triangle_pack_dispatcher(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const uint64_t* A, const sum_t* vsum, uint32_t corr, int32_t orderB, uint64_t* B) {
+template <int32_t beta, int32_t Complex>
+inline void triangle_pack_dispatcher(cudaStream_t stream, int32_t N, int32_t orderA, const uint64_t* A, int32_t orderB, uint64_t* B) {
   constexpr int32_t block_threads = 512;
   dim3 grid(uint32_t(N + 511) >> 9, uint32_t(N), uint32_t(1));
-  int64_t K64 = int64_t(M), N64 = int64_t(N);
-  int64_t strideA = N64 * N64, strideB = (strideA + N64) / int64_t(2);
+  int64_t N64 = int64_t(N), strideA = N64 * N64, strideB = (strideA + N64) / int64_t(2);
   int32_t mode = (1 <= orderA && orderA <= 3 && 1 <= orderB && orderB <= 3) ? ((orderA - 1) + ((orderB - 1) * 3)) : -1;
-  vsum = 0 < M ? vsum : nullptr;
 
   switch (mode) {
-    case 0: triangle_pack_kernel<1, 1, beta> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, K64, vsum, corr, B, strideB); return;
-    case 1: triangle_pack_kernel<2, 1, beta> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, K64, vsum, corr, B, strideB); return;
-    case 2: triangle_pack_kernel<3, 1, beta> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, K64, vsum, corr, B, strideB); return;
-    case 3: triangle_pack_kernel<1, 2, beta> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, K64, vsum, corr, B, strideB); return;
-    case 4: triangle_pack_kernel<2, 2, beta> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, K64, vsum, corr, B, strideB); return;
-    case 5: triangle_pack_kernel<3, 2, beta> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, K64, vsum, corr, B, strideB); return;
-    case 6: triangle_pack_kernel<1, 3, beta> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, K64, vsum, corr, B, strideB); return;
-    case 7: triangle_pack_kernel<2, 3, beta> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, K64, vsum, corr, B, strideB); return;
-    case 8: triangle_pack_kernel<3, 3, beta> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, K64, vsum, corr, B, strideB); return;
+    case 0: triangle_pack_kernel<1, 1, beta, Complex> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, B, strideB); return;
+    case 1: triangle_pack_kernel<2, 1, beta, Complex> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, B, strideB); return;
+    case 2: triangle_pack_kernel<3, 1, beta, Complex> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, B, strideB); return;
+    case 3: triangle_pack_kernel<1, 2, beta, Complex> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, B, strideB); return;
+    case 4: triangle_pack_kernel<2, 2, beta, Complex> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, B, strideB); return;
+    case 5: triangle_pack_kernel<3, 2, beta, Complex> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, B, strideB); return;
+    case 6: triangle_pack_kernel<1, 3, beta, Complex> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, B, strideB); return;
+    case 7: triangle_pack_kernel<2, 3, beta, Complex> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, B, strideB); return;
+    case 8: triangle_pack_kernel<3, 3, beta, Complex> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, B, strideB); return;
     default: return;
   }
 }
 
-void internal::int8::triangle_pack(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const uint64_t* A, const ulonglong2* vsum, uint32_t corr, int32_t beta, int32_t orderB, uint64_t* B) {
-  if (beta) triangle_pack_dispatcher<1>(stream, M, N, orderA, A, vsum, corr, orderB, B);
-    else triangle_pack_dispatcher<0>(stream, M, N, orderA, A, vsum, corr, orderB, B);
+void internal::int8::triangle_pack(cudaStream_t stream, int32_t N, int32_t orderA, const uint64_t* A, int32_t beta, int32_t orderB, uint64_t* B) {
+  if (beta) triangle_pack_dispatcher<1, 0>(stream, N, orderA, A, orderB, B);
+    else triangle_pack_dispatcher<0, 0>(stream, N, orderA, A, orderB, B);
 }
 
-void internal::int8::triangle_pack(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const uint64_t* A, const ulonglong4_32a* vsum, uint32_t corr, int32_t beta, int32_t orderB, uint64_t* B) {
-  corr += uint32_t(corr ? -1 : 0);
-  if (beta) triangle_pack_dispatcher<1>(stream, M, N, orderA, A, vsum, corr, orderB, B);
-    else triangle_pack_dispatcher<0>(stream, M, N, orderA, A, vsum, corr, orderB, B);
+void internal::int8::triangle_pack_complex(cudaStream_t stream, int32_t N, int32_t orderA, const uint64_t* A, int32_t beta, int32_t orderB, uint64_t* B) {
+  if (beta) triangle_pack_dispatcher<1, 1>(stream, N, orderA, A, orderB, B);
+    else triangle_pack_dispatcher<0, 1>(stream, N, orderA, A, orderB, B);
 }

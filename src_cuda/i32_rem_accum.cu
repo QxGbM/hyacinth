@@ -3,20 +3,18 @@
 #include <ext_arith.hpp>
 #include <crt_constants.hpp>
 
-template <int32_t x>
-__device__ __forceinline__ int64_t i32_i64_prod(int32_t y) {
+template <int32_t x> __device__ __forceinline__ int64_t i32_i64_prod(int32_t y) {
   uint32_t lo = uint32_t(x * y), hi = uint32_t(__mulhi(x, y));
   return int64_t(uint64_t(lo) | (uint64_t(hi) << 32));
 }
 
-template <int32_t orderX, int32_t x, int32_t orderA>
-__device__ __forceinline__ void add_pd(uint64_t (&a)[orderA], int32_t i) {
+template <int32_t orderX, int32_t x, int32_t orderA> __device__ __forceinline__ void add_pd(uint64_t (&a)[orderA], int32_t i) {
   using U8CRT::Constants;
   constexpr int32_t x6 = x * 6;
-  constexpr uint32_t MO = U8CRT::mo[x], MINV = Constants<orderX>::minv[x], R32 = Constants<orderX>::rem_e32[x];
+  constexpr uint32_t MO = U8CRT::mo[x], MINV = Constants<orderX>::minv[x];
 
-  uint32_t u = uint32_t(i), mask_sign = uint32_t(a[orderA - 1] >> 63) + 0x7fffffffu;
-  i = int32_t(device::barrett_reduc<MO>(device::mulx_reduc<MINV, MO>(u) + ((-(u >> 31)) & R32)) - (MO & mask_sign));
+  uint32_t mask_sign = uint32_t(a[orderA - 1] >> 63) + 0x7fffffffu;
+  i = int32_t(device::barrett_reduc<MO>(device::mulx_reduc<1, MINV, MO>(uint32_t(i))) - (MO & mask_sign));
   if constexpr(Constants<orderX>::pd[x6]) { device::add_shifted<0>(a, i32_i64_prod<Constants<orderX>::pd[x6]>(i)); }
   if constexpr(Constants<orderX>::pd[x6 + 1]) { device::add_shifted<31>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 1]>(i)); }
   if constexpr(Constants<orderX>::pd[x6 + 2]) { device::add_shifted<62>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 2]>(i)); }
@@ -37,8 +35,7 @@ __global__ void i32_crt_accum_kernel(int64_t N, const int32_t* __restrict__ X, i
       if constexpr(0 < orderA) { acc[0] = A[0]; }
       if constexpr(1 < orderA) { acc[1] = A[strideA]; }
       if constexpr(2 < orderA) { acc[2] = A[strideA + strideA]; }
-    }
-    else {
+    } else {
       if constexpr(0 < orderA) { acc[0] = uint64_t(0); }
       if constexpr(1 < orderA) { acc[1] = uint64_t(0); }
       if constexpr(2 < orderA) { acc[2] = uint64_t(0); }
@@ -68,16 +65,34 @@ __global__ void i32_crt_accum_kernel(int64_t N, const int32_t* __restrict__ X, i
     if constexpr(21 < orderX) { add_pd<orderX, 21>(acc, *(X += strideX)); }
     if constexpr(22 < orderX) { add_pd<orderX, 22>(acc, *(X += strideX)); }
 
+    uint64_t neg[orderA];
+    constexpr int64_t p0 = U8CRT::Constants<orderX>::p[0], p1 = U8CRT::Constants<orderX>::p[1], p2 = U8CRT::Constants<orderX>::p[2], neg_p0 = -p0, neg_p1 = -p1, neg_p2 = -p2;
+    if constexpr(0 < orderA) { neg[0] = acc[0]; }
+    if constexpr(1 < orderA) { neg[1] = acc[1]; }
+    if constexpr(2 < orderA) { neg[2] = acc[2]; }
     if (acc[orderA - 1] >> 63) {
-      constexpr int64_t p0 = U8CRT::Constants<orderX>::p[0], p1 = U8CRT::Constants<orderX>::p[1], p2 = U8CRT::Constants<orderX>::p[2];
       if constexpr(p0) { device::add_shifted<0>(acc, p0); }
       if constexpr(p1) { device::add_shifted<63>(acc, p1); }
       if constexpr(p2) { device::add_shifted<126>(acc, p2); }
+    } else {
+      if constexpr(p0) { device::add_shifted<0>(neg, neg_p0); }
+      if constexpr(p1) { device::add_shifted<63>(neg, neg_p1); }
+      if constexpr(p2) { device::add_shifted<126>(neg, neg_p2); }
     }
 
-    if constexpr(0 < orderA) { *A = acc[0]; }
-    if constexpr(1 < orderA) { *(A += strideA) = acc[1]; }
-    if constexpr(2 < orderA) { *(A += strideA) = acc[2]; }
+    uint64_t sum;
+    if constexpr(0 < orderA) { sum = acc[0] + neg[0]; } else { sum = uint64_t(0); }
+    if constexpr(1 < orderA) { sum = (sum >> 63) + acc[1] + neg[1]; }
+    if constexpr(2 < orderA) { sum = (sum >> 63) + acc[2] + neg[2]; }
+    if (!bool(sum >> 63)) {
+      if constexpr(0 < orderA) { *A = neg[0]; }
+      if constexpr(1 < orderA) { *(A += strideA) = neg[1]; }
+      if constexpr(2 < orderA) { *(A += strideA) = neg[2]; }
+    } else {
+      if constexpr(0 < orderA) { *A = acc[0]; }
+      if constexpr(1 < orderA) { *(A += strideA) = acc[1]; }
+      if constexpr(2 < orderA) { *(A += strideA) = acc[2]; }
+    }
   }
 }
 

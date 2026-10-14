@@ -70,12 +70,13 @@ namespace device {
 #endif
   }
 
-  template<uint32_t MUL, uint32_t DIV>
+  template<int32_t sign, uint32_t MUL, uint32_t DIV>
   __host__ __device__ __forceinline__ uint32_t mulx_reduc(uint32_t x) {
     if constexpr(MUL && DIV) {
       static_assert(DIV <= 4096u, "Modular needs to be smaller than 4096");
       constexpr uint32_t mul = MUL % DIV, mul_r16 = (mul << 16) % DIV;
-      return (mul_r16 * (x >> 16)) + (mul * (x & uint32_t(0xffff)));
+      uint32_t mul_x = (mul_r16 * (x >> 16)) + (mul * (x & uint32_t(0xffff)));
+      if constexpr(sign) { constexpr uint32_t mul_r32 = ((DIV - mul_r16) << 16) % DIV; return mul_x + ((-(x >> 31)) & mul_r32); } else { return mul_x; }
     } else return uint32_t(0);
   }
 

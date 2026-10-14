@@ -161,8 +161,8 @@ inline void i8herk_limbs(cudaStream_t stream, cudaMemPool_t mempool, cublasHandl
   } else { gemm_accum_iters<'U'>(stream, handle, algnN, N, algnM, orderA, A, lda, orderB, B, scratch); }
   cudaFreeAsync(scratch, stream);
 
-  if constexpr(Complex) { internal::int8::triangle_pack(stream, 0, N, orderB, B, (const ulonglong4_32a*)nullptr, uint32_t(0), beta, orderC, C); }
-    else { internal::int8::triangle_pack(stream, 0, N, orderB, B, (const ulonglong2*)nullptr, uint32_t(0), beta, orderC, C); }
+  if constexpr(Complex) { internal::int8::triangle_pack_complex(stream, N, orderB, B, beta, orderC, C); }
+    else { internal::int8::triangle_pack(stream, N, orderB, B, beta, orderC, C); }
   cudaFreeAsync(B, stream);
 }
 
@@ -194,23 +194,20 @@ template <char mode, int32_t Complex> inline void gemm_accum_crt(cudaStream_t st
   }
 }
 
-template <class matrix_t> inline void i8herk_crt(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, int32_t segM, const matrix_t* A, int32_t lda, const int32_t* vexp, uint32_t corr, int32_t beta, int32_t orderC, uint64_t* C) {
+template <class matrix_t> inline void i8herk_crt(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, int32_t segM, const matrix_t* A, int32_t lda, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C) {
   constexpr int32_t Complex = int32_t(std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>);
-  using sum_t = std::conditional_t<Complex, ulonglong4_32a, ulonglong2>; std::div_t divM = std::div(M, segM);
-  int32_t orderB = (U8CRT::range[orderA - 1] + 63) / 63, algnM = (divM.quot + 255) & (~255), algnN = (N + 63) & (~63);
+  std::div_t divM = std::div(M, segM); int32_t orderB = (U8CRT::range[orderA - 1] + 63) / 63, algnM = (divM.quot + 255) & (~255), algnN = (N + 63) & (~63);
   int64_t colsA = int64_t(N) * int64_t(orderA), strideB = int64_t(N) * int64_t(N) * int64_t(orderB);
   uint64_t b_len = uint64_t(strideB), w_len = uint64_t(algnN - N) * uint64_t(algnM);
   if constexpr(Complex) { b_len += b_len; w_len += uint64_t(3) * uint64_t(algnM) * uint64_t(colsA); } else { w_len += uint64_t(algnM) * uint64_t(colsA); }
 
-  int8_t* W = nullptr; int32_t* scratch = nullptr; uint64_t* B = nullptr; sum_t *vsum = nullptr;
+  int8_t* W = nullptr; int32_t* scratch = nullptr; uint64_t* B = nullptr;
   if (cudaSuccess != cudaMallocFromPoolAsync((void**)&W, w_len, mempool, stream))
     throw std::runtime_error("Workspace (i8) allocation failed at Integer SY/HERK.");
   if (cudaSuccess != cudaMallocFromPoolAsync((void**)&scratch, uint64_t(algnN) * uint64_t(colsA) * sizeof(int32_t), mempool, stream))
     throw std::runtime_error("Workspace (i32) allocation failed at Integer SY/HERK.");
   if (cudaSuccess != cudaMallocFromPoolAsync((void**)&B, b_len * sizeof(uint64_t), mempool, stream))
     throw std::runtime_error("Workspace (u64) allocation failed at Integer SY/HERK.");
-  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&vsum, uint64_t(N) * sizeof(sum_t), mempool, stream))
-    throw std::runtime_error("Workspace (vsum) allocation failed at Integer SY/HERK.");
 
   if (divM.quot < algnM) {
     uint64_t cols = uint64_t(colsA); if constexpr(Complex) { cols *= uint64_t(3); }
@@ -219,12 +216,14 @@ template <class matrix_t> inline void i8herk_crt(cudaStream_t stream, cudaMemPoo
 
   for (int32_t i = 0; i < segM; ++i) {
     int32_t rows = divM.quot + int32_t(segM <= (divM.rem + i));
-    internal::int8::quantize_crt(stream, rows, N, orderA, A, lda, corr, vexp, W, algnM, vsum); A = &A[rows];
+    internal::int8::quantize_crt(stream, rows, N, orderA, A, lda, vexp, W, algnM); A = &A[rows];
     gemm_accum_crt<'U', Complex>(stream, handle, algnN, N, algnM, orderA, W, orderB, B, scratch);
-    if constexpr(Complex) { gemm_accum_crt<'A', Complex>(stream, handle, algnN, N, algnM, orderA, &W[int64_t(algnM) * int64_t(N)], orderB, &B[strideB], scratch); }
-    internal::int8::triangle_pack(stream, rows, N, orderB, B, vsum, corr, beta || int32_t(0 < i), orderC, C);
+    if constexpr(Complex) {
+      gemm_accum_crt<'A', Complex>(stream, handle, algnN, N, algnM, orderA, &W[int64_t(algnM) * int64_t(N)], orderB, &B[strideB], scratch);
+      internal::int8::triangle_pack_complex(stream, N, orderB, B, beta || int32_t(0 < i), orderC, C);
+    } else { internal::int8::triangle_pack(stream, N, orderB, B, beta || int32_t(0 < i), orderC, C); }
   }
-  cudaFreeAsync(W, stream); cudaFreeAsync(scratch, stream); cudaFreeAsync(B, stream); cudaFreeAsync(vsum, stream);
+  cudaFreeAsync(W, stream); cudaFreeAsync(scratch, stream); cudaFreeAsync(B, stream);
 }
 
 template <class matrix_t> inline void herk_dispatcher(const hyacinHandle_t* handle, int32_t M, int32_t N, const matrix_t* A, int32_t lda, const int32_t* vexp, int32_t* beta, int32_t orderC, uint64_t* C, int32_t* uptr) {
@@ -250,7 +249,7 @@ template <class matrix_t> inline void herk_dispatcher(const hyacinHandle_t* hand
     internal::int8::quantize_limbs(stream, M, N, orderA, A, lda, vexp, W, algnM);
     i8herk_limbs<Complex>(stream, mempool, cublasH, M, N, orderA, W, algnM, i, orderC, C);
     cudaFreeAsync(W, stream);
-  } else { i8herk_crt(stream, mempool, cublasH, M, N, orderA, segM, A, lda, vexp, uint32_t(uc), i, orderC, C); }
+  } else { i8herk_crt(stream, mempool, cublasH, M, N, orderA, segM, A, lda, vexp, i, orderC, C); }
 }
 
 extern "C" void hyacinXherk(const hyacinHandle_t* handle, int32_t M, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t u_hint, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C) {
