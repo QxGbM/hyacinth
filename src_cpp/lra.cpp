@@ -45,16 +45,18 @@ int32_t interp_dispatcher(const hyacinHandle_t* handle, double epi, int32_t M, i
     throw std::runtime_error("Basis matrix allocation failed.");
   int32_t rank = hyacinXGinterp(handle, 'A', epi, N, K, Atype, X, N, jpvt, Gtype, G, N);
   cudaFreeAsync(G, handle->cudaStream);
-  if constexpr(std::is_same_v<T, double> || std::is_same_v<T, cuDoubleComplex>) { hyacinSetcuBLASWorkspaceSize(handle, Gib8); }
-  hyacinXtransform(handle, M, N, rank, Atype, A, lda, U, ldu, 'I', jpvt, 0);
-  hyacinXtransform(handle, localMv, Nv, rank, Atype, V, ldv, V, ldv, 'F', &X[localVoffset], N);
-  if constexpr(std::is_same_v<T, double> || std::is_same_v<T, cuDoubleComplex>) { hyacinSetcuBLASWorkspaceSize(handle, uint64_t(0)); }
+  if (U != nullptr || V != nullptr) {
+    if constexpr(std::is_same_v<T, double> || std::is_same_v<T, cuDoubleComplex>) { hyacinSetcuBLASWorkspaceSize(handle, Gib8); }
+    if (U) { hyacinXtransform(handle, M, N, rank, Atype, A, lda, U, ldu, 'I', jpvt, 0); }
+    if (V) { hyacinXtransform(handle, localMv, Nv, rank, Atype, V, ldv, V, ldv, 'F', &X[localVoffset], N); }
+    if constexpr(std::is_same_v<T, double> || std::is_same_v<T, cuDoubleComplex>) { hyacinSetcuBLASWorkspaceSize(handle, uint64_t(0)); }
+  }
   cudaFreeAsync(X, handle->cudaStream);
   return rank;
 }
 
 template <class T, class R> inline
-int32_t svd_dispatcher(const hyacinHandle_t* handle, double epi, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, T* U, int32_t ldu, R* S, T* V, int32_t ldv, int64_t globalM, int32_t batchIter, int32_t localMv, int32_t Nv, int32_t localVoffset) {
+int32_t svd_dispatcher(const hyacinHandle_t* handle, double epi, int32_t econV, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, T* U, int32_t ldu, R* S, T* V, int32_t ldv, int64_t globalM, int32_t batchIter, int32_t localMv, int32_t Nv, int32_t localVoffset) {
   globalM = globalM <= int64_t(0) ? int64_t(M) : globalM; localMv = localMv <= 0 ? N : localMv; batchIter = batchIter <= 0 ? handle->BatchK : std::min(batchIter, handle->BatchK);
   cudaSetDevice(handle->DeviceID); hyacinPrecision_t Atype = hyacin_prec<T>(), Gtype;
   int32_t* vexp = nullptr, u, cPanels, lPanels, gElemBytes; uint64_t strideC;
@@ -82,14 +84,16 @@ int32_t svd_dispatcher(const hyacinHandle_t* handle, double epi, int32_t M, int3
   hyacinXdequantize(handle, N, lPanels, C, vexp, Gtype, G, N);
   cudaFreeAsync(vexp, handle->cudaStream); cudaFreeAsync(C, handle->cudaStream);
 
-  T* X = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&X, uint64_t(N) * uint64_t(K) * sizeof(T), handle->mempool, handle->cudaStream))
+  T* X = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&X, uint64_t(N) * uint64_t(econV ? K : N) * sizeof(T), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Basis matrix allocation failed.");
-  int32_t rank = hyacinXGevd(handle, 'A', epi, N, K, Atype, X, N, S, Gtype, G, N);
+  int32_t rank = hyacinXGevd(handle, 'A', epi, econV, N, K, Atype, X, N, S, Gtype, G, N);
   cudaFreeAsync(G, handle->cudaStream);
-  if constexpr(std::is_same_v<R, double>) { hyacinSetcuBLASWorkspaceSize(handle, Gib8); }
-  hyacinXtransform(handle, M, N, rank, Atype, A, lda, U, ldu, 'F', X, N);
-  hyacinXtransform(handle, localMv, Nv, rank, Atype, V, ldv, V, ldv, 'F', &X[localVoffset], N);
-  if constexpr(std::is_same_v<R, double>) { hyacinSetcuBLASWorkspaceSize(handle, uint64_t(0)); }
+  if (U != nullptr || V != nullptr) {
+    if constexpr(std::is_same_v<R, double>) { hyacinSetcuBLASWorkspaceSize(handle, Gib8); }
+    if (U) { hyacinXtransform(handle, M, N, rank, Atype, A, lda, U, ldu, 'F', X, N); }
+    if (V) { hyacinXtransform(handle, localMv, Nv, econV ? rank : N, Atype, V, ldv, V, ldv, 'F', &X[localVoffset], N); }
+    if constexpr(std::is_same_v<R, double>) { hyacinSetcuBLASWorkspaceSize(handle, uint64_t(0)); }
+  }
   cudaFreeAsync(X, handle->cudaStream);
   return rank;
 }
@@ -149,18 +153,18 @@ namespace hyacinLRA {
   int32_t interp_fit_transform(const hyacinHandle_t* handle, double epi, int32_t M, int32_t N, int32_t K, const __half2* A, int32_t lda, int32_t* jpvt, __half2* U, int32_t ldu, __half2* V, int32_t ldv, int64_t globalM, int32_t batchIter, int32_t localMv, int32_t Nv, int32_t localVoffset)
   { return interp_dispatcher(handle, epi, M, N, K, A, lda, jpvt, U, ldu, V, ldv, globalM, batchIter, localMv, Nv, localVoffset); }
 
-  int32_t svd_fit_transform(const hyacinHandle_t* handle, double epi, int32_t M, int32_t N, int32_t K, const double* A, int32_t lda, double* U, int32_t ldu, double* S, double* V, int32_t ldv, int64_t globalM, int32_t batchIter, int32_t localMv, int32_t Nv, int32_t localVoffset)
-  { return svd_dispatcher(handle, epi, M, N, K, A, lda, U, ldu, S, V, ldv, globalM, batchIter, localMv, Nv, localVoffset); }
-  int32_t svd_fit_transform(const hyacinHandle_t* handle, double epi, int32_t M, int32_t N, int32_t K, const float* A, int32_t lda, float* U, int32_t ldu, float* S, float* V, int32_t ldv, int64_t globalM, int32_t batchIter, int32_t localMv, int32_t Nv, int32_t localVoffset)
-  { return svd_dispatcher(handle, epi, M, N, K, A, lda, U, ldu, S, V, ldv, globalM, batchIter, localMv, Nv, localVoffset); }
-  int32_t svd_fit_transform(const hyacinHandle_t* handle, double epi, int32_t M, int32_t N, int32_t K, const __half* A, int32_t lda, __half* U, int32_t ldu, __half* S, __half* V, int32_t ldv, int64_t globalM, int32_t batchIter, int32_t localMv, int32_t Nv, int32_t localVoffset)
-  { return svd_dispatcher(handle, epi, M, N, K, A, lda, U, ldu, S, V, ldv, globalM, batchIter, localMv, Nv, localVoffset); }
-  int32_t svd_fit_transform(const hyacinHandle_t* handle, double epi, int32_t M, int32_t N, int32_t K, const cuDoubleComplex* A, int32_t lda, cuDoubleComplex* U, int32_t ldu, double* S, cuDoubleComplex* V, int32_t ldv, int64_t globalM, int32_t batchIter, int32_t localMv, int32_t Nv, int32_t localVoffset)
-  { return svd_dispatcher(handle, epi, M, N, K, A, lda, U, ldu, S, V, ldv, globalM, batchIter, localMv, Nv, localVoffset); }
-  int32_t svd_fit_transform(const hyacinHandle_t* handle, double epi, int32_t M, int32_t N, int32_t K, const cuComplex* A, int32_t lda, cuComplex* U, int32_t ldu, float* S, cuComplex* V, int32_t ldv, int64_t globalM, int32_t batchIter, int32_t localMv, int32_t Nv, int32_t localVoffset)
-  { return svd_dispatcher(handle, epi, M, N, K, A, lda, U, ldu, S, V, ldv, globalM, batchIter, localMv, Nv, localVoffset); }
-  int32_t svd_fit_transform(const hyacinHandle_t* handle, double epi, int32_t M, int32_t N, int32_t K, const __half2* A, int32_t lda, __half2* U, int32_t ldu, __half* S, __half2* V, int32_t ldv, int64_t globalM, int32_t batchIter, int32_t localMv, int32_t Nv, int32_t localVoffset)
-  { return svd_dispatcher(handle, epi, M, N, K, A, lda, U, ldu, S, V, ldv, globalM, batchIter, localMv, Nv, localVoffset); }
+  int32_t svd_fit_transform(const hyacinHandle_t* handle, double epi, int32_t econV, int32_t M, int32_t N, int32_t K, const double* A, int32_t lda, double* U, int32_t ldu, double* S, double* V, int32_t ldv, int64_t globalM, int32_t batchIter, int32_t localMv, int32_t Nv, int32_t localVoffset)
+  { return svd_dispatcher(handle, epi, econV, M, N, K, A, lda, U, ldu, S, V, ldv, globalM, batchIter, localMv, Nv, localVoffset); }
+  int32_t svd_fit_transform(const hyacinHandle_t* handle, double epi, int32_t econV, int32_t M, int32_t N, int32_t K, const float* A, int32_t lda, float* U, int32_t ldu, float* S, float* V, int32_t ldv, int64_t globalM, int32_t batchIter, int32_t localMv, int32_t Nv, int32_t localVoffset)
+  { return svd_dispatcher(handle, epi, econV, M, N, K, A, lda, U, ldu, S, V, ldv, globalM, batchIter, localMv, Nv, localVoffset); }
+  int32_t svd_fit_transform(const hyacinHandle_t* handle, double epi, int32_t econV, int32_t M, int32_t N, int32_t K, const __half* A, int32_t lda, __half* U, int32_t ldu, __half* S, __half* V, int32_t ldv, int64_t globalM, int32_t batchIter, int32_t localMv, int32_t Nv, int32_t localVoffset)
+  { return svd_dispatcher(handle, epi, econV, M, N, K, A, lda, U, ldu, S, V, ldv, globalM, batchIter, localMv, Nv, localVoffset); }
+  int32_t svd_fit_transform(const hyacinHandle_t* handle, double epi, int32_t econV, int32_t M, int32_t N, int32_t K, const cuDoubleComplex* A, int32_t lda, cuDoubleComplex* U, int32_t ldu, double* S, cuDoubleComplex* V, int32_t ldv, int64_t globalM, int32_t batchIter, int32_t localMv, int32_t Nv, int32_t localVoffset)
+  { return svd_dispatcher(handle, epi, econV, M, N, K, A, lda, U, ldu, S, V, ldv, globalM, batchIter, localMv, Nv, localVoffset); }
+  int32_t svd_fit_transform(const hyacinHandle_t* handle, double epi, int32_t econV, int32_t M, int32_t N, int32_t K, const cuComplex* A, int32_t lda, cuComplex* U, int32_t ldu, float* S, cuComplex* V, int32_t ldv, int64_t globalM, int32_t batchIter, int32_t localMv, int32_t Nv, int32_t localVoffset)
+  { return svd_dispatcher(handle, epi, econV, M, N, K, A, lda, U, ldu, S, V, ldv, globalM, batchIter, localMv, Nv, localVoffset); }
+  int32_t svd_fit_transform(const hyacinHandle_t* handle, double epi, int32_t econV, int32_t M, int32_t N, int32_t K, const __half2* A, int32_t lda, __half2* U, int32_t ldu, __half* S, __half2* V, int32_t ldv, int64_t globalM, int32_t batchIter, int32_t localMv, int32_t Nv, int32_t localVoffset)
+  { return svd_dispatcher(handle, epi, econV, M, N, K, A, lda, U, ldu, S, V, ldv, globalM, batchIter, localMv, Nv, localVoffset); }
 
   double check_lra_answer(const hyacinHandle_t* handle, int32_t M, int32_t N, const double* A, int32_t lda, int32_t rank, const double* U, int32_t ldu, const double* V, int32_t ldv)
   { return check_answer(handle, M, N, rank, U, ldu, V, ldv, A, lda); }

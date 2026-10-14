@@ -126,6 +126,7 @@ int32_t hyacinXGevd(
   const hyacinHandle_t* handle,
   char fillmode,
   double epi,
+  int32_t econX,
   int32_t N,
   int32_t K,
   hyacinPrecision_t Atype,
