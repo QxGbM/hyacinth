@@ -14,13 +14,14 @@ template <> inline hyacinPrecision_t hyacin_prec<__half2>() { return HYACIN_F16_
 
 template <class T> inline
 int32_t interp_dispatcher(const hyacinHandle_t* handle, double epi, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, int32_t* jpvt, T* U, int32_t ldu, T* V, int32_t ldv, int64_t globalM, int32_t batchIter, int32_t localMv, int32_t Nv, int32_t localVoffset) {
-  globalM = globalM <= int64_t(0) ? int64_t(M) : globalM; localMv = localMv <= 0 ? N : localMv; batchIter = batchIter <= 0 ? handle->BatchK : std::min(batchIter, handle->BatchK);
+  globalM = globalM <= int64_t(0) ? int64_t(M) : globalM; localMv = localMv <= 0 ? N : localMv; batchIter = 0 < handle->BatchK ? (batchIter <= 0 ? handle->BatchK : std::min(batchIter, handle->BatchK)) : M;
   cudaSetDevice(handle->DeviceID); hyacinPrecision_t Atype = hyacin_prec<T>(), Gtype;
+  std::div_t divM = std::div(M, batchIter); int32_t batches = divM.quot + int32_t(0 < divM.rem), lastM = 0 < divM.rem ? divM.rem : batchIter;
   int32_t* vexp = nullptr, u, cPanels, lPanels, gElemBytes; uint64_t strideC;
-  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&vexp, uint64_t(N) * sizeof(int32_t), handle->mempool, handle->cudaStream))
+  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&vexp, uint64_t(batches + 1) * uint64_t(N) * sizeof(int32_t), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Exponent vector allocation failed");
   hyacinXherkBatchInit(handle, epi, globalM, N, Atype, &u, &cPanels, &lPanels, &strideC, &Gtype, &gElemBytes);
-  hyacinXquantizeScale(handle, M, N, Atype, A, lda, u, 0, vexp);
+  hyacinXquantizeScaleBatch(handle, batches, batchIter, lastM, N, Atype, A, lda, u, vexp);
   hyacinAllReduceVExp(handle, uint64_t(N), vexp);
 
   uint64_t* C = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&C, uint64_t(cPanels) * uint64_t(lPanels) * strideC * sizeof(uint64_t), handle->mempool, handle->cudaStream))
@@ -55,13 +56,14 @@ int32_t interp_dispatcher(const hyacinHandle_t* handle, double epi, int32_t M, i
 
 template <class T, class R> inline
 int32_t svd_dispatcher(const hyacinHandle_t* handle, double epi, int32_t econV, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, T* U, int32_t ldu, R* S, T* V, int32_t ldv, int64_t globalM, int32_t batchIter, int32_t localMv, int32_t Nv, int32_t localVoffset) {
-  globalM = globalM <= int64_t(0) ? int64_t(M) : globalM; localMv = localMv <= 0 ? N : localMv; batchIter = batchIter <= 0 ? handle->BatchK : std::min(batchIter, handle->BatchK);
+  globalM = globalM <= int64_t(0) ? int64_t(M) : globalM; localMv = localMv <= 0 ? N : localMv; batchIter = 0 < handle->BatchK ? (batchIter <= 0 ? handle->BatchK : std::min(batchIter, handle->BatchK)) : M;
   cudaSetDevice(handle->DeviceID); hyacinPrecision_t Atype = hyacin_prec<T>(), Gtype;
+  std::div_t divM = std::div(M, batchIter); int32_t batches = divM.quot + int32_t(0 < divM.rem), lastM = 0 < divM.rem ? divM.rem : batchIter;
   int32_t* vexp = nullptr, u, cPanels, lPanels, gElemBytes; uint64_t strideC;
-  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&vexp, uint64_t(N) * sizeof(int32_t), handle->mempool, handle->cudaStream))
+  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&vexp, uint64_t(batches + 1) * uint64_t(N) * sizeof(int32_t), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Exponent vector allocation failed");
   hyacinXherkBatchInit(handle, epi, globalM, N, Atype, &u, &cPanels, &lPanels, &strideC, &Gtype, &gElemBytes);
-  hyacinXquantizeScale(handle, M, N, Atype, A, lda, u, 0, vexp);
+  hyacinXquantizeScaleBatch(handle, batches, batchIter, lastM, N, Atype, A, lda, u, vexp);
   hyacinAllReduceVExp(handle, uint64_t(N), vexp);
 
   uint64_t* C = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&C, uint64_t(cPanels) * uint64_t(lPanels) * strideC * sizeof(uint64_t), handle->mempool, handle->cudaStream))

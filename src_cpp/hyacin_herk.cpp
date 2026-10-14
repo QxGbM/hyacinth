@@ -209,7 +209,7 @@ template <class matrix_t> inline void i8herk_crt(cudaStream_t stream, cudaMemPoo
     throw std::runtime_error("Workspace (i32) allocation failed at Integer SY/HERK.");
   if (cudaSuccess != cudaMallocFromPoolAsync((void**)&B, b_len * sizeof(uint64_t), mempool, stream))
     throw std::runtime_error("Workspace (u64) allocation failed at Integer SY/HERK.");
-   if (cudaSuccess != cudaMallocFromPoolAsync((void**)&vsum, uint64_t(N) * sizeof(sum_t), mempool, stream))
+  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&vsum, uint64_t(N) * sizeof(sum_t), mempool, stream))
     throw std::runtime_error("Workspace (vsum) allocation failed at Integer SY/HERK.");
 
   if (divM.quot < algnM) {

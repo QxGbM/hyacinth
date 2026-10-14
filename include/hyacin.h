@@ -114,15 +114,16 @@ void hyacinXherkBatchFlush(
   uint64_t* C // device-pointer
 );
 
-void hyacinXquantizeScale(
+void hyacinXquantizeScaleBatch(
   const hyacinHandle_t* handle,
-  int32_t M,
+  int32_t batches,
+  int32_t segM,
+  int32_t lastM, 
   int32_t N,
   hyacinPrecision_t Atype,
   const void* A, // device-pointer
   int32_t lda,
   int32_t uA,
-  int32_t beta,
   int32_t* vexp // device-pointer
 );
 

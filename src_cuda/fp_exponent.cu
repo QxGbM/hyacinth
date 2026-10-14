@@ -22,19 +22,31 @@ struct _max {
 
 __device__ __forceinline__ int32_t float_frexp(double a) { if (a < f64_min) { return int_max; } else { int32_t x; frexp(a, &x); return x; }}
 __device__ __forceinline__ int32_t float_frexp(float a) { if (a < f32_min) { return int_max; } else { int32_t x; frexpf(a, &x); return x; }}
-template <int32_t beta> __device__ __forceinline__ void exp_update(int32_t& e, int32_t i) { if constexpr(beta) { e = min(e, i); } else { e = i; }}
-__global__ void vector_exponent_init_kernel(int32_t N, int32_t* __restrict__ vexp) { int32_t i = (int32_t(blockIdx.x) << 9) + int32_t(threadIdx.x); if (i < N) { vexp[i] = int_max; }}
+__global__ void vector_exponent_init_kernel(int32_t N, int32_t* __restrict__ vexp) { int32_t i = (int32_t(blockIdx.x) << 7) + int32_t(threadIdx.x); if (i < N) { vexp[i] = int_max; }}
 
-template <int32_t beta, int32_t BLOCK_THREADS, class matrix_t>
-__global__ void vector_exponent_kernel(int32_t M, const matrix_t* __restrict__ A, int64_t lda, int32_t u, int32_t* __restrict__ vexp) {
+template <int32_t BLOCK_THREADS, class matrix_t> __global__ void vector_exponent_batch_kernel(int32_t segM, int32_t lastM, const matrix_t* __restrict__ A, int64_t lda, int32_t u, int32_t* __restrict__ mexp) {
   constexpr int32_t Complex = std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>;
   using reduc_t = typename std::conditional_t<std::is_same_v<matrix_t, double> || std::is_same_v<matrix_t, cuDoubleComplex>, double, float>;
   __shared__ typename cub::BlockReduce<reduc_t, BLOCK_THREADS>::TempStorage temp_reduce;
-  _max cmp; reduc_t threadA = reduc_t(); A = &A[int64_t(blockIdx.x) * lda]; vexp = &vexp[blockIdx.x];
+  _max cmp; reduc_t threadA = reduc_t(); int32_t M = (int32_t(blockIdx.x) + 1 == int32_t(gridDim.x)) ? lastM : segM;
+  A = &A[int64_t(blockIdx.x) * int64_t(segM) + int64_t(blockIdx.y) * lda]; mexp = &mexp[int64_t(blockIdx.x) * int64_t(gridDim.y) + int64_t(blockIdx.y)];
   for (int32_t i = int32_t(threadIdx.x); i < M; i += BLOCK_THREADS)
   { if constexpr(Complex) { matrix_t Aij = A[i]; reduc_t r = _abs(Aij.x), i = _abs(Aij.y); threadA = cmp(threadA, cmp(r, i)); } else { reduc_t a = _abs(A[i]); threadA = cmp(threadA, a); }}
   threadA = cub::BlockReduce<reduc_t, BLOCK_THREADS>(temp_reduce).Reduce(threadA, cmp);
-  if (threadIdx.x == 0) { int32_t e = float_frexp(threadA); exp_update<beta>(vexp[0], (e == int_max) ? int_max : (u - e)); }
+  if (threadIdx.x == 0) { int32_t e = float_frexp(threadA); *mexp = (e == int_max) ? int_max : (u - e); }
+}
+
+__global__ void vector_exponent_reduc_kernel(int32_t N, int32_t seg_m1, const int32_t* __restrict__ mexp, int32_t* __restrict__ vexp) {
+  int32_t i = (int32_t(blockIdx.x) << 7) + int32_t(threadIdx.x);
+  if (i < N) { int32_t threadA = *(mexp += i); vexp = &vexp[i]; for (int32_t j = 0; j < seg_m1; ++j) { mexp += N; threadA = min(threadA, *mexp); } *vexp = threadA; }
+}
+
+template <int32_t BLOCK_THREADS> __global__ void vector_range_batch_kernel(int32_t N, int32_t u, const int32_t* __restrict__ mexp, const int32_t* __restrict__ vexp, int32_t* __restrict__ segU) {
+  __shared__ typename cub::BlockReduce<int32_t, BLOCK_THREADS>::TempStorage temp_reduce;
+  _max cmp; int32_t threadA = int_min; mexp = &mexp[int64_t(blockIdx.x) * int64_t(N)]; segU = &segU[blockIdx.x];
+  for (int32_t i = int32_t(threadIdx.x); i < N; i += BLOCK_THREADS) { int32_t e = mexp[i]; if (e < int_max) { threadA = cmp(threadA, vexp[i] - e); }}
+  threadA = cub::BlockReduce<int32_t, BLOCK_THREADS>(temp_reduce).Reduce(threadA, cmp);
+  if (threadIdx.x == 0) { *segU = u + threadA; }
 }
 
 template <int32_t BLOCK_THREADS, class matrix_t>
@@ -62,25 +74,24 @@ __global__ void vector_range_kernel(int32_t M, int32_t N, const matrix_t* __rest
   }
 }
 
-template<class matrix_t>
-inline void vector_exponents_dispatcher(cudaStream_t stream, int32_t M, int32_t N, const matrix_t* A, int32_t lda, int32_t u, int32_t beta, int32_t* vexp) {
-  constexpr int32_t block_threads = 512;
+template<class matrix_t> inline void vector_exponents_dispatcher(cudaStream_t stream, int32_t batches, int32_t segM, int32_t lastM, int32_t N, const matrix_t* A, int32_t lda, int32_t u, int32_t* vexp) {
   int64_t lda64 = int64_t(lda);
-  if (beta == 0 && (M <= 0 || u < 0)) { vector_exponent_init_kernel <<< uint32_t(N + 511) >> 9, block_threads, 0, stream >>> (N, vexp); } else
-  if (beta == 1 && 0 < M) { vector_exponent_kernel<1, block_threads> <<< N, block_threads, 0, stream >>> (M, A, lda64, u, vexp); } else
-  if (beta == 0 && 0 < M) { vector_exponent_kernel<0, block_threads> <<< N, block_threads, 0, stream >>> (M, A, lda64, u, vexp); }
+  if (batches <= 0 || u < 0) { vector_exponent_init_kernel <<< uint32_t(N + 127) >> 7, 128, 0, stream >>> (N, vexp); } else {
+    vector_exponent_batch_kernel<512> <<< dim3(batches, N), 512, 0, stream >>> (segM, lastM, A, lda64, u, &vexp[N]);
+    vector_exponent_reduc_kernel <<< uint32_t(N + 127) >> 7, 128, 0, stream >>> (N, batches - 1, &vexp[N], vexp);
+  }
 }
 
-extern "C" void hyacinXquantizeScale(const hyacinHandle_t* handle, int32_t M, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t uA, int32_t beta, int32_t* vexp) {
+extern "C" void hyacinXquantizeScaleBatch(const hyacinHandle_t* handle, int32_t batches, int32_t segM, int32_t lastM, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t uA, int32_t* vexp) {
   if (N <= 0) { return; }
   Timer::register_distribute_kernel(handle->cudaStream, handle->timer);
   switch (Atype) {
-    case HYACIN_F64: vector_exponents_dispatcher(handle->cudaStream, M, N, (const double*)A, lda, uA, beta, vexp); return;
-    case HYACIN_F32: vector_exponents_dispatcher(handle->cudaStream, M, N, (const float*)A, lda, uA, beta, vexp); return;
-    case HYACIN_F16: vector_exponents_dispatcher(handle->cudaStream, M, N, (const __half*)A, lda, uA, beta, vexp); return;
-    case HYACIN_F64_COMPLEX: vector_exponents_dispatcher(handle->cudaStream, M, N, (const cuDoubleComplex*)A, lda, uA, beta, vexp); return;
-    case HYACIN_F32_COMPLEX: vector_exponents_dispatcher(handle->cudaStream, M, N, (const cuComplex*)A, lda, uA, beta, vexp); return;
-    case HYACIN_F16_COMPLEX: vector_exponents_dispatcher(handle->cudaStream, M, N, (const __half2*)A, lda, uA, beta, vexp); return;
+    case HYACIN_F64: vector_exponents_dispatcher(handle->cudaStream, batches, segM, lastM, N, (const double*)A, lda, uA, vexp); return;
+    case HYACIN_F32: vector_exponents_dispatcher(handle->cudaStream, batches, segM, lastM, N, (const float*)A, lda, uA, vexp); return;
+    case HYACIN_F16: vector_exponents_dispatcher(handle->cudaStream, batches, segM, lastM, N, (const __half*)A, lda, uA, vexp); return;
+    case HYACIN_F64_COMPLEX: vector_exponents_dispatcher(handle->cudaStream, batches, segM, lastM, N, (const cuDoubleComplex*)A, lda, uA, vexp); return;
+    case HYACIN_F32_COMPLEX: vector_exponents_dispatcher(handle->cudaStream, batches, segM, lastM, N, (const cuComplex*)A, lda, uA, vexp); return;
+    case HYACIN_F16_COMPLEX: vector_exponents_dispatcher(handle->cudaStream, batches, segM, lastM, N, (const __half2*)A, lda, uA, vexp); return;
     default: return;
   }
 }
