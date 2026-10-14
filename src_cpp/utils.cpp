@@ -100,15 +100,10 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle) {
   cusolverDnSetStream(handle->cusolverHandle, handle->cudaStream);
   cudaMallocHost(&handle->pinnedWorkspace, sizeof(int32_t));
 #ifndef NO_NCCL
-  handle->col_comm = handle->row_comm = nullptr;
+  handle->ncclComm = nullptr;
 #endif
   handle->timer = (((env_str = get_env("HYACIN_CREATE_TIMER")) == "") ? HYACIN_DEFAULT_CREATE_TIMER : (env_str == "1" || env_str == "true" || env_str == "True")) ? (new EventTimer()) : nullptr;
 }
-
-#ifndef NO_NCCL
-extern "C" void hyacinSetCommunicator(hyacinHandle_t* handle, ncclComm_t col_comm, ncclComm_t row_comm)
-{ handle->col_comm = col_comm; handle->row_comm = row_comm; }
-#endif
 
 extern "C" void hyacinDestroy(hyacinHandle_t* handle) {
   if (handle->cudaStream) {

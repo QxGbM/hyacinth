@@ -135,9 +135,9 @@ template <int32_t op> inline void conv_reduction(cudaStream_t stream, uint64_t N
 }
 
 extern "C" void hyacinAllReduce1Drow(const hyacinHandle_t* handle, int32_t Complex, int32_t orderA, uint64_t N, uint64_t* A) {
-  if (Complex <= 0 || orderA <= 0 || N == uint64_t(0) || handle->col_comm == nullptr) { return; }
+  if (Complex <= 0 || orderA <= 0 || N == uint64_t(0) || handle->ncclComm == nullptr) { return; }
   Timer::register_comm(handle->cudaStream, handle->timer);
-  int32_t comm_size; ncclCommCount(handle->col_comm, &comm_size);
+  int32_t comm_size; ncclCommCount(handle->ncclComm, &comm_size);
   if (comm_size == 1) { return; } else if (comm_size <= 0) { throw std::runtime_error("Invalid NCCL communicator at All-reduce"); }
 
   int32_t LimbCount = orderA + 1 + int32_t(orderA == 2 && 1048576 < comm_size) + int32_t(orderA == 3 && 32768 < comm_size) + int32_t(orderA == 3 && 33554432 < comm_size);
@@ -146,27 +146,27 @@ extern "C" void hyacinAllReduce1Drow(const hyacinHandle_t* handle, int32_t Compl
   if (cudaSuccess != cudaMallocFromPoolAsync((void**)&devE, lenE * uint64_t(sizeof(uint64_t)), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Workspace allocation failed at All-reduce.");
 
-  if (Complex == 1 && orderA == 1 && LimbCount == 2) { conv_reduction<0>(handle->cudaStream, N, A, lenA, devE, lenE, handle->col_comm); } else
-  if (Complex == 1 && orderA == 2 && LimbCount == 3) { conv_reduction<1>(handle->cudaStream, N, A, lenA, devE, lenE, handle->col_comm); } else
-  if (Complex == 1 && orderA == 2 && LimbCount == 4) { conv_reduction<2>(handle->cudaStream, N, A, lenA, devE, lenE, handle->col_comm); } else
-  if (Complex == 1 && orderA == 3 && LimbCount == 4) { conv_reduction<3>(handle->cudaStream, N, A, lenA, devE, lenE, handle->col_comm); } else
-  if (Complex == 1 && orderA == 3 && LimbCount == 5) { conv_reduction<4>(handle->cudaStream, N, A, lenA, devE, lenE, handle->col_comm); } else
-  if (Complex == 1 && orderA == 3 && LimbCount == 6) { conv_reduction<5>(handle->cudaStream, N, A, lenA, devE, lenE, handle->col_comm); } else
-  if (Complex == 2 && orderA == 1 && LimbCount == 2) { conv_reduction<6>(handle->cudaStream, N, A, lenA, devE, lenE, handle->col_comm); } else
-  if (Complex == 2 && orderA == 2 && LimbCount == 3) { conv_reduction<7>(handle->cudaStream, N, A, lenA, devE, lenE, handle->col_comm); } else
-  if (Complex == 2 && orderA == 2 && LimbCount == 4) { conv_reduction<8>(handle->cudaStream, N, A, lenA, devE, lenE, handle->col_comm); } else
-  if (Complex == 2 && orderA == 3 && LimbCount == 4) { conv_reduction<9>(handle->cudaStream, N, A, lenA, devE, lenE, handle->col_comm); } else
-  if (Complex == 2 && orderA == 3 && LimbCount == 5) { conv_reduction<10>(handle->cudaStream, N, A, lenA, devE, lenE, handle->col_comm); } else
-  if (Complex == 2 && orderA == 3 && LimbCount == 6) { conv_reduction<11>(handle->cudaStream, N, A, lenA, devE, lenE, handle->col_comm); }
+  if (Complex == 1 && orderA == 1 && LimbCount == 2) { conv_reduction<0>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm); } else
+  if (Complex == 1 && orderA == 2 && LimbCount == 3) { conv_reduction<1>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm); } else
+  if (Complex == 1 && orderA == 2 && LimbCount == 4) { conv_reduction<2>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm); } else
+  if (Complex == 1 && orderA == 3 && LimbCount == 4) { conv_reduction<3>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm); } else
+  if (Complex == 1 && orderA == 3 && LimbCount == 5) { conv_reduction<4>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm); } else
+  if (Complex == 1 && orderA == 3 && LimbCount == 6) { conv_reduction<5>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm); } else
+  if (Complex == 2 && orderA == 1 && LimbCount == 2) { conv_reduction<6>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm); } else
+  if (Complex == 2 && orderA == 2 && LimbCount == 3) { conv_reduction<7>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm); } else
+  if (Complex == 2 && orderA == 2 && LimbCount == 4) { conv_reduction<8>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm); } else
+  if (Complex == 2 && orderA == 3 && LimbCount == 4) { conv_reduction<9>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm); } else
+  if (Complex == 2 && orderA == 3 && LimbCount == 5) { conv_reduction<10>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm); } else
+  if (Complex == 2 && orderA == 3 && LimbCount == 6) { conv_reduction<11>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm); }
   cudaFreeAsync(devE, handle->cudaStream);
 }
 
 extern "C" void hyacinAllReduceVExp(const hyacinHandle_t* handle, uint64_t N, int32_t* vexp) {
-  if (N == uint64_t(0) || handle->col_comm == nullptr) { return; }
+  if (N == uint64_t(0) || handle->ncclComm == nullptr) { return; }
   Timer::register_comm(handle->cudaStream, handle->timer);
-  int32_t comm_size; ncclCommCount(handle->col_comm, &comm_size);
+  int32_t comm_size; ncclCommCount(handle->ncclComm, &comm_size);
   if (comm_size == 1) { return; } else if (comm_size <= 0) { throw std::runtime_error("Invalid NCCL communicator at All-reduce"); }
-  ncclAllReduce(vexp, vexp, N, ncclInt32, ncclMin, handle->col_comm, handle->cudaStream);
+  ncclAllReduce(vexp, vexp, N, ncclInt32, ncclMin, handle->ncclComm, handle->cudaStream);
 }
 
 #else

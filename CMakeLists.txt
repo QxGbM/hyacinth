@@ -14,6 +14,7 @@ set(CPP_SOURCES
   src_cpp/gram_id.cpp
   src_cpp/hyacin_herk.cpp
   src_cpp/lra.cpp
+  src_cpp/orth.cpp
   src_cpp/preprocess.cpp
   src_cpp/utils.cpp
 )

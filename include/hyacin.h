@@ -28,7 +28,7 @@ typedef struct {
   cudaMemPool_t mempool;
   void* timer, **cublasWorkspace, *pinnedWorkspace;
 #ifndef NO_NCCL
-  ncclComm_t col_comm, row_comm;
+  ncclComm_t ncclComm;
 #endif
 } hyacinHandle_t;
 
@@ -183,6 +183,20 @@ void hyacinXtransform(
   int32_t ldx
 ); // In-place mode: Ain == Aout && lda_in == lda_out; Gather mode: Xtype == 'I'/'J', Identity mode: N <= 0
 
+void hyacinXorth(
+  const hyacinHandle_t* handle,
+  int32_t M,
+  int32_t N,
+  int32_t K,
+  hyacinPrecision_t Atype,
+  const void* A, // device-pointer
+  int32_t lda,
+  void* Q, // device-pointer
+  int32_t ldq,
+  void* R, // device-pointer
+  int32_t ldr
+);
+
 void hyacinAllReduce1Drow(
   const hyacinHandle_t* handle,
   int32_t Complex,
@@ -205,16 +219,6 @@ int32_t hyacinXAllGatherV1Dcol(
   void* A, // device-pointer
   int32_t lda
 ); // returns local Koffset
-
-#ifndef NO_NCCL
-
-void hyacinSetCommunicator(
-  hyacinHandle_t* handle, // host-pointer
-  ncclComm_t col_comm,
-  ncclComm_t row_comm
-);
-
-#endif
 
 void hyacinSync_TimerSegments(
   const hyacinHandle_t* handle,

@@ -63,21 +63,21 @@ template <class matrix_t> inline int32_t allgather(cudaStream_t stream, cudaMemP
 }
 
 extern "C" int32_t hyacinXAllGatherV1Dcol(const hyacinHandle_t* handle, int32_t M, int32_t* K, hyacinPrecision_t Atype, void* A, int32_t lda) {
-  if (handle->row_comm == nullptr) { return 0; }
+  if (handle->ncclComm == nullptr) { return 0; }
   Timer::register_comm(handle->cudaStream, handle->timer);
   int32_t* kptr = (int32_t*)handle->pinnedWorkspace, offset_j = 0; *kptr = K ? *K : 0;
   switch (Atype) {
-    case HYACIN_F64: offset_j = allgather(handle->cudaStream, handle->mempool, handle->cublasHandle, M, kptr, (double*)A, lda, handle->row_comm); break;
-    case HYACIN_F32: offset_j = allgather(handle->cudaStream, handle->mempool, handle->cublasHandle, M, kptr, (float*)A, lda, handle->row_comm); break;
-    case HYACIN_F16: offset_j = allgather(handle->cudaStream, handle->mempool, handle->cublasHandle, M, kptr, (__half*)A, lda, handle->row_comm); break;
-    case HYACIN_F64_COMPLEX: offset_j = allgather(handle->cudaStream, handle->mempool, handle->cublasHandle, M, kptr, (cuDoubleComplex*)A, lda, handle->row_comm); break;
-    case HYACIN_F32_COMPLEX: offset_j = allgather(handle->cudaStream, handle->mempool, handle->cublasHandle, M, kptr, (cuComplex*)A, lda, handle->row_comm); break;
-    case HYACIN_F16_COMPLEX: offset_j = allgather(handle->cudaStream, handle->mempool, handle->cublasHandle, M, kptr, (__half2*)A, lda, handle->row_comm); break;
+    case HYACIN_F64: offset_j = allgather(handle->cudaStream, handle->mempool, handle->cublasHandle, M, kptr, (double*)A, lda, handle->ncclComm); break;
+    case HYACIN_F32: offset_j = allgather(handle->cudaStream, handle->mempool, handle->cublasHandle, M, kptr, (float*)A, lda, handle->ncclComm); break;
+    case HYACIN_F16: offset_j = allgather(handle->cudaStream, handle->mempool, handle->cublasHandle, M, kptr, (__half*)A, lda, handle->ncclComm); break;
+    case HYACIN_F64_COMPLEX: offset_j = allgather(handle->cudaStream, handle->mempool, handle->cublasHandle, M, kptr, (cuDoubleComplex*)A, lda, handle->ncclComm); break;
+    case HYACIN_F32_COMPLEX: offset_j = allgather(handle->cudaStream, handle->mempool, handle->cublasHandle, M, kptr, (cuComplex*)A, lda, handle->ncclComm); break;
+    case HYACIN_F16_COMPLEX: offset_j = allgather(handle->cudaStream, handle->mempool, handle->cublasHandle, M, kptr, (__half2*)A, lda, handle->ncclComm); break;
     default: break;
   }
   if (K) { *K = *kptr; } return offset_j;
 }
 
 #else
-extern "C" int32_t hyacinXAllGatherV1Dcol(hyacinHandle_t, int32_t, int32_t* K, hyacinPrecision_t, void*, int32_t) { if (K) { *K = 0; } return 0; }
+extern "C" int32_t hyacinXAllGatherV1Dcol(hyacinHandle_t, int32_t, int32_t*, hyacinPrecision_t, void*, int32_t) { return 0; }
 #endif
