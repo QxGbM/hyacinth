@@ -39,8 +39,8 @@ int32_t interp_dispatcher(const hyacinHandle_t* handle, double epi, int32_t M, i
   int32_t rank = hyacinXGinterp(handle, 'A', epi, N, K, Atype, X, N, jpvt, Gtype, G, N);
   cudaFreeAsync(G, handle->cudaStream);
   if constexpr(std::is_same_v<T, double> || std::is_same_v<T, cuDoubleComplex>) { hyacinSetcuBLASWorkspaceSize(handle, Gib8); }
-  if (U) { hyacinXtransform(handle, M, N, rank, Atype, A, lda, U, ldu, 'I', jpvt, 0); }
-  hyacinXtransform(handle, localMv, Nv, rank, Atype, V, ldv, V, ldv, 'F', &X[localVoffset], N);
+  if (U) { hyacinXtransform(handle, M, N, rank, Atype, A, lda, U, ldu, 'J', jpvt, 0); }
+  hyacinXtransform(handle, localMv, Nv, rank, Atype, V, ldv, V, ldv, 'V', &X[localVoffset], N);
   if constexpr(std::is_same_v<T, double> || std::is_same_v<T, cuDoubleComplex>) { hyacinSetcuBLASWorkspaceSize(handle, uint64_t(0)); }
   cudaFreeAsync(X, handle->cudaStream);
   return rank;
@@ -73,8 +73,8 @@ int32_t svd_dispatcher(const hyacinHandle_t* handle, double epi, int32_t econV, 
   int32_t rank = hyacinXGevd(handle, 'A', epi, econV, N, K, Atype, X, N, S, Gtype, G, N);
   cudaFreeAsync(G, handle->cudaStream);
   if constexpr(std::is_same_v<R, double>) { hyacinSetcuBLASWorkspaceSize(handle, Gib8); }
-  if (U) { hyacinXtransform(handle, M, N, rank, Atype, A, lda, U, ldu, 'F', X, N); }
-  hyacinXtransform(handle, localMv, Nv, econV ? rank : N, Atype, V, ldv, V, ldv, 'F', &X[localVoffset], N);
+  if (U) { hyacinXtransform(handle, M, N, rank, Atype, A, lda, U, ldu, 'V', X, N); }
+  hyacinXtransform(handle, localMv, Nv, econV ? rank : N, Atype, V, ldv, V, ldv, 'V', &X[localVoffset], N);
   if constexpr(std::is_same_v<R, double>) { hyacinSetcuBLASWorkspaceSize(handle, uint64_t(0)); }
   cudaFreeAsync(X, handle->cudaStream);
   return rank;

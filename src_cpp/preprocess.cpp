@@ -42,9 +42,9 @@ template <class matrix_t> inline void preprocess(cudaStream_t stream, cudaMemPoo
     matrix_t* dev_work = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&dev_work, work_bytes, mempool, stream))
       throw std::runtime_error("Workspace allocation failed at preprocessing A.");
     for (int32_t i = 0; i < M; i += rows) {
-      int32_t m = std::min(M - i, rows), ld = std::min((m + 63) & (~63), rows);
-      nn_gemm(handle, m, Vcols, N, &B[i], ldb, V, ldv, dev_work, ld);
-      nc_gemm(handle, m, N, Vcols, dev_work, ld, V, ldv, &B[i], ldb);
+      int32_t m = std::min(M - i, rows);
+      nn_gemm(handle, m, Vcols, N, &B[i], ldb, V, ldv, dev_work, m);
+      nc_gemm(handle, m, N, Vcols, dev_work, m, V, ldv, &B[i], ldb);
     }
   }
 }
@@ -63,11 +63,11 @@ template <> inline void preprocess<__half2>(cudaStream_t stream, cudaMemPool_t m
     internal::scatter_matcopy(stream, handle, 'A', N, Vcols, V, ldv, f32v, N);
     int64_t incA = (transpose == 'T' || transpose == 'C') ? (int64_t(rows) * int64_t(lda)) : int64_t(rows);
     for (int32_t i = 0; i < M; i += rows) {
-      int32_t m = std::min(M - i, rows), ld = std::min((m + 63) & (~63), rows);
-      internal::scatter_matcopy(stream, handle, transpose, m, N, A, lda, f32a, ld); A = &A[incA];
-      cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_N, m, Vcols, N, &one, f32a, CUDA_C_32F, ld, f32v, CUDA_C_32F, N, &zero, dev_work, CUDA_C_32F, ld, CUBLAS_COMPUTE_32F_FAST_16F, CUBLAS_GEMM_DEFAULT);
-      cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_C, m, N, Vcols, &minus_one, dev_work, CUDA_C_32F, ld, f32v, CUDA_C_32F, N, &one, f32a, CUDA_C_32F, ld, CUBLAS_COMPUTE_32F_FAST_16F, CUBLAS_GEMM_DEFAULT);
-      internal::scatter_matcopy(stream, handle, 'A', m, N, f32a, ld, &B[i], ldb);
+      int32_t m = std::min(M - i, rows);
+      internal::scatter_matcopy(stream, handle, transpose, m, N, A, lda, f32a, m); A = &A[incA];
+      cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_N, m, Vcols, N, &one, f32a, CUDA_C_32F, m, f32v, CUDA_C_32F, N, &zero, dev_work, CUDA_C_32F, m, CUBLAS_COMPUTE_32F_FAST_16F, CUBLAS_GEMM_DEFAULT);
+      cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_C, m, N, Vcols, &minus_one, dev_work, CUDA_C_32F, m, f32v, CUDA_C_32F, N, &one, f32a, CUDA_C_32F, m, CUBLAS_COMPUTE_32F_FAST_16F, CUBLAS_GEMM_DEFAULT);
+      internal::scatter_matcopy(stream, handle, 'A', m, N, f32a, m, &B[i], ldb);
     }
   } else { internal::scatter_matcopy(stream, handle, transpose, M, N, A, lda, B, ldb); }
 }
