@@ -301,11 +301,16 @@ template <class matrix_t> inline void herk_batch_dispatcher(const hyacinHandle_t
         int32_t seg1 = algnM - rowsW, seg2 = rows - seg1;
         if (0 < seg1) { internal::int8::quantize_crt(stream, seg1, N, orderA, &A[rowsA], lda, vexp, &W[rowsW], algnM); }
         i8herk_crt<Complex>(stream, mempool, cublasH, algnM, N, orderA, W, algnM, beta, orderC, C); beta = 1;
+        while (algnM < seg2) {
+          internal::int8::quantize_crt(stream, algnM, N, orderA, &A[rowsA + seg1], lda, vexp, W, algnM);
+          i8herk_crt<Complex>(stream, mempool, cublasH, algnM, N, orderA, W, algnM, beta, orderC, C); beta = 1;
+          seg1 += algnM; seg2 -= algnM;
+        }
         if (0 < seg2) { internal::int8::quantize_crt(stream, seg2, N, orderA, &A[rowsA + seg1], lda, vexp, W, algnM); } rowsW = seg2;
       } else { internal::int8::quantize_crt(stream, rows, N, orderA, &A[rowsA], lda, vexp, &W[rowsW], algnM); rowsW += rows; }
       i = i_end; while (i < batches && segmentsU[i] != n_limb_batches) { ++i; }
     }
-    i8herk_crt<Complex>(stream, mempool, cublasH, rowsW, N, orderA, W, algnM, beta, orderC, C); beta = 1;
+    if (0 < rowsW) { i8herk_crt<Complex>(stream, mempool, cublasH, rowsW, N, orderA, W, algnM, beta, orderC, C); beta = 1; }
     cudaFreeAsync(W, stream);
   }
 }
