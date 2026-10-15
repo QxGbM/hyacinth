@@ -202,7 +202,7 @@ template <int32_t Complex> inline void i8herk_crt(cudaStream_t stream, cudaMemPo
 
   gemm_accum_crt<'U', Complex>(stream, handle, algnN, N, algnM, orderA, A, lda, orderB, B, scratch);
   if constexpr(Complex) {
-    gemm_accum_crt<'A', Complex>(stream, handle, algnN, N, algnM, orderA, &A[int64_t(algnM) * int64_t(N)], lda, orderB, &B[strideB], scratch);
+    gemm_accum_crt<'A', Complex>(stream, handle, algnN, N, algnM, orderA, &A[int64_t(lda) * int64_t(N)], lda, orderB, &B[strideB], scratch);
     internal::int8::triangle_pack_complex(stream, N, orderB, B, beta, orderC, C);
   } else { internal::int8::triangle_pack(stream, N, orderB, B, beta, orderC, C); }
   cudaFreeAsync(scratch, stream); cudaFreeAsync(B, stream);

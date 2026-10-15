@@ -79,10 +79,10 @@ template <class matrix_t> inline void xa_transform(cudaStream_t stream, cudaMemP
     uint64_t work_bytes = uint64_t(K) * uint64_t(cols) * uint64_t(sizeof(matrix_t));
     matrix_t* dev_work = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&dev_work, work_bytes, mempool, stream))
       throw std::runtime_error("Workspace allocation failed at transforming A.");
-    for (int32_t i = 0; i < N; i += cols) {
-      int32_t n = std::min(N - i, cols);
-      an_gemm(handle, CUBLAS_OP_C, K, n, M, X, ldx, &Ain[int64_t(i) * int64_t(lda_in)], lda_in, dev_work, K);
-      internal::scatter_matcopy(stream, handle, 'A', K, n, dev_work, K, &Aout[int64_t(i) * int64_t(lda_out)], lda_out);
+    for (int32_t j = 0; j < N; j += cols) {
+      int32_t n = std::min(N - j, cols);
+      an_gemm(handle, CUBLAS_OP_C, K, n, M, X, ldx, &Ain[int64_t(j) * int64_t(lda_in)], lda_in, dev_work, K);
+      internal::scatter_matcopy(stream, handle, 'A', K, n, dev_work, K, &Aout[int64_t(j) * int64_t(lda_out)], lda_out);
     }
     cudaFreeAsync(dev_work, stream);
   } else { an_gemm(handle, CUBLAS_OP_C, K, N, M, X, ldx, Ain, lda_in, Aout, lda_out); }
@@ -99,11 +99,11 @@ template <> inline void xa_transform<__half2>(cudaStream_t stream, cudaMemPool_t
   cuComplex one = make_cuComplex(1.f, 0.f), zero = make_cuComplex(0.f, 0.f);
   cuComplex* f32a = (cuComplex*)&dev_work[work_bytes], *f32x = (cuComplex*)&dev_work[work_bytes + devA_bytes];
   internal::scatter_matcopy(stream, handle, 'A', M, K, X, ldx, f32x, M);
-  for (int32_t i = 0; i < N; i += cols) {
-    int32_t n = std::min(N - i, cols);
-    internal::scatter_matcopy(stream, handle, 'A', M, n, &Ain[int64_t(i) * int64_t(lda_in)], lda_in, f32a, M);
+  for (int32_t j = 0; j < N; j += cols) {
+    int32_t n = std::min(N - j, cols);
+    internal::scatter_matcopy(stream, handle, 'A', M, n, &Ain[int64_t(j) * int64_t(lda_in)], lda_in, f32a, M);
     cublasGemmEx(handle, CUBLAS_OP_C, CUBLAS_OP_N, K, n, M, &one, f32a, CUDA_C_32F, M, f32x, CUDA_C_32F, M, &zero, dev_work, CUDA_C_32F, K, CUBLAS_COMPUTE_32F_FAST_16F, CUBLAS_GEMM_DEFAULT);
-    internal::scatter_matcopy(stream, handle, 'A', K, n, (cuComplex*)dev_work, K, &Aout[int64_t(i) * int64_t(lda_out)], lda_out);
+    internal::scatter_matcopy(stream, handle, 'A', K, n, (cuComplex*)dev_work, K, &Aout[int64_t(j) * int64_t(lda_out)], lda_out);
   }
   cudaFreeAsync(dev_work, stream);
 }
