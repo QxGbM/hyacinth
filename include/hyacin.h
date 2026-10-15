@@ -20,7 +20,6 @@ typedef enum {
 typedef struct {
   char GramMatrixAlgorithm;
   int32_t QuantizeBitCorrection, GramBitCorrection, JacobiSVDSweeps, RankOversampling;
-  int32_t BatchK; struct { int32_t U, Order, Rows; int8_t* Data; } *BatchTensor;
   int32_t DeviceID, DeviceSMs, DeviceIsF64Capable;
   cudaStream_t cudaStream;
   cublasHandle_t cublasHandle;
@@ -78,36 +77,16 @@ void hyacinXherkBatchInit(
   int32_t* gElemBytes // host-pointer
 );
 
-void hyacinXherk(
+void hyacinXherkBatch(
   const hyacinHandle_t* handle,
-  int32_t M,
+  int32_t batches,
+  int32_t segM,
+  int32_t lastM, 
   int32_t N,
   hyacinPrecision_t Atype,
   const void* A, // device-pointer
   int32_t lda,
-  int32_t u_hint,
-  const int32_t* vexp, // device-pointer
-  int32_t beta,
-  int32_t orderC,
-  uint64_t* C // device-pointer
-);
-
-void* hyacinXherkBatch(
-  const hyacinHandle_t* handle,
-  int32_t CommitLines,
-  int32_t ReserveLines,
-  int32_t N,
-  hyacinPrecision_t Atype,
-  const int32_t* vexp, // device-pointer
-  int32_t* beta, // host-pointer
-  int32_t orderC,
-  uint64_t* C // device-pointer
-);
-
-void hyacinXherkBatchFlush(
-  const hyacinHandle_t* handle,
-  int32_t N,
-  hyacinPrecision_t Atype,
+  int32_t u,
   const int32_t* vexp, // device-pointer
   int32_t beta,
   int32_t orderC,

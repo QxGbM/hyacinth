@@ -25,13 +25,6 @@ namespace internal::Cholesky {
 
 namespace internal::int8 {
 
-  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int32_t* u, const int32_t* vexp, int32_t* vbuf);
-  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, int32_t* u, const int32_t* vexp, int32_t* vbuf);
-  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const __half* A, int32_t lda, int32_t* u, const int32_t* vexp, int32_t* vbuf);
-  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const cuDoubleComplex* A, int32_t lda, int32_t* u, const int32_t* vexp, int32_t* vbuf);
-  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const cuComplex* A, int32_t lda, int32_t* u, const int32_t* vexp, int32_t* vbuf);
-  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const __half2* A, int32_t lda, int32_t* u, const int32_t* vexp, int32_t* vbuf);
-
   void quantize_limbs(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const double* A, int32_t lda, const int32_t* vexp, int8_t* B, int32_t ldb);
   void quantize_limbs(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const float* A, int32_t lda, const int32_t* vexp, int8_t* B, int32_t ldb);
   void quantize_limbs(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const __half* A, int32_t lda, const int32_t* vexp, int8_t* B, int32_t ldb);
@@ -50,6 +43,7 @@ namespace internal::int8 {
   void accumulate_remainder_i32tensor(cudaStream_t stream, char mode, int32_t beta, int32_t N, int32_t orderX, const int32_t* X, int32_t ldx, int32_t orderA, uint64_t* A);
   void triangle_pack(cudaStream_t stream, int32_t N, int32_t orderA, const uint64_t* A, int32_t beta, int32_t orderB, uint64_t* B);
   void triangle_pack_complex(cudaStream_t stream, int32_t N, int32_t orderA, const uint64_t* A, int32_t beta, int32_t orderB, uint64_t* B);
+  void vector_range(cudaStream_t stream, int32_t batches, int32_t N, int32_t u, const int32_t* vexp, int32_t* segU);
 
 };
 
@@ -97,7 +91,7 @@ namespace internal {
   void scatter_matcopy(cudaStream_t stream, cublasHandle_t handle, char mode, int32_t M, int32_t N, const complex_float3* A, int32_t lda, __half2* B, int32_t ldb, const int32_t* jpiv = nullptr);
   void scatter_matcopy(cudaStream_t stream, cublasHandle_t handle, char mode, int32_t M, int32_t N, const complex_float4* A, int32_t lda, __half2* B, int32_t ldb, const int32_t* jpiv = nullptr);
 
-  std::pair<int32_t, int32_t> gram_algorithm(char& alg, int32_t M, int32_t& u, int32_t Complex);
+  std::pair<int32_t, int32_t> gram_algorithm(char& alg, int32_t M, int32_t u, int32_t Complex);
 
 };
 

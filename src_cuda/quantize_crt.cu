@@ -2,7 +2,6 @@
 #include <internal.hpp>
 #include <ext_arith.hpp>
 #include <crt_constants.hpp>
-#include <cub/cub.cuh>
 #include <limits>
 
 constexpr int32_t int_max = std::numeric_limits<int32_t>::max();

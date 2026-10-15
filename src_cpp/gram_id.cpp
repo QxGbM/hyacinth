@@ -37,7 +37,7 @@ inline int32_t interp(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t
 }
 
 extern "C" int32_t hyacinXGinterp(const hyacinHandle_t* handle, char fillmode, double epi, int32_t N, int32_t K, hyacinPrecision_t Atype, void* X, int32_t ldx, int32_t* jpiv, hyacinPrecision_t Gtype, void* G, int32_t ldg) {
-  if (N <= 0) { return 0; } K = K <= 0 ? N : std::min(N, K);
+  if (N <= 0) { return 0; } K = K <= 0 ? N : std::min(N, K); epi = std::min(1., std::abs(epi));
   cudaStream_t stream = handle->cudaStream; Timer::register_replicate_kernel(stream, handle->timer);
   cudaMemPool_t mempool = handle->mempool; cublasHandle_t cublasH = handle->cublasHandle;
   int32_t *r_ptr = (int32_t*)handle->pinnedWorkspace, oversampling = handle->RankOversampling; *r_ptr = handle->DeviceSMs;

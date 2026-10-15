@@ -2,7 +2,6 @@
 #include <hyacin.h>
 #include <internal.hpp>
 #include <cub/cub.cuh>
-#include <cooperative_groups.h>
 #include <limits>
 #include <stdexcept>
 
@@ -36,41 +35,11 @@ template <int32_t BLOCK_THREADS, class matrix_t> __global__ void vector_exponent
   if (threadIdx.x == 0) { int32_t e = float_frexp(threadA); *mexp = (e == int_max) ? int_max : (u - e); }
 }
 
-__global__ void vector_exponent_reduc_kernel(int32_t N, int32_t seg_m1, const int32_t* __restrict__ mexp, int32_t* __restrict__ vexp) {
+__global__ void vector_exponent_reduc_kernel(int32_t N, int32_t seg_m1, int32_t* __restrict__ vexp) {
   int32_t i = (int32_t(blockIdx.x) << 7) + int32_t(threadIdx.x);
-  if (i < N) { int32_t threadA = *(mexp += i); vexp = &vexp[i]; for (int32_t j = 0; j < seg_m1; ++j) { mexp += N; threadA = min(threadA, *mexp); } *vexp = threadA; }
-}
-
-template <int32_t BLOCK_THREADS> __global__ void vector_range_batch_kernel(int32_t N, int32_t u, const int32_t* __restrict__ mexp, const int32_t* __restrict__ vexp, int32_t* __restrict__ segU) {
-  __shared__ typename cub::BlockReduce<int32_t, BLOCK_THREADS>::TempStorage temp_reduce;
-  _max cmp; int32_t threadA = int_min; mexp = &mexp[int64_t(blockIdx.x) * int64_t(N)]; segU = &segU[blockIdx.x];
-  for (int32_t i = int32_t(threadIdx.x); i < N; i += BLOCK_THREADS) { int32_t e = mexp[i]; if (e < int_max) { threadA = cmp(threadA, vexp[i] - e); }}
-  threadA = cub::BlockReduce<int32_t, BLOCK_THREADS>(temp_reduce).Reduce(threadA, cmp);
-  if (threadIdx.x == 0) { *segU = u + threadA; }
-}
-
-template <int32_t BLOCK_THREADS, class matrix_t>
-__global__ void vector_range_kernel(int32_t M, int32_t N, const matrix_t* __restrict__ A, int64_t lda, const int32_t* __restrict__ vexp, int32_t* __restrict__ vbuf, int32_t* __restrict__ out) {
-  constexpr int32_t Complex = std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>;
-  __shared__ typename cub::BlockReduce<int32_t, BLOCK_THREADS>::TempStorage temp_reduce;
-  using reduc_t = typename std::conditional_t<std::is_same_v<matrix_t, double> || std::is_same_v<matrix_t, cuDoubleComplex>, double, float>;
-  _max cmp; int32_t threadI = int_min;
-  for (int32_t j = int32_t(blockIdx.x); j < N; j += int32_t(gridDim.x)) {
-    reduc_t threadA = reduc_t();
-    const matrix_t* Aj = &A[int64_t(j) * lda];
-    for (int32_t i = int32_t(threadIdx.x); i < M; i += BLOCK_THREADS)
-    { if constexpr(Complex) { matrix_t Aij = Aj[i]; reduc_t r = _abs(Aij.x), i = _abs(Aij.y); threadA = cmp(threadA, cmp(r, i)); } else { reduc_t a = _abs(Aj[i]); threadA = cmp(threadA, a); }}
-    int32_t e = float_frexp(threadA); if (e < int_max) { threadI = cmp(threadI, e + vexp[j]); }
-  }
-  threadI = cub::BlockReduce<int32_t, BLOCK_THREADS>(temp_reduce).Reduce(threadI, cmp);
-  if (gridDim.x == 1) { if (threadIdx.x == 0) { *out = threadI; } return; }
-
-  if (threadIdx.x == 0) { vbuf[blockIdx.x] = threadI; } else { threadI = int_min; }
-  cooperative_groups::this_grid().sync();
-  if (blockIdx.x == 0) {
-    for (int32_t i = int32_t(threadIdx.x) + 1; i < int32_t(gridDim.x); i += BLOCK_THREADS) { threadI = cmp(threadI, vbuf[i]); }
-    threadI = cub::BlockReduce<int32_t, BLOCK_THREADS>(temp_reduce).Reduce(threadI, cmp);
-    if (threadIdx.x == 0) { *out = threadI; }
+  if (i < N) {
+    vexp = &vexp[i]; const int32_t* mexp = &vexp[N]; int32_t threadA = *mexp; 
+    for (int32_t j = 0; j < seg_m1; ++j) { mexp += N; threadA = min(threadA, *mexp); } *vexp = threadA;
   }
 }
 
@@ -78,7 +47,7 @@ template<class matrix_t> inline void vector_exponents_dispatcher(cudaStream_t st
   int64_t lda64 = int64_t(lda);
   if (batches <= 0 || u < 0) { vector_exponent_init_kernel <<< uint32_t(N + 127) >> 7, 128, 0, stream >>> (N, vexp); } else {
     vector_exponent_batch_kernel<512> <<< dim3(batches, N), 512, 0, stream >>> (segM, lastM, A, lda64, u, &vexp[N]);
-    vector_exponent_reduc_kernel <<< uint32_t(N + 127) >> 7, 128, 0, stream >>> (N, batches - 1, &vexp[N], vexp);
+    vector_exponent_reduc_kernel <<< uint32_t(N + 127) >> 7, 128, 0, stream >>> (N, batches - 1, vexp);
   }
 }
 
@@ -96,35 +65,13 @@ extern "C" void hyacinXquantizeScaleBatch(const hyacinHandle_t* handle, int32_t 
   }
 }
 
-template<class matrix_t>
-inline void vector_range_dispatcher(cudaStream_t stream, int32_t M, int32_t N, const matrix_t* A, int32_t lda, int32_t* u, const int32_t* vexp, int32_t* vbuf) {
-  constexpr int32_t block_threads = 512, grid_blocks = 512;
-  int32_t device_sms = *u, maxBlocksPerSM = 0; int64_t lda64 = int64_t(lda);
-  cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, vector_range_kernel<block_threads, matrix_t>, block_threads, 0);
-  
-  int32_t grid = std::min(grid_blocks, std::min(N, device_sms * maxBlocksPerSM));
-  void* kernelArgs[]{ &M, &N, &A, &lda64, &vexp, &vbuf, &u };
-  cudaLaunchCooperativeKernel(vector_range_kernel<block_threads, matrix_t>, grid, block_threads, kernelArgs, 0, stream);
+template <int32_t BLOCK_THREADS> __global__ void vector_range_batch_kernel(int32_t N, int32_t u, const int32_t* __restrict__ vexp, int32_t* __restrict__ segU) {
+  __shared__ typename cub::BlockReduce<int32_t, BLOCK_THREADS>::TempStorage temp_reduce;
+  _max cmp; int32_t threadA = int_min; const int32_t* mexp = &vexp[(int64_t(1) + int64_t(blockIdx.x)) * int64_t(N)]; segU = &segU[blockIdx.x];
+  for (int32_t i = int32_t(threadIdx.x); i < N; i += BLOCK_THREADS) { int32_t e = mexp[i]; if (e < int_max) { threadA = cmp(threadA, vexp[i] - e); }}
+  threadA = cub::BlockReduce<int32_t, BLOCK_THREADS>(temp_reduce).Reduce(threadA, cmp);
+  if (threadIdx.x == 0) { *segU = threadA == int_min ? int_min : (u + threadA); }
 }
 
-namespace internal::int8 {
-
-  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const double* A, int32_t lda, int32_t* u, const int32_t* vexp, int32_t* vbuf)
-  { vector_range_dispatcher(stream, M, N, A, lda, u, vexp, vbuf); }
-
-  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const float* A, int32_t lda, int32_t* u, const int32_t* vexp, int32_t* vbuf)
-  { vector_range_dispatcher(stream, M, N, A, lda, u, vexp, vbuf); }
-
-  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const __half* A, int32_t lda, int32_t* u, const int32_t* vexp, int32_t* vbuf)
-  { vector_range_dispatcher(stream, M, N, A, lda, u, vexp, vbuf); }
-
-  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const cuDoubleComplex* A, int32_t lda, int32_t* u, const int32_t* vexp, int32_t* vbuf)
-  { vector_range_dispatcher(stream, M, N, A, lda, u, vexp, vbuf); }
-
-  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const cuComplex* A, int32_t lda, int32_t* u, const int32_t* vexp, int32_t* vbuf)
-  { vector_range_dispatcher(stream, M, N, A, lda, u, vexp, vbuf); }
-
-  void vector_range(cudaStream_t stream, int32_t M, int32_t N, const __half2* A, int32_t lda, int32_t* u, const int32_t* vexp, int32_t* vbuf)
-  { vector_range_dispatcher(stream, M, N, A, lda, u, vexp, vbuf); }
-
-};
+void internal::int8::vector_range(cudaStream_t stream, int32_t batches, int32_t N, int32_t u, const int32_t* vexp, int32_t* segU)
+{ vector_range_batch_kernel<512> <<< batches, 512, 0, stream >>> (N, u, vexp, segU); }

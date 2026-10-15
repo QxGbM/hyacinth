@@ -288,8 +288,7 @@ inline int32_t potrfp_dispatcher(cudaStream_t stream, char fillmode, double epi,
   else if (fillmode == 'L' || fillmode == 'l')
     matrix_fill_upper_to_full<'L', real_t> <<< dim3(uint32_t(N + 511) >> 9, uint32_t(N)), 512, 0, stream >>> (A, lda);
 
-  K = (K == N) ? 1 : (N - K); p = std::max(0, p); epi = std::min(1., std::max(0., std::abs(epi)));
-  real_t epi_f;
+  real_t epi_f; K = (K == N) ? 1 : (N - K); p = std::max(0, p);
   if constexpr(std::is_same_v<real_t, double>) { epi_f = epi; } else
   if constexpr(std::is_same_v<real_t, float>) { epi_f = float(epi); } else
   if constexpr(std::is_same_v<real_t, double2>) { epi_f = make_double2(epi, 0.); } else

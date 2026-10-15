@@ -90,7 +90,7 @@ inline int32_t tsvd(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t c
         throw std::runtime_error("Workspace allocation failed at GESVDJ.");
 
       gesvdjInfo_t gesvdj_params = nullptr; cusolverDnCreateGesvdjInfo(&gesvdj_params);
-      cusolverDnXgesvdjSetTolerance(gesvdj_params, std::min(1., std::max(double(std::numeric_limits<real_t>::epsilon()), std::abs(epi))));
+      cusolverDnXgesvdjSetTolerance(gesvdj_params, std::max(double(std::numeric_limits<real_t>::epsilon()), epi));
       cusolverDnXgesvdjSetMaxSweeps(gesvdj_params, sweeps);
       int32_t lwork = 0; Xgesvj_bufferSize(cusolverH, econ, N, rank, A, N, sigma, U, N, V, rank, &lwork, gesvdj_params);
       matrix_t* workspaceOnDevice = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&workspaceOnDevice, uint64_t(lwork) * uint64_t(sizeof(matrix_t)), mempool, stream))
@@ -115,7 +115,7 @@ inline int32_t tsvd(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t c
 }
 
 extern "C" int32_t hyacinXGevd(const hyacinHandle_t* handle, char fillmode, double epi, int32_t econX, int32_t N, int32_t K, hyacinPrecision_t Atype, void* X, int32_t ldx, void* S, hyacinPrecision_t Gtype, void* G, int32_t ldg) {
-  if (N <= 0) { return 0; } K = K <= 0 ? N : std::min(N, K); econX = econX == 0 ? 0 : 1;
+  if (N <= 0) { return 0; } K = K <= 0 ? N : std::min(N, K); econX = econX == 0 ? 0 : 1; epi = std::min(1., std::abs(epi));
   cudaStream_t stream = handle->cudaStream; Timer::register_replicate_kernel(stream, handle->timer);
   cudaMemPool_t mempool = handle->mempool; cublasHandle_t cublasH = handle->cublasHandle; cusolverDnHandle_t cusolverH = handle->cusolverHandle;
   int32_t *r_ptr = (int32_t*)handle->pinnedWorkspace, sweeps = handle->JacobiSVDSweeps, oversampling = handle->RankOversampling; *r_ptr = handle->DeviceSMs;
