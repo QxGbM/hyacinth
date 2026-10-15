@@ -66,11 +66,11 @@ template <class matrix_t> inline void gather(cudaStream_t stream, cudaMemPool_t 
       throw std::runtime_error("Workspace allocation failed at transforming A.");
     for (int32_t i = 0; i < M; i += rows) {
       int32_t m = std::min(M - i, rows), ld = std::min((m + 63) & (~63), rows);
-      gather_cpy_kernel <<< dim3(uint32_t((uint64_t(m) + uint64_t(511)) >> 9), uint32_t(K)), 512, 0, stream >>> (int64_t(m), jpiv, Ain, int64_t(lda_in), dev_work, int64_t(ld));
+      gather_cpy_kernel <<< dim3(uint32_t(M + 511) >> 9, uint32_t(K)), 512, 0, stream >>> (int64_t(m), jpiv, Ain, int64_t(lda_in), dev_work, int64_t(ld));
       internal::scatter_matcopy(stream, handle, 'A', m, K, dev_work, ld, &Aout[i], lda_out);
     }
     cudaFreeAsync(dev_work, stream);
-  } else { gather_cpy_kernel <<< dim3(uint32_t((uint64_t(M) + uint64_t(511)) >> 9), uint32_t(K)), 512, 0, stream >>> (int64_t(M), jpiv, Ain, int64_t(lda_in), Aout, int64_t(lda_out)); }
+  } else { gather_cpy_kernel <<< dim3(uint32_t(M + 511) >> 9, uint32_t(K)), 512, 0, stream >>> (int64_t(M), jpiv, Ain, int64_t(lda_in), Aout, int64_t(lda_out)); }
 }
 
 extern "C" void hyacinXtransform(const hyacinHandle_t* handle, int32_t M, int32_t N, int32_t K, hyacinPrecision_t Atype, const void* Ain, int32_t lda_in, void* Aout, int32_t lda_out, char Xtype, const void* X, int32_t ldx) {

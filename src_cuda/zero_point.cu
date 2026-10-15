@@ -25,8 +25,7 @@ template <int32_t orderIn, int32_t ORDER> __device__ __forceinline__ void add_i(
   if constexpr(2 < orderIn) { device::add_shifted<126>(i, int64_t(*(in += stride))); }
 }
 
-template <int32_t ORDER>
-__device__ __forceinline__ void cross_sum(uint64_t (&rl)[ORDER], uint64_t (&im)[ORDER]) {
+template <int32_t ORDER> __device__ __forceinline__ void cross_sum(uint64_t (&rl)[ORDER], uint64_t (&im)[ORDER]) {
   uint64_t t[ORDER]{};
   if constexpr(0 < ORDER) { device::add_shifted<0>(t, -int64_t(im[0])); }
   if constexpr(1 < ORDER) { device::add_shifted<63>(t, -int64_t(im[1])); }
