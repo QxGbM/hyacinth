@@ -7,26 +7,6 @@
 #include <algorithm>
 #include <stdexcept>
 
-template <int32_t BLOCK_THREADS, class real_t, class Stype>
-__global__ void find_srank_kernel(double epi, int32_t K, const real_t* __restrict__ X, Stype* __restrict__ reX, int32_t* __restrict__ rank) {
-  __shared__ double s0; __shared__ typename cub::BlockReduce<int32_t, BLOCK_THREADS>::TempStorage temp_reduce;
-  if (threadIdx.x == 0) { s0 = epi * double(X[0]); }
-  cooperative_groups::this_thread_block().sync();
-
-  int32_t thread_x = 0;
-  for (int32_t i = int32_t(threadIdx.x); i < K; i += BLOCK_THREADS) {
-    real_t x = X[i]; bool pred = s0 <= double(x); thread_x += int32_t(pred);
-    if (pred) {
-      if constexpr(std::is_same_v<Stype, real_t>) { reX[i] = x; } else
-      if constexpr(std::is_same_v<Stype, __half> && std::is_same_v<real_t, double>) { reX[i] = __double2half(x); } else
-      if constexpr(std::is_same_v<Stype, __half> && std::is_same_v<real_t, float>) { reX[i] = __float2half(x); } else
-      { reX[i] = Stype(x); }
-    }
-  }
-  thread_x = cub::BlockReduce<int32_t, BLOCK_THREADS>(temp_reduce).Sum(thread_x);
-  if (threadIdx.x == 0) { *rank = thread_x; }
-}
-
 inline cusolverStatus_t Xgesvj_bufferSize(cusolverDnHandle_t handle, int32_t econ, int32_t m, int32_t n, const double* A, int32_t lda, const double* S, const double* U, int32_t ldu, const double* V, int32_t ldv, int32_t* lwork, gesvdjInfo_t params)
 { return cusolverDnDgesvdj_bufferSize(handle, CUSOLVER_EIG_MODE_VECTOR, econ, m, n, A, lda, S, U, ldu, V, ldv, lwork, params); }
 inline cusolverStatus_t Xgesvj_bufferSize(cusolverDnHandle_t handle, int32_t econ, int32_t m, int32_t n, const float* A, int32_t lda, const float* S, const float* U, int32_t ldu, const float* V, int32_t ldv, int32_t* lwork, gesvdjInfo_t params)
@@ -59,6 +39,33 @@ inline cusolverStatus_t Xgesvd(cusolverDnHandle_t handle, int32_t econ, int32_t 
 { return cusolverDnZgesvd(handle, econ ? 'S' : 'A', 'N', m, n, A, lda, S, U, ldu, nullptr, n, work, lwork, rwork, nullptr); }
 inline cusolverStatus_t Xgesvd(cusolverDnHandle_t handle, int32_t econ, int32_t m, int32_t n, cuComplex* A, int32_t lda, float* S, cuComplex* U, int32_t ldu, cuComplex* work, int32_t lwork, float* rwork)
 { return cusolverDnCgesvd(handle, econ ? 'S' : 'A', 'N', m, n, A, lda, S, U, ldu, nullptr, n, work, lwork, rwork, nullptr); }
+
+template <int32_t BLOCK_THREADS, class real_t, class Stype>
+__global__ void find_srank_kernel(double epi_sq, int32_t K, const real_t* __restrict__ sigma, Stype* __restrict__ sigma_s, int32_t* __restrict__ rank, double* __restrict__ dnrm) {
+  __shared__ typename cub::BlockScan<double, BLOCK_THREADS>::TempStorage temp_scan;
+  constexpr int32_t BLOCK_THREADS_M1 = BLOCK_THREADS - 1;
+  double sum = 0.; int32_t Kp = (K + BLOCK_THREADS_M1) & (~BLOCK_THREADS_M1);
+  for (int32_t i = int32_t(threadIdx.x); i < Kp; i += BLOCK_THREADS) {
+    int32_t rev_i = K - i - 1; double x = i < K ? double(sigma[rev_i]) : 0., thread_data = (threadIdx.x == 0) ? fma(x, x, sum) : (x * x);
+    cub::BlockScan<double, BLOCK_THREADS>(temp_scan).InclusiveSum(thread_data, thread_data, sum);
+    if (i < K) { dnrm[rev_i] = thread_data; }
+    cooperative_groups::this_thread_block().sync();
+  }
+
+  __shared__ typename cub::BlockReduce<int32_t, BLOCK_THREADS>::TempStorage temp_reduce;
+  int32_t thread_cnt = 0; sum *= epi_sq; bool epi_zero = epi == 0.;
+  for (int32_t i = int32_t(threadIdx.x); i < K; i += BLOCK_THREADS) {
+    bool pred = epi_zero || sum < dnrm[i]; thread_cnt += int32_t(pred);
+    if (pred) {
+      if constexpr(std::is_same_v<Stype, real_t>) { sigma_s[i] = sigma[i]; } else
+      if constexpr(std::is_same_v<Stype, __half> && std::is_same_v<real_t, double>) { sigma_s[i] = __double2half(sigma[i]); } else
+      if constexpr(std::is_same_v<Stype, __half> && std::is_same_v<real_t, float>) { sigma_s[i] = __float2half(sigma[i]); } else
+      { sigma_s[i] = Stype(sigma[i]); }
+    }
+  }
+  thread_cnt = cub::BlockReduce<int32_t, BLOCK_THREADS>(temp_reduce).Sum(thread_cnt);
+  if (threadIdx.x == 0) { *rank = thread_cnt; }
+}
 
 template <class Rtype, class Xtype, class Stype, class Gtype>
 inline int32_t tsvd(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, char fillmode, double epi, int32_t econ, int32_t sweeps, int32_t N, int32_t K, int32_t p, Xtype* X, int32_t ldx, Stype* S, Gtype* G, int32_t ldg, int32_t* r_ptr) {
@@ -107,8 +114,10 @@ inline int32_t tsvd(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t c
       cudaFreeAsync(workspaceOnDevice, stream);
     }
 
-    cudaFreeAsync(A, stream); find_srank_kernel<512> <<< 1, 512, 0, stream >>> (epi, rank, sigma, S, r_ptr); cudaStreamSynchronize(stream);
-    rank = std::min(rank, *r_ptr); cudaFreeAsync(sigma, stream);
+    double* dnrm = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&dnrm, uint64_t(rank) * uint64_t(sizeof(double)), mempool, stream))
+      throw std::runtime_error("Workspace allocation failed at GESVD.");
+    cudaFreeAsync(A, stream); find_srank_kernel<512> <<< 1, 512, 0, stream >>> (std::pow(epi, 2), rank, sigma, S, r_ptr, dnrm); cudaStreamSynchronize(stream);
+    rank = std::min(rank, *r_ptr); cudaFreeAsync(sigma, stream); cudaFreeAsync(dnrm, stream);
     internal::scatter_matcopy(stream, cublasH, 'A', N, econ ? rank : N, U, N, X, ldx); cudaFreeAsync(U, stream); 
   } else { cudaFreeAsync(jpiv, stream); }
   return rank;
