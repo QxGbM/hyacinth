@@ -245,7 +245,7 @@ template <class matrix_t> inline void herk_batch_dispatcher(const hyacinHandle_t
   cudaStream_t stream = handle->cudaStream; cudaMemPool_t mempool = handle->mempool; cublasHandle_t cublasH = handle->cublasHandle; 
   int32_t* segU = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&segU, uint64_t(sizeof(int32_t)) * uint64_t(batches), mempool, stream))
     throw std::runtime_error("Workspace (Batch Vector) allocation failed at Integer SY/HERK");
-  internal::int8::vector_range(stream, batches, N, u, vexp, segU); 
+  internal::int8::vector_range(stream, batches, N, u + Complex, vexp, segU); 
 
   int32_t u_floor = Complex, u_ceil = Complex + u, M = (batches - 1) * segM + lastM; std::vector<std::pair<int32_t, int32_t>> limb_batches;
   while (u_floor <= u_ceil) {
@@ -257,12 +257,14 @@ template <class matrix_t> inline void herk_batch_dispatcher(const hyacinHandle_t
 
   std::vector<int32_t> batchRows(int32_t(limb_batches.size()) + 1, 0);
   for (int32_t i = 0; i < batches; ++i) {
-    int32_t uc = segmentsU[i] + Complex; if (0 <= uc) {
+    int32_t uc = segmentsU[i]; if (0 <= uc) {
       int32_t idx = std::distance(limb_batches.begin(), std::find_if(limb_batches.begin(), limb_batches.end(), [=](const auto& t) { return uc <= t.second; }));
       batchRows[idx] += (i + 1 == batches) ? lastM : segM; segmentsU[i] = idx;
     } else { segmentsU[i] = -1; }
   }
 
+  int32_t ceil_batch_rows = batchRows.back(); char algo = handle->GramMatrixAlgorithm;
+  std::pair<int32_t, int32_t> ceil_batch = internal::gram_algorithm(algo, ceil_batch_rows, u_ceil, Complex); if (algo == 'L') { limb_batches.emplace_back(ceil_batch); }
   int32_t algnN = (N + 63) & (~63), n_limb_batches = int32_t(limb_batches.size());
   for (int32_t b = 0; b < n_limb_batches; ++b) if (0 < batchRows[b]) {
     int32_t orderA = limb_batches[b].first, algnM = (batchRows[b] + 255) & (~255);
@@ -283,8 +285,6 @@ template <class matrix_t> inline void herk_batch_dispatcher(const hyacinHandle_t
     cudaFreeAsync(W, stream);
   }
 
-  int32_t ceil_batch_rows = batchRows[n_limb_batches]; char algo = handle->GramMatrixAlgorithm;
-  std::pair<int32_t, int32_t> ceil_batch = internal::gram_algorithm(algo, ceil_batch_rows, u_ceil, Complex);
   if (algo == 'C' && 0 < ceil_batch_rows) {
     int32_t orderA = ceil_batch.first, algnM = ceil_batch.second;
     uint64_t strideA = uint64_t(algnM) * uint64_t(N) * uint64_t(orderA), a_len = uint64_t(algnM) * uint64_t(algnN - N);
@@ -292,7 +292,7 @@ template <class matrix_t> inline void herk_batch_dispatcher(const hyacinHandle_t
     int8_t* W = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&W, a_len, mempool, stream))
       throw std::runtime_error("Workspace (i8) allocation failed at Integer SY/HERK");
 
-    int32_t rowsW = 0, i = 0;
+    int32_t rowsW = 0, i = 0; 
     while (i < batches && segmentsU[i] != n_limb_batches) { ++i; }
     while (i < batches) {
       int32_t i_end = i; while (i_end < batches && segmentsU[i_end] == n_limb_batches) { ++i_end; }
