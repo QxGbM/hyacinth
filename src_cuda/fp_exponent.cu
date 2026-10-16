@@ -32,7 +32,7 @@ template <int32_t BLOCK_THREADS, class matrix_t> __global__ void vector_exponent
   for (int32_t i = int32_t(threadIdx.x); i < M; i += BLOCK_THREADS)
   { if constexpr(Complex) { matrix_t Aij = A[i]; reduc_t r = _abs(Aij.x), i = _abs(Aij.y); threadA = cmp(threadA, cmp(r, i)); } else { reduc_t a = _abs(A[i]); threadA = cmp(threadA, a); }}
   threadA = cub::BlockReduce<reduc_t, BLOCK_THREADS>(temp_reduce).Reduce(threadA, cmp);
-  if (threadIdx.x == 0) { int32_t e = float_frexp(threadA); *mexp = (e == int_max) ? int_max : (u - e); }
+  if (int32_t(threadIdx.x) == 0) { int32_t e = float_frexp(threadA); *mexp = (e == int_max) ? int_max : (u - e); }
 }
 
 __global__ void vector_exponent_reduc_kernel(int32_t N, int32_t seg_m1, int32_t* __restrict__ vexp) {
@@ -70,7 +70,7 @@ template <int32_t BLOCK_THREADS> __global__ void vector_range_batch_kernel(int32
   _max cmp; int32_t threadA = int_min; const int32_t* mexp = &vexp[(int64_t(1) + int64_t(blockIdx.x)) * int64_t(N)]; segU = &segU[blockIdx.x];
   for (int32_t i = int32_t(threadIdx.x); i < N; i += BLOCK_THREADS) { int32_t e = mexp[i]; if (e < int_max) { threadA = cmp(threadA, vexp[i] - e); }}
   threadA = cub::BlockReduce<int32_t, BLOCK_THREADS>(temp_reduce).Reduce(threadA, cmp);
-  if (threadIdx.x == 0) { *segU = threadA == int_min ? int_min : (u + threadA); }
+  if (int32_t(threadIdx.x) == 0) { *segU = threadA == int_min ? int_min : (u + threadA); }
 }
 
 void internal::int8::vector_range(cudaStream_t stream, int32_t batches, int32_t N, int32_t u, const int32_t* vexp, int32_t* segU)

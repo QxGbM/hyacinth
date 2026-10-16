@@ -8,40 +8,20 @@
 #include <algorithm>
 #include <stdexcept>
 
-const int32_t u_practical_limit = 80; // u <= 80 to satisfy implementation assumptions
-const int32_t StridedSyrkIncrementN = 512;
-const cublasGemmAlgo_t cublas_algo = CUBLAS_GEMM_DEFAULT;
-
-// mappings vector for datatypes
-const std::vector<hyacinPrecision_t> real_type
-({ HYACIN_F64, HYACIN_F64, HYACIN_F32, HYACIN_F32, HYACIN_F16, HYACIN_F16, HYACIN_DD, HYACIN_DD, HYACIN_TF, HYACIN_TF, HYACIN_QF, HYACIN_QF });
-const std::vector<hyacinPrecision_t> complex_type
-({ HYACIN_F64_COMPLEX, HYACIN_F64_COMPLEX, HYACIN_F32_COMPLEX, HYACIN_F32_COMPLEX, HYACIN_F16_COMPLEX, HYACIN_F16_COMPLEX, HYACIN_DD_COMPLEX, HYACIN_DD_COMPLEX, HYACIN_TF_COMPLEX, HYACIN_TF_COMPLEX, HYACIN_QF_COMPLEX, HYACIN_QF_COMPLEX });
-const std::vector<int32_t> type_bytes
-({ sizeof(double), sizeof(cuDoubleComplex), sizeof(float), sizeof(cuComplex), sizeof(__half), sizeof(__half2), sizeof(double2), sizeof(complex_double2), sizeof(float3), sizeof(complex_float3), sizeof(float4), sizeof(complex_float4) });
-const std::vector<int32_t> type_mantissa
-({ 52, 52, 23, 23, 10, 10, 105, 105, 71, 71, 95, 95 });
-
-extern "C" void hyacinXherkBatchInit(const hyacinHandle_t* handle, double epi, uint64_t M, int32_t N, hyacinPrecision_t Atype, int32_t* uA, int32_t* cPanels, int32_t* lPanels, uint64_t* stride, hyacinPrecision_t* Gtype, int32_t* gElemBytes) {
+extern "C" void hyacinXherkBatchInit(const hyacinHandle_t* handle, double epi, uint64_t M, int32_t N, hyacinPrecision_t Atype, int32_t* uA, int32_t* cPanels, int32_t* lPanels, uint64_t* stride) {
   if (stride) { uint64_t N64 = uint64_t(std::max(0, N)); *stride = (N64 * N64 + N64) >> 1; }
-  hyacinPrecision_t AtypeReal = real_type[int32_t(Atype)];
-  if (uint64_t(1) < M) { --M; M |= M >> 1; M |= M >> 2; M |= M >> 4; M |= M >> 8; M |= M >> 16; M |= M >> 32; ++M; } else { M = uint64_t(1); }
-  int32_t exp_epi; double bitsM = std::log2(double(M)), frac = std::frexp(std::abs(epi), &exp_epi);
-  int32_t u = std::clamp(int32_t(frac == 0.5) - exp_epi, 0, type_mantissa[int32_t(Atype)]);
   if (uA != nullptr || cPanels != nullptr || lPanels != nullptr) {
+    constexpr hyacinPrecision_t real_type[]{ HYACIN_F64, HYACIN_F64, HYACIN_F32, HYACIN_F32, HYACIN_F16, HYACIN_F16, HYACIN_DD, HYACIN_DD, HYACIN_TF, HYACIN_TF, HYACIN_QF, HYACIN_QF };
+    constexpr int32_t type_mantissa[]{ 52, 52, 23, 23, 10, 10, 105, 105, 71, 71, 95, 95 };
+    constexpr int32_t u_practical_limit = 80; // u <= 80 to satisfy implementation assumptions
+
+    hyacinPrecision_t AtypeReal = real_type[int32_t(Atype)];
+    if (uint64_t(1) < M) { --M; M |= M >> 1; M |= M >> 2; M |= M >> 4; M |= M >> 8; M |= M >> 16; M |= M >> 32; ++M; } else { M = uint64_t(1); }
+    int32_t exp_epi; double bitsM = std::log2(double(M)), frac = std::frexp(std::abs(epi), &exp_epi);
+    int32_t u = std::clamp(int32_t(frac == 0.5) - exp_epi, 0, type_mantissa[int32_t(Atype)]);
     int32_t Complex = int32_t(Atype != AtypeReal), u_corr = std::max(-1, std::min(u_practical_limit, handle->QuantizeBitCorrection + u));
     if (uA) { *uA = u_corr; } if (cPanels) { *cPanels = 1 + Complex; }
     if (lPanels) { *lPanels = (0 <= u_corr) ? (((Complex + 63 + u_corr + u_corr) + int32_t(std::ceil(bitsM))) / 63) : 0; if (4 <= *lPanels) { throw std::runtime_error("i64-limb (g.e. 4) not supported"); }}
-  }
-  if (Gtype != nullptr || gElemBytes != nullptr) {
-    int32_t bits = (handle->GramBitCorrection + 1) + int32_t(std::floor(0.25 * bitsM)) + (u + u);
-    hyacinPrecision_t GtypeReal = 
-      bits <= type_mantissa[int32_t(HYACIN_F32)] ? HYACIN_F32 : (
-      (AtypeReal == HYACIN_F16 || bits <= type_mantissa[int32_t(HYACIN_F64)]) ? HYACIN_F64 : (
-      bits <= type_mantissa[int32_t(HYACIN_TF)] ? HYACIN_TF : (
-      (bits <= type_mantissa[int32_t(HYACIN_QF)] && (!handle->DeviceIsF64Capable)) ? HYACIN_QF : HYACIN_DD)));
-    hyacinPrecision_t g = (Atype == AtypeReal) ? GtypeReal : complex_type[int32_t(GtypeReal)];
-    if (Gtype) { *Gtype = g; } if (gElemBytes) { *gElemBytes = type_bytes[g]; }
   }
 }
 
@@ -50,7 +30,7 @@ inline void gemm_accum(cudaStream_t stream, cublasHandle_t handle, int32_t M, in
   const int32_t zero = 0, one = 1;
   if (K <= iter_k) {
     cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N * orderA, K, &one, AT, CUDA_R_8I, lda, A, CUDA_R_8I, lda,
-      &zero, W, CUDA_R_32I, M, CUBLAS_COMPUTE_32I, cublas_algo);
+      &zero, W, CUDA_R_32I, M, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
     internal::int8::accumulate_i32tensor(stream, 'A', beta, N, sft, orderA, W, M, orderC, C);
   } else {
     int32_t rem_k = K % iter_k; rem_k = rem_k < iter_h ? (rem_k + iter_k) : rem_k;
@@ -59,38 +39,38 @@ inline void gemm_accum(cudaStream_t stream, cublasHandle_t handle, int32_t M, in
     for (int32_t k = 0; k < range_k; k += iter_k) {
       const int8_t* AT_k = &AT[k], *AN_k = &A[k];
       cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N * orderA, iter_k, &one, AT_k, CUDA_R_8I, lda, AN_k, CUDA_R_8I, lda,
-        &zero, W, CUDA_R_32I, M, CUBLAS_COMPUTE_32I, cublas_algo);
+        &zero, W, CUDA_R_32I, M, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
       internal::int8::accumulate_i32tensor(stream, 'A', k == 0 ? beta : 1, N, sft, orderA, W, M, orderC, C);
     }
 
     const int8_t* AT_k = &AT[range_k], *AN_k = &A[range_k];
     if (rem_k <= iter_k) {
       cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N * orderA, rem_k, &one, AT_k, CUDA_R_8I, lda, AN_k, CUDA_R_8I, lda,
-        &zero, W, CUDA_R_32I, M, CUBLAS_COMPUTE_32I, cublas_algo);
+        &zero, W, CUDA_R_32I, M, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
       internal::int8::accumulate_i32tensor(stream, 'A', range_k == 0 ? beta : 1, N, sft, orderA, W, M, orderC, C);
     } else {
       cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N * orderA, iter_h, &one, AT_k, CUDA_R_8I, lda, AN_k, CUDA_R_8I, lda,
-        &zero, W, CUDA_R_32I, M, CUBLAS_COMPUTE_32I, cublas_algo);
+        &zero, W, CUDA_R_32I, M, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
       internal::int8::accumulate_i32tensor(stream, 'A', range_k == 0 ? beta : 1, N, sft, orderA, W, M, orderC, C);
       cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N * orderA, rem_k - iter_h, &one, &AT_k[iter_h], CUDA_R_8I, lda, &AN_k[iter_h], CUDA_R_8I, lda,
-        &zero, W, CUDA_R_32I, M, CUBLAS_COMPUTE_32I, cublas_algo);
+        &zero, W, CUDA_R_32I, M, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
       internal::int8::accumulate_i32tensor(stream, 'A', 1, N, sft, orderA, W, M, orderC, C);
     }
   }
 }
 
 template <char upperMode> inline void IgemmStridedBatched(cublasHandle_t handle, int32_t M, int32_t N, int32_t K, const int8_t* A, int32_t lda, int64_t strideA, int32_t* C, int32_t ldc, int64_t strideC, int32_t nbatches) {
-  const int32_t one = 1, zero = 0;
+  constexpr int32_t StridedSyrkIncrementN = 512; const int32_t one = 1, zero = 0;
   if constexpr(upperMode == 'U' && 64 <= StridedSyrkIncrementN) {
     int32_t iterN = N % StridedSyrkIncrementN, iterM = iterN + (M - N);
-    if (iterN) { cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, iterM, iterN, K, &one, A, CUDA_R_8I, lda, strideA, A, CUDA_R_8I, lda, strideA, &zero, C, CUDA_R_32I, ldc, strideC, nbatches, CUBLAS_COMPUTE_32I, cublas_algo); }
+    if (iterN) { cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, iterM, iterN, K, &one, A, CUDA_R_8I, lda, strideA, A, CUDA_R_8I, lda, strideA, &zero, C, CUDA_R_32I, ldc, strideC, nbatches, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT); }
     while(iterN < N) {
       const int8_t* A_iter = &A[int64_t(iterN) * int64_t(lda)]; int32_t* C_iter = &C[int64_t(iterN) * int64_t(ldc)]; iterN += StridedSyrkIncrementN;
       cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, iterM += StridedSyrkIncrementN, StridedSyrkIncrementN, K,
-        &one, A, CUDA_R_8I, lda, strideA, A_iter, CUDA_R_8I, lda, strideA, &zero, C_iter, CUDA_R_32I, ldc, strideC, nbatches, CUBLAS_COMPUTE_32I, cublas_algo);
+        &one, A, CUDA_R_8I, lda, strideA, A_iter, CUDA_R_8I, lda, strideA, &zero, C_iter, CUDA_R_32I, ldc, strideC, nbatches, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
   }} else {
     const int8_t* AN; if constexpr(upperMode == 'U') { AN = A; } else { AN = &A[int64_t(N) * int64_t(lda)]; }
-    cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, K, &one, A, CUDA_R_8I, lda, strideA, AN, CUDA_R_8I, lda, strideA, &zero, C, CUDA_R_32I, ldc, strideC, nbatches, CUBLAS_COMPUTE_32I, cublas_algo);
+    cublasGemmStridedBatchedEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, K, &one, A, CUDA_R_8I, lda, strideA, AN, CUDA_R_8I, lda, strideA, &zero, C, CUDA_R_32I, ldc, strideC, nbatches, CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT);
   }
 }
 

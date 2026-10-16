@@ -72,9 +72,7 @@ void hyacinXherkBatchInit(
   int32_t* uA, // host-pointer
   int32_t* cPanels, // host-pointer
   int32_t* lPanels, // host-pointer
-  uint64_t* stride, // host-pointer
-  hyacinPrecision_t* Gtype, // host-pointer
-  int32_t* gElemBytes // host-pointer
+  uint64_t* stride // host-pointer
 );
 
 void hyacinXherkBatch(
@@ -104,6 +102,17 @@ void hyacinXquantizeScaleBatch(
   int32_t lda,
   int32_t uA,
   int32_t* vexp // device-pointer
+);
+
+void hyacinXdequantizeInit(
+  const hyacinHandle_t* handle,
+  int32_t N,
+  int32_t orderC,
+  const uint64_t* C, // device-pointer
+  const int32_t* vexp, // device-pointer
+  hyacinPrecision_t Atype,
+  hyacinPrecision_t* Gtype, // host-pointer
+  int32_t* gElemBytes // host-pointer
 );
 
 void hyacinXdequantize(

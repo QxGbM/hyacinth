@@ -20,7 +20,7 @@ int32_t interp_dispatcher(const hyacinHandle_t* handle, double epi, int32_t M, i
   int32_t* vexp = nullptr, u, cPanels, lPanels, gElemBytes; uint64_t strideC;
   if (cudaSuccess != cudaMallocFromPoolAsync((void**)&vexp, uint64_t(batches + 1) * uint64_t(N) * sizeof(int32_t), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Exponent vector allocation failed");
-  hyacinXherkBatchInit(handle, epi, globalM, N, Atype, &u, &cPanels, &lPanels, &strideC, &Gtype, &gElemBytes);
+  hyacinXherkBatchInit(handle, epi, globalM, N, Atype, &u, &cPanels, &lPanels, &strideC);
   hyacinXquantizeScaleBatch(handle, batches, batchIter, lastM, N, Atype, A, lda, u, vexp);
   hyacinAllReduceVExp(handle, uint64_t(N), vexp);
 
@@ -29,6 +29,7 @@ int32_t interp_dispatcher(const hyacinHandle_t* handle, double epi, int32_t M, i
   hyacinXherkBatch(handle, batches, batchIter, lastM, N, Atype, A, lda, u, vexp, 0, lPanels, C);
   hyacinAllReduce1Drow(handle, cPanels, lPanels, strideC, C);
 
+  hyacinXdequantizeInit(handle, N, lPanels, C, vexp, Atype, &Gtype, &gElemBytes);
   void* G = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&G, uint64_t(N) * uint64_t(N) * uint64_t(gElemBytes), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Gram matrix allocation failed.");
   hyacinXdequantize(handle, N, lPanels, C, vexp, Gtype, G, N);
@@ -54,7 +55,7 @@ int32_t svd_dispatcher(const hyacinHandle_t* handle, double epi, int32_t econV, 
   int32_t* vexp = nullptr, u, cPanels, lPanels, gElemBytes; uint64_t strideC;
   if (cudaSuccess != cudaMallocFromPoolAsync((void**)&vexp, uint64_t(batches + 1) * uint64_t(N) * sizeof(int32_t), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Exponent vector allocation failed");
-  hyacinXherkBatchInit(handle, epi, globalM, N, Atype, &u, &cPanels, &lPanels, &strideC, &Gtype, &gElemBytes);
+  hyacinXherkBatchInit(handle, epi, globalM, N, Atype, &u, &cPanels, &lPanels, &strideC);
   hyacinXquantizeScaleBatch(handle, batches, batchIter, lastM, N, Atype, A, lda, u, vexp);
   hyacinAllReduceVExp(handle, uint64_t(N), vexp);
 
@@ -63,6 +64,7 @@ int32_t svd_dispatcher(const hyacinHandle_t* handle, double epi, int32_t econV, 
   hyacinXherkBatch(handle, batches, batchIter, lastM, N, Atype, A, lda, u, vexp, 0, lPanels, C);
   hyacinAllReduce1Drow(handle, cPanels, lPanels, strideC, C);
 
+  hyacinXdequantizeInit(handle, N, lPanels, C, vexp, Atype, &Gtype, &gElemBytes);
   void* G = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&G, uint64_t(N) * uint64_t(N) * uint64_t(gElemBytes), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Gram matrix allocation failed.");
   hyacinXdequantize(handle, N, lPanels, C, vexp, Gtype, G, N);

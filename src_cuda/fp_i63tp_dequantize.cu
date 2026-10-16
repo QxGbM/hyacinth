@@ -2,9 +2,58 @@
 #include <hyacin.h>
 #include <internal.hpp>
 #include <ext_arith.hpp>
+#include <cub/cub.cuh>
 #include <limits>
 
+template <int32_t orderA> __device__ __forceinline__ int32_t iexp(const uint64_t* A, int64_t strideA) {
+  int32_t e = 64 - int32_t(__clzll(*A));
+  if constexpr(1 < orderA) { int32_t e_nxt = 127 - int32_t(__clzll(*(A += strideA))); e = 63 < e_nxt ? e_nxt : e; }
+  if constexpr(2 < orderA) { int32_t e_nxt = 190 - int32_t(__clzll(*(A += strideA))); e = 126 < e_nxt ? e_nxt : e; }
+  return e;
+}
+
+constexpr int32_t int_min = std::numeric_limits<int32_t>::min();
 constexpr int32_t int_max = std::numeric_limits<int32_t>::max();
+struct _max {  __device__ __forceinline__ int2 operator()(int2 a, int2 b) { return a.x == b.x ? make_int2(a.x, max(a.y, b.y)) : (a.x < b.x ? b : a); }};
+template <int32_t BLOCK_THREADS, int32_t orderA> __global__ void gram_range_kernel(int32_t N, const uint64_t* __restrict__ A, int64_t strideA, const int32_t* __restrict__ vexp, int32_t* __restrict__ e) {
+  __shared__ typename cub::BlockReduce<int2, BLOCK_THREADS>::TempStorage temp_reduce;
+  int2 threadA = make_int2(int_min, 0); _max cmp;
+  for (int32_t i = int32_t(threadIdx.x); i < N; i+= BLOCK_THREADS) {
+    int32_t expA = vexp[i]; if (expA < int_max)
+    { int32_t eA = iexp<orderA>(&A[(uint64_t(i) * (uint64_t(i) + uint64_t(3))) >> 1], strideA); threadA = cmp(threadA, make_int2(eA - (expA + expA), eA)); }
+  }
+  threadA = cub::BlockReduce<int2, BLOCK_THREADS>(temp_reduce).Reduce(threadA, cmp);
+  if (int32_t(threadIdx.x) == 0) { *e = threadA.y; }
+}
+
+
+extern "C" void hyacinXdequantizeInit(const hyacinHandle_t* handle, int32_t N, int32_t orderC, const uint64_t* C, const int32_t* vexp, hyacinPrecision_t Atype, hyacinPrecision_t* Gtype, int32_t* gElemBytes) {
+  if (N <= 0 && (Gtype != nullptr || gElemBytes != nullptr)) { return; }
+  Timer::register_replicate_kernel(handle->cudaStream, handle->timer);
+  constexpr int32_t block_threads = 512;
+  int64_t strideC = (int64_t(N) * int64_t(N) + int64_t(N)) / int64_t(2); int32_t *e_ptr = (int32_t*)handle->pinnedWorkspace;
+  switch (orderC) {
+    case 1: gram_range_kernel<block_threads, 1> <<< 1, block_threads, 0, handle->cudaStream >>> (N, C, strideC, vexp, e_ptr); break;
+    case 2: gram_range_kernel<block_threads, 2> <<< 1, block_threads, 0, handle->cudaStream >>> (N, C, strideC, vexp, e_ptr); break;
+    case 3: gram_range_kernel<block_threads, 3> <<< 1, block_threads, 0, handle->cudaStream >>> (N, C, strideC, vexp, e_ptr); break;
+    default: break;
+  }
+  cudaStreamSynchronize(handle->cudaStream);
+  constexpr hyacinPrecision_t real_type[]{ HYACIN_F64, HYACIN_F64, HYACIN_F32, HYACIN_F32, HYACIN_F16, HYACIN_F16, HYACIN_DD, HYACIN_DD, HYACIN_TF, HYACIN_TF, HYACIN_QF, HYACIN_QF };
+  constexpr int32_t type_mantissa[]{ 52, 52, 23, 23, 10, 10, 105, 105, 71, 71, 95, 95 };
+  constexpr int32_t type_bytes[]{ sizeof(double), sizeof(cuDoubleComplex), sizeof(float), sizeof(cuComplex), sizeof(__half), sizeof(__half2),
+    sizeof(double2), sizeof(complex_double2), sizeof(float3), sizeof(complex_float3), sizeof(float4), sizeof(complex_float4) };
+
+  int32_t bits = *e_ptr + (handle->GramBitCorrection - handle->QuantizeBitCorrection - handle->QuantizeBitCorrection);
+  hyacinPrecision_t GtypeComplex = 
+    bits <= type_mantissa[int32_t(HYACIN_F32)] ? HYACIN_F32_COMPLEX : (
+    bits <= type_mantissa[int32_t(HYACIN_F64)] ? HYACIN_F64_COMPLEX : (
+    bits <= type_mantissa[int32_t(HYACIN_TF)] ? HYACIN_TF_COMPLEX : (
+    bits <= type_mantissa[int32_t(HYACIN_QF)] && (!handle->DeviceIsF64Capable) ? HYACIN_QF_COMPLEX : HYACIN_DD_COMPLEX)));
+  hyacinPrecision_t g = (Atype == real_type[int32_t(Atype)]) ? real_type[int32_t(GtypeComplex)] : GtypeComplex;
+  if (Gtype) { *Gtype = g; } if (gElemBytes) { *gElemBytes = type_bytes[g]; }
+}
+
 __device__ __forceinline__ double2 conv_i64_dd(uint64_t i) { return make_double2(scalbn(double(int32_t(i >> 32)), 32), double(uint32_t(i))); }
 template <int32_t orderA> __device__ __forceinline__ double conv_a63_f64(uint64_t const (&a)[orderA], int32_t e) {
   double res = double(int64_t(a[orderA - 1]));

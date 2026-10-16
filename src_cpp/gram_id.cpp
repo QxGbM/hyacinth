@@ -57,15 +57,21 @@ extern "C" int32_t hyacinXGinterp(const hyacinHandle_t* handle, char fillmode, d
     case HYACIN_DD: if (Atype == HYACIN_F64)
     { return interp<double2>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (double*)X, ldx, (double2*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F32)
-    { return interp<double2>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (float*)X, ldx, (double2*)G, ldg, r_ptr); } else { return 0; }
+    { return interp<double2>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (float*)X, ldx, (double2*)G, ldg, r_ptr); } else
+    if (Atype == HYACIN_F16)
+    { return interp<double2>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (__half*)X, ldx, (double2*)G, ldg, r_ptr); } else { return 0; }
     case HYACIN_TF: if (Atype == HYACIN_F64)
     { return interp<float3>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (double*)X, ldx, (float3*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F32)
-    { return interp<float3>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (float*)X, ldx, (float3*)G, ldg, r_ptr); } else { return 0; }
+    { return interp<float3>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (float*)X, ldx, (float3*)G, ldg, r_ptr); } else
+    if (Atype == HYACIN_F16)
+    { return interp<float3>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (__half*)X, ldx, (float3*)G, ldg, r_ptr); } else { return 0; }
     case HYACIN_QF: if (Atype == HYACIN_F64)
     { return interp<float4>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (double*)X, ldx, (float4*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F32)
-    { return interp<float4>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (float*)X, ldx, (float4*)G, ldg, r_ptr); } else { return 0; }
+    { return interp<float4>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (float*)X, ldx, (float4*)G, ldg, r_ptr); } else
+    if (Atype == HYACIN_F16)
+    { return interp<float4>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (__half*)X, ldx, (float4*)G, ldg, r_ptr); } else { return 0; }
     case HYACIN_F64_COMPLEX: if (Atype == HYACIN_F64_COMPLEX)
     { return interp<double>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (cuDoubleComplex*)X, ldx, (cuDoubleComplex*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F32_COMPLEX)
@@ -79,17 +85,23 @@ extern "C" int32_t hyacinXGinterp(const hyacinHandle_t* handle, char fillmode, d
     if (Atype == HYACIN_F16_COMPLEX)
     { return interp<float>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (__half2*)X, ldx, (cuComplex*)G, ldg, r_ptr); } else { return 0; }
     case HYACIN_DD_COMPLEX: if (Atype == HYACIN_F64_COMPLEX)
-    { return interp<double2>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (cuDoubleComplex*)X, ldx, (complex_double2*)G, ldg, r_ptr); }
+    { return interp<double2>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (cuDoubleComplex*)X, ldx, (complex_double2*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F32_COMPLEX)
-    { return interp<double2>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (cuComplex*)X, ldx, (complex_double2*)G, ldg, r_ptr); } else { return 0; }
+    { return interp<double2>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (cuComplex*)X, ldx, (complex_double2*)G, ldg, r_ptr); } else
+    if (Atype == HYACIN_F16_COMPLEX)
+    { return interp<double2>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (__half2*)X, ldx, (complex_double2*)G, ldg, r_ptr); } else { return 0; }
     case HYACIN_TF_COMPLEX: if (Atype == HYACIN_F64_COMPLEX)
     { return interp<float3>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (cuDoubleComplex*)X, ldx, (complex_float3*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F32_COMPLEX)
-    { return interp<float3>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (cuComplex*)X, ldx, (complex_float3*)G, ldg, r_ptr); } else { return 0; }
+    { return interp<float3>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (cuComplex*)X, ldx, (complex_float3*)G, ldg, r_ptr); } else
+    if (Atype == HYACIN_F16_COMPLEX)
+    { return interp<float3>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (__half2*)X, ldx, (complex_float3*)G, ldg, r_ptr); } else { return 0; }
     case HYACIN_QF_COMPLEX: if (Atype == HYACIN_F64_COMPLEX)
     { return interp<float4>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (cuDoubleComplex*)X, ldx, (complex_float4*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F32_COMPLEX)
-    { return interp<float4>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (cuComplex*)X, ldx, (complex_float4*)G, ldg, r_ptr); } else { return 0; }
+    { return interp<float4>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (cuComplex*)X, ldx, (complex_float4*)G, ldg, r_ptr); } else
+    if (Atype == HYACIN_F16_COMPLEX)
+    { return interp<float4>(stream, mempool, cublasH, fillmode, epi, N, K, oversampling, jpiv, (__half2*)X, ldx, (complex_float4*)G, ldg, r_ptr); } else { return 0; }
     default: return 0;
   }
 }
