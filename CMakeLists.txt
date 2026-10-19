@@ -10,12 +10,9 @@ project("hyacin" LANGUAGES CXX CUDA)
 find_package(CUDAToolkit REQUIRED)
 
 set(CPP_SOURCES
-  src_cpp/allgatherv_1dcol.cpp
   src_cpp/gram_id.cpp
   src_cpp/hyacin_herk.cpp
   src_cpp/lra.cpp
-  src_cpp/orth.cpp
-  src_cpp/preprocess.cpp
   src_cpp/utils.cpp
 )
 
@@ -30,7 +27,6 @@ set(CU_SOURCES
   src_cuda/matcopy.cu
   src_cuda/quantize_crt.cu
   src_cuda/quantize_limbs.cu
-  src_cuda/transform.cu
   src_cuda/zero_point.cu
 )
 

@@ -25,7 +25,7 @@ typedef struct {
   cublasHandle_t cublasHandle;
   cusolverDnHandle_t cusolverHandle;
   cudaMemPool_t mempool;
-  void* timer, **cublasWorkspace, *pinnedWorkspace;
+  void* timer, *pinnedWorkspace;
 #ifndef NO_NCCL
   ncclComm_t ncclComm;
 #endif
@@ -42,26 +42,6 @@ void hyacinCreate(
 void hyacinDestroy(
   hyacinHandle_t* handle
 );
-
-void hyacinSetcuBLASWorkspaceSize(
-  const hyacinHandle_t* handle,
-  uint64_t workBytes
-);
-
-void hyacinXpreprocess(
-  const hyacinHandle_t* handle,
-  char transpose,
-  int32_t M,
-  int32_t N,
-  int32_t Vcols,
-  hyacinPrecision_t Atype,
-  const void* A, // device-pointer
-  int32_t lda,
-  const void* V, // device-pointer
-  int32_t ldv,
-  void* B, // device-pointer
-  int32_t ldb
-); // B = op(A)*(I-vv^H)
 
 void hyacinXherkBatchInit(
   const hyacinHandle_t* handle,
@@ -130,7 +110,6 @@ int32_t hyacinXGevd(
   const hyacinHandle_t* handle,
   char fillmode,
   double epi,
-  int32_t econX,
   int32_t N,
   int32_t K,
   hyacinPrecision_t Atype,
@@ -157,35 +136,6 @@ int32_t hyacinXGinterp(
   int32_t ldg
 ); // returns rank
 
-void hyacinXtransform(
-  const hyacinHandle_t* handle,
-  int32_t M,
-  int32_t N,
-  int32_t K,
-  hyacinPrecision_t Atype,
-  const void* Ain, // device-pointer
-  int32_t lda_in,
-  void* Aout, // device-pointer
-  int32_t lda_out,
-  char Xtype,
-  const void* X, // device-pointer
-  int32_t ldx
-); // In-place mode: Ain == Aout && lda_in == lda_out; Gather mode: Xtype == 'I'/'J', Identity mode: N <= 0
-
-void hyacinXorth(
-  const hyacinHandle_t* handle,
-  int32_t M,
-  int32_t N,
-  int32_t K,
-  hyacinPrecision_t Atype,
-  const void* A, // device-pointer
-  int32_t lda,
-  void* Q, // device-pointer
-  int32_t ldq,
-  void* R, // device-pointer
-  int32_t ldr
-);
-
 void hyacinAllReduce1Drow(
   const hyacinHandle_t* handle,
   int32_t Complex,
@@ -199,15 +149,6 @@ void hyacinAllReduceVExp(
   uint64_t N,
   int32_t* vexp // device-pointer
 );
-
-int32_t hyacinXAllGatherV1Dcol(
-  const hyacinHandle_t* handle,
-  int32_t M,
-  int32_t* K, // host-pointer
-  hyacinPrecision_t Atype,
-  void* A, // device-pointer
-  int32_t lda
-); // returns local Koffset
 
 void hyacinSync_TimerSegments(
   const hyacinHandle_t* handle,
