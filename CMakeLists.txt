@@ -25,6 +25,7 @@ set(CU_SOURCES
   src_cuda/i32_accum.cu
   src_cuda/i32_rem_accum.cu
   src_cuda/matcopy.cu
+  src_cuda/matmul_fp16_complex.cu
   src_cuda/quantize_crt.cu
   src_cuda/quantize_limbs.cu
   src_cuda/zero_point.cu

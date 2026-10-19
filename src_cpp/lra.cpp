@@ -108,36 +108,7 @@ inline void an_gemm(const hyacinHandle_t* handle, char opA, int32_t M, int32_t N
   cublasGemmEx(handle->cublasHandle, opA == 'C' ? CUBLAS_OP_C : (opA == 'T' ? CUBLAS_OP_T : CUBLAS_OP_N), CUBLAS_OP_N, M, N, K, &one, A, CUDA_C_32F, lda, B, CUDA_C_32F, ldb, &zero, C, CUDA_C_32F, ldc, CUBLAS_COMPUTE_32F_EMULATED_16BFX9, CUBLAS_GEMM_DEFAULT);
 }
 inline void an_gemm(const hyacinHandle_t* handle, char opA, int32_t M, int32_t N, int32_t K, const __half2* A, int32_t lda, const __half2* B, int32_t ldb, __half2* C, int32_t ldc) {
-  cuComplex one = make_cuComplex(1.f, 0.f), zero = make_cuComplex(0.f, 0.f);
-  constexpr int32_t block = 4096; constexpr uint64_t bytes = uint64_t(block) * uint64_t(block) * uint64_t(sizeof(cuComplex));
-  cuComplex* matA = nullptr, *matB = nullptr, *matC = nullptr;
-  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&matA, bytes, handle->mempool, handle->cudaStream))
-    throw std::runtime_error("Workspace allocation failed at CF16 GEMM");
-  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&matB, bytes, handle->mempool, handle->cudaStream))
-    throw std::runtime_error("Workspace allocation failed at CF16 GEMM");
-  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&matC, bytes, handle->mempool, handle->cudaStream))
-    throw std::runtime_error("Workspace allocation failed at CF16 GEMM");
-  if (opA == 'C' || opA == 'T')
-    for (int32_t i = 0; i < M; i += block) { int32_t rows = std::min(M - i, block);
-      for (int32_t j = 0; j < N; j += block) { int32_t cols = std::min(N - j, block);
-        for (int32_t k = 0; k < K; k += block) { int32_t reduc = std::min(K - k, block);
-          internal::scatter_matcopy(handle->cudaStream, handle->cublasHandle, 'A', reduc, rows, &A[int64_t(k) + int64_t(i) * int64_t(lda)], lda, matA, block);
-          internal::scatter_matcopy(handle->cudaStream, handle->cublasHandle, 'A', reduc, cols, &B[int64_t(k) + int64_t(j) * int64_t(lda)], ldb, matB, block);
-          cublasGemmEx(handle->cublasHandle, opA == 'C' ? CUBLAS_OP_C : CUBLAS_OP_T, CUBLAS_OP_N, rows, cols, reduc, &one, matA, CUDA_C_32F, block, matB, CUDA_C_32F, block, k == 0 ? &zero : &one, matC, CUDA_C_32F, block, CUBLAS_COMPUTE_32F_FAST_16F, CUBLAS_GEMM_DEFAULT);
-        }
-        internal::scatter_matcopy(handle->cudaStream, handle->cublasHandle, 'A', rows, cols, matC, block, &C[int64_t(i) + int64_t(j) * int64_t(ldc)], ldc);
-      }
-    }
-  else for (int32_t i = 0; i < M; i += block) { int32_t rows = std::min(M - i, block);
-    for (int32_t j = 0; j < N; j += block) { int32_t cols = std::min(N - j, block);
-      for (int32_t k = 0; k < K; k += block) { int32_t reduc = std::min(K - k, block);
-        internal::scatter_matcopy(handle->cudaStream, handle->cublasHandle, 'A', rows, reduc, &A[int64_t(i) + int64_t(k) * int64_t(lda)], lda, matA, block);
-        internal::scatter_matcopy(handle->cudaStream, handle->cublasHandle, 'A', reduc, cols, &B[int64_t(k) + int64_t(j) * int64_t(lda)], ldb, matB, block);
-        cublasGemmEx(handle->cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, rows, cols, reduc, &one, matA, CUDA_C_32F, block, matB, CUDA_C_32F, block, k == 0 ? &zero : &one, matC, CUDA_C_32F, block, CUBLAS_COMPUTE_32F_FAST_16F, CUBLAS_GEMM_DEFAULT);
-      }
-      internal::scatter_matcopy(handle->cudaStream, handle->cublasHandle, 'A', rows, cols, matC, block, &C[int64_t(i) + int64_t(j) * int64_t(ldc)], ldc);
-    }
-  }
+  internal::matmul_cf16(handle->cudaStream, handle->cublasHandle, handle->mempool, opA, M, N, K, A, lda, B, ldb, C, ldc);
 }
 
 template <class T, class R> inline

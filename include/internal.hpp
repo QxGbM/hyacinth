@@ -92,6 +92,7 @@ namespace internal {
   void scatter_matcopy(cudaStream_t stream, cublasHandle_t handle, char mode, int32_t M, int32_t N, const complex_float4* A, int32_t lda, __half2* B, int32_t ldb, const int32_t* jpiv = nullptr);
 
   std::pair<int32_t, int32_t> gram_algorithm(char& alg, int32_t M, int32_t u, int32_t Complex);
+  void matmul_cf16(cudaStream_t stream, cublasHandle_t handle, cudaMemPool_t mempool, char opA, int32_t M, int32_t N, int32_t K, const __half2* A, int32_t lda, const __half2* B, int32_t ldb, __half2* C, int32_t ldc);
 
 };
 
