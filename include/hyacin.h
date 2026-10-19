@@ -19,7 +19,7 @@ typedef enum {
 
 typedef struct {
   char GramMatrixAlgorithm;
-  int32_t QuantizeBitCorrection, GramBitCorrection, JacobiSVDSweeps, RankOversampling;
+  int32_t QuantizeBitCorrection, GramBitCorrection, JacobiSVDSweeps;
   int32_t DeviceID, DeviceSMs, DeviceIsF64Capable;
   cudaStream_t cudaStream;
   cublasHandle_t cublasHandle;

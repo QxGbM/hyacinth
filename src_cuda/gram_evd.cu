@@ -68,7 +68,7 @@ __global__ void find_srank_kernel(double epi_sq, int32_t K, const real_t* __rest
 }
 
 template <class Rtype, class Xtype, class Stype, class Gtype>
-inline int32_t tsvd(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, char fillmode, double epi, int32_t sweeps, int32_t N, int32_t K, int32_t p, Xtype* X, int32_t ldx, Stype* S, Gtype* G, int32_t ldg, int32_t* r_ptr) {
+inline int32_t tsvd(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, char fillmode, double epi, int32_t sweeps, int32_t N, int32_t K, Xtype* X, int32_t ldx, Stype* S, Gtype* G, int32_t ldg, int32_t* r_ptr) {
   using matrix_t = typename std::conditional_t<std::is_same_v<Xtype, cuDoubleComplex> || std::is_same_v<Xtype, cuComplex> || std::is_same_v<Xtype, __half2>,
     std::conditional_t<std::is_same_v<Xtype, cuDoubleComplex>, cuDoubleComplex, cuComplex>, std::conditional_t<std::is_same_v<Xtype, double>, double, float>>;
   using real_t = typename std::conditional_t<std::is_same_v<matrix_t, cuDoubleComplex>, double, std::conditional_t<std::is_same_v<matrix_t, cuComplex>, float, matrix_t>>;
@@ -76,10 +76,10 @@ inline int32_t tsvd(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t c
   int32_t* jpiv = nullptr; Rtype* potrf_work = nullptr;
   if (cudaSuccess != cudaMallocFromPoolAsync((void**)&jpiv, uint64_t(N) * uint64_t(sizeof(int32_t)), mempool, stream))
     throw std::runtime_error("Workspace allocation failed at GESVD Preconditioning.");
-  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&potrf_work, uint64_t(65536) + (uint64_t(N) + uint64_t(1)) * uint64_t(sizeof(Rtype)), mempool, stream))
+  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&potrf_work, uint64_t(98304) + (uint64_t(N) + uint64_t(1)) * uint64_t(sizeof(Rtype)), mempool, stream))
     throw std::runtime_error("Workspace allocation failed at GESVD Preconditioning.");
 
-  int32_t rank = internal::Cholesky::potrfp(stream, fillmode, epi, K, p, N, G, ldg, jpiv, potrf_work, r_ptr);
+  int32_t rank = internal::Cholesky::potrfp(stream, fillmode, epi, K, N, G, ldg, jpiv, potrf_work, r_ptr);
   cudaFreeAsync(potrf_work, stream);
   if (0 < rank) {
     matrix_t* A = nullptr, *U = nullptr; real_t* sigma = nullptr;
@@ -127,68 +127,68 @@ extern "C" int32_t hyacinXGevd(const hyacinHandle_t* handle, char fillmode, doub
   if (N <= 0) { return 0; } K = K <= 0 ? N : std::min(N, K); epi = std::min(1., std::abs(epi));
   cudaStream_t stream = handle->cudaStream; Timer::register_replicate_kernel(stream, handle->timer);
   cudaMemPool_t mempool = handle->mempool; cublasHandle_t cublasH = handle->cublasHandle; cusolverDnHandle_t cusolverH = handle->cusolverHandle;
-  int32_t *r_ptr = (int32_t*)handle->pinnedWorkspace, sweeps = handle->JacobiSVDSweeps, oversampling = handle->RankOversampling; *r_ptr = handle->DeviceSMs;
+  int32_t *r_ptr = (int32_t*)handle->pinnedWorkspace, sweeps = handle->JacobiSVDSweeps; *r_ptr = handle->DeviceSMs;
   switch (Gtype) {
     case HYACIN_F64: if (Atype == HYACIN_F64)
-    { return tsvd<double>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (double*)X, ldx, (double*)S, (double*)G, ldg, r_ptr); } else
+    { return tsvd<double>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (double*)X, ldx, (double*)S, (double*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F32)
-    { return tsvd<double>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (float*)X, ldx, (float*)S, (double*)G, ldg, r_ptr); } else
+    { return tsvd<double>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (float*)X, ldx, (float*)S, (double*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F16)
-    { return tsvd<double>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (__half*)X, ldx, (__half*)S, (double*)G, ldg, r_ptr); } else { return 0; }
+    { return tsvd<double>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (__half*)X, ldx, (__half*)S, (double*)G, ldg, r_ptr); } else { return 0; }
     case HYACIN_F32: if (Atype == HYACIN_F64)
-    { return tsvd<float>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (double*)X, ldx, (double*)S, (float*)G, ldg, r_ptr); } else
+    { return tsvd<float>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (double*)X, ldx, (double*)S, (float*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F32)
-    { return tsvd<float>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (float*)X, ldx, (float*)S, (float*)G, ldg, r_ptr); } else
+    { return tsvd<float>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (float*)X, ldx, (float*)S, (float*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F16)
-    { return tsvd<float>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (__half*)X, ldx, (__half*)S, (float*)G, ldg, r_ptr); } else { return 0; }
+    { return tsvd<float>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (__half*)X, ldx, (__half*)S, (float*)G, ldg, r_ptr); } else { return 0; }
     case HYACIN_DD: if (Atype == HYACIN_F64)
-    { return tsvd<double2>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (double*)X, ldx, (double*)S, (double2*)G, ldg, r_ptr); } else
+    { return tsvd<double2>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (double*)X, ldx, (double*)S, (double2*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F32)
-    { return tsvd<double2>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (float*)X, ldx, (float*)S, (double2*)G, ldg, r_ptr); } else
+    { return tsvd<double2>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (float*)X, ldx, (float*)S, (double2*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F16)
-    { return tsvd<double2>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (__half*)X, ldx, (__half*)S, (double2*)G, ldg, r_ptr); } else { return 0; }
+    { return tsvd<double2>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (__half*)X, ldx, (__half*)S, (double2*)G, ldg, r_ptr); } else { return 0; }
     case HYACIN_TF: if (Atype == HYACIN_F64)
-    { return tsvd<float3>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (double*)X, ldx, (double*)S, (float3*)G, ldg, r_ptr); } else
+    { return tsvd<float3>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (double*)X, ldx, (double*)S, (float3*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F32)
-    { return tsvd<float3>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (float*)X, ldx, (float*)S, (float3*)G, ldg, r_ptr); } else
+    { return tsvd<float3>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (float*)X, ldx, (float*)S, (float3*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F16)
-    { return tsvd<float3>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (__half*)X, ldx, (__half*)S, (float3*)G, ldg, r_ptr); } else { return 0; }
+    { return tsvd<float3>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (__half*)X, ldx, (__half*)S, (float3*)G, ldg, r_ptr); } else { return 0; }
     case HYACIN_QF: if (Atype == HYACIN_F64)
-    { return tsvd<float4>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (double*)X, ldx, (double*)S, (float4*)G, ldg, r_ptr); } else
+    { return tsvd<float4>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (double*)X, ldx, (double*)S, (float4*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F32)
-    { return tsvd<float4>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (float*)X, ldx, (float*)S, (float4*)G, ldg, r_ptr); } else
+    { return tsvd<float4>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (float*)X, ldx, (float*)S, (float4*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F16)
-    { return tsvd<float4>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (__half*)X, ldx, (__half*)S, (float4*)G, ldg, r_ptr); } else { return 0; }
+    { return tsvd<float4>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (__half*)X, ldx, (__half*)S, (float4*)G, ldg, r_ptr); } else { return 0; }
     case HYACIN_F64_COMPLEX: if (Atype == HYACIN_F64_COMPLEX)
-    { return tsvd<double>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (cuDoubleComplex*)X, ldx, (double*)S, (cuDoubleComplex*)G, ldg, r_ptr); } else
+    { return tsvd<double>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (cuDoubleComplex*)X, ldx, (double*)S, (cuDoubleComplex*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F32_COMPLEX)
-    { return tsvd<double>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (cuComplex*)X, ldx, (float*)S, (cuDoubleComplex*)G, ldg, r_ptr); } else
+    { return tsvd<double>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (cuComplex*)X, ldx, (float*)S, (cuDoubleComplex*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F16_COMPLEX)
-    { return tsvd<double>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (__half2*)X, ldx, (__half*)S, (cuDoubleComplex*)G, ldg, r_ptr); } else { return 0; }
+    { return tsvd<double>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (__half2*)X, ldx, (__half*)S, (cuDoubleComplex*)G, ldg, r_ptr); } else { return 0; }
     case HYACIN_F32_COMPLEX: if (Atype == HYACIN_F64_COMPLEX)
-    { return tsvd<float>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (cuDoubleComplex*)X, ldx, (double*)S, (cuComplex*)G, ldg, r_ptr); } else
+    { return tsvd<float>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (cuDoubleComplex*)X, ldx, (double*)S, (cuComplex*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F32_COMPLEX)
-    { return tsvd<float>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (cuComplex*)X, ldx, (float*)S, (cuComplex*)G, ldg, r_ptr); } else
+    { return tsvd<float>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (cuComplex*)X, ldx, (float*)S, (cuComplex*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F16_COMPLEX)
-    { return tsvd<float>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (__half2*)X, ldx, (__half*)S, (cuComplex*)G, ldg, r_ptr); } else { return 0; }
+    { return tsvd<float>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (__half2*)X, ldx, (__half*)S, (cuComplex*)G, ldg, r_ptr); } else { return 0; }
     case HYACIN_DD_COMPLEX: if (Atype == HYACIN_F64_COMPLEX)
-    { return tsvd<double2>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (cuDoubleComplex*)X, ldx, (double*)S, (complex_double2*)G, ldg, r_ptr); } else
+    { return tsvd<double2>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (cuDoubleComplex*)X, ldx, (double*)S, (complex_double2*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F32_COMPLEX)
-    { return tsvd<double2>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (cuComplex*)X, ldx, (float*)S, (complex_double2*)G, ldg, r_ptr); } else
+    { return tsvd<double2>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (cuComplex*)X, ldx, (float*)S, (complex_double2*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F16_COMPLEX)
-    { return tsvd<double2>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (__half2*)X, ldx, (__half*)S, (complex_double2*)G, ldg, r_ptr); } else { return 0; }
+    { return tsvd<double2>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (__half2*)X, ldx, (__half*)S, (complex_double2*)G, ldg, r_ptr); } else { return 0; }
     case HYACIN_TF_COMPLEX: if (Atype == HYACIN_F64_COMPLEX)
-    { return tsvd<float3>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (cuDoubleComplex*)X, ldx, (double*)S, (complex_float3*)G, ldg, r_ptr); } else
+    { return tsvd<float3>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (cuDoubleComplex*)X, ldx, (double*)S, (complex_float3*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F32_COMPLEX)
-    { return tsvd<float3>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (cuComplex*)X, ldx, (float*)S, (complex_float3*)G, ldg, r_ptr); } else
+    { return tsvd<float3>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (cuComplex*)X, ldx, (float*)S, (complex_float3*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F16_COMPLEX)
-    { return tsvd<float3>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (__half2*)X, ldx, (__half*)S, (complex_float3*)G, ldg, r_ptr); } else { return 0; }
+    { return tsvd<float3>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (__half2*)X, ldx, (__half*)S, (complex_float3*)G, ldg, r_ptr); } else { return 0; }
     case HYACIN_QF_COMPLEX: if (Atype == HYACIN_F64_COMPLEX)
-    { return tsvd<float4>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (cuDoubleComplex*)X, ldx, (double*)S, (complex_float4*)G, ldg, r_ptr); } else
+    { return tsvd<float4>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (cuDoubleComplex*)X, ldx, (double*)S, (complex_float4*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F32_COMPLEX)
-    { return tsvd<float4>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (cuComplex*)X, ldx, (float*)S, (complex_float4*)G, ldg, r_ptr); } else
+    { return tsvd<float4>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (cuComplex*)X, ldx, (float*)S, (complex_float4*)G, ldg, r_ptr); } else
     if (Atype == HYACIN_F16_COMPLEX)
-    { return tsvd<float4>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, oversampling, (__half2*)X, ldx, (__half*)S, (complex_float4*)G, ldg, r_ptr); } else { return 0; }
+    { return tsvd<float4>(stream, mempool, cublasH, cusolverH, fillmode, epi, sweeps, N, K, (__half2*)X, ldx, (__half*)S, (complex_float4*)G, ldg, r_ptr); } else { return 0; }
     default: return 0;
   }
 }

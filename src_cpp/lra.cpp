@@ -144,7 +144,7 @@ template <class T, class R> inline
 int32_t svd_segN_dispatcher(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, R* S, T* V, int32_t ldv, int64_t globalM, int32_t batchIter) {
   int32_t segments = 512 <= N ? int32_t(std::floor(std::sqrt(double(N) / double(K)))) : 1;
   if (segments <= 1) { return svd_dispatcher(handle, epi, opA, M, N, K, A, lda, S, V, ldv, globalM, batchIter); }
-  epi *= 0.5; std::div_t divN = std::div(N, segments); opA = opA == 't' ? 'T' : (opA == 'c' ? 'C' : opA);
+  epi *= sqrt(0.5); std::div_t divN = std::div(N, segments); opA = opA == 't' ? 'T' : (opA == 'c' ? 'C' : opA);
   int32_t N_stage1 = divN.quot + int32_t(0 < divN.rem); uint64_t V_stage1_stride = uint64_t(N_stage1) * uint64_t(N_stage1);
   T* V_stage1 = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&V_stage1, V_stage1_stride * uint64_t(segments) * sizeof(T), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Stage-1 allocation failed.");
