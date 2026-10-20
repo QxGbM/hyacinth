@@ -19,7 +19,7 @@ typedef enum {
 
 typedef struct {
   char GramMatrixAlgorithm; double StrideBatchPerfPenalty;
-  int32_t QuantizeBitCorrection, GramBitCorrection, TCGemmSegmentK, JacobiSVDSweeps;
+  int32_t QuantizeBitCorrection, GramBitCorrection, GramSegmentK, TCGemmSegmentK, JacobiSVDSweeps;
   int32_t DeviceID, DeviceSMs, DeviceIsF64Capable;
   uint32_t HandleOwnedResource;
   cudaStream_t cudaStream;
@@ -42,6 +42,54 @@ void hyacinCreate(
 
 void hyacinDestroy(
   hyacinHandle_t* handle
+);
+
+int32_t hyacinInterpolateFit(
+  const hyacinHandle_t* handle,
+  double epi,
+  char opA,
+  int32_t M,
+  int32_t N,
+  int32_t K,
+  const void* A,
+  int32_t lda,
+  int32_t* jpvt,
+  void* V,
+  int32_t ldv,
+  int64_t globalM,
+  hyacinPrecision_t ComputeType
+);
+
+int32_t hyacinTsvdFit(
+  const hyacinHandle_t* handle,
+  double epi,
+  char opA,
+  int32_t M,
+  int32_t N,
+  int32_t K,
+  const void* A,
+  int32_t lda,
+  void* S,
+  void* V,
+  int32_t ldv,
+  int64_t globalM,
+  hyacinPrecision_t ComputeType
+);
+
+int32_t hyacinTsvdFitSegmentN(
+  const hyacinHandle_t* handle,
+  double epi,
+  char opA,
+  int32_t M,
+  int32_t N,
+  int32_t K,
+  const void* A,
+  int32_t lda,
+  void* S,
+  void* V,
+  int32_t ldv,
+  int64_t globalM,
+  hyacinPrecision_t ComputeType
 );
 
 void hyacinXherkBatchInit(
@@ -136,6 +184,18 @@ int32_t hyacinXGinterp(
   void* G, // device-pointer
   int32_t ldg
 ); // returns rank
+
+double hyacinCheckNorm(
+  const hyacinHandle_t* handle,
+  int32_t M,
+  int32_t N,
+  const void* A,
+  int32_t lda,
+  int32_t rank,
+  const void* V,
+  int32_t ldv,
+  hyacinPrecision_t ComputeType
+);
 
 void hyacinAllReduce1Drow(
   const hyacinHandle_t* handle,

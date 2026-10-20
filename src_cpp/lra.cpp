@@ -1,5 +1,5 @@
 
-#include <hyacinLRA.hpp>
+#include <hyacin.h>
 #include <internal.hpp>
 #include <vector>
 #include <numeric>
@@ -14,8 +14,8 @@ template <> inline hyacinPrecision_t hyacin_prec<cuComplex>() { return HYACIN_F3
 template <> inline hyacinPrecision_t hyacin_prec<__half2>() { return HYACIN_F16_COMPLEX; };
 
 template <class T> inline
-int32_t interp_dispatcher(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, int32_t* jpvt, T* V, int32_t ldv, int64_t globalM, int32_t batchIter) {
-  globalM = globalM <= int64_t(0) ? int64_t(M) : globalM; batchIter = batchIter <= 0 ? M : std::min(batchIter, M);
+int32_t interp_dispatcher(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, int32_t* jpvt, T* V, int32_t ldv, int64_t globalM) {
+  int32_t batchIter = handle->GramSegmentK <= 0 ? M : std::min(handle->GramSegmentK, M);
   hyacinPrecision_t Atype = hyacin_prec<T>(), Gtype; opA = opA == 't' ? 'T' : (opA == 'c' ? 'C' : opA);
   std::div_t divM = std::div(M, batchIter); int32_t batches = divM.quot + int32_t(0 < divM.rem), lastM = 0 < divM.rem ? divM.rem : batchIter;
   int32_t* vexp = nullptr, u, cPanels, lPanels, gElemBytes; uint64_t strideC;
@@ -51,8 +51,8 @@ int32_t interp_dispatcher(const hyacinHandle_t* handle, double epi, char opA, in
 }
 
 template <class T, class R> inline
-int32_t svd_dispatcher(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, R* S, T* V, int32_t ldv, int64_t globalM, int32_t batchIter) {
-  globalM = globalM <= int64_t(0) ? int64_t(M) : globalM; batchIter = batchIter <= 0 ? M : std::min(batchIter, M);
+int32_t svd_dispatcher(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, R* S, T* V, int32_t ldv, int64_t globalM) {
+  int32_t batchIter = handle->GramSegmentK <= 0 ? M : std::min(handle->GramSegmentK, M);
   hyacinPrecision_t Atype = hyacin_prec<T>(), Gtype; opA = opA == 't' ? 'T' : (opA == 'c' ? 'C' : opA);
   std::div_t divM = std::div(M, batchIter); int32_t batches = divM.quot + int32_t(0 < divM.rem), lastM = 0 < divM.rem ? divM.rem : batchIter;
   int32_t* vexp = nullptr, u, cPanels, lPanels, gElemBytes; uint64_t strideC;
@@ -112,9 +112,9 @@ inline void an_gemm(const hyacinHandle_t* handle, char opA, int32_t M, int32_t N
 }
 
 template <class T, class R> inline
-int32_t svd_segN_dispatcher(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, R* S, T* V, int32_t ldv, int64_t globalM, int32_t batchIter) {
+int32_t svd_segN_dispatcher(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, R* S, T* V, int32_t ldv, int64_t globalM) {
   int32_t segments = 512 <= N ? int32_t(std::floor(std::sqrt(double(N) / double(K)))) : 1;
-  if (segments <= 1) { return svd_dispatcher(handle, epi, opA, M, N, K, A, lda, S, V, ldv, globalM, batchIter); }
+  if (segments <= 1) { return svd_dispatcher(handle, epi, opA, M, N, K, A, lda, S, V, ldv, globalM); }
   epi *= sqrt(0.5); std::div_t divN = std::div(N, segments); opA = opA == 't' ? 'T' : (opA == 'c' ? 'C' : opA);
   int32_t N_stage1 = divN.quot + int32_t(0 < divN.rem); uint64_t V_stage1_stride = uint64_t(N_stage1) * uint64_t(N_stage1);
   T* V_stage1 = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&V_stage1, V_stage1_stride * uint64_t(segments) * sizeof(T), handle->mempool, handle->cudaStream))
@@ -126,7 +126,7 @@ int32_t svd_segN_dispatcher(const hyacinHandle_t* handle, double epi, char opA, 
   std::vector<int32_t> ranks_stage1;
   for (int32_t i = 0; i < segments; ++i) {
     int32_t cols = divN.quot + int32_t(i < divN.rem);
-    ranks_stage1.emplace_back(svd_dispatcher(handle, epi, opA, M, cols, cols, &A[locA], lda, S_stage1, &V_stage1[uint64_t(i) * V_stage1_stride], N_stage1, globalM, batchIter));
+    ranks_stage1.emplace_back(svd_dispatcher(handle, epi, opA, M, cols, cols, &A[locA], lda, S_stage1, &V_stage1[uint64_t(i) * V_stage1_stride], N_stage1, globalM));
     if (transA) { locA += cols; } else { locA += int64_t(cols) * int64_t(lda); }
   }
 
@@ -143,7 +143,7 @@ int32_t svd_segN_dispatcher(const hyacinHandle_t* handle, double epi, char opA, 
 
   T* V_stage2 = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&V_stage2, uint64_t(N_stage2) * uint64_t(K) * sizeof(T), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Stage-2 allocation failed.");
-  int32_t rank = svd_dispatcher(handle, epi, 'N', M, N_stage2, K, A_stage2, M, S, V_stage2, N_stage2, globalM, batchIter);
+  int32_t rank = svd_dispatcher(handle, epi, 'N', M, N_stage2, K, A_stage2, M, S, V_stage2, N_stage2, globalM);
   cudaFreeAsync(A_stage2, handle->cudaStream);
 
   int32_t row = 0, rowV = 0;
@@ -214,57 +214,50 @@ double check_answer(const hyacinHandle_t* handle, int32_t M, int32_t N, int32_t 
   } return err;
 }
 
-namespace hyacinLRA {
-  int32_t interp_fit(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const double* A, int32_t lda, int32_t* jpvt, double* V, int32_t ldv, int64_t globalM, int32_t batchIter)
-  { return interp_dispatcher(handle, epi, opA, M, N, K, A, lda, jpvt, V, ldv, globalM, batchIter); }
-  int32_t interp_fit(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const float* A, int32_t lda, int32_t* jpvt, float* V, int32_t ldv, int64_t globalM, int32_t batchIter)
-  { return interp_dispatcher(handle, epi, opA, M, N, K, A, lda, jpvt, V, ldv, globalM, batchIter); }
-  int32_t interp_fit(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const __half* A, int32_t lda, int32_t* jpvt, __half* V, int32_t ldv, int64_t globalM, int32_t batchIter)
-  { return interp_dispatcher(handle, epi, opA, M, N, K, A, lda, jpvt, V, ldv, globalM, batchIter); }
-  int32_t interp_fit(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const cuDoubleComplex* A, int32_t lda, int32_t* jpvt, cuDoubleComplex* V, int32_t ldv, int64_t globalM, int32_t batchIter)
-  { return interp_dispatcher(handle, epi, opA, M, N, K, A, lda, jpvt, V, ldv, globalM, batchIter); }
-  int32_t interp_fit(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const cuComplex* A, int32_t lda, int32_t* jpvt,cuComplex* V, int32_t ldv, int64_t globalM, int32_t batchIter)
-  { return interp_dispatcher(handle, epi, opA, M, N, K, A, lda, jpvt, V, ldv, globalM, batchIter); }
-  int32_t interp_fit(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const __half2* A, int32_t lda, int32_t* jpvt, __half2* V, int32_t ldv, int64_t globalM, int32_t batchIter)
-  { return interp_dispatcher(handle, epi, opA, M, N, K, A, lda, jpvt, V, ldv, globalM, batchIter); }
+extern "C" int32_t hyacinInterpolateFit(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const void* A, int32_t lda, int32_t* jpvt, void* V, int32_t ldv, int64_t globalM, hyacinPrecision_t ComputeType) {
+  globalM = globalM <= int64_t(0) ? int64_t(M) : globalM; switch (ComputeType) {
+    case HYACIN_F64: return interp_dispatcher(handle, epi, opA, M, N, K, (const double*)A, lda, jpvt, (double*)V, ldv, globalM);
+    case HYACIN_F32: return interp_dispatcher(handle, epi, opA, M, N, K, (const float*)A, lda, jpvt, (float*)V, ldv, globalM);
+    case HYACIN_F16: return interp_dispatcher(handle, epi, opA, M, N, K, (const __half*)A, lda, jpvt, (__half*)V, ldv, globalM);
+    case HYACIN_F64_COMPLEX: return interp_dispatcher(handle, epi, opA, M, N, K, (const cuDoubleComplex*)A, lda, jpvt, (cuDoubleComplex*)V, ldv, globalM);
+    case HYACIN_F32_COMPLEX: return interp_dispatcher(handle, epi, opA, M, N, K, (const cuComplex*)A, lda, jpvt, (cuComplex*)V, ldv, globalM);
+    case HYACIN_F16_COMPLEX: return interp_dispatcher(handle, epi, opA, M, N, K, (const __half2*)A, lda, jpvt, (__half2*)V, ldv, globalM);
+    default: return 0;
+  }
+}
 
-  int32_t tsvd_fit(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const double* A, int32_t lda, double* S, double* V, int32_t ldv, int64_t globalM, int32_t batchIter)
-  { return svd_dispatcher(handle, epi, opA, M, N, K, A, lda, S, V, ldv, globalM, batchIter); }
-  int32_t tsvd_fit(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const float* A, int32_t lda, float* S, float* V, int32_t ldv, int64_t globalM, int32_t batchIter)
-  { return svd_dispatcher(handle, epi, opA, M, N, K, A, lda, S, V, ldv, globalM, batchIter); }
-  int32_t tsvd_fit(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const __half* A, int32_t lda, __half* S, __half* V, int32_t ldv, int64_t globalM, int32_t batchIter)
-  { return svd_dispatcher(handle, epi, opA, M, N, K, A, lda, S, V, ldv, globalM, batchIter); }
-  int32_t tsvd_fit(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const cuDoubleComplex* A, int32_t lda, double* S, cuDoubleComplex* V, int32_t ldv, int64_t globalM, int32_t batchIter)
-  { return svd_dispatcher(handle, epi, opA, M, N, K, A, lda, S, V, ldv, globalM, batchIter); }
-  int32_t tsvd_fit(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const cuComplex* A, int32_t lda, float* S, cuComplex* V, int32_t ldv, int64_t globalM, int32_t batchIter)
-  { return svd_dispatcher(handle, epi, opA, M, N, K, A, lda, S, V, ldv, globalM, batchIter); }
-  int32_t tsvd_fit(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const __half2* A, int32_t lda, __half* S, __half2* V, int32_t ldv, int64_t globalM, int32_t batchIter)
-  { return svd_dispatcher(handle, epi, opA, M, N, K, A, lda, S, V, ldv, globalM, batchIter); }
+extern "C" int32_t hyacinTsvdFit(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const void* A, int32_t lda, void* S, void* V, int32_t ldv, int64_t globalM, hyacinPrecision_t ComputeType) {
+  globalM = globalM <= int64_t(0) ? int64_t(M) : globalM; switch (ComputeType) {
+    case HYACIN_F64: return svd_dispatcher(handle, epi, opA, M, N, K, (const double*)A, lda, (double*)S, (double*)V, ldv, globalM);
+    case HYACIN_F32: return svd_dispatcher(handle, epi, opA, M, N, K, (const float*)A, lda, (float*)S, (float*)V, ldv, globalM);
+    case HYACIN_F16: return svd_dispatcher(handle, epi, opA, M, N, K, (const __half*)A, lda, (__half*)S, (__half*)V, ldv, globalM);
+    case HYACIN_F64_COMPLEX: return svd_dispatcher(handle, epi, opA, M, N, K, (const cuDoubleComplex*)A, lda, (double*)S, (cuDoubleComplex*)V, ldv, globalM);
+    case HYACIN_F32_COMPLEX: return svd_dispatcher(handle, epi, opA, M, N, K, (const cuComplex*)A, lda, (float*)S, (cuComplex*)V, ldv, globalM);
+    case HYACIN_F16_COMPLEX: return svd_dispatcher(handle, epi, opA, M, N, K, (const __half2*)A, lda, (__half*)S, (__half2*)V, ldv, globalM);
+    default: return 0;
+  }
+}
 
-  int32_t tsvd_fit_segmentN(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const double* A, int32_t lda, double* S, double* V, int32_t ldv, int64_t globalM, int32_t batchIter)
-  { return svd_segN_dispatcher(handle, epi, opA, M, N, K, A, lda, S, V, ldv, globalM, batchIter); }
-  int32_t tsvd_fit_segmentN(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const float* A, int32_t lda, float* S, float* V, int32_t ldv, int64_t globalM, int32_t batchIter)
-  { return svd_segN_dispatcher(handle, epi, opA, M, N, K, A, lda, S, V, ldv, globalM, batchIter); }
-  int32_t tsvd_fit_segmentN(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const __half* A, int32_t lda, __half* S, __half* V, int32_t ldv, int64_t globalM, int32_t batchIter)
-  { return svd_segN_dispatcher(handle, epi, opA, M, N, K, A, lda, S, V, ldv, globalM, batchIter); }
-  int32_t tsvd_fit_segmentN(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const cuDoubleComplex* A, int32_t lda, double* S, cuDoubleComplex* V, int32_t ldv, int64_t globalM, int32_t batchIter)
-  { return svd_segN_dispatcher(handle, epi, opA, M, N, K, A, lda, S, V, ldv, globalM, batchIter); }
-  int32_t tsvd_fit_segmentN(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const cuComplex* A, int32_t lda, float* S, cuComplex* V, int32_t ldv, int64_t globalM, int32_t batchIter)
-  { return svd_segN_dispatcher(handle, epi, opA, M, N, K, A, lda, S, V, ldv, globalM, batchIter); }
-  int32_t tsvd_fit_segmentN(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const __half2* A, int32_t lda, __half* S, __half2* V, int32_t ldv, int64_t globalM, int32_t batchIter)
-  { return svd_segN_dispatcher(handle, epi, opA, M, N, K, A, lda, S, V, ldv, globalM, batchIter); }
+extern "C" int32_t hyacinTsvdFitSegmentN(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const void* A, int32_t lda, void* S, void* V, int32_t ldv, int64_t globalM, hyacinPrecision_t ComputeType) {
+  globalM = globalM <= int64_t(0) ? int64_t(M) : globalM; switch (ComputeType) {
+    case HYACIN_F64: return svd_segN_dispatcher(handle, epi, opA, M, N, K, (const double*)A, lda, (double*)S, (double*)V, ldv, globalM);
+    case HYACIN_F32: return svd_segN_dispatcher(handle, epi, opA, M, N, K, (const float*)A, lda, (float*)S, (float*)V, ldv, globalM);
+    case HYACIN_F16: return svd_segN_dispatcher(handle, epi, opA, M, N, K, (const __half*)A, lda, (__half*)S, (__half*)V, ldv, globalM);
+    case HYACIN_F64_COMPLEX: return svd_segN_dispatcher(handle, epi, opA, M, N, K, (const cuDoubleComplex*)A, lda, (double*)S, (cuDoubleComplex*)V, ldv, globalM);
+    case HYACIN_F32_COMPLEX: return svd_segN_dispatcher(handle, epi, opA, M, N, K, (const cuComplex*)A, lda, (float*)S, (cuComplex*)V, ldv, globalM);
+    case HYACIN_F16_COMPLEX: return svd_segN_dispatcher(handle, epi, opA, M, N, K, (const __half2*)A, lda, (__half*)S, (__half2*)V, ldv, globalM);
+    default: return 0;
+  }
+}
 
-  double check_lra_answer(const hyacinHandle_t* handle, int32_t M, int32_t N, const double* A, int32_t lda, int32_t rank, const double* V, int32_t ldv)
-  { return check_answer(handle, M, N, rank, V, ldv, A, lda); }
-  double check_lra_answer(const hyacinHandle_t* handle, int32_t M, int32_t N, const float* A, int32_t lda, int32_t rank, const float* V, int32_t ldv)
-  { return check_answer(handle, M, N, rank, V, ldv, A, lda); }
-  double check_lra_answer(const hyacinHandle_t* handle, int32_t M, int32_t N, const __half* A, int32_t lda, int32_t rank, const __half* V, int32_t ldv)
-  { return check_answer(handle, M, N, rank, V, ldv, A, lda); }
-  double check_lra_answer(const hyacinHandle_t* handle, int32_t M, int32_t N, const cuDoubleComplex* A, int32_t lda, int32_t rank, const cuDoubleComplex* V, int32_t ldv)
-  { return check_answer(handle, M, N, rank, V, ldv, A, lda); }
-  double check_lra_answer(const hyacinHandle_t* handle, int32_t M, int32_t N, const cuComplex* A, int32_t lda, int32_t rank, const cuComplex* V, int32_t ldv)
-  { return check_answer(handle, M, N, rank, V, ldv, A, lda); }
-  double check_lra_answer(const hyacinHandle_t* handle, int32_t M, int32_t N, const __half2* A, int32_t lda, int32_t rank, const __half2* V, int32_t ldv)
-  { return check_answer(handle, M, N, rank, V, ldv, A, lda); }
-};
-
+extern "C" double hyacinCheckNorm(const hyacinHandle_t* handle, int32_t M, int32_t N, const void* A, int32_t lda, int32_t rank, const void* V, int32_t ldv, hyacinPrecision_t ComputeType) {
+  switch (ComputeType) {
+    case HYACIN_F64: return check_answer(handle, M, N, rank, (const double*)V, ldv, (const double*)A, lda);
+    case HYACIN_F32: return check_answer(handle, M, N, rank, (const float*)V, ldv, (const float*)A, lda);
+    case HYACIN_F16: return check_answer(handle, M, N, rank, (const __half*)V, ldv, (const __half*)A, lda);
+    case HYACIN_F64_COMPLEX: return check_answer(handle, M, N, rank, (const cuDoubleComplex*)V, ldv, (const cuDoubleComplex*)A, lda);
+    case HYACIN_F32_COMPLEX: return check_answer(handle, M, N, rank, (const cuComplex*)V, ldv, (const cuComplex*)A, lda);
+    case HYACIN_F16_COMPLEX: return check_answer(handle, M, N, rank, (const __half2*)V, ldv, (const __half2*)A, lda);
+    default: return 0.0;
+  }
+}

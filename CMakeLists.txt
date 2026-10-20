@@ -69,7 +69,7 @@ else()
 endif()
 
 message(STATUS "Will install to: ${CMAKE_INSTALL_PREFIX}")
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/include/hyacin.h ${CMAKE_CURRENT_SOURCE_DIR}/include/hyacinLRA.hpp DESTINATION include)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/include/hyacin.h DESTINATION include)
 install(TARGETS hyacin EXPORT HyacinTargets LIBRARY DESTINATION lib ARCHIVE DESTINATION lib)
 install(EXPORT HyacinTargets FILE HyacinTargets.cmake NAMESPACE Hyacin:: DESTINATION lib/cmake)
 export(EXPORT HyacinTargets FILE HyacinTargets.cmake NAMESPACE Hyacin::)

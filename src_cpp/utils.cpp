@@ -18,6 +18,9 @@
 #ifndef HYACIN_DEFAULT_GRAM_BITS_CORR
 #define HYACIN_DEFAULT_GRAM_BITS_CORR 0
 #endif
+#ifndef HYACIN_DEFAULT_GRAM_SEGMENT_K
+#define HYACIN_DEFAULT_GRAM_SEGMENT_K 8192
+#endif
 #ifndef HYACIN_DEFAULT_TCGEMM_SEGMENT_K
 #define HYACIN_DEFAULT_TCGEMM_SEGMENT_K 8192
 #endif
@@ -72,6 +75,7 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle) {
   handle->StrideBatchPerfPenalty = ((env_str = get_env("HYACIN_STRIDE_BATCH_PERF_PENALTY")) == "") ? HYACIN_DEFAULT_STRIDE_BATCH_PERF_PENALTY : std::stod(env_str);
   handle->QuantizeBitCorrection = ((env_str = get_env("HYACIN_QUANTIZE_BITS_CORR")) == "") ? HYACIN_DEFAULT_QUANTIZE_BITS_CORR : std::stoi(env_str);
   handle->GramBitCorrection = ((env_str = get_env("HYACIN_GRAM_BITS_CORR")) == "") ? HYACIN_DEFAULT_GRAM_BITS_CORR : std::stoi(env_str);
+  handle->GramSegmentK = ((env_str = get_env("HYACIN_GRAM_SEGMENT_K")) == "") ? HYACIN_DEFAULT_GRAM_SEGMENT_K : std::stoi(env_str);
   handle->TCGemmSegmentK = ((env_str = get_env("HYACIN_TCGEMM_SEGMENT_K")) == "") ? HYACIN_DEFAULT_TCGEMM_SEGMENT_K : std::stoi(env_str);
   handle->JacobiSVDSweeps = ((env_str = get_env("HYACIN_JACOBI_SVD_SWEEPS")) == "") ? HYACIN_DEFAULT_JACOBI_SVD_SWEEPS : std::stoi(env_str);
 
