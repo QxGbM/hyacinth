@@ -18,8 +18,8 @@ typedef enum {
 } hyacinPrecision_t;
 
 typedef struct {
-  char GramMatrixAlgorithm;
-  int32_t QuantizeBitCorrection, GramBitCorrection, JacobiSVDSweeps;
+  char GramMatrixAlgorithm; double StrideBatchPerfPenalty;
+  int32_t QuantizeBitCorrection, GramBitCorrection, TCGemmSegmentK, JacobiSVDSweeps;
   int32_t DeviceID, DeviceSMs, DeviceIsF64Capable;
   cudaStream_t cudaStream;
   cublasHandle_t cublasHandle;
