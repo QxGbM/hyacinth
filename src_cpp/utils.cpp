@@ -59,6 +59,12 @@ struct EventTimer {
   segment lastSegment = segment::none;
 };
 
+constexpr uint32_t HANDLE_OWNS_CUDA_STREAM = 0x1;
+constexpr uint32_t HANDLE_OWNS_CUBLAS = 0x2;
+constexpr uint32_t HANDLE_OWNS_CUSOLVER = 0x4;
+constexpr uint32_t HANDLE_OWNS_MEMPOOL = 0x8;
+constexpr uint32_t HANDLE_OWNS_PINNED_WORK = 0x10;
+
 extern "C" void hyacinCreate(hyacinHandle_t* handle) {
   auto get_env = [](const std::string& key) { const char* val = std::getenv(key.c_str()); return val ? std::string(val) : std::string(""); };
   std::string env_str;
@@ -75,30 +81,32 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle) {
   cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, handle->DeviceID);
   handle->DeviceIsF64Capable = int32_t(f64_capable_sm_list.end() != std::find(f64_capable_sm_list.begin(), f64_capable_sm_list.end(), 10 * major + minor));
 
-  cudaStreamCreateWithFlags(&handle->cudaStream, cudaStreamNonBlocking);
-  cudaMemPoolProps props = cudaMemPoolProps();
-  props.location.id = handle->DeviceID; props.allocType = cudaMemAllocationTypePinned; props.location.type = cudaMemLocationTypeDevice;
-  cudaMemPoolCreate(&handle->mempool, &props);
+  if (!(handle->HandleOwnedResource & HANDLE_OWNS_CUDA_STREAM))
+  { cudaStreamCreateWithFlags(&handle->cudaStream, cudaStreamNonBlocking); handle->HandleOwnedResource |= HANDLE_OWNS_CUDA_STREAM; }
+  if (!(handle->HandleOwnedResource & HANDLE_OWNS_CUBLAS))
+  { cublasCreate(&handle->cublasHandle); handle->HandleOwnedResource |= HANDLE_OWNS_CUBLAS; }
+  if (!(handle->HandleOwnedResource & HANDLE_OWNS_CUSOLVER))
+  { cusolverDnCreate(&handle->cusolverHandle); handle->HandleOwnedResource |= HANDLE_OWNS_CUSOLVER; }
+  if (!(handle->HandleOwnedResource & HANDLE_OWNS_MEMPOOL)) {
+    cudaMemPoolProps props{}; props.location.id = handle->DeviceID; props.allocType = cudaMemAllocationTypePinned; props.location.type = cudaMemLocationTypeDevice;
+    cudaMemPoolCreate(&handle->mempool, &props); handle->HandleOwnedResource |= HANDLE_OWNS_MEMPOOL;
+  }
+  if (!(handle->HandleOwnedResource & HANDLE_OWNS_PINNED_WORK))
+  { cudaMallocHost(&handle->pinnedWorkspace, sizeof(int32_t)); handle->HandleOwnedResource |= HANDLE_OWNS_PINNED_WORK; }
+
   uint64_t threshold = std::numeric_limits<uint64_t>::max();
   cudaMemPoolSetAttribute(handle->mempool, cudaMemPoolAttrReleaseThreshold, &threshold);
-
-  cublasCreate(&handle->cublasHandle);
   cublasSetStream(handle->cublasHandle, handle->cudaStream);
-  cusolverDnCreate(&handle->cusolverHandle);
   cusolverDnSetStream(handle->cusolverHandle, handle->cudaStream);
-  cudaMallocHost(&handle->pinnedWorkspace, sizeof(int32_t));
-#ifndef NO_NCCL
-  handle->ncclComm = nullptr;
-#endif
   handle->timer = (((env_str = get_env("HYACIN_CREATE_TIMER")) == "") ? HYACIN_DEFAULT_CREATE_TIMER : (env_str == "1" || env_str == "true" || env_str == "True")) ? (new EventTimer()) : nullptr;
 }
 
 extern "C" void hyacinDestroy(hyacinHandle_t* handle) {
-  if (handle->cudaStream) { cudaStreamDestroy(handle->cudaStream); }
-  if (handle->cublasHandle) { cublasDestroy(handle->cublasHandle); }
-  if (handle->cusolverHandle) { cusolverDnDestroy(handle->cusolverHandle); }
-  if (handle->mempool) { cudaMemPoolDestroy(handle->mempool); }
-  if (handle->pinnedWorkspace) { cudaFreeHost(handle->pinnedWorkspace); }
+  if ((handle->HandleOwnedResource & HANDLE_OWNS_CUDA_STREAM) && (handle->cudaStream != nullptr)) { cudaStreamDestroy(handle->cudaStream); }
+  if ((handle->HandleOwnedResource & HANDLE_OWNS_CUBLAS) && (handle->cublasHandle != nullptr)) { cublasDestroy(handle->cublasHandle); }
+  if ((handle->HandleOwnedResource & HANDLE_OWNS_CUSOLVER) && (handle->cusolverHandle != nullptr)) { cusolverDnDestroy(handle->cusolverHandle); }
+  if ((handle->HandleOwnedResource & HANDLE_OWNS_MEMPOOL) && (handle->mempool != nullptr)) { cudaMemPoolDestroy(handle->mempool); }
+  if ((handle->HandleOwnedResource & HANDLE_OWNS_PINNED_WORK) && (handle->pinnedWorkspace != nullptr)) { cudaFreeHost(handle->pinnedWorkspace); }
   if (handle->timer) { delete (EventTimer*)(handle->timer); }
   std::memset(handle, 0, sizeof(hyacinHandle_t));
 }

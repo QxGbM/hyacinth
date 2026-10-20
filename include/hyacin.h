@@ -21,6 +21,7 @@ typedef struct {
   char GramMatrixAlgorithm; double StrideBatchPerfPenalty;
   int32_t QuantizeBitCorrection, GramBitCorrection, TCGemmSegmentK, JacobiSVDSweeps;
   int32_t DeviceID, DeviceSMs, DeviceIsF64Capable;
+  uint32_t HandleOwnedResource;
   cudaStream_t cudaStream;
   cublasHandle_t cublasHandle;
   cusolverDnHandle_t cusolverHandle;
@@ -29,7 +30,7 @@ typedef struct {
 #ifndef NO_NCCL
   ncclComm_t ncclComm;
 #endif
-} hyacinHandle_t;
+} hyacinHandle_t; // Expect initialization to all zero
 
 #ifdef __cplusplus
 extern "C" {
