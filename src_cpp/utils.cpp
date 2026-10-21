@@ -12,8 +12,11 @@
 #ifndef HYACIN_DEFAULT_STRIDE_BATCH_PERF_PENALTY
 #define HYACIN_DEFAULT_STRIDE_BATCH_PERF_PENALTY 1.3
 #endif
+#ifndef HYACIN_DEFAULT_GRAM_SVD_EPI_CORR
+#define HYACIN_DEFAULT_GRAM_SVD_EPI_CORR 0.5
+#endif
 #ifndef HYACIN_DEFAULT_QUANTIZE_BITS_CORR
-#define HYACIN_DEFAULT_QUANTIZE_BITS_CORR 5
+#define HYACIN_DEFAULT_QUANTIZE_BITS_CORR 7
 #endif
 #ifndef HYACIN_DEFAULT_GRAM_BITS_CORR
 #define HYACIN_DEFAULT_GRAM_BITS_CORR 0
@@ -73,6 +76,7 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle) {
   std::string env_str;
   handle->GramMatrixAlgorithm = ((env_str = get_env("HYACIN_GRAM_ALGORITHM")) == "") ? HYACIN_DEFAULT_GRAM_ALGORITHM : env_str[0];
   handle->StrideBatchPerfPenalty = ((env_str = get_env("HYACIN_STRIDE_BATCH_PERF_PENALTY")) == "") ? HYACIN_DEFAULT_STRIDE_BATCH_PERF_PENALTY : std::stod(env_str);
+  handle->GramSVDEpiCorrection = ((env_str = get_env("HYACIN_GRAM_SVD_EPI_CORR")) == "") ? HYACIN_DEFAULT_GRAM_SVD_EPI_CORR : std::stod(env_str);
   handle->QuantizeBitCorrection = ((env_str = get_env("HYACIN_QUANTIZE_BITS_CORR")) == "") ? HYACIN_DEFAULT_QUANTIZE_BITS_CORR : std::stoi(env_str);
   handle->GramBitCorrection = ((env_str = get_env("HYACIN_GRAM_BITS_CORR")) == "") ? HYACIN_DEFAULT_GRAM_BITS_CORR : std::stoi(env_str);
   handle->GramSegmentK = ((env_str = get_env("HYACIN_GRAM_SEGMENT_K")) == "") ? HYACIN_DEFAULT_GRAM_SEGMENT_K : std::stoi(env_str);

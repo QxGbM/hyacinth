@@ -18,7 +18,7 @@ typedef enum {
 } hyacinPrecision_t;
 
 typedef struct {
-  char GramMatrixAlgorithm; double StrideBatchPerfPenalty;
+  char GramMatrixAlgorithm; double StrideBatchPerfPenalty, GramSVDEpiCorrection;
   int32_t QuantizeBitCorrection, GramBitCorrection, GramSegmentK, TCGemmSegmentK, JacobiSVDSweeps;
   int32_t DeviceID, DeviceSMs, DeviceIsF64Capable;
   uint32_t HandleOwnedResource;
