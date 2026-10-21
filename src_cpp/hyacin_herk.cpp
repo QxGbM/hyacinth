@@ -118,9 +118,9 @@ template <int32_t Complex> inline void i8herk_limbs(cudaStream_t stream, cudaMem
   uint64_t b_len = uint64_t(strideB); if constexpr(Complex) { b_len += b_len; }
 
   int32_t* scratch = nullptr; uint64_t* B = nullptr;
-  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&scratch, uint64_t(algnN) * uint64_t(colsA) * sizeof(int32_t), mempool, stream))
+  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&scratch, uint64_t(algnN) * uint64_t(colsA) * uint64_t(sizeof(int32_t)), mempool, stream))
     throw std::runtime_error("Workspace (i32) allocation failed at Integer SY/HERK.");
-  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&B, b_len * sizeof(uint64_t), mempool, stream))
+  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&B, b_len * uint64_t(sizeof(uint64_t)), mempool, stream))
     throw std::runtime_error("Workspace (u64) allocation failed at Integer SY/HERK.");
 
   if constexpr(Complex) { colsA *= uint64_t(3); }
@@ -172,9 +172,9 @@ template <int32_t Complex> inline void i8herk_crt(cudaStream_t stream, cudaMemPo
   if constexpr(Complex) { b_len += b_len; w_len += uint64_t(3) * uint64_t(algnM) * uint64_t(colsA); } else { w_len += uint64_t(algnM) * uint64_t(colsA); }
 
   int32_t* scratch = nullptr; uint64_t* B = nullptr;
-  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&scratch, uint64_t(algnN) * uint64_t(colsA) * sizeof(int32_t), mempool, stream))
+  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&scratch, uint64_t(algnN) * uint64_t(colsA) * uint64_t(sizeof(int32_t)), mempool, stream))
     throw std::runtime_error("Workspace (i32) allocation failed at Integer SY/HERK.");
-  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&B, b_len * sizeof(uint64_t), mempool, stream))
+  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&B, b_len * uint64_t(sizeof(uint64_t)), mempool, stream))
     throw std::runtime_error("Workspace (u64) allocation failed at Integer SY/HERK.");
 
   if constexpr(Complex) { colsA *= uint64_t(3); }

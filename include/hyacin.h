@@ -195,6 +195,7 @@ int32_t hyacinXGinterp(
 
 double hyacinCheckNorm(
   const hyacinHandle_t* handle,
+  char opA,
   int32_t M,
   int32_t N,
   const void* A,

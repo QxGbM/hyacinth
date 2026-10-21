@@ -19,14 +19,14 @@ int32_t interp_dispatcher(const hyacinHandle_t* handle, double epi, char opA, in
   hyacinPrecision_t Atype = hyacin_prec<T>(), Gtype; opA = opA == 't' ? 'T' : (opA == 'c' ? 'C' : opA);
   std::div_t divM = std::div(M, batchIter); int32_t batches = divM.quot + int32_t(0 < divM.rem), lastM = 0 < divM.rem ? divM.rem : batchIter;
   int32_t* vexp = nullptr, u, cPanels, lPanels, gElemBytes; uint64_t strideC;
-  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&vexp, uint64_t(batches + 1) * uint64_t(N) * sizeof(int32_t), handle->mempool, handle->cudaStream))
+  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&vexp, uint64_t(batches + 1) * uint64_t(N) * uint64_t(sizeof(int32_t)), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Exponent vector allocation failed");
   hyacinXherkBatchInit(handle, epi, globalM, N, Atype, &u, &cPanels, &lPanels, &strideC);
-  uint64_t* C = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&C, uint64_t(cPanels) * uint64_t(lPanels) * strideC * sizeof(uint64_t), handle->mempool, handle->cudaStream))
+  uint64_t* C = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&C, uint64_t(cPanels) * uint64_t(lPanels) * strideC * uint64_t(sizeof(uint64_t)), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Accumulator allocation failed.");
 
   if (opA == 'T' || opA == 'C') {
-    T* AH = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&AH, uint64_t(M) * uint64_t(N) * sizeof(sizeof(T)), handle->mempool, handle->cudaStream))
+    T* AH = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&AH, uint64_t(M) * uint64_t(N) * uint64_t(sizeof(T)), handle->mempool, handle->cudaStream))
       throw std::runtime_error("A-Transpose allocation failed");
     internal::scatter_matcopy(handle->cudaStream, handle->cublasHandle, opA, M, N, A, lda, AH, M);
     hyacinXquantizeScaleBatch(handle, batches, batchIter, lastM, N, Atype, AH, M, u, vexp);
@@ -56,14 +56,14 @@ int32_t svd_dispatcher(const hyacinHandle_t* handle, double epi, char opA, int32
   hyacinPrecision_t Atype = hyacin_prec<T>(), Gtype; opA = opA == 't' ? 'T' : (opA == 'c' ? 'C' : opA);
   std::div_t divM = std::div(M, batchIter); int32_t batches = divM.quot + int32_t(0 < divM.rem), lastM = 0 < divM.rem ? divM.rem : batchIter;
   int32_t* vexp = nullptr, u, cPanels, lPanels, gElemBytes; uint64_t strideC;
-  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&vexp, uint64_t(batches + 1) * uint64_t(N) * sizeof(int32_t), handle->mempool, handle->cudaStream))
+  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&vexp, uint64_t(batches + 1) * uint64_t(N) * uint64_t(sizeof(int32_t)), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Exponent vector allocation failed");
   hyacinXherkBatchInit(handle, epi, globalM, N, Atype, &u, &cPanels, &lPanels, &strideC);
-  uint64_t* C = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&C, uint64_t(cPanels) * uint64_t(lPanels) * strideC * sizeof(uint64_t), handle->mempool, handle->cudaStream))
+  uint64_t* C = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&C, uint64_t(cPanels) * uint64_t(lPanels) * strideC * uint64_t(sizeof(uint64_t)), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Accumulator allocation failed.");
   
   if (opA == 'T' || opA == 'C') {
-    T* AH = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&AH, uint64_t(M) * uint64_t(N) * sizeof(sizeof(T)), handle->mempool, handle->cudaStream))
+    T* AH = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&AH, uint64_t(M) * uint64_t(N) * uint64_t(sizeof(T)), handle->mempool, handle->cudaStream))
       throw std::runtime_error("A-Transpose allocation failed");
     internal::scatter_matcopy(handle->cudaStream, handle->cublasHandle, opA, M, N, A, lda, AH, M);
     hyacinXquantizeScaleBatch(handle, batches, batchIter, lastM, N, Atype, AH, M, u, vexp);
@@ -119,7 +119,7 @@ int32_t svd_segN_dispatcher(const hyacinHandle_t* handle, double epi, char opA, 
   int32_t N_stage1 = divN.quot + int32_t(0 < divN.rem); uint64_t V_stage1_stride = uint64_t(N_stage1) * uint64_t(N_stage1);
   T* V_stage1 = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&V_stage1, V_stage1_stride * uint64_t(segments) * sizeof(T), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Stage-1 allocation failed.");
-  R* S_stage1 = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&S_stage1, uint64_t(N_stage1) * sizeof(R), handle->mempool, handle->cudaStream))
+  R* S_stage1 = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&S_stage1, uint64_t(N_stage1) * uint64_t(sizeof(R)), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Stage-1 allocation failed.");
 
   int64_t locA = int64_t(0); bool transA = opA == 'T' || opA == 'C';
@@ -132,7 +132,7 @@ int32_t svd_segN_dispatcher(const hyacinHandle_t* handle, double epi, char opA, 
 
   cudaFreeAsync(S_stage1, handle->cudaStream);
   int32_t N_stage2 = std::reduce(ranks_stage1.begin(), ranks_stage1.end());
-  T* A_stage2 = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&A_stage2, uint64_t(M) * uint64_t(N_stage2) * sizeof(T), handle->mempool, handle->cudaStream))
+  T* A_stage2 = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&A_stage2, uint64_t(M) * uint64_t(N_stage2) * uint64_t(sizeof(T)), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Stage-2 allocation failed.");
   int64_t locA2 = (locA = int64_t(0));
   for (int32_t i = 0; i < segments; ++i) {
@@ -141,7 +141,7 @@ int32_t svd_segN_dispatcher(const hyacinHandle_t* handle, double epi, char opA, 
     if (transA) { locA += cols; } else { locA += int64_t(cols) * int64_t(lda); } locA2 += int64_t(ranks_stage1[i]) * int64_t(M);
   }
 
-  T* V_stage2 = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&V_stage2, uint64_t(N_stage2) * uint64_t(K) * sizeof(T), handle->mempool, handle->cudaStream))
+  T* V_stage2 = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&V_stage2, uint64_t(N_stage2) * uint64_t(K) * uint64_t(sizeof(T)), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Stage-2 allocation failed.");
   int32_t rank = svd_dispatcher(handle, epi, 'N', M, N_stage2, K, A_stage2, M, S, V_stage2, N_stage2, globalM);
   cudaFreeAsync(A_stage2, handle->cudaStream);
@@ -157,17 +157,17 @@ int32_t svd_segN_dispatcher(const hyacinHandle_t* handle, double epi, char opA, 
 }
 
 template <class T> inline
-double check_answer(const hyacinHandle_t* handle, int32_t M, int32_t N, int32_t rank, const T* V, int32_t ldv, const T* A, int32_t lda) {
+double check_answer(const hyacinHandle_t* handle, char opA, int32_t M, int32_t N, int32_t rank, const T* V, int32_t ldv, const T* A, int32_t lda) {
   if (M <= 0 || N <= 0) { return 0.; }
-  constexpr int32_t Complex = std::is_same_v<T, cuDoubleComplex> || std::is_same_v<T, cuComplex> || std::is_same_v<T, __half2>;
+  constexpr int32_t Complex = std::is_same_v<T, cuDoubleComplex> || std::is_same_v<T, cuComplex> || std::is_same_v<T, __half2>, block = 2048;
   using type = typename std::conditional_t<Complex, cuDoubleComplex, double>;
-  double err = 0.; constexpr int32_t block = 2048;
+  opA = opA == 't' ? 'T' : (opA == 'c' ? 'C' : opA); bool transA = opA == 'T' || opA == 'C'; double err = 0.;
   if (rank <= 0) {
     type* matA = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&matA, uint64_t(block) * uint64_t(block) * uint64_t(sizeof(type)), handle->mempool, handle->cudaStream))
       throw std::runtime_error("Workspace allocation failed at answer check");
     for (int32_t i = 0; i < M; i += block) { int32_t rows = std::min(M - i, block);
       for (int32_t j = 0; j < N; j += block) { int32_t cols = std::min(N - j, block);
-        internal::scatter_matcopy(handle->cudaStream, handle->cublasHandle, 'A', rows, cols, &A[int64_t(i) + int64_t(j) * int64_t(lda)], lda, matA, rows);
+        internal::scatter_matcopy(handle->cudaStream, handle->cublasHandle, opA, rows, cols, transA ? &A[int64_t(j) + int64_t(i) * int64_t(lda)] : &A[int64_t(i) + int64_t(j) * int64_t(lda)], lda, matA, rows);
         double nrm = 0.; cublasDnrm2_64(handle->cublasHandle, int64_t(rows) * int64_t(cols) * int64_t(Complex + 1), (const double*)matA, 1, &nrm); err += std::pow(nrm, 2);
       }
     }
@@ -205,7 +205,7 @@ double check_answer(const hyacinHandle_t* handle, int32_t M, int32_t N, int32_t 
     cublasOperation_t opt = CUBLAS_OP_T; cudaDataType Atype = CUDA_R_64F; if constexpr(Complex) { opt = CUBLAS_OP_C; Atype = CUDA_C_64F; }
     for (int32_t i = 0; i < M; i += block) {
       int32_t rows = std::min(M - i, block);
-      internal::scatter_matcopy(handle->cudaStream, handle->cublasHandle, 'A', rows, N, &A[i], lda, matA, rows);
+      internal::scatter_matcopy(handle->cudaStream, handle->cublasHandle, opA, rows, N, transA ? &A[int64_t(i) * int64_t(lda)] : &A[i], lda, matA, rows);
       cublasGemmEx(handle->cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, rows, rank, N, &one, matA, Atype, rows, matQ, Atype, N, &zero, matU, Atype, block, CUBLAS_COMPUTE_64F_PEDANTIC, CUBLAS_GEMM_DEFAULT);
       cublasGemmEx(handle->cublasHandle, CUBLAS_OP_N, opt, rows, N, rank, &minus_one, matU, Atype, block, matQ, Atype, N, &one, matA, Atype, rows, CUBLAS_COMPUTE_64F_PEDANTIC, CUBLAS_GEMM_DEFAULT);
       double nrm = 0.; cublasDnrm2_64(handle->cublasHandle, int64_t(rows) * int64_t(N) * int64_t(Complex + 1), (const double*)matA, 1, &nrm); err += std::pow(nrm, 2);
@@ -250,14 +250,14 @@ extern "C" int32_t hyacinTsvdFitSegmentN(const hyacinHandle_t* handle, double ep
   }
 }
 
-extern "C" double hyacinCheckNorm(const hyacinHandle_t* handle, int32_t M, int32_t N, const void* A, int32_t lda, int32_t rank, const void* V, int32_t ldv, hyacinPrecision_t ComputeType) {
+extern "C" double hyacinCheckNorm(const hyacinHandle_t* handle, char opA, int32_t M, int32_t N, const void* A, int32_t lda, int32_t rank, const void* V, int32_t ldv, hyacinPrecision_t ComputeType) {
   switch (ComputeType) {
-    case HYACIN_F64: return check_answer(handle, M, N, rank, (const double*)V, ldv, (const double*)A, lda);
-    case HYACIN_F32: return check_answer(handle, M, N, rank, (const float*)V, ldv, (const float*)A, lda);
-    case HYACIN_F16: return check_answer(handle, M, N, rank, (const __half*)V, ldv, (const __half*)A, lda);
-    case HYACIN_F64_COMPLEX: return check_answer(handle, M, N, rank, (const cuDoubleComplex*)V, ldv, (const cuDoubleComplex*)A, lda);
-    case HYACIN_F32_COMPLEX: return check_answer(handle, M, N, rank, (const cuComplex*)V, ldv, (const cuComplex*)A, lda);
-    case HYACIN_F16_COMPLEX: return check_answer(handle, M, N, rank, (const __half2*)V, ldv, (const __half2*)A, lda);
+    case HYACIN_F64: return check_answer(handle, opA, M, N, rank, (const double*)V, ldv, (const double*)A, lda);
+    case HYACIN_F32: return check_answer(handle, opA, M, N, rank, (const float*)V, ldv, (const float*)A, lda);
+    case HYACIN_F16: return check_answer(handle, opA, M, N, rank, (const __half*)V, ldv, (const __half*)A, lda);
+    case HYACIN_F64_COMPLEX: return check_answer(handle, opA, M, N, rank, (const cuDoubleComplex*)V, ldv, (const cuDoubleComplex*)A, lda);
+    case HYACIN_F32_COMPLEX: return check_answer(handle, opA, M, N, rank, (const cuComplex*)V, ldv, (const cuComplex*)A, lda);
+    case HYACIN_F16_COMPLEX: return check_answer(handle, opA, M, N, rank, (const __half2*)V, ldv, (const __half2*)A, lda);
     default: return 0.0;
   }
 }
