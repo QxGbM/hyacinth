@@ -6,20 +6,12 @@
 #include <algorithm>
 #include <stdexcept>
 
+/* Performance parameters */
 #ifndef HYACIN_DEFAULT_GRAM_ALGORITHM
 #define HYACIN_DEFAULT_GRAM_ALGORITHM 'A'
 #endif
 #ifndef HYACIN_DEFAULT_STRIDE_BATCH_PERF_PENALTY
 #define HYACIN_DEFAULT_STRIDE_BATCH_PERF_PENALTY 1.3
-#endif
-#ifndef HYACIN_DEFAULT_GRAM_SVD_EPI_CORR
-#define HYACIN_DEFAULT_GRAM_SVD_EPI_CORR 0.5
-#endif
-#ifndef HYACIN_DEFAULT_QUANTIZE_BITS_CORR
-#define HYACIN_DEFAULT_QUANTIZE_BITS_CORR 7
-#endif
-#ifndef HYACIN_DEFAULT_GRAM_BITS_CORR
-#define HYACIN_DEFAULT_GRAM_BITS_CORR 0
 #endif
 #ifndef HYACIN_DEFAULT_GRAM_SEGMENT_K
 #define HYACIN_DEFAULT_GRAM_SEGMENT_K 8192
@@ -27,9 +19,18 @@
 #ifndef HYACIN_DEFAULT_TCGEMM_SEGMENT_K
 #define HYACIN_DEFAULT_TCGEMM_SEGMENT_K 8192
 #endif
+
+/* Spectral parameters */
+#ifndef HYACIN_DEFAULT_GRAM_SVD_EPI_CORR
+#define HYACIN_DEFAULT_GRAM_SVD_EPI_CORR 0.5
+#endif
+#ifndef HYACIN_DEFAULT_QUANTIZE_BITS_CORR
+#define HYACIN_DEFAULT_QUANTIZE_BITS_CORR 7
+#endif
 #ifndef HYACIN_DEFAULT_JACOBI_SVD_SWEEPS
 #define HYACIN_DEFAULT_JACOBI_SVD_SWEEPS 5
 #endif
+
 #ifndef HYACIN_DEFAULT_CREATE_TIMER
 #define HYACIN_DEFAULT_CREATE_TIMER 1
 #endif
@@ -70,17 +71,18 @@ constexpr uint32_t HANDLE_OWNS_CUBLAS = 0x2;
 constexpr uint32_t HANDLE_OWNS_CUSOLVER = 0x4;
 constexpr uint32_t HANDLE_OWNS_MEMPOOL = 0x8;
 constexpr uint32_t HANDLE_OWNS_PINNED_WORK = 0x10;
+constexpr uint32_t HANDLE_OWNS_TIMER = 0x20;
 
 extern "C" void hyacinCreate(hyacinHandle_t* handle) {
   auto get_env = [](const std::string& key) { const char* val = std::getenv(key.c_str()); return val ? std::string(val) : std::string(""); };
   std::string env_str;
   handle->GramMatrixAlgorithm = ((env_str = get_env("HYACIN_GRAM_ALGORITHM")) == "") ? HYACIN_DEFAULT_GRAM_ALGORITHM : env_str[0];
   handle->StrideBatchPerfPenalty = ((env_str = get_env("HYACIN_STRIDE_BATCH_PERF_PENALTY")) == "") ? HYACIN_DEFAULT_STRIDE_BATCH_PERF_PENALTY : std::stod(env_str);
-  handle->GramSVDEpiCorrection = ((env_str = get_env("HYACIN_GRAM_SVD_EPI_CORR")) == "") ? HYACIN_DEFAULT_GRAM_SVD_EPI_CORR : std::stod(env_str);
-  handle->QuantizeBitCorrection = ((env_str = get_env("HYACIN_QUANTIZE_BITS_CORR")) == "") ? HYACIN_DEFAULT_QUANTIZE_BITS_CORR : std::stoi(env_str);
-  handle->GramBitCorrection = ((env_str = get_env("HYACIN_GRAM_BITS_CORR")) == "") ? HYACIN_DEFAULT_GRAM_BITS_CORR : std::stoi(env_str);
   handle->GramSegmentK = ((env_str = get_env("HYACIN_GRAM_SEGMENT_K")) == "") ? HYACIN_DEFAULT_GRAM_SEGMENT_K : std::stoi(env_str);
   handle->TCGemmSegmentK = ((env_str = get_env("HYACIN_TCGEMM_SEGMENT_K")) == "") ? HYACIN_DEFAULT_TCGEMM_SEGMENT_K : std::stoi(env_str);
+
+  handle->GramSVDEpiCorrection = ((env_str = get_env("HYACIN_GRAM_SVD_EPI_CORR")) == "") ? HYACIN_DEFAULT_GRAM_SVD_EPI_CORR : std::stod(env_str);
+  handle->QuantizeBitCorrection = ((env_str = get_env("HYACIN_QUANTIZE_BITS_CORR")) == "") ? HYACIN_DEFAULT_QUANTIZE_BITS_CORR : std::stoi(env_str);
   handle->JacobiSVDSweeps = ((env_str = get_env("HYACIN_JACOBI_SVD_SWEEPS")) == "") ? HYACIN_DEFAULT_JACOBI_SVD_SWEEPS : std::stoi(env_str);
 
   cudaGetDevice(&handle->DeviceID); int32_t major, minor;
@@ -106,7 +108,10 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle) {
   cudaMemPoolSetAttribute(handle->mempool, cudaMemPoolAttrReleaseThreshold, &threshold);
   cublasSetStream(handle->cublasHandle, handle->cudaStream);
   cusolverDnSetStream(handle->cusolverHandle, handle->cudaStream);
-  handle->timer = (((env_str = get_env("HYACIN_CREATE_TIMER")) == "") ? HYACIN_DEFAULT_CREATE_TIMER : (env_str == "1" || env_str == "true" || env_str == "True")) ? (new EventTimer()) : nullptr;
+
+  int32_t create_timer = ((env_str = get_env("HYACIN_CREATE_TIMER")) == "") ? HYACIN_DEFAULT_CREATE_TIMER : int32_t(env_str == "1" || env_str == "true" || env_str == "True");
+  if (!(handle->HandleOwnedResource & HANDLE_OWNS_TIMER) && create_timer)
+  { handle->timer = (new EventTimer()); handle->HandleOwnedResource |= HANDLE_OWNS_TIMER; }
 }
 
 extern "C" void hyacinDestroy(hyacinHandle_t* handle) {
@@ -115,7 +120,7 @@ extern "C" void hyacinDestroy(hyacinHandle_t* handle) {
   if ((handle->HandleOwnedResource & HANDLE_OWNS_CUSOLVER) && (handle->cusolverHandle != nullptr)) { cusolverDnDestroy(handle->cusolverHandle); }
   if ((handle->HandleOwnedResource & HANDLE_OWNS_MEMPOOL) && (handle->mempool != nullptr)) { cudaMemPoolDestroy(handle->mempool); }
   if ((handle->HandleOwnedResource & HANDLE_OWNS_PINNED_WORK) && (handle->pinnedWorkspace != nullptr)) { cudaFreeHost(handle->pinnedWorkspace); }
-  if (handle->timer) { delete (EventTimer*)(handle->timer); }
+  if ((handle->HandleOwnedResource & HANDLE_OWNS_TIMER) && (handle->timer != nullptr)) { delete (EventTimer*)(handle->timer); }
   std::memset(handle, 0, sizeof(hyacinHandle_t));
 }
 

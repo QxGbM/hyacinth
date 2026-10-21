@@ -44,7 +44,7 @@ extern "C" void hyacinXdequantizeInit(const hyacinHandle_t* handle, int32_t N, i
   constexpr int32_t type_bytes[]{ sizeof(double), sizeof(cuDoubleComplex), sizeof(float), sizeof(cuComplex), sizeof(__half), sizeof(__half2),
     sizeof(double2), sizeof(complex_double2), sizeof(float3), sizeof(complex_float3), sizeof(float4), sizeof(complex_float4) };
 
-  int32_t bits = *e_ptr + (handle->GramBitCorrection - handle->QuantizeBitCorrection - handle->QuantizeBitCorrection);
+  int32_t bits = *e_ptr - (handle->QuantizeBitCorrection + handle->QuantizeBitCorrection);
   hyacinPrecision_t GtypeComplex = 
     bits <= type_mantissa[int32_t(HYACIN_F32)] ? HYACIN_F32_COMPLEX : (
     bits <= type_mantissa[int32_t(HYACIN_F64)] ? HYACIN_F64_COMPLEX : (
