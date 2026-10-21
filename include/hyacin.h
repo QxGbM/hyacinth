@@ -19,11 +19,23 @@ typedef enum {
 
 typedef struct {
   /* Performance parameters */
+  /* ENV{HYACIN_GRAM_ALGORITHM}: ['L'/'l'] to use only int-limb decomposition; ['C'/'c'] to use only CRT; Others for auto; Default: 'A' */
+  /* ENV{HYACIN_STRIDE_BATCH_PERF_PENALTY}: Runtime multiplier for using StridedBatchGEMM over GEMM; only used for auto; Default: 1.3 */
+  /* ENV{HYACIN_GRAM_SEGMENT_K}: Segment length for partioning K-dimension in HERK for local exponents; Default: 8192 */
+  /* ENV{HYACIN_TCGEMM_TARGET_K}: Long-reduction CRT TC-GEMM will segment K, but not smaller than TargetK; not used for limbs; Default 8192 */
+  /* Tuning guide: Default options performs generally well across systems. */
   char GramMatrixAlgorithm;
   double StrideBatchPerfPenalty;
-  int32_t GramSegmentK, TCGemmSegmentK;
+  int32_t GramSegmentK, TCGemmTargetK;
 
   /* Spectral parameters */
+  /* ENV{HYACIN_GRAM_SVD_EPI_CORR}: Epsilon multiplier for SVD Preconditioning, eps_precond = eps_requested * GramSVDEpiCorrection; Default: 0.5 */
+  /* ENV{HYACIN_QUANTIZE_BITS_CORR}: Extra quantization resolution, add this many bits to the estimated quantization resolution; Default: 7 */
+  /* ENV{HYACIN_JACOBI_SVD_SWEEPS}: Maximum Jacobi iteration number, set to 0 to select the bidiagonalization-based SVD backend instead of Jacobi SVD; Default: 5; */
+  /* Tuning guide:
+    (1) Insufficient quantization resolution may contaminate the small-eigenvalue spectrum of the Gram matrix, causing excessive rank retention, expensive downstream factorization, or numerical failure.
+    (2) We therefore recommend a modest positive resolution margin, with Gram algorithm set to CRT or auto.
+    (3) Usually, 2-3 Jacobi Sweeps produce basis with excellent quality, 1 Jacobi Sweep is usable with slightly worse error bound. */
   double GramSVDEpiCorrection;
   int32_t QuantizeBitCorrection, JacobiSVDSweeps;
 
@@ -38,7 +50,7 @@ typedef struct {
 #ifndef NO_NCCL
   ncclComm_t ncclComm;
 #endif
-} hyacinHandle_t; // Expect initialization to all zero
+} hyacinHandle_t; // Expect initialization to all zero before calling hyacinCreate()
 
 #ifdef __cplusplus
 extern "C" {
@@ -56,49 +68,49 @@ int32_t hyacinInterpolateFit(
   const hyacinHandle_t* handle,
   double epi,
   char opA,
-  int32_t M,
-  int32_t N,
-  int32_t K,
-  const void* A,
+  int32_t M, // Rows of matrix op(A)
+  int32_t N, // Cols of matrix op(A), Rows of matrix V, length of jpvt
+  int32_t K, // Cols of matrix V
+  const void* A, // device-pointer
   int32_t lda,
-  int32_t* jpvt,
-  void* V,
+  int32_t* jpvt, // device-pointer, LAPACK 1-based index
+  void* V, // device-pointer, only columns [1:rank] will be overwritten
   int32_t ldv,
-  int64_t globalM,
+  int64_t globalM, // Total rows of op(A) if distributed
   hyacinPrecision_t ComputeType
-);
+); // returns rank, either K or epi is reached
 
 int32_t hyacinTsvdFit(
   const hyacinHandle_t* handle,
   double epi,
   char opA,
-  int32_t M,
-  int32_t N,
-  int32_t K,
-  const void* A,
+  int32_t M, // Rows of matrix op(A)
+  int32_t N, // Cols of matrix op(A), Rows of matrix V
+  int32_t K, // Length of vector S, Cols of matrix V
+  const void* A, // device-pointer
   int32_t lda,
-  void* S,
-  void* V,
+  void* S, // device-pointer
+  void* V, // device-pointer, only columns [1:rank] will be overwritten
   int32_t ldv,
-  int64_t globalM,
+  int64_t globalM, // Total rows of op(A) if distributed
   hyacinPrecision_t ComputeType
-);
+); // returns rank, either K or epi is reached
 
 int32_t hyacinTsvdFitSegmentN(
   const hyacinHandle_t* handle,
   double epi,
   char opA,
-  int32_t M,
-  int32_t N,
-  int32_t K,
-  const void* A,
+  int32_t M, // Rows of matrix op(A)
+  int32_t N, // Cols of matrix op(A), Rows of matrix V
+  int32_t K, // Length of vector S, Cols of matrix V
+  const void* A, // device-pointer
   int32_t lda,
-  void* S,
-  void* V,
+  void* S, // device-pointer
+  void* V, // device-pointer, only columns [1:rank] will be overwritten
   int32_t ldv,
-  int64_t globalM,
+  int64_t globalM, // Total rows of op(A) if distributed
   hyacinPrecision_t ComputeType
-);
+); // returns rank, either K or epi is reached
 
 void hyacinXherkBatchInit(
   const hyacinHandle_t* handle,
@@ -198,13 +210,13 @@ double hyacinCheckNorm(
   char opA,
   int32_t M,
   int32_t N,
-  const void* A,
+  const void* A, // device-pointer
   int32_t lda,
-  int32_t rank,
-  const void* V,
+  int32_t rank, // Can be zero, V won't be accessed if rank <= 0
+  const void* V, // device-pointer
   int32_t ldv,
   hyacinPrecision_t ComputeType
-);
+); // returns ||A-A*orth(V)*orth(V)^H||^2_F
 
 void hyacinAllReduce1Drow(
   const hyacinHandle_t* handle,

@@ -195,7 +195,7 @@ template <class matrix_t> inline void herk_dispatcher(const hyacinHandle_t* hand
   if (u < 0 && beta == 0) { cudaMemsetAsync(C, 0, uint64_t(N) * uint64_t(N + 1) * uint64_t(orderC) * elem, stream); return; }
 
   int32_t orderA, segM, algnM = (M + 255) & (~255), algnN = (N + 63) & (~63); char alg = handle->GramMatrixAlgorithm;
-  std::tie(orderA, segM) = internal::gram_algorithm(alg, M, u + Complex, Complex, handle->TCGemmSegmentK, handle->StrideBatchPerfPenalty);
+  std::tie(orderA, segM) = internal::gram_algorithm(alg, M, u + Complex, Complex, handle->TCGemmTargetK, handle->StrideBatchPerfPenalty);
   if (alg == 'L') {
     uint64_t strideA = uint64_t(algnM) * uint64_t(N) * uint64_t(orderA), a_len = uint64_t(algnM) * uint64_t(algnN - N);
     if constexpr(Complex) { a_len += strideA * uint64_t(3); } else { a_len += strideA; }
@@ -229,7 +229,7 @@ template <class matrix_t> inline void herk_batch_dispatcher(const hyacinHandle_t
 
   int32_t u_floor = Complex, u_ceil = Complex + u, M = (batches - 1) * segM + lastM; std::vector<std::pair<int32_t, int32_t>> limb_batches;
   while (u_floor <= u_ceil) {
-    char algo = handle->GramMatrixAlgorithm; std::pair<int32_t, int32_t> param = internal::gram_algorithm(algo, M, u_floor, Complex, handle->TCGemmSegmentK, handle->StrideBatchPerfPenalty);
+    char algo = handle->GramMatrixAlgorithm; std::pair<int32_t, int32_t> param = internal::gram_algorithm(algo, M, u_floor, Complex, handle->TCGemmTargetK, handle->StrideBatchPerfPenalty);
     if (algo == 'L') { u_floor = 1 + param.second; limb_batches.emplace_back(param); } else { u_floor = 1 + u_ceil; }
   }
   std::vector<int32_t> segmentsU(batches); cudaMemcpyAsync(&segmentsU[0], segU, uint64_t(batches) * uint64_t(sizeof(int32_t)), cudaMemcpyDeviceToHost, stream);
@@ -244,7 +244,7 @@ template <class matrix_t> inline void herk_batch_dispatcher(const hyacinHandle_t
   }
 
   int32_t ceil_batch_rows = batchRows.back(); char algo = handle->GramMatrixAlgorithm;
-  std::pair<int32_t, int32_t> ceil_batch = internal::gram_algorithm(algo, ceil_batch_rows, u_ceil, Complex, handle->TCGemmSegmentK, handle->StrideBatchPerfPenalty);
+  std::pair<int32_t, int32_t> ceil_batch = internal::gram_algorithm(algo, ceil_batch_rows, u_ceil, Complex, handle->TCGemmTargetK, handle->StrideBatchPerfPenalty);
   if (algo == 'L') { limb_batches.emplace_back(ceil_batch); }
   int32_t algnN = (N + 63) & (~63), n_limb_batches = int32_t(limb_batches.size());
   for (int32_t b = 0; b < n_limb_batches; ++b) if (0 < batchRows[b]) {
