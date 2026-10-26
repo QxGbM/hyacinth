@@ -22,8 +22,10 @@ set(CU_SOURCES
   src_cuda/fp_i63tp_dequantize.cu
   src_cuda/gram_evd.cu
   src_cuda/hyacin_potrfp.cu
-  src_cuda/i32_accum.cu
   src_cuda/i32_rem_accum.cu
+  src_cuda/limbs_cross_imag.cu
+  src_cuda/limbs_cross_real.cu
+  src_cuda/limbs_diag.cu
   src_cuda/matcopy.cu
   src_cuda/matmul_fp16_complex.cu
   src_cuda/quantize_crt.cu

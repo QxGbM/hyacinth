@@ -13,7 +13,7 @@ template <int32_t orderX, int32_t x, int32_t orderA> __device__ __forceinline__ 
   constexpr int32_t x6 = x * 6;
   constexpr uint32_t MO = U8CRT::mo[x], MINV = Constants<orderX>::minv[x];
 
-  uint32_t mask_sign = uint32_t(a[orderA - 1] >> 63) + 0x7fffffffu;
+  uint32_t mask_sign = uint32_t(a[orderA - 1] >> 63) + 0xffffffffu;
   i = int32_t(device::barrett_reduc<MO>(device::mulx_reduc<1, MINV, MO>(uint32_t(i))) - (MO & mask_sign));
   if constexpr(Constants<orderX>::pd[x6]) { device::add_shifted<0>(a, i32_i64_prod<Constants<orderX>::pd[x6]>(i)); }
   if constexpr(Constants<orderX>::pd[x6 + 1]) { device::add_shifted<31>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 1]>(i)); }
