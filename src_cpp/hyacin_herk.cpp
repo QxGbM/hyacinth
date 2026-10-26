@@ -15,11 +15,10 @@ extern "C" void hyacinXherkBatchInit(const hyacinHandle_t* handle, double epi, u
     constexpr int32_t type_mantissa[]{ 52, 52, 23, 23, 10, 10, 105, 105, 71, 71, 95, 95 };
     constexpr int32_t u_practical_limit = 80; // u <= 80 to satisfy implementation assumptions
 
-    hyacinPrecision_t AtypeReal = real_type[int32_t(Atype)];
     if (uint64_t(1) < M) { --M; M |= M >> 1; M |= M >> 2; M |= M >> 4; M |= M >> 8; M |= M >> 16; M |= M >> 32; ++M; } else { M = uint64_t(1); }
     int32_t exp_epi; double frac = std::frexp(std::abs(epi), &exp_epi);
     int32_t u = std::clamp(int32_t(frac == 0.5) - exp_epi, 0, type_mantissa[int32_t(Atype)]);
-    int32_t Complex = int32_t(Atype != AtypeReal), u_corr = std::max(-1, std::min(u_practical_limit, handle->QuantizeBitCorrection + u));
+    int32_t Complex = int32_t(Atype != real_type[int32_t(Atype)]), u_corr = std::max(-1, std::min(u_practical_limit, handle->QuantizeBitCorrection + u));
     if (uA) { *uA = u_corr; } if (cPanels) { *cPanels = 1 + Complex; }
     if (lPanels) {
       *lPanels = (0 <= u_corr) ? ((63 + std::max(0, (u_corr + Complex) * 2) + int32_t(std::ceil(std::log2(double(M))))) / 63) : 0;

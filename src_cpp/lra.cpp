@@ -5,15 +5,16 @@
 #include <numeric>
 #include <stdexcept>
 
-template <class T> inline hyacinPrecision_t hyacin_prec();
-template <> inline hyacinPrecision_t hyacin_prec<double>() { return HYACIN_F64; };
-template <> inline hyacinPrecision_t hyacin_prec<float>() { return HYACIN_F32; };
-template <> inline hyacinPrecision_t hyacin_prec<__half>() { return HYACIN_F16; };
-template <> inline hyacinPrecision_t hyacin_prec<cuDoubleComplex>() { return HYACIN_F64_COMPLEX; };
-template <> inline hyacinPrecision_t hyacin_prec<cuComplex>() { return HYACIN_F32_COMPLEX; };
-template <> inline hyacinPrecision_t hyacin_prec<__half2>() { return HYACIN_F16_COMPLEX; };
+template <class T> static inline hyacinPrecision_t hyacin_prec() {
+  if constexpr(std::is_same_v<T, double>) { return HYACIN_F64; } else
+  if constexpr(std::is_same_v<T, float>) { return HYACIN_F32; } else
+  if constexpr(std::is_same_v<T, __half>) { return HYACIN_F16; } else
+  if constexpr(std::is_same_v<T, cuDoubleComplex>) { return HYACIN_F64_COMPLEX; } else
+  if constexpr(std::is_same_v<T, cuComplex>) { return HYACIN_F32_COMPLEX; } else
+  if constexpr(std::is_same_v<T, __half2>) { return HYACIN_F16_COMPLEX; }
+}
 
-template <class T> inline
+template <class T> static inline
 int32_t interp_dispatcher(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, int32_t* jpvt, T* V, int32_t ldv, int64_t globalM) {
   int32_t batchIter = handle->GramSegmentK <= 0 ? M : std::min(handle->GramSegmentK, M);
   hyacinPrecision_t Atype = hyacin_prec<T>(), Gtype; opA = opA == 't' ? 'T' : (opA == 'c' ? 'C' : opA);
@@ -50,7 +51,7 @@ int32_t interp_dispatcher(const hyacinHandle_t* handle, double epi, char opA, in
   cudaFreeAsync(G, handle->cudaStream); return rank;
 }
 
-template <class T, class R> inline
+template <class T, class R> static inline
 int32_t svd_dispatcher(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, R* S, T* V, int32_t ldv, int64_t globalM) {
   int32_t batchIter = handle->GramSegmentK <= 0 ? M : std::min(handle->GramSegmentK, M);
   hyacinPrecision_t Atype = hyacin_prec<T>(), Gtype; opA = opA == 't' ? 'T' : (opA == 'c' ? 'C' : opA);
@@ -87,36 +88,36 @@ int32_t svd_dispatcher(const hyacinHandle_t* handle, double epi, char opA, int32
   cudaFreeAsync(G, handle->cudaStream); return rank;
 }
 
-inline void an_gemm(const hyacinHandle_t* handle, char opA, int32_t M, int32_t N, int32_t K, const double* A, int32_t lda, const double* B, int32_t ldb, double* C, int32_t ldc){
+static inline void an_gemm(const hyacinHandle_t* handle, char opA, int32_t M, int32_t N, int32_t K, const double* A, int32_t lda, const double* B, int32_t ldb, double* C, int32_t ldc){
   double one = 1., zero = 0.;
   cublasGemmEx(handle->cublasHandle, opA == 'C' || opA == 'T' ? CUBLAS_OP_T : CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &one, A, CUDA_R_64F, lda, B, CUDA_R_64F, ldb, &zero, C, CUDA_R_64F, ldc, CUBLAS_COMPUTE_64F, CUBLAS_GEMM_DEFAULT);
 }
-inline void an_gemm(const hyacinHandle_t* handle, char opA, int32_t M, int32_t N, int32_t K, const float* A, int32_t lda, const float* B, int32_t ldb, float* C, int32_t ldc) {
+static inline void an_gemm(const hyacinHandle_t* handle, char opA, int32_t M, int32_t N, int32_t K, const float* A, int32_t lda, const float* B, int32_t ldb, float* C, int32_t ldc) {
   float one = 1.f, zero = 0.f;
   cublasGemmEx(handle->cublasHandle, opA == 'C' || opA == 'T' ? CUBLAS_OP_T : CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &one, A, CUDA_R_32F, lda, B, CUDA_R_32F, ldb, &zero, C, CUDA_R_32F, ldc, CUBLAS_COMPUTE_32F_EMULATED_16BFX9, CUBLAS_GEMM_DEFAULT);
 }
-inline void an_gemm(const hyacinHandle_t* handle, char opA, int32_t M, int32_t N, int32_t K, const __half* A, int32_t lda, const __half* B, int32_t ldb, __half* C, int32_t ldc) {
+static inline void an_gemm(const hyacinHandle_t* handle, char opA, int32_t M, int32_t N, int32_t K, const __half* A, int32_t lda, const __half* B, int32_t ldb, __half* C, int32_t ldc) {
   __half one = CUDART_ONE_FP16, zero = CUDART_ZERO_FP16;
   cublasGemmEx(handle->cublasHandle, opA == 'C' || opA == 'T' ? CUBLAS_OP_T : CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &one, A, CUDA_R_16F, lda, B, CUDA_R_16F, ldb, &zero, C, CUDA_R_16F, ldc, CUBLAS_COMPUTE_16F, CUBLAS_GEMM_DEFAULT);
 }
-inline void an_gemm(const hyacinHandle_t* handle, char opA, int32_t M, int32_t N, int32_t K, const cuDoubleComplex* A, int32_t lda, const cuDoubleComplex* B, int32_t ldb, cuDoubleComplex* C, int32_t ldc) {
+static inline void an_gemm(const hyacinHandle_t* handle, char opA, int32_t M, int32_t N, int32_t K, const cuDoubleComplex* A, int32_t lda, const cuDoubleComplex* B, int32_t ldb, cuDoubleComplex* C, int32_t ldc) {
   cuDoubleComplex one = make_cuDoubleComplex(1., 0.), zero = make_cuDoubleComplex(0., 0.);
   cublasGemmEx(handle->cublasHandle, opA == 'C' ? CUBLAS_OP_C : (opA == 'T' ? CUBLAS_OP_T : CUBLAS_OP_N), CUBLAS_OP_N, M, N, K, &one, A, CUDA_C_64F, lda, B, CUDA_C_64F, ldb, &zero, C, CUDA_C_64F, ldc, CUBLAS_COMPUTE_64F, CUBLAS_GEMM_DEFAULT);
 }
-inline void an_gemm(const hyacinHandle_t* handle, char opA, int32_t M, int32_t N, int32_t K, const cuComplex* A, int32_t lda, const cuComplex* B, int32_t ldb, cuComplex* C, int32_t ldc) {
+static inline void an_gemm(const hyacinHandle_t* handle, char opA, int32_t M, int32_t N, int32_t K, const cuComplex* A, int32_t lda, const cuComplex* B, int32_t ldb, cuComplex* C, int32_t ldc) {
   cuComplex one = make_cuComplex(1.f, 0.f), zero = make_cuComplex(0.f, 0.f);
   cublasGemmEx(handle->cublasHandle, opA == 'C' ? CUBLAS_OP_C : (opA == 'T' ? CUBLAS_OP_T : CUBLAS_OP_N), CUBLAS_OP_N, M, N, K, &one, A, CUDA_C_32F, lda, B, CUDA_C_32F, ldb, &zero, C, CUDA_C_32F, ldc, CUBLAS_COMPUTE_32F_EMULATED_16BFX9, CUBLAS_GEMM_DEFAULT);
 }
-inline void an_gemm(const hyacinHandle_t* handle, char opA, int32_t M, int32_t N, int32_t K, const __half2* A, int32_t lda, const __half2* B, int32_t ldb, __half2* C, int32_t ldc) {
+static inline void an_gemm(const hyacinHandle_t* handle, char opA, int32_t M, int32_t N, int32_t K, const __half2* A, int32_t lda, const __half2* B, int32_t ldb, __half2* C, int32_t ldc) {
   internal::matmul_cf16(handle->cudaStream, handle->cublasHandle, handle->mempool, opA, M, N, K, A, lda, B, ldb, C, ldc);
 }
 
-template <class T, class R> inline
+template <class T, class R> static inline
 int32_t svd_segN_dispatcher(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, R* S, T* V, int32_t ldv, int64_t globalM) {
   int32_t segments = 512 <= N ? int32_t(std::floor(std::sqrt(double(N) / double(K)))) : 1;
   if (segments <= 1) { return svd_dispatcher(handle, epi, opA, M, N, K, A, lda, S, V, ldv, globalM); }
   epi *= sqrt(0.5); std::div_t divN = std::div(N, segments); opA = opA == 't' ? 'T' : (opA == 'c' ? 'C' : opA);
-  int32_t N_stage1 = divN.quot + int32_t(0 < divN.rem); uint64_t V_stage1_stride = uint64_t(N_stage1) * uint64_t(N_stage1);
+  int32_t N_stage1 = divN.quot + int32_t(0 < divN.rem); uint64_t V_stage1_stride = uint64_t(N_stage1) * uint64_t(std::min(N_stage1, M));
   T* V_stage1 = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&V_stage1, V_stage1_stride * uint64_t(segments) * sizeof(T), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Stage-1 allocation failed.");
   R* S_stage1 = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&S_stage1, uint64_t(N_stage1) * uint64_t(sizeof(R)), handle->mempool, handle->cudaStream))
@@ -126,7 +127,7 @@ int32_t svd_segN_dispatcher(const hyacinHandle_t* handle, double epi, char opA, 
   std::vector<int32_t> ranks_stage1;
   for (int32_t i = 0; i < segments; ++i) {
     int32_t cols = divN.quot + int32_t(i < divN.rem);
-    ranks_stage1.emplace_back(svd_dispatcher(handle, epi, opA, M, cols, cols, &A[locA], lda, S_stage1, &V_stage1[uint64_t(i) * V_stage1_stride], N_stage1, globalM));
+    ranks_stage1.emplace_back(svd_dispatcher(handle, epi, opA, M, cols, std::min(M, cols), &A[locA], lda, S_stage1, &V_stage1[uint64_t(i) * V_stage1_stride], N_stage1, globalM));
     if (transA) { locA += cols; } else { locA += int64_t(cols) * int64_t(lda); }
   }
 
@@ -156,7 +157,7 @@ int32_t svd_segN_dispatcher(const hyacinHandle_t* handle, double epi, char opA, 
   return rank;
 }
 
-template <class T> inline
+template <class T> static inline
 double check_answer(const hyacinHandle_t* handle, char opA, int32_t M, int32_t N, int32_t rank, const T* V, int32_t ldv, const T* A, int32_t lda) {
   if (M <= 0 || N <= 0) { return 0.; }
   constexpr int32_t Complex = std::is_same_v<T, cuDoubleComplex> || std::is_same_v<T, cuComplex> || std::is_same_v<T, __half2>, block = 2048;

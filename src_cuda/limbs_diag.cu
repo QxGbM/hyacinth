@@ -3,7 +3,7 @@
 #include <ext_arith.hpp>
 
 template<int32_t orderX, int32_t orderA>
-__device__ __forceinline__ void accumulate_diag(uint64_t (&a)[orderA], const int32_t* X, int64_t strideX) {
+static __device__ __forceinline__ void accumulate_diag(uint64_t (&a)[orderA], const int32_t* X, int64_t strideX) {
   if constexpr(0 < orderX) { device::add_shifted<0>(a, int64_t(*X)); }
   if constexpr(1 < orderX) { device::add_shifted<16>(a, int64_t(*(X += strideX))); }
   if constexpr(2 < orderX) { device::add_shifted<32>(a, int64_t(*(X += strideX))); }
@@ -42,7 +42,7 @@ __global__ void limbs_diag_real_kernel(int64_t N, const int32_t* __restrict__ X,
 }
 
 template <int32_t orderA, int32_t orderX>
-inline void limbs_diag(cudaStream_t stream, int32_t beta, int32_t N, const int32_t* X, int32_t ldx, uint64_t* A) {
+static inline void limbs_diag(cudaStream_t stream, int32_t beta, int32_t N, const int32_t* X, int32_t ldx, uint64_t* A) {
   constexpr int32_t block_threads = 512;
   dim3 grid(uint32_t(N + 511) >> 9, uint32_t(N), uint32_t(1));
   int64_t N64 = int64_t(N), ldx64 = int64_t(ldx), strideX = ldx64 * N64, strideA = (N64 + (N64 * N64)) / int64_t(2);

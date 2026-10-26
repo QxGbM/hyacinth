@@ -3,12 +3,12 @@
 #include <ext_arith.hpp>
 #include <crt_constants.hpp>
 
-template <int32_t x> __device__ __forceinline__ int64_t i32_i64_prod(int32_t y) {
+template <int32_t x> static __device__ __forceinline__ int64_t i32_i64_prod(int32_t y) {
   uint32_t lo = uint32_t(x * y), hi = uint32_t(__mulhi(x, y));
   return int64_t(uint64_t(lo) | (uint64_t(hi) << 32));
 }
 
-template <int32_t orderX, int32_t x, int32_t orderA> __device__ __forceinline__ void add_pd(uint64_t (&a)[orderA], int32_t i) {
+template <int32_t orderX, int32_t x, int32_t orderA> static __device__ __forceinline__ void add_pd(uint64_t (&a)[orderA], int32_t i) {
   using U8CRT::Constants;
   constexpr int32_t x6 = x * 6;
   constexpr uint32_t MO = U8CRT::mo[x], MINV = Constants<orderX>::minv[x];
@@ -97,7 +97,7 @@ __global__ void i32_crt_accum_kernel(int64_t N, const int32_t* __restrict__ X, i
 }
 
 template <int32_t orderX, int32_t orderA>
-inline void crt_acc_dispatcher(cudaStream_t stream, char mode, int32_t beta, int64_t N, const int32_t* X, int64_t ldx, uint64_t* A) {
+static inline void crt_acc_dispatcher(cudaStream_t stream, char mode, int32_t beta, int64_t N, const int32_t* X, int64_t ldx, uint64_t* A) {
   constexpr int32_t block_threads = 512;
   dim3 grid(uint32_t(N + 511) >> 9, uint32_t(N), uint32_t(1));
   int64_t strideX = ldx * N, strideA = N * N;
@@ -108,7 +108,7 @@ inline void crt_acc_dispatcher(cudaStream_t stream, char mode, int32_t beta, int
 }
 
 template <int32_t orderA>
-inline void crt_acc_dispatcher(cudaStream_t stream, char mode, int32_t beta, int64_t N, int32_t orderX, const int32_t* X, int64_t ldx, uint64_t* A) {
+static inline void crt_acc_dispatcher(cudaStream_t stream, char mode, int32_t beta, int64_t N, int32_t orderX, const int32_t* X, int64_t ldx, uint64_t* A) {
   switch (orderX) {
     case 2: crt_acc_dispatcher<2, orderA>(stream, mode, beta, N, X, ldx, A); return;
     case 3: crt_acc_dispatcher<3, orderA>(stream, mode, beta, N, X, ldx, A); return;

@@ -3,17 +3,17 @@
 #include <internal.hpp>
 #include <stdexcept>
 
-inline void ltrsm(cublasHandle_t handle, int32_t Mb, int32_t Nb, double* R, int32_t ldr)
+static inline void ltrsm(cublasHandle_t handle, int32_t Mb, int32_t Nb, double* R, int32_t ldr)
 { double one = 1.; cublasDtrsm(handle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, Mb, Nb, &one, R, ldr, &R[int64_t(Mb) * int64_t(ldr)], ldr); }
-inline void ltrsm(cublasHandle_t handle, int32_t Mb, int32_t Nb, float* R, int32_t ldr)
+static inline void ltrsm(cublasHandle_t handle, int32_t Mb, int32_t Nb, float* R, int32_t ldr)
 { float one = 1.f; cublasStrsm(handle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, Mb, Nb, &one, R, ldr, &R[int64_t(Mb) * int64_t(ldr)], ldr); }
-inline void ltrsm(cublasHandle_t handle, int32_t Mb, int32_t Nb, cuDoubleComplex* R, int32_t ldr)
+static inline void ltrsm(cublasHandle_t handle, int32_t Mb, int32_t Nb, cuDoubleComplex* R, int32_t ldr)
 { cuDoubleComplex one = make_cuDoubleComplex(1., 0.); cublasZtrsm(handle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, Mb, Nb, &one, R, ldr, &R[int64_t(Mb) * int64_t(ldr)], ldr); }
-inline void ltrsm(cublasHandle_t handle, int32_t Mb, int32_t Nb, cuComplex* R, int32_t ldr)
+static inline void ltrsm(cublasHandle_t handle, int32_t Mb, int32_t Nb, cuComplex* R, int32_t ldr)
 { cuComplex one = make_cuComplex(1.f, 0.f); cublasCtrsm(handle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, Mb, Nb, &one, R, ldr, &R[int64_t(Mb) * int64_t(ldr)], ldr); }
 
 template <class Rtype, class Xtype, class Gtype>
-inline int32_t interp(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t handle, char fillmode, double epi, int32_t N, int32_t K, int32_t* jpiv, Xtype* X, int32_t ldx, Gtype* G, int32_t ldg, int32_t* r_ptr) {
+static inline int32_t interp(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t handle, char fillmode, double epi, int32_t N, int32_t K, int32_t* jpiv, Xtype* X, int32_t ldx, Gtype* G, int32_t ldg, int32_t* r_ptr) {
   using matrix_t = typename std::conditional_t<std::is_same_v<Xtype, cuDoubleComplex> || std::is_same_v<Xtype, cuComplex> || std::is_same_v<Xtype, __half2>,
     std::conditional_t<std::is_same_v<Xtype, cuDoubleComplex>, cuDoubleComplex, cuComplex>, std::conditional_t<std::is_same_v<Xtype, double>, double, float>>;
   Rtype* potrf_work = nullptr;

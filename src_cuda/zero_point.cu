@@ -3,20 +3,20 @@
 #include <ext_arith.hpp>
 #include <stdexcept>
 
-template <int32_t orderIn, int32_t ORDER> __device__ __forceinline__ void load_i(uint64_t (&a)[ORDER], const uint64_t* in, int64_t stride) {
+template <int32_t orderIn, int32_t ORDER> static __device__ __forceinline__ void load_i(uint64_t (&a)[ORDER], const uint64_t* in, int64_t stride) {
   constexpr uint64_t i63 = uint64_t(0x7fffffffffffffffllu);
   if constexpr(0 < orderIn) { a[0] = *in; } else if constexpr(0 < ORDER) { a[0] = uint64_t(0); }
   if constexpr(1 < orderIn) { a[1] = *(in += stride); } else if constexpr(1 < ORDER) { a[1] = -(a[0] >> 63); a[0] &= i63; }
   if constexpr(2 < orderIn) { a[2] = *(in += stride); } else if constexpr(2 < ORDER) { a[2] = -(a[1] >> 63); a[1] &= i63; }
 }
 
-template <int32_t orderIn, int32_t ORDER> __device__ __forceinline__ void add_i(uint64_t (&a)[ORDER], const uint64_t* in, int64_t stride) {
+template <int32_t orderIn, int32_t ORDER> static __device__ __forceinline__ void add_i(uint64_t (&a)[ORDER], const uint64_t* in, int64_t stride) {
   if constexpr(0 < orderIn) { device::add_shifted<0>(a, int64_t(*in)); }
   if constexpr(1 < orderIn) { device::add_shifted<63>(a, int64_t(*(in += stride))); }
   if constexpr(2 < orderIn) { device::add_shifted<126>(a, int64_t(*(in += stride))); }
 }
 
-template <int32_t orderIn, int32_t ORDER> __device__ __forceinline__ void add_i(uint64_t (&r)[ORDER], uint64_t (&i)[ORDER], const uint64_t* in, int64_t stride) {
+template <int32_t orderIn, int32_t ORDER> static __device__ __forceinline__ void add_i(uint64_t (&r)[ORDER], uint64_t (&i)[ORDER], const uint64_t* in, int64_t stride) {
   if constexpr(0 < orderIn) { device::add_shifted<0>(r, int64_t(*in)); }
   if constexpr(1 < orderIn) { device::add_shifted<63>(r, int64_t(*(in += stride))); }
   if constexpr(2 < orderIn) { device::add_shifted<126>(r, int64_t(*(in += stride))); }
@@ -25,7 +25,7 @@ template <int32_t orderIn, int32_t ORDER> __device__ __forceinline__ void add_i(
   if constexpr(2 < orderIn) { device::add_shifted<126>(i, int64_t(*(in += stride))); }
 }
 
-template <int32_t ORDER> __device__ __forceinline__ void cross_sum(uint64_t (&rl)[ORDER], uint64_t (&im)[ORDER]) {
+template <int32_t ORDER> static __device__ __forceinline__ void cross_sum(uint64_t (&rl)[ORDER], uint64_t (&im)[ORDER]) {
   uint64_t t[ORDER]{};
   if constexpr(0 < ORDER) { device::add_shifted<0>(t, -int64_t(im[0])); }
   if constexpr(1 < ORDER) { device::add_shifted<63>(t, -int64_t(im[1])); }
@@ -35,13 +35,13 @@ template <int32_t ORDER> __device__ __forceinline__ void cross_sum(uint64_t (&rl
   if constexpr(2 < ORDER) { int64_t r = -int64_t(rl[2]); device::add_shifted<126>(t, r); device::add_shifted<126>(im, r); rl[2] = t[2]; }
 }
 
-template <int32_t orderOut, int32_t ORDER> __device__ __forceinline__ void store_i(uint64_t (&a)[ORDER], uint64_t* out, int64_t stride) {
+template <int32_t orderOut, int32_t ORDER> static __device__ __forceinline__ void store_i(uint64_t (&a)[ORDER], uint64_t* out, int64_t stride) {
   constexpr uint64_t b63 = uint64_t(0x8000000000000000llu);
   if constexpr(0 < orderOut && orderOut < ORDER) { a[orderOut - 1] |= a[ORDER - 1] & b63; }
   if constexpr(0 < orderOut) { *out = a[0]; } if constexpr(1 < orderOut) { *(out += stride) = a[1]; } if constexpr(2 < orderOut) { *(out += stride) = a[2]; }
 }
 
-template <int32_t orderOut, int32_t ORDER> __device__ __forceinline__ void store_i(uint64_t (&r)[ORDER], uint64_t (&i)[ORDER], uint64_t* out, int64_t stride) {
+template <int32_t orderOut, int32_t ORDER> static __device__ __forceinline__ void store_i(uint64_t (&r)[ORDER], uint64_t (&i)[ORDER], uint64_t* out, int64_t stride) {
   constexpr uint64_t b63 = uint64_t(0x8000000000000000llu);
   if constexpr(0 < orderOut && orderOut < ORDER) { r[orderOut - 1] |= r[ORDER - 1] & b63; i[orderOut - 1] |= i[ORDER - 1] & b63; }
   if constexpr(0 < orderOut) { *out = r[0]; } if constexpr(1 < orderOut) { *(out += stride) = r[1]; } if constexpr(2 < orderOut) { *(out += stride) = r[2]; }
@@ -74,7 +74,7 @@ __global__ void triangle_pack_kernel(int64_t N, const uint64_t* __restrict__ A, 
 }
 
 template <int32_t beta, int32_t Complex>
-inline void triangle_pack_dispatcher(cudaStream_t stream, int32_t N, int32_t orderA, const uint64_t* A, int32_t orderB, uint64_t* B) {
+static inline void triangle_pack_dispatcher(cudaStream_t stream, int32_t N, int32_t orderA, const uint64_t* A, int32_t orderB, uint64_t* B) {
   constexpr int32_t block_threads = 512;
   dim3 grid(uint32_t(N + 511) >> 9, uint32_t(N), uint32_t(1));
   int64_t N64 = int64_t(N), strideA = N64 * N64, strideB = (strideA + N64) / int64_t(2);

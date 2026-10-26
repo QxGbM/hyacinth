@@ -9,9 +9,9 @@ constexpr int32_t int_max = std::numeric_limits<int32_t>::max();
 constexpr int32_t int_min = std::numeric_limits<int32_t>::min();
 constexpr double f64_min = std::numeric_limits<double>::min();
 constexpr float f32_min = std::numeric_limits<float>::min();
-__device__ __forceinline__ double _abs(double a) { return fabs(a); }
-__device__ __forceinline__ float _abs(float a) { return fabsf(a); }
-__device__ __forceinline__ float _abs(__half a) { return __half2float(__habs(a)); }
+static __device__ __forceinline__ double _abs(double a) { return fabs(a); }
+static __device__ __forceinline__ float _abs(float a) { return fabsf(a); }
+static __device__ __forceinline__ float _abs(__half a) { return __half2float(__habs(a)); }
 
 struct _max {
   __device__ __forceinline__ double operator()(double a, double b) { return fmax(a, b); }
@@ -19,8 +19,8 @@ struct _max {
   __device__ __forceinline__ int32_t operator()(int32_t a, int32_t b) { return max(a, b); }
 };
 
-__device__ __forceinline__ int32_t float_frexp(double a) { if (a < f64_min) { return int_max; } else { int32_t x; frexp(a, &x); return x; }}
-__device__ __forceinline__ int32_t float_frexp(float a) { if (a < f32_min) { return int_max; } else { int32_t x; frexpf(a, &x); return x; }}
+static __device__ __forceinline__ int32_t float_frexp(double a) { if (a < f64_min) { return int_max; } else { int32_t x; frexp(a, &x); return x; }}
+static __device__ __forceinline__ int32_t float_frexp(float a) { if (a < f32_min) { return int_max; } else { int32_t x; frexpf(a, &x); return x; }}
 __global__ void vector_exponent_init_kernel(int32_t N, int32_t* __restrict__ vexp) { int32_t i = (int32_t(blockIdx.x) << 7) + int32_t(threadIdx.x); if (i < N) { vexp[i] = int_max; }}
 
 template <int32_t BLOCK_THREADS, class matrix_t> __global__ void vector_exponent_batch_kernel(int32_t segM, int32_t lastM, const matrix_t* __restrict__ A, int64_t lda, int32_t u, int32_t* __restrict__ mexp) {
@@ -43,7 +43,7 @@ __global__ void vector_exponent_reduc_kernel(int32_t N, int32_t seg_m1, int32_t*
   }
 }
 
-template<class matrix_t> inline void vector_exponents_dispatcher(cudaStream_t stream, int32_t batches, int32_t segM, int32_t lastM, int32_t N, const matrix_t* A, int32_t lda, int32_t u, int32_t* vexp) {
+template<class matrix_t> static inline void vector_exponents_dispatcher(cudaStream_t stream, int32_t batches, int32_t segM, int32_t lastM, int32_t N, const matrix_t* A, int32_t lda, int32_t u, int32_t* vexp) {
   int64_t lda64 = int64_t(lda);
   if (batches <= 0 || u < 0) { vector_exponent_init_kernel <<< uint32_t(N + 127) >> 7, 128, 0, stream >>> (N, vexp); } else {
     vector_exponent_batch_kernel<512> <<< dim3(batches, N), 512, 0, stream >>> (segM, lastM, A, lda64, u, &vexp[N]);

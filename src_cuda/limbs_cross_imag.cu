@@ -3,13 +3,13 @@
 #include <ext_arith.hpp>
 
 template<int32_t sign, int32_t sft, int32_t orderA>
-__device__ __forceinline__ void accumulate_single(uint64_t (&r)[orderA], uint64_t (&i)[orderA], int32_t X) {
+static __device__ __forceinline__ void accumulate_single(uint64_t (&r)[orderA], uint64_t (&i)[orderA], int32_t X) {
   if constexpr(sign) { device::add_shifted<sft>(r, int64_t(-X)); device::add_shifted<sft>(i, int64_t(-X)); } else
   { device::add_shifted<sft>(r, int64_t(-X)); device::add_shifted<sft>(i, int64_t(X)); }
 }
 
 template<int32_t sign, int32_t sft, int32_t orderX, int32_t orderA>
-__device__ __forceinline__ void accumulate_complex(uint64_t (&r)[orderA], uint64_t (&i)[orderA], const int32_t* X, int64_t strideX) {
+static __device__ __forceinline__ void accumulate_complex(uint64_t (&r)[orderA], uint64_t (&i)[orderA], const int32_t* X, int64_t strideX) {
   if constexpr(0 < orderX) { accumulate_single<sign, sft>(r, i, *X); }
   if constexpr(1 < orderX) { accumulate_single<sign, sft + 8>(r, i, *(X += strideX)); }
   if constexpr(2 < orderX) { accumulate_single<sign, sft + 16>(r, i, *(X += strideX)); }
@@ -47,7 +47,7 @@ __global__ void limbs_cross_imaginary_kernel(int64_t N, const int32_t* __restric
 }
 
 template <int32_t orderA, int32_t orderX>
-inline void limbs_cross_imag(cudaStream_t stream, int32_t beta, int32_t N, int32_t sft, const int32_t* X, int32_t ldx, uint64_t* A) {
+static inline void limbs_cross_imag(cudaStream_t stream, int32_t beta, int32_t N, int32_t sft, const int32_t* X, int32_t ldx, uint64_t* A) {
   constexpr int32_t block_threads = 512;
   dim3 grid(uint32_t(N + 511) >> 9, uint32_t(N), uint32_t(1));
   int64_t N64 = int64_t(N), ldx64 = int64_t(ldx), strideX = ldx64 * N64, strideA = (N64 + (N64 * N64)) / int64_t(2);

@@ -7,37 +7,39 @@
 #include <algorithm>
 #include <stdexcept>
 
-inline cusolverStatus_t Xgesvj_bufferSize(cusolverDnHandle_t handle, int32_t m, int32_t n, const double* A, int32_t lda, const double* S, const double* U, int32_t ldu, const double* V, int32_t ldv, int32_t* lwork, gesvdjInfo_t params)
+static inline cusolverStatus_t Xgesvj_bufferSize(cusolverDnHandle_t handle, int32_t m, int32_t n, const double* A, int32_t lda, const double* S, const double* U, int32_t ldu, const double* V, int32_t ldv, int32_t* lwork, gesvdjInfo_t params)
 { return cusolverDnDgesvdj_bufferSize(handle, CUSOLVER_EIG_MODE_VECTOR, 1, m, n, A, lda, S, U, ldu, V, ldv, lwork, params); }
-inline cusolverStatus_t Xgesvj_bufferSize(cusolverDnHandle_t handle, int32_t m, int32_t n, const float* A, int32_t lda, const float* S, const float* U, int32_t ldu, const float* V, int32_t ldv, int32_t* lwork, gesvdjInfo_t params)
+static inline cusolverStatus_t Xgesvj_bufferSize(cusolverDnHandle_t handle, int32_t m, int32_t n, const float* A, int32_t lda, const float* S, const float* U, int32_t ldu, const float* V, int32_t ldv, int32_t* lwork, gesvdjInfo_t params)
 { return cusolverDnSgesvdj_bufferSize(handle, CUSOLVER_EIG_MODE_VECTOR, 1, m, n, A, lda, S, U, ldu, V, ldv, lwork, params); }
-inline cusolverStatus_t Xgesvj_bufferSize(cusolverDnHandle_t handle, int32_t m, int32_t n, const cuDoubleComplex* A, int32_t lda, const double* S, const cuDoubleComplex* U, int32_t ldu, const cuDoubleComplex* V, int32_t ldv, int32_t* lwork, gesvdjInfo_t params)
+static inline cusolverStatus_t Xgesvj_bufferSize(cusolverDnHandle_t handle, int32_t m, int32_t n, const cuDoubleComplex* A, int32_t lda, const double* S, const cuDoubleComplex* U, int32_t ldu, const cuDoubleComplex* V, int32_t ldv, int32_t* lwork, gesvdjInfo_t params)
 { return cusolverDnZgesvdj_bufferSize(handle, CUSOLVER_EIG_MODE_VECTOR, 1, m, n, A, lda, S, U, ldu, V, ldv, lwork, params); }
-inline cusolverStatus_t Xgesvj_bufferSize(cusolverDnHandle_t handle, int32_t m, int32_t n, const cuComplex* A, int32_t lda, const float* S, const cuComplex* U, int32_t ldu, const cuComplex* V, int32_t ldv, int32_t* lwork, gesvdjInfo_t params)
+static inline cusolverStatus_t Xgesvj_bufferSize(cusolverDnHandle_t handle, int32_t m, int32_t n, const cuComplex* A, int32_t lda, const float* S, const cuComplex* U, int32_t ldu, const cuComplex* V, int32_t ldv, int32_t* lwork, gesvdjInfo_t params)
 { return cusolverDnCgesvdj_bufferSize(handle, CUSOLVER_EIG_MODE_VECTOR, 1, m, n, A, lda, S, U, ldu, V, ldv, lwork, params); }
 
-inline cusolverStatus_t Xgesvj(cusolverDnHandle_t handle, int32_t m, int32_t n, double* A, int32_t lda, double* S, double* U, int32_t ldu, double* V, int32_t ldv, double* work, int32_t lwork, gesvdjInfo_t params)
+static inline cusolverStatus_t Xgesvj(cusolverDnHandle_t handle, int32_t m, int32_t n, double* A, int32_t lda, double* S, double* U, int32_t ldu, double* V, int32_t ldv, double* work, int32_t lwork, gesvdjInfo_t params)
 { return cusolverDnDgesvdj(handle, CUSOLVER_EIG_MODE_VECTOR, 1, m, n, A, lda, S, U, ldu, V, ldv, work, lwork, nullptr, params); }
-inline cusolverStatus_t Xgesvj(cusolverDnHandle_t handle, int32_t m, int32_t n, float* A, int32_t lda, float* S, float* U, int32_t ldu, float* V, int32_t ldv, float* work, int32_t lwork, gesvdjInfo_t params)
+static inline cusolverStatus_t Xgesvj(cusolverDnHandle_t handle, int32_t m, int32_t n, float* A, int32_t lda, float* S, float* U, int32_t ldu, float* V, int32_t ldv, float* work, int32_t lwork, gesvdjInfo_t params)
 { return cusolverDnSgesvdj(handle, CUSOLVER_EIG_MODE_VECTOR, 1, m, n, A, lda, S, U, ldu, V, ldv, work, lwork, nullptr, params); }
-inline cusolverStatus_t Xgesvj(cusolverDnHandle_t handle, int32_t m, int32_t n, cuDoubleComplex* A, int32_t lda, double* S, cuDoubleComplex* U, int32_t ldu, cuDoubleComplex* V, int32_t ldv, cuDoubleComplex* work, int32_t lwork, gesvdjInfo_t params)
+static inline cusolverStatus_t Xgesvj(cusolverDnHandle_t handle, int32_t m, int32_t n, cuDoubleComplex* A, int32_t lda, double* S, cuDoubleComplex* U, int32_t ldu, cuDoubleComplex* V, int32_t ldv, cuDoubleComplex* work, int32_t lwork, gesvdjInfo_t params)
 { return cusolverDnZgesvdj(handle, CUSOLVER_EIG_MODE_VECTOR, 1, m, n, A, lda, S, U, ldu, V, ldv, work, lwork, nullptr, params); }
-inline cusolverStatus_t Xgesvj(cusolverDnHandle_t handle, int32_t m, int32_t n, cuComplex* A, int32_t lda, float* S, cuComplex* U, int32_t ldu, cuComplex* V, int32_t ldv, cuComplex* work, int32_t lwork, gesvdjInfo_t params)
+static inline cusolverStatus_t Xgesvj(cusolverDnHandle_t handle, int32_t m, int32_t n, cuComplex* A, int32_t lda, float* S, cuComplex* U, int32_t ldu, cuComplex* V, int32_t ldv, cuComplex* work, int32_t lwork, gesvdjInfo_t params)
 { return cusolverDnCgesvdj(handle, CUSOLVER_EIG_MODE_VECTOR, 1, m, n, A, lda, S, U, ldu, V, ldv, work, lwork, nullptr, params); }
 
-template <class matrix_t> inline cusolverStatus_t Xgesvd_bufferSize(cusolverDnHandle_t handle, int32_t m, int32_t n, int32_t* lwork);
-template <> inline cusolverStatus_t Xgesvd_bufferSize<double>(cusolverDnHandle_t handle, int32_t m, int32_t n, int32_t* lwork) { return cusolverDnDgesvd_bufferSize(handle, m, n, lwork); }
-template <> inline cusolverStatus_t Xgesvd_bufferSize<float>(cusolverDnHandle_t handle, int32_t m, int32_t n, int32_t* lwork)  { return cusolverDnSgesvd_bufferSize(handle, m, n, lwork); }
-template <> inline cusolverStatus_t Xgesvd_bufferSize<cuDoubleComplex>(cusolverDnHandle_t handle, int32_t m, int32_t n, int32_t* lwork)  { return cusolverDnZgesvd_bufferSize(handle, m, n, lwork); }
-template <> inline cusolverStatus_t Xgesvd_bufferSize<cuComplex>(cusolverDnHandle_t handle, int32_t m, int32_t n, int32_t* lwork)  { return cusolverDnCgesvd_bufferSize(handle, m, n, lwork); }
+template <class matrix_t> static inline cusolverStatus_t Xgesvd_bufferSize(cusolverDnHandle_t handle, int32_t m, int32_t n, int32_t* lwork) {
+  if constexpr(std::is_same_v<matrix_t, double>) { return cusolverDnDgesvd_bufferSize(handle, m, n, lwork); } else
+  if constexpr(std::is_same_v<matrix_t, float>) { return cusolverDnSgesvd_bufferSize(handle, m, n, lwork); } else
+  if constexpr(std::is_same_v<matrix_t, cuDoubleComplex>) { return cusolverDnZgesvd_bufferSize(handle, m, n, lwork); } else
+  if constexpr(std::is_same_v<matrix_t, cuComplex>) { return cusolverDnCgesvd_bufferSize(handle, m, n, lwork); } else
+  { return cusolverStatus_t(); }
+}
 
-inline cusolverStatus_t Xgesvd(cusolverDnHandle_t handle, int32_t m, int32_t n, double* A, int32_t lda, double* S, double* U, int32_t ldu, double* work, int32_t lwork, double* rwork)
+static inline cusolverStatus_t Xgesvd(cusolverDnHandle_t handle, int32_t m, int32_t n, double* A, int32_t lda, double* S, double* U, int32_t ldu, double* work, int32_t lwork, double* rwork)
 { return cusolverDnDgesvd(handle, 'S', 'N', m, n, A, lda, S, U, ldu, nullptr, n, work, lwork, rwork, nullptr); }
-inline cusolverStatus_t Xgesvd(cusolverDnHandle_t handle, int32_t m, int32_t n, float* A, int32_t lda, float* S, float* U, int32_t ldu, float* work, int32_t lwork, float* rwork)
+static inline cusolverStatus_t Xgesvd(cusolverDnHandle_t handle, int32_t m, int32_t n, float* A, int32_t lda, float* S, float* U, int32_t ldu, float* work, int32_t lwork, float* rwork)
 { return cusolverDnSgesvd(handle, 'S', 'N', m, n, A, lda, S, U, ldu, nullptr, n, work, lwork, rwork, nullptr); }
-inline cusolverStatus_t Xgesvd(cusolverDnHandle_t handle, int32_t m, int32_t n, cuDoubleComplex* A, int32_t lda, double* S, cuDoubleComplex* U, int32_t ldu, cuDoubleComplex* work, int32_t lwork, double* rwork)
+static inline cusolverStatus_t Xgesvd(cusolverDnHandle_t handle, int32_t m, int32_t n, cuDoubleComplex* A, int32_t lda, double* S, cuDoubleComplex* U, int32_t ldu, cuDoubleComplex* work, int32_t lwork, double* rwork)
 { return cusolverDnZgesvd(handle, 'S', 'N', m, n, A, lda, S, U, ldu, nullptr, n, work, lwork, rwork, nullptr); }
-inline cusolverStatus_t Xgesvd(cusolverDnHandle_t handle, int32_t m, int32_t n, cuComplex* A, int32_t lda, float* S, cuComplex* U, int32_t ldu, cuComplex* work, int32_t lwork, float* rwork)
+static inline cusolverStatus_t Xgesvd(cusolverDnHandle_t handle, int32_t m, int32_t n, cuComplex* A, int32_t lda, float* S, cuComplex* U, int32_t ldu, cuComplex* work, int32_t lwork, float* rwork)
 { return cusolverDnCgesvd(handle, 'S', 'N', m, n, A, lda, S, U, ldu, nullptr, n, work, lwork, rwork, nullptr); }
 
 template <int32_t BLOCK_THREADS, class real_t, class Stype>
@@ -68,7 +70,7 @@ __global__ void find_srank_kernel(double epi_sq, int32_t N, int32_t K, const rea
 }
 
 template <class Rtype, class Xtype, class Stype, class Gtype>
-inline int32_t tsvd(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, char fillmode, double epi, double p, int32_t sweeps, int32_t N, int32_t K, Xtype* X, int32_t ldx, Stype* S, Gtype* G, int32_t ldg, int32_t* r_ptr) {
+static inline int32_t tsvd(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, char fillmode, double epi, double p, int32_t sweeps, int32_t N, int32_t K, Xtype* X, int32_t ldx, Stype* S, Gtype* G, int32_t ldg, int32_t* r_ptr) {
   using matrix_t = typename std::conditional_t<std::is_same_v<Xtype, cuDoubleComplex> || std::is_same_v<Xtype, cuComplex> || std::is_same_v<Xtype, __half2>,
     std::conditional_t<std::is_same_v<Xtype, cuDoubleComplex>, cuDoubleComplex, cuComplex>, std::conditional_t<std::is_same_v<Xtype, double>, double, float>>;
   using real_t = typename std::conditional_t<std::is_same_v<matrix_t, cuDoubleComplex>, double, std::conditional_t<std::is_same_v<matrix_t, cuComplex>, float, matrix_t>>;

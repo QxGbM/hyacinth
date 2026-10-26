@@ -5,7 +5,7 @@
 #include <cub/cub.cuh>
 #include <limits>
 
-template <int32_t orderA> __device__ __forceinline__ int32_t iexp(const uint64_t* A, int64_t strideA) {
+template <int32_t orderA> static __device__ __forceinline__ int32_t iexp(const uint64_t* A, int64_t strideA) {
   int32_t e = 64 - int32_t(__clzll(*A));
   if constexpr(1 < orderA) { int32_t e_nxt = 127 - int32_t(__clzll(*(A += strideA))); e = 63 < e_nxt ? e_nxt : e; }
   if constexpr(2 < orderA) { int32_t e_nxt = 190 - int32_t(__clzll(*(A += strideA))); e = 126 < e_nxt ? e_nxt : e; }
@@ -14,10 +14,10 @@ template <int32_t orderA> __device__ __forceinline__ int32_t iexp(const uint64_t
 
 constexpr int32_t int_min = std::numeric_limits<int32_t>::min();
 constexpr int32_t int_max = std::numeric_limits<int32_t>::max();
-struct _max {  __device__ __forceinline__ int2 operator()(int2 a, int2 b) { return a.x == b.x ? make_int2(a.x, max(a.y, b.y)) : (a.x < b.x ? b : a); }};
+struct _max_i2 {  __device__ __forceinline__ int2 operator()(int2 a, int2 b) { return a.x == b.x ? make_int2(a.x, max(a.y, b.y)) : (a.x < b.x ? b : a); }};
 template <int32_t BLOCK_THREADS, int32_t orderA> __global__ void gram_range_kernel(int32_t N, const uint64_t* __restrict__ A, int64_t strideA, const int32_t* __restrict__ vexp, int32_t* __restrict__ e) {
   __shared__ typename cub::BlockReduce<int2, BLOCK_THREADS>::TempStorage temp_reduce;
-  int2 threadA = make_int2(int_min, 0); _max cmp;
+  int2 threadA = make_int2(int_min, 0); _max_i2 cmp;
   for (int32_t i = int32_t(threadIdx.x); i < N; i+= BLOCK_THREADS) {
     int32_t expA = vexp[i]; if (expA < int_max)
     { int32_t eA = iexp<orderA>(&A[(uint64_t(i) * (uint64_t(i) + uint64_t(3))) >> 1], strideA); threadA = cmp(threadA, make_int2(eA - (expA + expA), eA)); }
@@ -54,15 +54,15 @@ extern "C" void hyacinXdequantizeInit(const hyacinHandle_t* handle, int32_t N, i
   if (Gtype) { *Gtype = g; } if (gElemBytes) { *gElemBytes = type_bytes[g]; }
 }
 
-__device__ __forceinline__ double2 conv_i64_dd(uint64_t i) { return make_double2(scalbn(double(int32_t(i >> 32)), 32), double(uint32_t(i))); }
-template <int32_t orderA> __device__ __forceinline__ double conv_a63_f64(uint64_t const (&a)[orderA], int32_t e) {
+static __device__ __forceinline__ double2 conv_i64_dd(uint64_t i) { return make_double2(scalbn(double(int32_t(i >> 32)), 32), double(uint32_t(i))); }
+template <int32_t orderA> static __device__ __forceinline__ double conv_a63_f64(uint64_t const (&a)[orderA], int32_t e) {
   double res = double(int64_t(a[orderA - 1]));
   if constexpr(2 < orderA) { double2 i = conv_i64_dd(a[1]); res = (scalbn(res, 63) + i.x) + i.y; }
   if constexpr(1 < orderA) { double2 i = conv_i64_dd(a[0]); res = (scalbn(res, 63) + i.x) + i.y; }
   return scalbn(res, e);
 }
 
-template <int32_t orderA> __device__ __forceinline__ double2 conv_a63_dd(uint64_t const (&a)[orderA], int32_t e) {
+template <int32_t orderA> static __device__ __forceinline__ double2 conv_a63_dd(uint64_t const (&a)[orderA], int32_t e) {
   double2 res = device::renormalize(conv_i64_dd(a[orderA - 1]));
   if constexpr(2 < orderA) { res = device::add(make_double2(scalbn(res.x, 63), scalbn(res.y, 63)), device::renormalize(conv_i64_dd(a[1]))); }
   if constexpr(1 < orderA) { res = device::add(make_double2(scalbn(res.x, 63), scalbn(res.y, 63)), device::renormalize(conv_i64_dd(a[0]))); }
@@ -70,24 +70,24 @@ template <int32_t orderA> __device__ __forceinline__ double2 conv_a63_dd(uint64_
 }
 
 constexpr uint32_t i24 = std::numeric_limits<uint32_t>::max() >> 8;
-__device__ __forceinline__ float3 conv_i64_tf_m126(uint64_t i)
+static __device__ __forceinline__ float3 conv_i64_tf_m126(uint64_t i)
 { return device::renormalize(make_float3(scalbnf(float(int16_t(i >> 48)), -78), scalbnf(float(uint32_t(i >> 24) & i24), -102), scalbnf(float(uint32_t(i) & i24), -126))); }
-template <int32_t orderA> __device__ __forceinline__ float3 conv_a63_tf(uint64_t const (&a)[orderA], int32_t e) {
+template <int32_t orderA> static __device__ __forceinline__ float3 conv_a63_tf(uint64_t const (&a)[orderA], int32_t e) {
   float3 res = conv_i64_tf_m126(a[orderA - 1]);
   if constexpr(2 < orderA) { res = device::add(make_float3(scalbnf(res.x, 63), scalbnf(res.y, 63), scalbnf(res.z, 63)), conv_i64_tf_m126(a[1])); }
   if constexpr(1 < orderA) { res = device::add(make_float3(scalbnf(res.x, 63), scalbnf(res.y, 63), scalbnf(res.z, 63)), conv_i64_tf_m126(a[0])); }
   e += 126; return make_float3(scalbnf(res.x, e), scalbnf(res.y, e), scalbnf(res.z, e));
 }
 
-__device__ __forceinline__ float4 ext(float3 x) { return make_float4(x.x, x.y, x.z, 0.f); }
-template <int32_t orderA> __device__ __forceinline__ float4 conv_a63_qf(uint64_t const (&a)[orderA], int32_t e) {
+static __device__ __forceinline__ float4 ext(float3 x) { return make_float4(x.x, x.y, x.z, 0.f); }
+template <int32_t orderA> static __device__ __forceinline__ float4 conv_a63_qf(uint64_t const (&a)[orderA], int32_t e) {
   float4 res = ext(conv_i64_tf_m126(a[orderA - 1]));
   if constexpr(2 < orderA) { res = device::add(make_float4(scalbnf(res.x, 63), scalbnf(res.y, 63), scalbnf(res.z, 63), scalbnf(res.w, 63)), ext(conv_i64_tf_m126(a[1]))); }
   if constexpr(1 < orderA) { res = device::add(make_float4(scalbnf(res.x, 63), scalbnf(res.y, 63), scalbnf(res.z, 63), scalbnf(res.w, 63)), ext(conv_i64_tf_m126(a[0]))); }
   e += 126; return make_float4(scalbnf(res.x, e), scalbnf(res.y, e), scalbnf(res.z, e), scalbnf(res.w, e));
 }
 
-template <int32_t orderA, class real_t, class matrix_t> __device__ __forceinline__ matrix_t deq_i(const uint64_t* A, int64_t stride, int32_t e) {
+template <int32_t orderA, class real_t, class matrix_t> static __device__ __forceinline__ matrix_t deq_i(const uint64_t* A, int64_t stride, int32_t e) {
   if constexpr(std::is_same_v<real_t, matrix_t>) {
     uint64_t a[orderA];
     if constexpr(0 < orderA) { a[0] = *A; } if constexpr(1 < orderA) { a[1] = *(A += stride); } if constexpr(2 < orderA) { a[2] = *(A += stride); }
@@ -110,7 +110,7 @@ template <int32_t orderA, class real_t, class matrix_t> __device__ __forceinline
   }
 }
 
-template <class real_t, class matrix_t> __device__ __forceinline__ matrix_t conj(matrix_t a) {
+template <class real_t, class matrix_t> static __device__ __forceinline__ matrix_t conj(matrix_t a) {
   if constexpr(std::is_same_v<real_t, double> && std::is_same_v<matrix_t, cuDoubleComplex>) { return make_cuDoubleComplex(a.x, -a.y); } else
   if constexpr(std::is_same_v<real_t, float> && std::is_same_v<matrix_t, cuComplex>) { return make_cuComplex(a.x, -a.y); } else
   if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, complex_double2>) { return device::make_complex_double2(a.real, make_double2(-a.imag.x, -a.imag.y)); } else
@@ -129,7 +129,7 @@ __global__ void triangle_unpack_dequantize_kernel(int64_t N, const uint64_t* __r
   }
 }
 
-template<class real_t, class matrix_t> inline void tp_deq_dispatcher(cudaStream_t stream, int32_t N, int32_t orderA, const uint64_t* A, const int32_t* vexp, matrix_t* B, int32_t ldb) {
+template<class real_t, class matrix_t> static inline void tp_deq_dispatcher(cudaStream_t stream, int32_t N, int32_t orderA, const uint64_t* A, const int32_t* vexp, matrix_t* B, int32_t ldb) {
   constexpr int32_t block_threads = 512;
   dim3 grid(uint32_t(N + 511) >> 9, uint32_t(N), uint32_t(1));
   int64_t N64 = int64_t(N), strideA = (N64 * N64 + N64) / int64_t(2), ldb64 = int64_t(ldb);

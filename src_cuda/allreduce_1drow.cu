@@ -6,19 +6,19 @@
 #include <ext_arith.hpp>
 #include <stdexcept>
 
-template <int32_t hi_bits> __device__ __forceinline__ uint64_t sign_bits(uint64_t a) {
+template <int32_t hi_bits> static __device__ __forceinline__ uint64_t sign_bits(uint64_t a) {
   static_assert(0 <= hi_bits && hi_bits <= 64);
   constexpr uint64_t mask = hi_bits ? (uint64_t(0xffffffffffffffffllu) << (64 - hi_bits)) : uint64_t(0);
   return mask & (-(a >> 63));
 }
 
-template <int32_t LEN, int32_t ORDER> __device__ __forceinline__ void load_i(uint64_t (&a)[ORDER], const uint64_t* in, int64_t stride) {
+template <int32_t LEN, int32_t ORDER> static __device__ __forceinline__ void load_i(uint64_t (&a)[ORDER], const uint64_t* in, int64_t stride) {
   if constexpr(0 < ORDER && 0 < LEN) { a[0] = *in; }
   if constexpr(1 < ORDER && 1 < LEN) { a[1] = *(in += stride); }
   if constexpr(2 < ORDER && 2 < LEN) { a[2] = *(in += stride); }
 }
 
-template <int32_t OFF, int32_t LEN, int32_t ORDER> __device__ __forceinline__ void store_i(const uint64_t (&a)[ORDER], uint64_t* out, int64_t stride) {
+template <int32_t OFF, int32_t LEN, int32_t ORDER> static __device__ __forceinline__ void store_i(const uint64_t (&a)[ORDER], uint64_t* out, int64_t stride) {
   if constexpr(OFF < ORDER && 0 < LEN) { *out = a[OFF]; }
   if constexpr(OFF + 1 < ORDER && 1 < LEN) { *(out += stride) = a[OFF + 1]; }
   if constexpr(OFF + 2 < ORDER && 2 < LEN) { *(out += stride) = a[OFF + 2]; }
@@ -27,7 +27,7 @@ template <int32_t OFF, int32_t LEN, int32_t ORDER> __device__ __forceinline__ vo
   if constexpr(OFF + 5 < ORDER && 5 < LEN) { *(out += stride) = a[OFF + 5]; }
 }
 
-template <int32_t ORDER> __device__ __forceinline__ void conv_u32(uint64_t (&a)[ORDER]) {
+template <int32_t ORDER> static __device__ __forceinline__ void conv_u32(uint64_t (&a)[ORDER]) {
   constexpr uint64_t i32 = uint64_t(0xffffffffllu);
   uint64_t b0 = a[0] & i32;
   if constexpr(2 < ORDER) {
@@ -44,7 +44,7 @@ template <int32_t ORDER> __device__ __forceinline__ void conv_u32(uint64_t (&a)[
   a[0] = b0;
 }
 
-__device__ __forceinline__ void conv_u43(uint64_t (&a)[3]) {
+static __device__ __forceinline__ void conv_u43(uint64_t (&a)[3]) {
   constexpr uint64_t i43 = uint64_t(0x7ffffffffffllu);
   uint64_t b0 = a[0] & i43;
   uint64_t b1 = ((a[0] >> 43) | (a[1] << 20)) & i43;
@@ -52,7 +52,7 @@ __device__ __forceinline__ void conv_u43(uint64_t (&a)[3]) {
   a[0] = b0; a[1] = b1; a[2] = b2;
 }
 
-__device__ __forceinline__ void conv_u48(uint64_t (&a)[4]) {
+static __device__ __forceinline__ void conv_u48(uint64_t (&a)[4]) {
   constexpr uint64_t i48 = uint64_t(0xffffffffffffllu);
   uint64_t b0 = a[0] & i48;
   uint64_t b1 = ((a[0] >> 48) | (a[1] << 15)) & i48;
@@ -61,7 +61,7 @@ __device__ __forceinline__ void conv_u48(uint64_t (&a)[4]) {
   a[0] = b0; a[1] = b1; a[2] = b2; a[3] = b3;
 }
 
-__device__ __forceinline__ void conv_u38(uint64_t (&a)[5]) {
+static __device__ __forceinline__ void conv_u38(uint64_t (&a)[5]) {
   constexpr uint64_t i38 = uint64_t(0x3fffffffffllu);
   uint64_t b0 = a[0] & i38;
   uint64_t b1 = ((a[0] >> 38) | (a[1] << 25)) & i38;
@@ -92,7 +92,7 @@ template <int32_t op> __global__ void limbs_convert_kernel(int64_t N, uint64_t* 
   }
 }
 
-template <int32_t SFT, int32_t OFF, int32_t LEN, int32_t ORDER> __device__ __forceinline__ void accum_i(uint64_t (&a)[ORDER], const uint64_t* in, int64_t stride) {
+template <int32_t SFT, int32_t OFF, int32_t LEN, int32_t ORDER> static __device__ __forceinline__ void accum_i(uint64_t (&a)[ORDER], const uint64_t* in, int64_t stride) {
   if constexpr(0 == OFF && 0 < LEN) { a[0] = *in; if constexpr(1 < ORDER) a[1] = uint64_t(0); if constexpr(2 < ORDER) a[2] = uint64_t(0); }
     else if constexpr(0 < LEN) { device::add_shifted<SFT * OFF>(a, int64_t(*in)); }
   if constexpr(1 < LEN) { device::add_shifted<SFT * (OFF + 1)>(a, int64_t(*(in += stride))); }
@@ -123,7 +123,7 @@ template <int32_t op> __global__ void limbs_accum_kernel(int64_t N, uint64_t* __
   }
 }
 
-template <int32_t op> inline void conv_reduction(cudaStream_t stream, uint64_t N, uint64_t* A, uint64_t lenA, uint64_t* E, uint64_t lenE, ncclComm_t col_comm) {
+template <int32_t op> static inline void conv_reduction(cudaStream_t stream, uint64_t N, uint64_t* A, uint64_t lenA, uint64_t* E, uint64_t lenE, ncclComm_t col_comm) {
   constexpr int32_t block_threads = 512;
   uint32_t grid = uint32_t((N + uint64_t(511)) >> 9);
   limbs_convert_kernel<op> <<< grid, block_threads, 0, stream >>> (int64_t(N), A, E);

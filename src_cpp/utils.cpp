@@ -124,7 +124,7 @@ extern "C" void hyacinDestroy(hyacinHandle_t* handle) {
   std::memset(handle, 0, sizeof(hyacinHandle_t));
 }
 
-template <segment seg> inline void register_event(cudaStream_t stream, EventTimer* timer) {
+template <segment seg> static inline void register_event(cudaStream_t stream, EventTimer* timer) {
   if (timer) if (timer->lastSegment != seg) {
     cudaEvent_t e; cudaEventCreate(&e); cudaEventRecord(e, stream);
     segment prev = timer->lastSegment; timer->events.emplace_back(prev, e); timer->lastSegment = seg;
