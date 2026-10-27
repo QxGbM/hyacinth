@@ -81,7 +81,7 @@ static __device__ __forceinline__ float4 sqrt_fl(float4 x, float4& r) {
   return x * (r = make_float4(scalbnf(rx.x, e), scalbnf(rx.y, e), scalbnf(rx.z, e), scalbnf(rx.w, e)));
 }
 
-template <class matrix_t, class real_t> static __device__ __forceinline__ matrix_t ext(real_t x) {
+template <class matrix_t, class real_t> static __device__ __forceinline__ matrix_t ext(const real_t& x) {
   if constexpr(std::is_same_v<real_t, double> && std::is_same_v<matrix_t, cuDoubleComplex>) { return make_cuDoubleComplex(x, 0.); } else
   if constexpr(std::is_same_v<real_t, float> && std::is_same_v<matrix_t, cuComplex>) { return make_cuComplex(x, 0.f); } else
   if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, complex_double2>) { return device::make_complex_double2(x, make_double2(0., 0.)); } else
@@ -194,7 +194,7 @@ template <class real_t, class matrix_t> static __device__ __forceinline__ matrix
   } else { return matrix_t(); }
 }
 
-template <class real_t, class matrix_t> static __device__ __forceinline__ matrix_t conj(matrix_t a) {
+template <class real_t, class matrix_t> static __device__ __forceinline__ matrix_t conj(const matrix_t& a) {
   if constexpr(std::is_same_v<real_t, double> && std::is_same_v<matrix_t, cuDoubleComplex>) { return make_cuDoubleComplex(a.x, -a.y); } else
   if constexpr(std::is_same_v<real_t, float> && std::is_same_v<matrix_t, cuComplex>) { return make_cuComplex(a.x, -a.y); } else
   if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, complex_double2>) { return device::make_complex_double2(a.real, make_double2(-a.imag.x, -a.imag.y)); } else

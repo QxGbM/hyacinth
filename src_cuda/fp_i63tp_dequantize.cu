@@ -48,7 +48,7 @@ extern "C" void hyacinXdequantizeInit(const hyacinHandle_t* handle, int32_t N, i
   hyacinPrecision_t GtypeComplex = 
     bits <= type_mantissa[int32_t(HYACIN_F32)] ? HYACIN_F32_COMPLEX : (
     bits <= type_mantissa[int32_t(HYACIN_F64)] ? HYACIN_F64_COMPLEX : (
-    bits <= type_mantissa[int32_t(HYACIN_TF)] ? HYACIN_TF_COMPLEX : (
+    bits <= type_mantissa[int32_t(HYACIN_TF)] && (!handle->DeviceIsF64Capable) ? HYACIN_TF_COMPLEX : (
     bits <= type_mantissa[int32_t(HYACIN_QF)] && (!handle->DeviceIsF64Capable) ? HYACIN_QF_COMPLEX : HYACIN_DD_COMPLEX)));
   hyacinPrecision_t g = (Atype == real_type[int32_t(Atype)]) ? real_type[int32_t(GtypeComplex)] : GtypeComplex;
   if (Gtype) { *Gtype = g; } if (gElemBytes) { *gElemBytes = type_bytes[g]; }
@@ -110,7 +110,7 @@ template <int32_t orderA, class real_t, class matrix_t> static __device__ __forc
   }
 }
 
-template <class real_t, class matrix_t> static __device__ __forceinline__ matrix_t conj(matrix_t a) {
+template <class real_t, class matrix_t> static __device__ __forceinline__ matrix_t conj(const matrix_t& a) {
   if constexpr(std::is_same_v<real_t, double> && std::is_same_v<matrix_t, cuDoubleComplex>) { return make_cuDoubleComplex(a.x, -a.y); } else
   if constexpr(std::is_same_v<real_t, float> && std::is_same_v<matrix_t, cuComplex>) { return make_cuComplex(a.x, -a.y); } else
   if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, complex_double2>) { return device::make_complex_double2(a.real, make_double2(-a.imag.x, -a.imag.y)); } else

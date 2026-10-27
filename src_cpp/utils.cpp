@@ -56,7 +56,7 @@ std::pair<int32_t, int32_t> internal::gram_algorithm(char& alg, int32_t K, int32
       double cost_limbs = (batch_penalty * double(orderA_limbs) * 0.5) + double(uint32_t(orderA_limbs * (orderA_limbs - 1)) >> 1) + double(orderA_limbs * orderA_limbs);
       if (crt_bits <= U8CRT2M::range[24]) {
         int32_t orderA_crt = 1 + int32_t(std::distance(&U8CRT2M::range[0], std::lower_bound(&U8CRT2M::range[0], &U8CRT2M::range[25], crt_bits)));
-        double cost_crt = batch_penalty * double(orderA_crt);
+        double cost_crt = batch_penalty * (double(orderA_crt) + double(std::max(0, orderA_crt - U8CRT2M::len_2m_moduli)) * 0.5);
         if (cost_crt < cost_limbs)
         { alg = 'C'; return std::make_pair(orderA_crt, std::min((K + 255) & (~255), segmentK << (U8CRT2M::range[orderA_crt - 1] - crt_bits))); }
       }
