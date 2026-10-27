@@ -11,7 +11,8 @@ template <class T> static inline hyacinPrecision_t hyacin_prec() {
   if constexpr(std::is_same_v<T, __half>) { return HYACIN_F16; } else
   if constexpr(std::is_same_v<T, cuDoubleComplex>) { return HYACIN_F64_COMPLEX; } else
   if constexpr(std::is_same_v<T, cuComplex>) { return HYACIN_F32_COMPLEX; } else
-  if constexpr(std::is_same_v<T, __half2>) { return HYACIN_F16_COMPLEX; }
+  if constexpr(std::is_same_v<T, __half2>) { return HYACIN_F16_COMPLEX; } else
+  { return hyacinPrecision_t(); }
 }
 
 template <class T> static inline
