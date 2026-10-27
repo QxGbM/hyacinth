@@ -39,7 +39,7 @@ template <int32_t orderX> static inline void crt_diag(cudaStream_t stream, int32
   { crt_diag_real_kernel<orderX, 0> <<< grid, block_threads, 0, stream >>> (N64, (uint32_t*)X, ldx64, strideX, (uchar4*)A, strideA); }
 }
 
-void internal::int8::accumulate_crt_diag(cudaStream_t stream, int32_t beta, int32_t N, int32_t orderX, const int32_t* X, int32_t ldx, uint32_t* A) {
+void internal::int8::accumulate_crt_diag_real(cudaStream_t stream, int32_t beta, int32_t N, int32_t orderX, const int32_t* X, int32_t ldx, uint32_t* A) {
   switch (orderX) {
     case 1: crt_diag<1>(stream, beta, N, X, ldx, A); return;
     case 2: crt_diag<2>(stream, beta, N, X, ldx, A); return;

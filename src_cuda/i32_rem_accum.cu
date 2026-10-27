@@ -9,9 +9,9 @@ template <int32_t x> static __device__ __forceinline__ int64_t i32_i64_prod(int3
 }
 
 template <int32_t orderX, int32_t x, int32_t orderA> static __device__ __forceinline__ void add_pd(uint64_t (&a)[orderA], int32_t i) {
-  using U8CRT::Constants;
+  using U8CRT2M::Constants;
   constexpr int32_t x6 = x * 6;
-  constexpr uint32_t MO = U8CRT::mo[x], MINV = Constants<orderX>::minv[x];
+  constexpr uint32_t MO = U8CRT2M::mo[x], MINV = Constants<orderX>::minv[x];
 
   uint32_t mask_sign = uint32_t(a[orderA - 1] >> 63) + 0xffffffffu;
   i = int32_t(device::barrett_reduc<MO>(device::mulx_reduc<1, MINV, MO>(uint32_t(i))) - (MO & mask_sign));
@@ -65,9 +65,10 @@ __global__ void i32_crt_accum_kernel(int64_t N, const int32_t* __restrict__ X, i
     if constexpr(21 < orderX) { add_pd<orderX, 21>(acc, *(X += strideX)); }
     if constexpr(22 < orderX) { add_pd<orderX, 22>(acc, *(X += strideX)); }
     if constexpr(23 < orderX) { add_pd<orderX, 23>(acc, *(X += strideX)); }
+    if constexpr(24 < orderX) { add_pd<orderX, 24>(acc, *(X += strideX)); }
 
     uint64_t neg[orderA];
-    constexpr int64_t p0 = U8CRT::Constants<orderX>::p[0], p1 = U8CRT::Constants<orderX>::p[1], p2 = U8CRT::Constants<orderX>::p[2], neg_p0 = -p0, neg_p1 = -p1, neg_p2 = -p2;
+    constexpr int64_t p0 = U8CRT2M::Constants<orderX>::p[0], p1 = U8CRT2M::Constants<orderX>::p[1], p2 = U8CRT2M::Constants<orderX>::p[2], neg_p0 = -p0, neg_p1 = -p1, neg_p2 = -p2;
     if constexpr(0 < orderA) { neg[0] = acc[0]; }
     if constexpr(1 < orderA) { neg[1] = acc[1]; }
     if constexpr(2 < orderA) { neg[2] = acc[2]; }
@@ -134,6 +135,7 @@ static inline void crt_acc_dispatcher(cudaStream_t stream, char mode, int32_t be
     case 22: crt_acc_dispatcher<22, orderA>(stream, mode, beta, N, X, ldx, A); return;
     case 23: crt_acc_dispatcher<23, orderA>(stream, mode, beta, N, X, ldx, A); return;
     case 24: crt_acc_dispatcher<24, orderA>(stream, mode, beta, N, X, ldx, A); return;
+    case 25: crt_acc_dispatcher<25, orderA>(stream, mode, beta, N, X, ldx, A); return;
     default: return;
   }
 }

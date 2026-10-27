@@ -6,22 +6,22 @@
 template<int32_t sign, int32_t orderX, int32_t x>
 static __device__ __forceinline__ void accumulate_modular_imaginary(uchar4& r, uchar4& i, const uint32_t* X, int64_t strideX) {
   if constexpr(x < orderX) {
-    constexpr uint32_t mo = U8CRT::mo[x], mul = mo - uint32_t(1), s = sign ? mul : 1;
+    constexpr uint32_t mo = U8CRT2M::mo[x], mul = mo - uint32_t(1), s = sign ? mul : 1;
     uint32_t a = *X;
     r.x = uint8_t(device::barrett_reduc<mo>(uint32_t(r.x) + device::mulx_reduc<1, mul, mo>(a)));
     i.x = uint8_t(device::barrett_reduc<mo>(uint32_t(i.x) + device::mulx_reduc<1, s, mo>(a)));
   } if constexpr(x + 1 < orderX) {
-    constexpr uint32_t mo = U8CRT::mo[x + 1], mul = mo - uint32_t(1), s = sign ? mul : 1;
+    constexpr uint32_t mo = U8CRT2M::mo[x + 1], mul = mo - uint32_t(1), s = sign ? mul : 1;
     uint32_t a = *(X += strideX);
     r.y = uint8_t(device::barrett_reduc<mo>(uint32_t(r.y) + device::mulx_reduc<1, mul, mo>(a)));
     i.y = uint8_t(device::barrett_reduc<mo>(uint32_t(i.y) + device::mulx_reduc<1, s, mo>(a)));
   } if constexpr(x + 2 < orderX) {
-    constexpr uint32_t mo = U8CRT::mo[x + 2], mul = mo - uint32_t(1), s = sign ? mul : 1;
+    constexpr uint32_t mo = U8CRT2M::mo[x + 2], mul = mo - uint32_t(1), s = sign ? mul : 1;
     uint32_t a = *(X += strideX);
     r.z = uint8_t(device::barrett_reduc<mo>(uint32_t(r.y) + device::mulx_reduc<1, mul, mo>(a)));
     i.z = uint8_t(device::barrett_reduc<mo>(uint32_t(i.y) + device::mulx_reduc<1, s, mo>(a)));
   } if constexpr(x + 3 < orderX) {
-    constexpr uint32_t mo = U8CRT::mo[x + 3], mul = mo - uint32_t(1), s = sign ? mul : 1;
+    constexpr uint32_t mo = U8CRT2M::mo[x + 3], mul = mo - uint32_t(1), s = sign ? mul : 1;
     uint32_t a = *(X += strideX);
     r.w = uint8_t(device::barrett_reduc<mo>(uint32_t(r.y) + device::mulx_reduc<1, mul, mo>(a)));
     i.w = uint8_t(device::barrett_reduc<mo>(uint32_t(i.y) + device::mulx_reduc<1, s, mo>(a)));
