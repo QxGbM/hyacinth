@@ -64,6 +64,7 @@ __global__ void i32_crt_accum_kernel(int64_t N, const int32_t* __restrict__ X, i
     if constexpr(20 < orderX) { add_pd<orderX, 20>(acc, *(X += strideX)); }
     if constexpr(21 < orderX) { add_pd<orderX, 21>(acc, *(X += strideX)); }
     if constexpr(22 < orderX) { add_pd<orderX, 22>(acc, *(X += strideX)); }
+    if constexpr(23 < orderX) { add_pd<orderX, 23>(acc, *(X += strideX)); }
 
     uint64_t neg[orderA];
     constexpr int64_t p0 = U8CRT::Constants<orderX>::p[0], p1 = U8CRT::Constants<orderX>::p[1], p2 = U8CRT::Constants<orderX>::p[2], neg_p0 = -p0, neg_p1 = -p1, neg_p2 = -p2;
@@ -132,6 +133,7 @@ static inline void crt_acc_dispatcher(cudaStream_t stream, char mode, int32_t be
     case 21: crt_acc_dispatcher<21, orderA>(stream, mode, beta, N, X, ldx, A); return;
     case 22: crt_acc_dispatcher<22, orderA>(stream, mode, beta, N, X, ldx, A); return;
     case 23: crt_acc_dispatcher<23, orderA>(stream, mode, beta, N, X, ldx, A); return;
+    case 24: crt_acc_dispatcher<24, orderA>(stream, mode, beta, N, X, ldx, A); return;
     default: return;
   }
 }

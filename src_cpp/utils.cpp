@@ -41,16 +41,16 @@ const std::vector<int32_t> limbs_u_list({ 7, 14, 22, 30, 38, 46, 54, 62, 70, 78,
 std::pair<int32_t, int32_t> internal::gram_algorithm(char& alg, int32_t K, int32_t u, int32_t Complex, int32_t segmentK, double batch_penalty) {
   u = std::max(0, u); K = std::max(1, K); int32_t crt_bits = (u + u + 2) + int32_t(std::ceil(std::log2(double(0 < segmentK ? std::min(K, segmentK) : K))));
   if (alg == 'C' || alg == 'c') {
-    if (crt_bits <= U8CRT::range[22]) {
-      int32_t orderA_crt = 1 + int32_t(std::distance(&U8CRT::range[0], std::lower_bound(&U8CRT::range[1], &U8CRT::range[23], crt_bits)));
+    if (crt_bits <= U8CRT::range[23]) {
+      int32_t orderA_crt = 1 + int32_t(std::distance(&U8CRT::range[0], std::lower_bound(&U8CRT::range[1], &U8CRT::range[24], crt_bits)));
       alg = 'C'; return std::make_pair(orderA_crt, std::min((K + 255) & (~255), segmentK << (U8CRT::range[orderA_crt - 1] - crt_bits)));
     } else { alg = 'C'; return std::make_pair(0, 0); }
   } else {
     int32_t orderA_limbs = 1 + std::distance(limbs_u_list.begin(), std::lower_bound(limbs_u_list.begin(), limbs_u_list.end(), u));
     if (alg != 'L' && alg != 'l' && 3 < orderA_limbs) {
       int32_t cost_limbs = int32_t(batch_penalty * double(orderA_limbs)) + int32_t(uint32_t(orderA_limbs * (orderA_limbs - 1)) >> 1) + (Complex ? orderA_limbs * orderA_limbs : 0);
-      if (crt_bits <= U8CRT::range[22]) {
-        int32_t orderA_crt = 1 + int32_t(std::distance(&U8CRT::range[0], std::lower_bound(&U8CRT::range[1], &U8CRT::range[23], crt_bits)));
+      if (crt_bits <= U8CRT::range[23]) {
+        int32_t orderA_crt = 1 + int32_t(std::distance(&U8CRT::range[0], std::lower_bound(&U8CRT::range[1], &U8CRT::range[24], crt_bits)));
         int32_t cost_crt = int32_t(batch_penalty * double(Complex ? (orderA_crt + orderA_crt) : orderA_crt));
         if (cost_crt < cost_limbs)
         { alg = 'C'; return std::make_pair(orderA_crt, std::min((K + 255) & (~255), segmentK << (U8CRT::range[orderA_crt - 1] - crt_bits))); }

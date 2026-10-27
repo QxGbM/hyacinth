@@ -75,7 +75,9 @@ namespace device {
     if constexpr(MUL && DIV) {
       static_assert(DIV <= 4096u, "Modular needs to be smaller than 4096");
       constexpr uint32_t mul = MUL % DIV, mul_r16 = (mul << 16) % DIV;
-      uint32_t mul_x = (mul_r16 * (x >> 16)) + (mul * (x & uint32_t(0xffff)));
+      uint32_t mul_x;
+      if constexpr(mul == uint32_t(1)) { mul_x = (mul_r16 * (x >> 16)) + (x & uint32_t(0xffff)); } else
+      { mul_x = (mul_r16 * (x >> 16)) + (mul * (x & uint32_t(0xffff))); }
       if constexpr(sign) { constexpr uint32_t mul_r32 = ((DIV - mul_r16) << 16) % DIV; return mul_x + ((-(x >> 31)) & mul_r32); } else { return mul_x; }
     } else return uint32_t(0);
   }
