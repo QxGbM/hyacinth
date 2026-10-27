@@ -35,7 +35,8 @@ typedef struct {
   /* Tuning guide:
     (1) Insufficient quantization resolution may contaminate the small-eigenvalue spectrum of the Gram matrix, causing excessive rank retention, expensive downstream factorization, or numerical failure.
     (2) We therefore recommend a modest positive resolution margin, with Gram algorithm set to CRT or auto.
-    (3) Usually, 2-3 Jacobi Sweeps produce basis with excellent quality, 1 Jacobi Sweep is usable with slightly worse error bound. */
+    (3) Usually, 2-3 Jacobi Sweeps produce basis with excellent quality, 1 Jacobi Sweep is usable with slightly worse error bound. 
+    (4) We prioritize bidiagonalization over Jacobi on low-FP64 GPUs, setting ENV{HYACIN_JACOBI_SVD_SWEEPS} negative will override this behavior, and its absolute value is used as sweeps instead. */
   double GramSVDEpiCorrection;
   int32_t QuantizeBitCorrection, JacobiSVDSweeps;
 
