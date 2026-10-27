@@ -50,23 +50,16 @@ std::pair<int32_t, int32_t> internal::gram_algorithm(char& alg, int32_t K, int32
       int32_t orderA_crt = 1 + int32_t(std::distance(&U8CRT::range[0], std::lower_bound(&U8CRT::range[0], &U8CRT::range[24], crt_bits)));
       alg = 'C'; return std::make_pair(orderA_crt, std::min((K + 255) & (~255), segmentK << (U8CRT::range[orderA_crt - 1] - crt_bits)));
     } else { alg = 'C'; return std::make_pair(0, 0); }
-  } else if (Complex) {
+  } else {
     int32_t orderA_limbs = 1 + std::distance(limbs_u_list.begin(), std::lower_bound(limbs_u_list.begin(), limbs_u_list.end(), u));
     if (alg != 'L' && alg != 'l' && 3 < orderA_limbs && 512 <= N) {
-      double cost_limbs = (batch_penalty * double(orderA_limbs) * 0.5) + double(uint32_t(orderA_limbs * (orderA_limbs - 1)) >> 1) + double(orderA_limbs * orderA_limbs);
-      if (crt_bits <= U8CRT2M::range[24]) {
+      double cost_limbs = (batch_penalty * double(orderA_limbs) * 0.5) + double(uint32_t(orderA_limbs * (orderA_limbs - 1)) >> 1) + double(Complex ? orderA_limbs * orderA_limbs : 0);
+      if (Complex && crt_bits <= U8CRT2M::range[24]) {
         int32_t orderA_crt = 1 + int32_t(std::distance(&U8CRT2M::range[0], std::lower_bound(&U8CRT2M::range[0], &U8CRT2M::range[25], crt_bits)));
         double cost_crt = batch_penalty * (double(orderA_crt) + double(std::max(0, orderA_crt - U8CRT2M::len_2m_moduli)) * 0.5);
         if (cost_crt < cost_limbs)
         { alg = 'C'; return std::make_pair(orderA_crt, std::min((K + 255) & (~255), segmentK << (U8CRT2M::range[orderA_crt - 1] - crt_bits))); }
-      }
-    }
-    alg = 'L'; return std::make_pair(orderA_limbs, limbs_u_list[orderA_limbs - 1]);
-  } else {
-    int32_t orderA_limbs = 1 + std::distance(limbs_u_list.begin(), std::lower_bound(limbs_u_list.begin(), limbs_u_list.end(), u));
-    if (alg != 'L' && alg != 'l' && 3 < orderA_limbs && 512 <= N) {
-      double cost_limbs = (batch_penalty * double(orderA_limbs) * 0.5) + double(uint32_t(orderA_limbs * (orderA_limbs - 1)) >> 1);
-      if (crt_bits <= U8CRT::range[23]) {
+      } else if (!Complex && crt_bits <= U8CRT::range[23]) {
         int32_t orderA_crt = 1 + int32_t(std::distance(&U8CRT::range[0], std::lower_bound(&U8CRT::range[0], &U8CRT::range[24], crt_bits)));
         double cost_crt = batch_penalty * double(orderA_crt) * 0.5;
         if (cost_crt < cost_limbs)
@@ -91,6 +84,12 @@ constexpr uint32_t HANDLE_OWNS_PINNED_WORK = 0x10;
 constexpr uint32_t HANDLE_OWNS_TIMER = 0x20;
 
 extern "C" void hyacinCreate(hyacinHandle_t* handle) {
+  cudaGetDevice(&handle->DeviceID); int32_t major, minor;
+  cudaDeviceGetAttribute(&handle->DeviceSMs, cudaDevAttrMultiProcessorCount, handle->DeviceID);
+  cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, handle->DeviceID);
+  cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, handle->DeviceID);
+  handle->DeviceIsF64Capable = int32_t(f64_capable_sm_list.end() != std::find(f64_capable_sm_list.begin(), f64_capable_sm_list.end(), 10 * major + minor));
+
   auto get_env = [](const std::string& key) { const char* val = std::getenv(key.c_str()); return val ? std::string(val) : std::string(""); };
   std::string env_str;
   handle->GramMatrixAlgorithm = ((env_str = get_env("HYACIN_GRAM_ALGORITHM")) == "") ? HYACIN_DEFAULT_GRAM_ALGORITHM : env_str[0];
@@ -100,13 +99,7 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle) {
 
   handle->GramSVDEpiCorrection = ((env_str = get_env("HYACIN_GRAM_SVD_EPI_CORR")) == "") ? HYACIN_DEFAULT_GRAM_SVD_EPI_CORR : std::stod(env_str);
   handle->QuantizeBitCorrection = ((env_str = get_env("HYACIN_QUANTIZE_BITS_CORR")) == "") ? HYACIN_DEFAULT_QUANTIZE_BITS_CORR : std::stoi(env_str);
-  handle->JacobiSVDSweeps = ((env_str = get_env("HYACIN_JACOBI_SVD_SWEEPS")) == "") ? HYACIN_DEFAULT_JACOBI_SVD_SWEEPS : std::stoi(env_str);
-
-  cudaGetDevice(&handle->DeviceID); int32_t major, minor;
-  cudaDeviceGetAttribute(&handle->DeviceSMs, cudaDevAttrMultiProcessorCount, handle->DeviceID);
-  cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, handle->DeviceID);
-  cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, handle->DeviceID);
-  handle->DeviceIsF64Capable = int32_t(f64_capable_sm_list.end() != std::find(f64_capable_sm_list.begin(), f64_capable_sm_list.end(), 10 * major + minor));
+  handle->JacobiSVDSweeps = ((env_str = get_env("HYACIN_JACOBI_SVD_SWEEPS")) == "") ? (handle->DeviceIsF64Capable ? HYACIN_DEFAULT_JACOBI_SVD_SWEEPS : 0) : std::stoi(env_str);
 
   if (!(handle->HandleOwnedResource & HANDLE_OWNS_CUDA_STREAM))
   { cudaStreamCreateWithFlags(&handle->cudaStream, cudaStreamNonBlocking); handle->HandleOwnedResource |= HANDLE_OWNS_CUDA_STREAM; }
