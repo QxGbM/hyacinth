@@ -103,7 +103,7 @@ template <int32_t SFT, int32_t OFF, int32_t LEN, int32_t ORDER> static __device_
 }
 
 template <int32_t op> __global__ void limbs_accum_kernel(int64_t N, uint64_t* __restrict__ A, const uint64_t* __restrict__ E) {
-  int64_t i = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x);
+  int64_t i = (int64_t(blockIdx.x) << 7) + int64_t(threadIdx.x);
   if (i < N) {
     constexpr int32_t orderA_lis[] = { 1, 2, 2, 3, 3, 3, 1, 2, 2, 3, 3, 3 };
     constexpr int32_t orderA = orderA_lis[op];
@@ -124,8 +124,8 @@ template <int32_t op> __global__ void limbs_accum_kernel(int64_t N, uint64_t* __
 }
 
 template <int32_t op> static inline void conv_reduction(cudaStream_t stream, uint64_t N, uint64_t* A, uint64_t lenA, uint64_t* E, uint64_t lenE, ncclComm_t col_comm) {
-  constexpr int32_t block_threads = 512;
-  uint32_t grid = uint32_t((N + uint64_t(511)) >> 9);
+  constexpr int32_t block_threads = 128;
+  uint32_t grid = uint32_t((N + uint64_t(127)) >> 7);
   limbs_convert_kernel<op> <<< grid, block_threads, 0, stream >>> (int64_t(N), A, E);
   ncclGroupStart();
   ncclAllReduce(A, A, lenA, ncclUint64, ncclSum, col_comm, stream);

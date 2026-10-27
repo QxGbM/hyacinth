@@ -51,7 +51,7 @@ template <int32_t beta, int32_t orderOut, int32_t orderA> static __device__ __fo
 
 template<int32_t orderX, int32_t orderA, int32_t beta>
 __global__ void reconstruct_real_kernel(int64_t N, const uint32_t* __restrict__ X, uint64_t* __restrict__ A) {
-  int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x);
+  int64_t y = (int64_t(blockIdx.x) << 7) + int64_t(threadIdx.x);
   if (y < N) {
     constexpr int64_t p0 = U8CRT::Constants<orderX>::p[0], p1 = U8CRT::Constants<orderX>::p[1], p2 = U8CRT::Constants<orderX>::p[2];
     constexpr int32_t orderP = int32_t(int64_t(0) < p0) + int32_t(int64_t(0) < p1) + int32_t(int64_t(0) < p2), orderAcc = orderA < orderP ? orderP : orderA;
@@ -94,8 +94,8 @@ __global__ void reconstruct_real_kernel(int64_t N, const uint32_t* __restrict__ 
 
 template <int32_t orderA, int32_t orderX>
 static inline void reconstruct_crt_real(cudaStream_t stream, int32_t beta, int64_t N, const uint32_t* X, uint64_t* A) {
-  constexpr int32_t block_threads = 512;
-  uint32_t grid = uint32_t((uint64_t(N) + uint64_t(511)) >> 9);
+  constexpr int32_t block_threads = 128;
+  uint32_t grid = uint32_t((uint64_t(N) + uint64_t(127)) >> 7);
   if (beta) { reconstruct_real_kernel<orderX, orderA, 1> <<< grid, block_threads, 0, stream >>> (N, X, A); } else
   { reconstruct_real_kernel<orderX, orderA, 0> <<< grid, block_threads, 0, stream >>> (N, X, A); }
 }

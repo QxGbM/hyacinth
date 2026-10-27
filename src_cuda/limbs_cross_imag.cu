@@ -26,7 +26,7 @@ static __device__ __forceinline__ void accumulate_complex(uint64_t (&r)[orderA],
 
 template<int32_t sft, int32_t orderA, int32_t orderX, int32_t beta>
 __global__ void limbs_cross_imaginary_kernel(int64_t N, const int32_t* __restrict__ X, int64_t ldx, int64_t strideX, uint64_t* __restrict__ A, int64_t strideA) {
-  int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
+  int64_t y = (int64_t(blockIdx.x) << 7) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
   if (y <= x) {
     uint64_t r[orderA], i[orderA]; A = &A[y + int64_t(uint64_t((x + int64_t(1)) * x) >> 1)];
 
@@ -48,8 +48,8 @@ __global__ void limbs_cross_imaginary_kernel(int64_t N, const int32_t* __restric
 
 template <int32_t orderA, int32_t orderX>
 static inline void limbs_cross_imag(cudaStream_t stream, int32_t beta, int32_t N, int32_t sft, const int32_t* X, int32_t ldx, uint64_t* A) {
-  constexpr int32_t block_threads = 512;
-  dim3 grid(uint32_t(N + 511) >> 9, uint32_t(N), uint32_t(1));
+  constexpr int32_t block_threads = 128;
+  dim3 grid(uint32_t(N + 127) >> 7, uint32_t(N), uint32_t(1));
   int64_t N64 = int64_t(N), ldx64 = int64_t(ldx), strideX = ldx64 * N64, strideA = (N64 + (N64 * N64)) / int64_t(2);
   if (beta == 0 && sft == 0) { limbs_cross_imaginary_kernel<0, orderA, orderX, 0> <<< grid, block_threads, 0, stream >>> (N64, X, ldx64, strideX, A, strideA); } else
   switch (sft) {

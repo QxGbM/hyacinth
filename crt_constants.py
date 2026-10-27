@@ -6,6 +6,7 @@ import numpy as np
 moduli_real = [256, 253, 251, 249, 247, 241, 239, 235, 233, 229, 227, 223, 217, 211, 199, 197, 193, 191, 181, 179, 173, 167, 163, 157]
 moduli_complex = [241, 233, 229, 221, 205, 197, 193, 181, 173, 157, 149, 137, 113, 109, 101, 97, 89, 73, 61, 53, 256, 253, 251, 249, 239]
 moduli_complex_imag = [64, 89, 107, 21, 32, 14, 81, 19, 80, 28, 44, 37, 15, 33, 10, 22, 34, 27, 11, 23, 0, 0, 0, 0, 0]
+len_2m_moduli = 20
 all_ok = True
 
 for (i, a), (j, b) in combinations(enumerate(moduli_real), 2):
@@ -20,8 +21,8 @@ for (i, a), (j, b) in combinations(enumerate(moduli_complex), 2):
     print(f"gcd(moduli_complex[{i}]={a}, moduli_complex[{j}]={b}) = {g}")
     all_ok = False
 
-for i, m in zip(moduli_complex_imag, moduli_complex):
-  if (0 < i and (1 + i**2) % m != 0):
+for i, m in zip(moduli_complex_imag[:len_2m_moduli:], moduli_complex[:len_2m_moduli:]):
+  if ((1 + i**2) % m != 0):
     print(f"{i}^2 mod {m} != -1")
     all_ok = False
 
@@ -73,7 +74,7 @@ if all_ok:
   print("};\n")
 
   ranges = np.trunc(np.cumsum(np.log2(moduli_complex))).astype(np.int32)
-  inv = [0 if i == 0 else pow(i, -1, m) for i, m in zip(moduli_complex_imag, moduli_complex)]
+  inv = [0 if i == 0 else pow(i + i, -1, m) for i, m in zip(moduli_complex_imag, moduli_complex)]
   rem_e32 = [(1 << 32) % m for m in moduli_complex]
   rem_e63 = [(1 << 63) % m for m in moduli_complex]
 
@@ -84,7 +85,8 @@ if all_ok:
   print(f"  constexpr uint16_t im[{len(moduli_complex)}] =" + " { " + ", ".join(f"{m}" for m in moduli_complex_imag) + " };")
   print(f"  constexpr uint16_t im_inv[{len(moduli_complex)}] =" + " { " + ", ".join(f"{m}" for m in inv) + " };")
   print(f"  constexpr uint16_t rem_e32[{len(moduli_complex)}] =" + " { " + ", ".join(f"{m}" for m in rem_e32) + " };")
-  print(f"  constexpr uint16_t rem_e63[{len(moduli_complex)}] =" + " { " + ", ".join(f"{m}" for m in rem_e63) + " };\n")
+  print(f"  constexpr uint16_t rem_e63[{len(moduli_complex)}] =" + " { " + ", ".join(f"{m}" for m in rem_e63) + " };")
+  print(f"  constexpr int32_t len_2m_moduli = {len_2m_moduli};\n")
 
   for n in range(1, len(moduli_complex)+1):
     moduli = moduli_complex[:n:]

@@ -121,7 +121,7 @@ template <class real_t, class matrix_t> static __device__ __forceinline__ matrix
 
 template<int32_t orderA, class real_t, class matrix_t>
 __global__ void triangle_unpack_dequantize_kernel(int64_t N, const uint64_t* __restrict__ A, int64_t strideA, const int32_t* __restrict__ vexp, matrix_t* __restrict__ B, int64_t ldb) {
-  int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
+  int64_t y = (int64_t(blockIdx.x) << 7) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
   if (y <= x) {
     int32_t ex = vexp[x], ey = vexp[y];
     matrix_t f = (ex == int_max || ey == int_max) ? matrix_t() : deq_i<orderA, real_t, matrix_t>(&A[y + int64_t(uint64_t((x + int64_t(1)) * x) >> 1)], strideA, -(ex + ey));
@@ -130,8 +130,8 @@ __global__ void triangle_unpack_dequantize_kernel(int64_t N, const uint64_t* __r
 }
 
 template<class real_t, class matrix_t> static inline void tp_deq_dispatcher(cudaStream_t stream, int32_t N, int32_t orderA, const uint64_t* A, const int32_t* vexp, matrix_t* B, int32_t ldb) {
-  constexpr int32_t block_threads = 512;
-  dim3 grid(uint32_t(N + 511) >> 9, uint32_t(N), uint32_t(1));
+  constexpr int32_t block_threads = 128;
+  dim3 grid(uint32_t(N + 127) >> 7, uint32_t(N), uint32_t(1));
   int64_t N64 = int64_t(N), strideA = (N64 * N64 + N64) / int64_t(2), ldb64 = int64_t(ldb);
   switch (orderA) {
     case 1: triangle_unpack_dequantize_kernel<1, real_t> <<< grid, block_threads, 0, stream >>> (N64, A, strideA, vexp, B, ldb64); return;

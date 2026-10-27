@@ -13,7 +13,7 @@ static __device__ __forceinline__ void accumulate_modular(uchar4& a, const uint3
 
 template<int32_t orderX, int32_t beta>
 __global__ void crt_diag_real_kernel(int64_t N, const uint32_t* __restrict__ X, int64_t ldx, int64_t strideX, uchar4* __restrict__ A, int64_t strideA) {
-  int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
+  int64_t y = (int64_t(blockIdx.x) << 7) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
   if (y <= x) {
     int64_t z = int64_t(blockIdx.z); X = &X[y + (x * N) + ((z << 2) * strideX)]; A = &A[y + int64_t(uint64_t((x + int64_t(1)) * x) >> 1) + (z * strideA)];
 
@@ -31,8 +31,8 @@ __global__ void crt_diag_real_kernel(int64_t N, const uint32_t* __restrict__ X, 
 }
 
 template <int32_t orderX> static inline void crt_diag_real(cudaStream_t stream, int32_t beta, int32_t N, const int32_t* X, int32_t ldx, uint32_t* A) {
-  constexpr int32_t block_threads = 512;
-  dim3 grid(uint32_t(N + 511) >> 9, uint32_t(N), uint32_t((orderX + 3) / 4));
+  constexpr int32_t block_threads = 128;
+  dim3 grid(uint32_t(N + 127) >> 7, uint32_t(N), uint32_t((orderX + 3) / 4));
   int64_t N64 = int64_t(N), ldx64 = int64_t(ldx), strideX = ldx64 * N64, strideA = (N64 + (N64 * N64)) / int64_t(2);
   if (beta) { crt_diag_real_kernel<orderX, 1> <<< grid, block_threads, 0, stream >>> (N64, (uint32_t*)X, ldx64, strideX, (uchar4*)A, strideA); } else
   { crt_diag_real_kernel<orderX, 0> <<< grid, block_threads, 0, stream >>> (N64, (uint32_t*)X, ldx64, strideX, (uchar4*)A, strideA); }

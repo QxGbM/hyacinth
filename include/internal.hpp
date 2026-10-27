@@ -44,8 +44,9 @@ namespace internal::int8 {
   void accumulate_limbs_cross_imag(cudaStream_t stream, int32_t beta, int32_t N, int32_t sft, int32_t orderX, const int32_t* X, int32_t ldx, int32_t orderA, uint64_t* A);
 
   void accumulate_crt_diag_real(cudaStream_t stream, int32_t beta, int32_t N, int32_t orderX, const int32_t* X, int32_t ldx, uint32_t* A);
-  void accumulate_crt_diag_complex(cudaStream_t stream, int32_t beta, int32_t N, int32_t orderX, const int32_t* X, int32_t ldx, uint32_t* A);
-  void accumulate_crt_cross_imag(cudaStream_t stream, int32_t beta, int32_t N, int32_t orderX, const int32_t* X, int32_t ldx, uint32_t* A);
+  void accumulate_crt_rotate(cudaStream_t stream, int32_t beta, int32_t N, int32_t orderX, const int32_t* X, int32_t ldx, uint32_t* A);
+  void accumulate_crt_extra_real(cudaStream_t stream, int32_t beta, int32_t N, int32_t orderX, const int32_t* X, int32_t ldx, uint32_t* A);
+  void accumulate_crt_extra_imag(cudaStream_t stream, int32_t beta, int32_t N, int32_t orderX, const int32_t* X, int32_t ldx, uint32_t* A);
   void reconstruct_real(cudaStream_t stream, int32_t beta, int64_t N, int32_t orderX, const uint32_t* X, int32_t orderA, uint64_t* A);
   void reconstruct_complex(cudaStream_t stream, int32_t beta, int64_t N, int32_t orderX, const uint32_t* X, int32_t orderA, uint64_t* A);
 

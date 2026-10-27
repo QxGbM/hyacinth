@@ -47,7 +47,7 @@ template <int32_t ORDER> static __device__ __forceinline__ int8_t* quantize_i8(c
 template <int32_t ORDER, class matrix_t>
 __global__ void quantize_limbs_kernel(int32_t M, const matrix_t* __restrict__ A, int64_t lda, const int32_t* __restrict__ vexp, int8_t* __restrict__ B, int64_t ldb, int64_t strideB) {
   constexpr int32_t Complex = std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>;
-  int32_t i = (int32_t(blockIdx.x) << 8) + int32_t(threadIdx.x), expon = vexp[blockIdx.y]; A = &A[int64_t(blockIdx.y) * lda]; B = &B[int64_t(blockIdx.y) * ldb];
+  int32_t i = (int32_t(blockIdx.x) << 7) + int32_t(threadIdx.x), expon = vexp[blockIdx.y]; A = &A[int64_t(blockIdx.y) * lda]; B = &B[int64_t(blockIdx.y) * ldb];
   if (i < M) {
     if (expon == int_max) { if constexpr(Complex) { write_zeros<ORDER * 3>(&B[i], strideB); } else { write_zeros<ORDER>(&B[i], strideB); }} else
     if constexpr(Complex) {
@@ -60,21 +60,21 @@ __global__ void quantize_limbs_kernel(int32_t M, const matrix_t* __restrict__ A,
 
 template <class matrix_t>
 static inline void quantize_limbs_dispatcher(cudaStream_t stream, int32_t M, int32_t N, int32_t orderA, const matrix_t* A, int32_t lda, const int32_t* vexp, int8_t* B, int32_t ldb) {
-  constexpr int32_t block_threads = 256; int64_t lda64 = int64_t(lda), ldb64 = int64_t(ldb), strideB = int64_t(N) * ldb64;
-  dim3 gridx(uint32_t(M + 255) >> 8, uint32_t(N));
+  constexpr int32_t block_threads = 128; int64_t lda64 = int64_t(lda), ldb64 = int64_t(ldb), strideB = int64_t(N) * ldb64;
+  dim3 grid(uint32_t(M + 127) >> 7, uint32_t(N));
   switch (orderA) {
-    case 1: quantize_limbs_kernel<1> <<< gridx, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
-    case 2: quantize_limbs_kernel<2> <<< gridx, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
-    case 3: quantize_limbs_kernel<3> <<< gridx, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
-    case 4: quantize_limbs_kernel<4> <<< gridx, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
-    case 5: quantize_limbs_kernel<5> <<< gridx, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
-    case 6: quantize_limbs_kernel<6> <<< gridx, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
-    case 7: quantize_limbs_kernel<7> <<< gridx, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
-    case 8: quantize_limbs_kernel<8> <<< gridx, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
-    case 9: quantize_limbs_kernel<9> <<< gridx, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
-    case 10: quantize_limbs_kernel<10> <<< gridx, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
-    case 11: quantize_limbs_kernel<11> <<< gridx, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
-    case 12: quantize_limbs_kernel<12> <<< gridx, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
+    case 1: quantize_limbs_kernel<1> <<< grid, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
+    case 2: quantize_limbs_kernel<2> <<< grid, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
+    case 3: quantize_limbs_kernel<3> <<< grid, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
+    case 4: quantize_limbs_kernel<4> <<< grid, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
+    case 5: quantize_limbs_kernel<5> <<< grid, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
+    case 6: quantize_limbs_kernel<6> <<< grid, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
+    case 7: quantize_limbs_kernel<7> <<< grid, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
+    case 8: quantize_limbs_kernel<8> <<< grid, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
+    case 9: quantize_limbs_kernel<9> <<< grid, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
+    case 10: quantize_limbs_kernel<10> <<< grid, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
+    case 11: quantize_limbs_kernel<11> <<< grid, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
+    case 12: quantize_limbs_kernel<12> <<< grid, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
     default: return;
   }
 }
