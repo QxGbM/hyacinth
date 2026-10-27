@@ -31,7 +31,7 @@ __global__ void crt_diag_real_kernel(int64_t N, const uint32_t* __restrict__ X, 
   }
 }
 
-template <int32_t orderX> static inline void crt_diag(cudaStream_t stream, int32_t beta, int32_t N, const int32_t* X, int32_t ldx, uint32_t* A) {
+template <int32_t orderX> static inline void crt_diag_real(cudaStream_t stream, int32_t beta, int32_t N, const int32_t* X, int32_t ldx, uint32_t* A) {
   constexpr int32_t block_threads = 512;
   dim3 grid(uint32_t(N + 511) >> 9, uint32_t(N), uint32_t((orderX + 3) / 4));
   int64_t N64 = int64_t(N), ldx64 = int64_t(ldx), strideX = ldx64 * N64, strideA = (N64 + (N64 * N64)) / int64_t(2);
@@ -41,30 +41,30 @@ template <int32_t orderX> static inline void crt_diag(cudaStream_t stream, int32
 
 void internal::int8::accumulate_crt_diag_real(cudaStream_t stream, int32_t beta, int32_t N, int32_t orderX, const int32_t* X, int32_t ldx, uint32_t* A) {
   switch (orderX) {
-    case 1: crt_diag<1>(stream, beta, N, X, ldx, A); return;
-    case 2: crt_diag<2>(stream, beta, N, X, ldx, A); return;
-    case 3: crt_diag<3>(stream, beta, N, X, ldx, A); return;
-    case 4: crt_diag<4>(stream, beta, N, X, ldx, A); return;
-    case 5: crt_diag<5>(stream, beta, N, X, ldx, A); return;
-    case 6: crt_diag<6>(stream, beta, N, X, ldx, A); return;
-    case 7: crt_diag<7>(stream, beta, N, X, ldx, A); return;
-    case 8: crt_diag<8>(stream, beta, N, X, ldx, A); return;
-    case 9: crt_diag<9>(stream, beta, N, X, ldx, A); return;
-    case 10: crt_diag<10>(stream, beta, N, X, ldx, A); return;
-    case 11: crt_diag<11>(stream, beta, N, X, ldx, A); return;
-    case 12: crt_diag<12>(stream, beta, N, X, ldx, A); return;
-    case 13: crt_diag<13>(stream, beta, N, X, ldx, A); return;
-    case 14: crt_diag<14>(stream, beta, N, X, ldx, A); return;
-    case 15: crt_diag<15>(stream, beta, N, X, ldx, A); return;
-    case 16: crt_diag<16>(stream, beta, N, X, ldx, A); return;
-    case 17: crt_diag<17>(stream, beta, N, X, ldx, A); return;
-    case 18: crt_diag<18>(stream, beta, N, X, ldx, A); return;
-    case 19: crt_diag<19>(stream, beta, N, X, ldx, A); return;
-    case 20: crt_diag<20>(stream, beta, N, X, ldx, A); return;
-    case 21: crt_diag<21>(stream, beta, N, X, ldx, A); return;
-    case 22: crt_diag<22>(stream, beta, N, X, ldx, A); return;
-    case 23: crt_diag<23>(stream, beta, N, X, ldx, A); return;
-    case 24: crt_diag<24>(stream, beta, N, X, ldx, A); return;
+    case 1: crt_diag_real<1>(stream, beta, N, X, ldx, A); return;
+    case 2: crt_diag_real<2>(stream, beta, N, X, ldx, A); return;
+    case 3: crt_diag_real<3>(stream, beta, N, X, ldx, A); return;
+    case 4: crt_diag_real<4>(stream, beta, N, X, ldx, A); return;
+    case 5: crt_diag_real<5>(stream, beta, N, X, ldx, A); return;
+    case 6: crt_diag_real<6>(stream, beta, N, X, ldx, A); return;
+    case 7: crt_diag_real<7>(stream, beta, N, X, ldx, A); return;
+    case 8: crt_diag_real<8>(stream, beta, N, X, ldx, A); return;
+    case 9: crt_diag_real<9>(stream, beta, N, X, ldx, A); return;
+    case 10: crt_diag_real<10>(stream, beta, N, X, ldx, A); return;
+    case 11: crt_diag_real<11>(stream, beta, N, X, ldx, A); return;
+    case 12: crt_diag_real<12>(stream, beta, N, X, ldx, A); return;
+    case 13: crt_diag_real<13>(stream, beta, N, X, ldx, A); return;
+    case 14: crt_diag_real<14>(stream, beta, N, X, ldx, A); return;
+    case 15: crt_diag_real<15>(stream, beta, N, X, ldx, A); return;
+    case 16: crt_diag_real<16>(stream, beta, N, X, ldx, A); return;
+    case 17: crt_diag_real<17>(stream, beta, N, X, ldx, A); return;
+    case 18: crt_diag_real<18>(stream, beta, N, X, ldx, A); return;
+    case 19: crt_diag_real<19>(stream, beta, N, X, ldx, A); return;
+    case 20: crt_diag_real<20>(stream, beta, N, X, ldx, A); return;
+    case 21: crt_diag_real<21>(stream, beta, N, X, ldx, A); return;
+    case 22: crt_diag_real<22>(stream, beta, N, X, ldx, A); return;
+    case 23: crt_diag_real<23>(stream, beta, N, X, ldx, A); return;
+    case 24: crt_diag_real<24>(stream, beta, N, X, ldx, A); return;
     default: return;
   }
 }

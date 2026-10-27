@@ -3,24 +3,18 @@
 #include <ext_arith.hpp>
 #include <crt_constants.hpp>
 
-template <int32_t x> static __device__ __forceinline__ int64_t i32_i64_prod(int32_t y) {
-  uint32_t lo = uint32_t(x * y), hi = uint32_t(__mulhi(x, y));
-  return int64_t(uint64_t(lo) | (uint64_t(hi) << 32));
-}
-
+template <int64_t x> static __device__ __forceinline__ int64_t i32_i64_prod(int32_t y) { return x * int64_t(y); }
 template <int32_t orderX, int32_t x, int32_t orderA> static __device__ __forceinline__ void add_pd(uint64_t (&a)[orderA], int32_t i) {
   using U8CRT2M::Constants;
-  constexpr int32_t x6 = x * 6;
+  constexpr int32_t x4 = x * 4;
   constexpr uint32_t MO = U8CRT2M::mo[x], MINV = Constants<orderX>::minv[x];
 
   uint32_t mask_sign = uint32_t(a[orderA - 1] >> 63) + 0xffffffffu;
   i = int32_t(device::barrett_reduc<MO>(device::mulx_reduc<1, MINV, MO>(uint32_t(i))) - (MO & mask_sign));
-  if constexpr(Constants<orderX>::pd[x6]) { device::add_shifted<0>(a, i32_i64_prod<Constants<orderX>::pd[x6]>(i)); }
-  if constexpr(Constants<orderX>::pd[x6 + 1]) { device::add_shifted<31>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 1]>(i)); }
-  if constexpr(Constants<orderX>::pd[x6 + 2]) { device::add_shifted<62>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 2]>(i)); }
-  if constexpr(Constants<orderX>::pd[x6 + 3]) { device::add_shifted<93>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 3]>(i)); }
-  if constexpr(Constants<orderX>::pd[x6 + 4]) { device::add_shifted<124>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 4]>(i)); }
-  if constexpr(Constants<orderX>::pd[x6 + 5]) { device::add_shifted<155>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 5]>(i)); }
+  if constexpr(Constants<orderX>::pd[x4]) { device::add_shifted<0>(a, i32_i64_prod<Constants<orderX>::pd[x4]>(i)); }
+  if constexpr(Constants<orderX>::pd[x4 + 1]) { device::add_shifted<55>(a, i32_i64_prod<Constants<orderX>::pd[x4 + 1]>(i)); }
+  if constexpr(Constants<orderX>::pd[x4 + 2]) { device::add_shifted<110>(a, i32_i64_prod<Constants<orderX>::pd[x4 + 2]>(i)); }
+  if constexpr(Constants<orderX>::pd[x4 + 3]) { device::add_shifted<165>(a, i32_i64_prod<Constants<orderX>::pd[x4 + 3]>(i)); }
 }
 
 template<int32_t orderX, int32_t orderA, int32_t beta, char mode>
@@ -112,6 +106,7 @@ static inline void crt_acc_dispatcher(cudaStream_t stream, char mode, int32_t be
 template <int32_t orderA>
 static inline void crt_acc_dispatcher(cudaStream_t stream, char mode, int32_t beta, int64_t N, int32_t orderX, const int32_t* X, int64_t ldx, uint64_t* A) {
   switch (orderX) {
+    case 1: crt_acc_dispatcher<1, orderA>(stream, mode, beta, N, X, ldx, A); return;
     case 2: crt_acc_dispatcher<2, orderA>(stream, mode, beta, N, X, ldx, A); return;
     case 3: crt_acc_dispatcher<3, orderA>(stream, mode, beta, N, X, ldx, A); return;
     case 4: crt_acc_dispatcher<4, orderA>(stream, mode, beta, N, X, ldx, A); return;

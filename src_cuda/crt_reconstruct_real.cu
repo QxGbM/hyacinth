@@ -3,50 +3,38 @@
 #include <ext_arith.hpp>
 #include <crt_constants.hpp>
 
-template <int32_t x> static __device__ __forceinline__ int64_t i32_i64_prod(int32_t y) {
-  uint32_t lo = uint32_t(x * y), hi = uint32_t(__mulhi(x, y));
-  return int64_t(uint64_t(lo) | (uint64_t(hi) << 32));
-}
-
+template <int64_t x> static __device__ __forceinline__ int64_t i32_i64_prod(int32_t y) { return x * int64_t(y); }
 template <int32_t orderX, int32_t x, int32_t orderA> static __device__ __forceinline__ void add_pd(uint64_t (&a)[orderA], uint32_t i) {
-  using U8CRT::Constants;
-  constexpr int32_t x6 = x * 6; constexpr uint32_t mask_8bits = 0xffu, mask_32bits = 0xffffffffu;
+  using U8CRT::mo, U8CRT::Constants;
+  constexpr int32_t x4 = x * 4; constexpr uint32_t mask_8bits = 0xffu, mask_32bits = 0xffffffffu;
   if constexpr(x < orderX) {
     uint32_t mask_sign = uint32_t(a[orderA - 1] >> 63) + mask_32bits;
-    int32_t s = int32_t(device::barrett_reduc<U8CRT::mo[x]>(device::mulx_reduc<0, Constants<orderX>::minv[x], U8CRT::mo[x]>(i & mask_8bits)) - (U8CRT::mo[x] & mask_sign));
-    if constexpr(Constants<orderX>::pd[x6]) { device::add_shifted<0>(a, i32_i64_prod<Constants<orderX>::pd[x6]>(s)); }
-    if constexpr(Constants<orderX>::pd[x6 + 1]) { device::add_shifted<31>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 1]>(s)); }
-    if constexpr(Constants<orderX>::pd[x6 + 2]) { device::add_shifted<62>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 2]>(s)); }
-    if constexpr(Constants<orderX>::pd[x6 + 3]) { device::add_shifted<93>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 3]>(s)); }
-    if constexpr(Constants<orderX>::pd[x6 + 4]) { device::add_shifted<124>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 4]>(s)); }
-    if constexpr(Constants<orderX>::pd[x6 + 5]) { device::add_shifted<155>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 5]>(s)); }
+    int32_t s = int32_t(device::barrett_reduc<mo[x]>(device::mulx_reduc<0, Constants<orderX>::minv[x], mo[x]>(i & mask_8bits)) - (mo[x] & mask_sign));
+    if constexpr(Constants<orderX>::pd[x4]) { device::add_shifted<0>(a, i32_i64_prod<Constants<orderX>::pd[x4]>(s)); }
+    if constexpr(Constants<orderX>::pd[x4 + 1]) { device::add_shifted<55>(a, i32_i64_prod<Constants<orderX>::pd[x4 + 1]>(s)); }
+    if constexpr(Constants<orderX>::pd[x4 + 2]) { device::add_shifted<110>(a, i32_i64_prod<Constants<orderX>::pd[x4 + 2]>(s)); }
+    if constexpr(Constants<orderX>::pd[x4 + 3]) { device::add_shifted<165>(a, i32_i64_prod<Constants<orderX>::pd[x4 + 3]>(s)); }
   } if constexpr(x + 1 < orderX) {
     uint32_t mask_sign = uint32_t(a[orderA - 1] >> 63) + mask_32bits;
-    int32_t s = int32_t(device::barrett_reduc<U8CRT::mo[x + 1]>(device::mulx_reduc<0, Constants<orderX>::minv[x + 1], U8CRT::mo[x + 1]>((i >> 8) & mask_8bits)) - (U8CRT::mo[x + 1] & mask_sign));
-    if constexpr(Constants<orderX>::pd[x6 + 6]) { device::add_shifted<0>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 6]>(s)); }
-    if constexpr(Constants<orderX>::pd[x6 + 7]) { device::add_shifted<31>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 7]>(s)); }
-    if constexpr(Constants<orderX>::pd[x6 + 8]) { device::add_shifted<62>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 8]>(s)); }
-    if constexpr(Constants<orderX>::pd[x6 + 9]) { device::add_shifted<93>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 9]>(s)); }
-    if constexpr(Constants<orderX>::pd[x6 + 10]) { device::add_shifted<124>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 10]>(s)); }
-    if constexpr(Constants<orderX>::pd[x6 + 11]) { device::add_shifted<155>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 11]>(s)); }
+    int32_t s = int32_t(device::barrett_reduc<mo[x + 1]>(device::mulx_reduc<0, Constants<orderX>::minv[x + 1], mo[x + 1]>((i >> 8) & mask_8bits)) - (mo[x + 1] & mask_sign));
+    if constexpr(Constants<orderX>::pd[x4 + 4]) { device::add_shifted<0>(a, i32_i64_prod<Constants<orderX>::pd[x4 + 4]>(s)); }
+    if constexpr(Constants<orderX>::pd[x4 + 5]) { device::add_shifted<55>(a, i32_i64_prod<Constants<orderX>::pd[x4 + 5]>(s)); }
+    if constexpr(Constants<orderX>::pd[x4 + 6]) { device::add_shifted<110>(a, i32_i64_prod<Constants<orderX>::pd[x4 + 6]>(s)); }
+    if constexpr(Constants<orderX>::pd[x4 + 7]) { device::add_shifted<165>(a, i32_i64_prod<Constants<orderX>::pd[x4 + 7]>(s)); }
   } if constexpr(x + 2 < orderX) {
     uint32_t mask_sign = uint32_t(a[orderA - 1] >> 63) + mask_32bits;
-    int32_t s = int32_t(device::barrett_reduc<U8CRT::mo[x + 2]>(device::mulx_reduc<0, Constants<orderX>::minv[x + 2], U8CRT::mo[x + 2]>((i >> 16) & mask_8bits)) - (U8CRT::mo[x + 2] & mask_sign));
-    if constexpr(Constants<orderX>::pd[x6 + 12]) { device::add_shifted<0>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 12]>(s)); }
-    if constexpr(Constants<orderX>::pd[x6 + 13]) { device::add_shifted<31>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 13]>(s)); }
-    if constexpr(Constants<orderX>::pd[x6 + 14]) { device::add_shifted<62>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 14]>(s)); }
-    if constexpr(Constants<orderX>::pd[x6 + 15]) { device::add_shifted<93>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 15]>(s)); }
-    if constexpr(Constants<orderX>::pd[x6 + 16]) { device::add_shifted<124>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 16]>(s)); }
-    if constexpr(Constants<orderX>::pd[x6 + 17]) { device::add_shifted<155>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 17]>(s)); }
+    int32_t s = int32_t(device::barrett_reduc<mo[x + 2]>(device::mulx_reduc<0, Constants<orderX>::minv[x + 2], mo[x + 2]>((i >> 16) & mask_8bits)) - (mo[x + 2] & mask_sign));
+    if constexpr(Constants<orderX>::pd[x4 + 8]) { device::add_shifted<0>(a, i32_i64_prod<Constants<orderX>::pd[x4 + 8]>(s)); }
+    if constexpr(Constants<orderX>::pd[x4 + 9]) { device::add_shifted<55>(a, i32_i64_prod<Constants<orderX>::pd[x4 + 9]>(s)); }
+    if constexpr(Constants<orderX>::pd[x4 + 10]) { device::add_shifted<110>(a, i32_i64_prod<Constants<orderX>::pd[x4 + 10]>(s)); }
+    if constexpr(Constants<orderX>::pd[x4 + 11]) { device::add_shifted<165>(a, i32_i64_prod<Constants<orderX>::pd[x4 + 11]>(s)); }
   } if constexpr(x + 3 < orderX) {
     uint32_t mask_sign = uint32_t(a[orderA - 1] >> 63) + mask_32bits;
-    int32_t s = int32_t(device::barrett_reduc<U8CRT::mo[x + 3]>(device::mulx_reduc<0, Constants<orderX>::minv[x + 3], U8CRT::mo[x + 3]>(i >> 24)) - (U8CRT::mo[x + 3] & mask_sign));
-    if constexpr(Constants<orderX>::pd[x6 + 18]) { device::add_shifted<0>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 18]>(s)); }
-    if constexpr(Constants<orderX>::pd[x6 + 19]) { device::add_shifted<31>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 19]>(s)); }
-    if constexpr(Constants<orderX>::pd[x6 + 20]) { device::add_shifted<62>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 20]>(s)); }
-    if constexpr(Constants<orderX>::pd[x6 + 21]) { device::add_shifted<93>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 21]>(s)); }
-    if constexpr(Constants<orderX>::pd[x6 + 22]) { device::add_shifted<124>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 22]>(s)); }
-    if constexpr(Constants<orderX>::pd[x6 + 23]) { device::add_shifted<155>(a, i32_i64_prod<Constants<orderX>::pd[x6 + 23]>(s)); }
+    int32_t s = int32_t(device::barrett_reduc<mo[x + 3]>(device::mulx_reduc<0, Constants<orderX>::minv[x + 3], mo[x + 3]>(i >> 24)) - (mo[x + 3] & mask_sign));
+    if constexpr(Constants<orderX>::pd[x4 + 12]) { device::add_shifted<0>(a, i32_i64_prod<Constants<orderX>::pd[x4 + 12]>(s)); }
+    if constexpr(Constants<orderX>::pd[x4 + 13]) { device::add_shifted<55>(a, i32_i64_prod<Constants<orderX>::pd[x4 + 13]>(s)); }
+    if constexpr(Constants<orderX>::pd[x4 + 14]) { device::add_shifted<110>(a, i32_i64_prod<Constants<orderX>::pd[x4 + 14]>(s)); }
+    if constexpr(Constants<orderX>::pd[x4 + 15]) { device::add_shifted<165>(a, i32_i64_prod<Constants<orderX>::pd[x4 + 15]>(s)); }
   }
 }
 
@@ -105,7 +93,7 @@ __global__ void reconstruct_real_kernel(int64_t N, const uint32_t* __restrict__ 
 }
 
 template <int32_t orderA, int32_t orderX>
-static inline void reconstruct_real_dispatcher(cudaStream_t stream, int32_t beta, int64_t N, const uint32_t* X, uint64_t* A) {
+static inline void reconstruct_crt_real(cudaStream_t stream, int32_t beta, int64_t N, const uint32_t* X, uint64_t* A) {
   constexpr int32_t block_threads = 512;
   uint32_t grid = uint32_t((uint64_t(N) + uint64_t(511)) >> 9);
   if (beta) { reconstruct_real_kernel<orderX, orderA, 1> <<< grid, block_threads, 0, stream >>> (N, X, A); } else
@@ -114,79 +102,82 @@ static inline void reconstruct_real_dispatcher(cudaStream_t stream, int32_t beta
 
 void internal::int8::reconstruct_real(cudaStream_t stream, int32_t beta, int64_t N, int32_t orderX, const uint32_t* X, int32_t orderA, uint64_t* A) {
   if (orderA == 1) switch (orderX) {
-    case 2: reconstruct_real_dispatcher<1, 2>(stream, beta, N, X, A); return;
-    case 3: reconstruct_real_dispatcher<1, 3>(stream, beta, N, X, A); return;
-    case 4: reconstruct_real_dispatcher<1, 4>(stream, beta, N, X, A); return;
-    case 5: reconstruct_real_dispatcher<1, 5>(stream, beta, N, X, A); return;
-    case 6: reconstruct_real_dispatcher<1, 6>(stream, beta, N, X, A); return;
-    case 7: reconstruct_real_dispatcher<1, 7>(stream, beta, N, X, A); return;
-    case 8: reconstruct_real_dispatcher<1, 8>(stream, beta, N, X, A); return;
-    case 9: reconstruct_real_dispatcher<1, 9>(stream, beta, N, X, A); return;
-    case 10: reconstruct_real_dispatcher<1, 10>(stream, beta, N, X, A); return;
-    case 11: reconstruct_real_dispatcher<1, 11>(stream, beta, N, X, A); return;
-    case 12: reconstruct_real_dispatcher<1, 12>(stream, beta, N, X, A); return;
-    case 13: reconstruct_real_dispatcher<1, 13>(stream, beta, N, X, A); return;
-    case 14: reconstruct_real_dispatcher<1, 14>(stream, beta, N, X, A); return;
-    case 15: reconstruct_real_dispatcher<1, 15>(stream, beta, N, X, A); return;
-    case 16: reconstruct_real_dispatcher<1, 16>(stream, beta, N, X, A); return;
-    case 17: reconstruct_real_dispatcher<1, 17>(stream, beta, N, X, A); return;
-    case 18: reconstruct_real_dispatcher<1, 18>(stream, beta, N, X, A); return;
-    case 19: reconstruct_real_dispatcher<1, 19>(stream, beta, N, X, A); return;
-    case 20: reconstruct_real_dispatcher<1, 20>(stream, beta, N, X, A); return;
-    case 21: reconstruct_real_dispatcher<1, 21>(stream, beta, N, X, A); return;
-    case 22: reconstruct_real_dispatcher<1, 22>(stream, beta, N, X, A); return;
-    case 23: reconstruct_real_dispatcher<1, 23>(stream, beta, N, X, A); return;
-    case 24: reconstruct_real_dispatcher<1, 24>(stream, beta, N, X, A); return;
+    case 1: reconstruct_crt_real<1, 1>(stream, beta, N, X, A); return;
+    case 2: reconstruct_crt_real<1, 2>(stream, beta, N, X, A); return;
+    case 3: reconstruct_crt_real<1, 3>(stream, beta, N, X, A); return;
+    case 4: reconstruct_crt_real<1, 4>(stream, beta, N, X, A); return;
+    case 5: reconstruct_crt_real<1, 5>(stream, beta, N, X, A); return;
+    case 6: reconstruct_crt_real<1, 6>(stream, beta, N, X, A); return;
+    case 7: reconstruct_crt_real<1, 7>(stream, beta, N, X, A); return;
+    case 8: reconstruct_crt_real<1, 8>(stream, beta, N, X, A); return;
+    case 9: reconstruct_crt_real<1, 9>(stream, beta, N, X, A); return;
+    case 10: reconstruct_crt_real<1, 10>(stream, beta, N, X, A); return;
+    case 11: reconstruct_crt_real<1, 11>(stream, beta, N, X, A); return;
+    case 12: reconstruct_crt_real<1, 12>(stream, beta, N, X, A); return;
+    case 13: reconstruct_crt_real<1, 13>(stream, beta, N, X, A); return;
+    case 14: reconstruct_crt_real<1, 14>(stream, beta, N, X, A); return;
+    case 15: reconstruct_crt_real<1, 15>(stream, beta, N, X, A); return;
+    case 16: reconstruct_crt_real<1, 16>(stream, beta, N, X, A); return;
+    case 17: reconstruct_crt_real<1, 17>(stream, beta, N, X, A); return;
+    case 18: reconstruct_crt_real<1, 18>(stream, beta, N, X, A); return;
+    case 19: reconstruct_crt_real<1, 19>(stream, beta, N, X, A); return;
+    case 20: reconstruct_crt_real<1, 20>(stream, beta, N, X, A); return;
+    case 21: reconstruct_crt_real<1, 21>(stream, beta, N, X, A); return;
+    case 22: reconstruct_crt_real<1, 22>(stream, beta, N, X, A); return;
+    case 23: reconstruct_crt_real<1, 23>(stream, beta, N, X, A); return;
+    case 24: reconstruct_crt_real<1, 24>(stream, beta, N, X, A); return;
     default: return;
   } else if (orderA == 2) switch (orderX) {
-    case 2: reconstruct_real_dispatcher<2, 2>(stream, beta, N, X, A); return;
-    case 3: reconstruct_real_dispatcher<2, 3>(stream, beta, N, X, A); return;
-    case 4: reconstruct_real_dispatcher<2, 4>(stream, beta, N, X, A); return;
-    case 5: reconstruct_real_dispatcher<2, 5>(stream, beta, N, X, A); return;
-    case 6: reconstruct_real_dispatcher<2, 6>(stream, beta, N, X, A); return;
-    case 7: reconstruct_real_dispatcher<2, 7>(stream, beta, N, X, A); return;
-    case 8: reconstruct_real_dispatcher<2, 8>(stream, beta, N, X, A); return;
-    case 9: reconstruct_real_dispatcher<2, 9>(stream, beta, N, X, A); return;
-    case 10: reconstruct_real_dispatcher<2, 10>(stream, beta, N, X, A); return;
-    case 11: reconstruct_real_dispatcher<2, 11>(stream, beta, N, X, A); return;
-    case 12: reconstruct_real_dispatcher<2, 12>(stream, beta, N, X, A); return;
-    case 13: reconstruct_real_dispatcher<2, 13>(stream, beta, N, X, A); return;
-    case 14: reconstruct_real_dispatcher<2, 14>(stream, beta, N, X, A); return;
-    case 15: reconstruct_real_dispatcher<2, 15>(stream, beta, N, X, A); return;
-    case 16: reconstruct_real_dispatcher<2, 16>(stream, beta, N, X, A); return;
-    case 17: reconstruct_real_dispatcher<2, 17>(stream, beta, N, X, A); return;
-    case 18: reconstruct_real_dispatcher<2, 18>(stream, beta, N, X, A); return;
-    case 19: reconstruct_real_dispatcher<2, 19>(stream, beta, N, X, A); return;
-    case 20: reconstruct_real_dispatcher<2, 20>(stream, beta, N, X, A); return;
-    case 21: reconstruct_real_dispatcher<2, 21>(stream, beta, N, X, A); return;
-    case 22: reconstruct_real_dispatcher<2, 22>(stream, beta, N, X, A); return;
-    case 23: reconstruct_real_dispatcher<2, 23>(stream, beta, N, X, A); return;
-    case 24: reconstruct_real_dispatcher<2, 24>(stream, beta, N, X, A); return;
+    case 1: reconstruct_crt_real<2, 1>(stream, beta, N, X, A); return;
+    case 2: reconstruct_crt_real<2, 2>(stream, beta, N, X, A); return;
+    case 3: reconstruct_crt_real<2, 3>(stream, beta, N, X, A); return;
+    case 4: reconstruct_crt_real<2, 4>(stream, beta, N, X, A); return;
+    case 5: reconstruct_crt_real<2, 5>(stream, beta, N, X, A); return;
+    case 6: reconstruct_crt_real<2, 6>(stream, beta, N, X, A); return;
+    case 7: reconstruct_crt_real<2, 7>(stream, beta, N, X, A); return;
+    case 8: reconstruct_crt_real<2, 8>(stream, beta, N, X, A); return;
+    case 9: reconstruct_crt_real<2, 9>(stream, beta, N, X, A); return;
+    case 10: reconstruct_crt_real<2, 10>(stream, beta, N, X, A); return;
+    case 11: reconstruct_crt_real<2, 11>(stream, beta, N, X, A); return;
+    case 12: reconstruct_crt_real<2, 12>(stream, beta, N, X, A); return;
+    case 13: reconstruct_crt_real<2, 13>(stream, beta, N, X, A); return;
+    case 14: reconstruct_crt_real<2, 14>(stream, beta, N, X, A); return;
+    case 15: reconstruct_crt_real<2, 15>(stream, beta, N, X, A); return;
+    case 16: reconstruct_crt_real<2, 16>(stream, beta, N, X, A); return;
+    case 17: reconstruct_crt_real<2, 17>(stream, beta, N, X, A); return;
+    case 18: reconstruct_crt_real<2, 18>(stream, beta, N, X, A); return;
+    case 19: reconstruct_crt_real<2, 19>(stream, beta, N, X, A); return;
+    case 20: reconstruct_crt_real<2, 20>(stream, beta, N, X, A); return;
+    case 21: reconstruct_crt_real<2, 21>(stream, beta, N, X, A); return;
+    case 22: reconstruct_crt_real<2, 22>(stream, beta, N, X, A); return;
+    case 23: reconstruct_crt_real<2, 23>(stream, beta, N, X, A); return;
+    case 24: reconstruct_crt_real<2, 24>(stream, beta, N, X, A); return;
     default: return;
   } else if (orderA == 3) switch (orderX) {
-    case 2: reconstruct_real_dispatcher<3, 2>(stream, beta, N, X, A); return;
-    case 3: reconstruct_real_dispatcher<3, 3>(stream, beta, N, X, A); return;
-    case 4: reconstruct_real_dispatcher<3, 4>(stream, beta, N, X, A); return;
-    case 5: reconstruct_real_dispatcher<3, 5>(stream, beta, N, X, A); return;
-    case 6: reconstruct_real_dispatcher<3, 6>(stream, beta, N, X, A); return;
-    case 7: reconstruct_real_dispatcher<3, 7>(stream, beta, N, X, A); return;
-    case 8: reconstruct_real_dispatcher<3, 8>(stream, beta, N, X, A); return;
-    case 9: reconstruct_real_dispatcher<3, 9>(stream, beta, N, X, A); return;
-    case 10: reconstruct_real_dispatcher<3, 10>(stream, beta, N, X, A); return;
-    case 11: reconstruct_real_dispatcher<3, 11>(stream, beta, N, X, A); return;
-    case 12: reconstruct_real_dispatcher<3, 12>(stream, beta, N, X, A); return;
-    case 13: reconstruct_real_dispatcher<3, 13>(stream, beta, N, X, A); return;
-    case 14: reconstruct_real_dispatcher<3, 14>(stream, beta, N, X, A); return;
-    case 15: reconstruct_real_dispatcher<3, 15>(stream, beta, N, X, A); return;
-    case 16: reconstruct_real_dispatcher<3, 16>(stream, beta, N, X, A); return;
-    case 17: reconstruct_real_dispatcher<3, 17>(stream, beta, N, X, A); return;
-    case 18: reconstruct_real_dispatcher<3, 18>(stream, beta, N, X, A); return;
-    case 19: reconstruct_real_dispatcher<3, 19>(stream, beta, N, X, A); return;
-    case 20: reconstruct_real_dispatcher<3, 20>(stream, beta, N, X, A); return;
-    case 21: reconstruct_real_dispatcher<3, 21>(stream, beta, N, X, A); return;
-    case 22: reconstruct_real_dispatcher<3, 22>(stream, beta, N, X, A); return;
-    case 23: reconstruct_real_dispatcher<3, 23>(stream, beta, N, X, A); return;
-    case 24: reconstruct_real_dispatcher<3, 24>(stream, beta, N, X, A); return;
+    case 1: reconstruct_crt_real<3, 1>(stream, beta, N, X, A); return;
+    case 2: reconstruct_crt_real<3, 2>(stream, beta, N, X, A); return;
+    case 3: reconstruct_crt_real<3, 3>(stream, beta, N, X, A); return;
+    case 4: reconstruct_crt_real<3, 4>(stream, beta, N, X, A); return;
+    case 5: reconstruct_crt_real<3, 5>(stream, beta, N, X, A); return;
+    case 6: reconstruct_crt_real<3, 6>(stream, beta, N, X, A); return;
+    case 7: reconstruct_crt_real<3, 7>(stream, beta, N, X, A); return;
+    case 8: reconstruct_crt_real<3, 8>(stream, beta, N, X, A); return;
+    case 9: reconstruct_crt_real<3, 9>(stream, beta, N, X, A); return;
+    case 10: reconstruct_crt_real<3, 10>(stream, beta, N, X, A); return;
+    case 11: reconstruct_crt_real<3, 11>(stream, beta, N, X, A); return;
+    case 12: reconstruct_crt_real<3, 12>(stream, beta, N, X, A); return;
+    case 13: reconstruct_crt_real<3, 13>(stream, beta, N, X, A); return;
+    case 14: reconstruct_crt_real<3, 14>(stream, beta, N, X, A); return;
+    case 15: reconstruct_crt_real<3, 15>(stream, beta, N, X, A); return;
+    case 16: reconstruct_crt_real<3, 16>(stream, beta, N, X, A); return;
+    case 17: reconstruct_crt_real<3, 17>(stream, beta, N, X, A); return;
+    case 18: reconstruct_crt_real<3, 18>(stream, beta, N, X, A); return;
+    case 19: reconstruct_crt_real<3, 19>(stream, beta, N, X, A); return;
+    case 20: reconstruct_crt_real<3, 20>(stream, beta, N, X, A); return;
+    case 21: reconstruct_crt_real<3, 21>(stream, beta, N, X, A); return;
+    case 22: reconstruct_crt_real<3, 22>(stream, beta, N, X, A); return;
+    case 23: reconstruct_crt_real<3, 23>(stream, beta, N, X, A); return;
+    case 24: reconstruct_crt_real<3, 24>(stream, beta, N, X, A); return;
     default: return;
   }
 }

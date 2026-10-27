@@ -72,6 +72,7 @@ template <class matrix_t> static inline void quantize_crt_real_dispatcher(cudaSt
   constexpr int32_t block_threads = 256; int64_t lda64 = int64_t(lda), ldb64 = int64_t(ldb), strideB = int64_t(N) * ldb64;
   dim3 gridx(uint32_t(M + 255) >> 8, uint32_t(N));
   switch (orderA) {
+    case 1: quantize_crt_real_kernel<1> <<< gridx, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
     case 2: quantize_crt_real_kernel<2> <<< gridx, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
     case 3: quantize_crt_real_kernel<3> <<< gridx, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;
     case 4: quantize_crt_real_kernel<4> <<< gridx, block_threads, 0, stream >>> (M, A, lda64, vexp, B, ldb64, strideB); return;

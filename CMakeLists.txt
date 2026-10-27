@@ -20,6 +20,7 @@ set(CU_SOURCES
   src_cuda/allreduce_1drow.cu
   src_cuda/crt_cross_imag.cu
   src_cuda/crt_diag_real.cu
+  src_cuda/crt_reconstruct_complex.cu
   src_cuda/crt_reconstruct_real.cu
   src_cuda/fp_exponent.cu
   src_cuda/fp_i63tp_dequantize.cu

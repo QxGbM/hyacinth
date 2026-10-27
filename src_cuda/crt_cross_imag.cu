@@ -43,6 +43,7 @@ __global__ void crt_cross_imag_kernel(int64_t N, const uint32_t* __restrict__ X,
       case 3: accumulate_modular_imaginary<0, orderX, 12>(r, i, &X[y + (x * N)], strideX); accumulate_modular_imaginary<1, orderX, 12>(r, i, &X[x + (y * N)], strideX); break;
       case 4: accumulate_modular_imaginary<0, orderX, 16>(r, i, &X[y + (x * N)], strideX); accumulate_modular_imaginary<1, orderX, 16>(r, i, &X[x + (y * N)], strideX); break;
       case 5: accumulate_modular_imaginary<0, orderX, 20>(r, i, &X[y + (x * N)], strideX); accumulate_modular_imaginary<1, orderX, 20>(r, i, &X[x + (y * N)], strideX); break;
+      case 6: accumulate_modular_imaginary<0, orderX, 24>(r, i, &X[y + (x * N)], strideX); accumulate_modular_imaginary<1, orderX, 24>(r, i, &X[x + (y * N)], strideX); break;
     }
     *R = r; *I = i;
   }
