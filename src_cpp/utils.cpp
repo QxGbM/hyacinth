@@ -39,7 +39,7 @@ const std::vector<int32_t> f64_capable_sm_list({ 80, 90, 100, 107 }); // sm80,sm
 const std::vector<int32_t> limbs_u_list({ 7, 14, 22, 30, 38, 46, 54, 62, 70, 78, 86, 94 });
 
 std::pair<int32_t, int32_t> internal::gram_algorithm(char& alg, int32_t K, int32_t N, int32_t u, int32_t Complex, int32_t segmentK, double batch_penalty) {
-  u = std::max(0, u); K = std::max(1, K); int32_t crt_bits = (u + u + 2) + int32_t(std::ceil(std::log2(double(0 < segmentK ? std::min(K, segmentK) : K))));
+  u = std::max(0, u); K = std::max(1, K); int32_t crt_bits = (u + u + 1) + int32_t(std::ceil(std::log2(double(0 < segmentK ? std::min(K, segmentK) : K))));
   if (Complex && (alg == 'C' || alg == 'c')) {
     if (crt_bits <= U8CRT2M::range[24]) {
       int32_t orderA_crt = 1 + int32_t(std::distance(&U8CRT2M::range[0], std::lower_bound(&U8CRT2M::range[0], &U8CRT2M::range[25], crt_bits)));

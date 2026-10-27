@@ -15,8 +15,7 @@ template<int32_t orderX, int32_t beta>
 __global__ void crt_diag_real_kernel(int64_t N, const uint32_t* __restrict__ X, int64_t ldx, int64_t strideX, uchar4* __restrict__ A, int64_t strideA) {
   int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
   if (y <= x) {
-    int64_t z = int64_t(blockIdx.z);
-    X = &X[y + (x * N) + ((z << 2) * strideX)]; A = &A[y + int64_t(uint64_t((x + int64_t(1)) * x) >> 1) + (z * strideA)];
+    int64_t z = int64_t(blockIdx.z); X = &X[y + (x * N) + ((z << 2) * strideX)]; A = &A[y + int64_t(uint64_t((x + int64_t(1)) * x) >> 1) + (z * strideA)];
 
     uchar4 a; if constexpr(beta) { a = *A; } else { a = uchar4(); }
     switch (int32_t(blockIdx.z)) {

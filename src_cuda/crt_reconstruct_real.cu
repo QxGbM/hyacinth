@@ -42,8 +42,8 @@ template <int32_t beta, int32_t orderOut, int32_t orderA> static __device__ __fo
   if constexpr(beta) {
     const uint64_t* A_in = out;
     if constexpr(0 < orderOut) { device::add_shifted<0>(a, int64_t(*A_in)); }
-    if constexpr(1 < orderOut) { device::add_shifted<0>(a, int64_t(*(A_in += stride))); }
-    if constexpr(2 < orderOut) { device::add_shifted<0>(a, int64_t(*(A_in += stride))); }
+    if constexpr(1 < orderOut) { device::add_shifted<63>(a, int64_t(*(A_in += stride))); }
+    if constexpr(2 < orderOut) { device::add_shifted<126>(a, int64_t(*(A_in += stride))); }
   }
   if constexpr(0 < orderOut && orderOut < orderA) { a[orderOut - 1] |= a[orderA - 1] & uint64_t(0x8000000000000000llu); }
   if constexpr(0 < orderOut) { *out = a[0]; } if constexpr(1 < orderOut) { *(out += stride) = a[1]; } if constexpr(2 < orderOut) { *(out += stride) = a[2]; }
@@ -54,8 +54,8 @@ __global__ void reconstruct_real_kernel(int64_t N, const uint32_t* __restrict__ 
   int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x);
   if (y < N) {
     constexpr int64_t p0 = U8CRT::Constants<orderX>::p[0], p1 = U8CRT::Constants<orderX>::p[1], p2 = U8CRT::Constants<orderX>::p[2];
-    constexpr int32_t orderAcc = int32_t(int64_t(0) < p0) + int32_t(int64_t(0) < p1) + int32_t(int64_t(0) < p2);
-    uint64_t a[orderAcc]{}; A = &A[y]; X = &X[y];
+    constexpr int32_t orderP = int32_t(int64_t(0) < p0) + int32_t(int64_t(0) < p1) + int32_t(int64_t(0) < p2), orderAcc = orderA < orderP ? orderP : orderA;
+    uint64_t a[orderAcc]{}; X = &X[y]; A = &A[y];
 
     if constexpr(0 < orderX) { add_pd<orderX, 0>(a, *X); }
     if constexpr(4 < orderX) { add_pd<orderX, 4>(a, *(X += N)); }

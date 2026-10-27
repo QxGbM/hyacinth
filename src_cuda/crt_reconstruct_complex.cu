@@ -42,21 +42,20 @@ template <int32_t beta, int32_t orderOut, int32_t orderA> static __device__ __fo
   if constexpr(beta) {
     const uint64_t* A_in = out;
     if constexpr(0 < orderOut) { device::add_shifted<0>(a, int64_t(*A_in)); }
-    if constexpr(1 < orderOut) { device::add_shifted<0>(a, int64_t(*(A_in += stride))); }
-    if constexpr(2 < orderOut) { device::add_shifted<0>(a, int64_t(*(A_in += stride))); }
+    if constexpr(1 < orderOut) { device::add_shifted<63>(a, int64_t(*(A_in += stride))); }
+    if constexpr(2 < orderOut) { device::add_shifted<126>(a, int64_t(*(A_in += stride))); }
   }
   if constexpr(0 < orderOut && orderOut < orderA) { a[orderOut - 1] |= a[orderA - 1] & uint64_t(0x8000000000000000llu); }
   if constexpr(0 < orderOut) { *out = a[0]; } if constexpr(1 < orderOut) { *(out += stride) = a[1]; } if constexpr(2 < orderOut) { *(out += stride) = a[2]; }
 }
 
 template<int32_t orderX, int32_t orderA, int32_t beta>
-__global__ void reconstruct_complex_kernel(int64_t N, const uint32_t* __restrict__ X, uint64_t* __restrict__ A) {
+__global__ void reconstruct_complex_kernel(int64_t N, const uint32_t* __restrict__ X, int64_t strideX, uint64_t* __restrict__ A, int64_t strideA) {
   int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x);
   if (y < N) {
-    int64_t z = int64_t(blockIdx.y) * N;
     constexpr int64_t p0 = U8CRT2M::Constants<orderX>::p[0], p1 = U8CRT2M::Constants<orderX>::p[1], p2 = U8CRT2M::Constants<orderX>::p[2];
-    constexpr int32_t orderAcc = int32_t(int64_t(0) < p0) + int32_t(int64_t(0) < p1) + int32_t(int64_t(0) < p2);
-    uint64_t a[orderAcc]{}; A = &A[y + (z * int64_t(orderX))]; X = &X[y + (z * int64_t(orderA))];
+    constexpr int32_t orderP = int32_t(int64_t(0) < p0) + int32_t(int64_t(0) < p1) + int32_t(int64_t(0) < p2), orderAcc = orderA < orderP ? orderP : orderA;
+    uint64_t a[orderAcc]{}; int64_t z = int64_t(blockIdx.y); X = &X[y + (z * strideX)]; A = &A[y + (z * strideA)];
 
     if constexpr(0 < orderX) { add_pd<orderX, 0>(a, *X); }
     if constexpr(4 < orderX) { add_pd<orderX, 4>(a, *(X += N)); }
@@ -64,6 +63,7 @@ __global__ void reconstruct_complex_kernel(int64_t N, const uint32_t* __restrict
     if constexpr(12 < orderX) { add_pd<orderX, 12>(a, *(X += N)); }
     if constexpr(16 < orderX) { add_pd<orderX, 16>(a, *(X += N)); }
     if constexpr(20 < orderX) { add_pd<orderX, 20>(a, *(X += N)); }
+    if constexpr(24 < orderX) { add_pd<orderX, 24>(a, *(X += N)); }
 
     uint64_t neg[orderAcc];
     constexpr int64_t neg_p0 = -p0, neg_p1 = -p1, neg_p2 = -p2;
@@ -97,8 +97,9 @@ template <int32_t orderA, int32_t orderX>
 static inline void reconstruct_crt_complex(cudaStream_t stream, int32_t beta, int64_t N, const uint32_t* X, uint64_t* A) {
   constexpr int32_t block_threads = 512;
   dim3 grid(uint32_t((uint64_t(N) + uint64_t(511)) >> 9), uint32_t(2));
-  if (beta) { reconstruct_complex_kernel<orderX, orderA, 1> <<< grid, block_threads, 0, stream >>> (N, X, A); } else
-  { reconstruct_complex_kernel<orderX, orderA, 0> <<< grid, block_threads, 0, stream >>> (N, X, A); }
+  int64_t strideX = int64_t((orderX + 3) / 4) * N, strideA = int64_t(orderA) * N;
+  if (beta) { reconstruct_complex_kernel<orderX, orderA, 1> <<< grid, block_threads, 0, stream >>> (N, X, strideX, A, strideA); } else
+  { reconstruct_complex_kernel<orderX, orderA, 0> <<< grid, block_threads, 0, stream >>> (N, X, strideX, A, strideA); }
 }
 
 void internal::int8::reconstruct_complex(cudaStream_t stream, int32_t beta, int64_t N, int32_t orderX, const uint32_t* X, int32_t orderA, uint64_t* A) {
@@ -127,6 +128,7 @@ void internal::int8::reconstruct_complex(cudaStream_t stream, int32_t beta, int6
     case 22: reconstruct_crt_complex<1, 22>(stream, beta, N, X, A); return;
     case 23: reconstruct_crt_complex<1, 23>(stream, beta, N, X, A); return;
     case 24: reconstruct_crt_complex<1, 24>(stream, beta, N, X, A); return;
+    case 25: reconstruct_crt_complex<1, 25>(stream, beta, N, X, A); return;
     default: return;
   } else if (orderA == 2) switch (orderX) {
     case 1: reconstruct_crt_complex<2, 1>(stream, beta, N, X, A); return;
@@ -153,6 +155,7 @@ void internal::int8::reconstruct_complex(cudaStream_t stream, int32_t beta, int6
     case 22: reconstruct_crt_complex<2, 22>(stream, beta, N, X, A); return;
     case 23: reconstruct_crt_complex<2, 23>(stream, beta, N, X, A); return;
     case 24: reconstruct_crt_complex<2, 24>(stream, beta, N, X, A); return;
+    case 25: reconstruct_crt_complex<2, 25>(stream, beta, N, X, A); return;
     default: return;
   } else if (orderA == 3) switch (orderX) {
     case 1: reconstruct_crt_complex<3, 1>(stream, beta, N, X, A); return;
@@ -179,6 +182,7 @@ void internal::int8::reconstruct_complex(cudaStream_t stream, int32_t beta, int6
     case 22: reconstruct_crt_complex<3, 22>(stream, beta, N, X, A); return;
     case 23: reconstruct_crt_complex<3, 23>(stream, beta, N, X, A); return;
     case 24: reconstruct_crt_complex<3, 24>(stream, beta, N, X, A); return;
+    case 25: reconstruct_crt_complex<3, 25>(stream, beta, N, X, A); return;
     default: return;
   }
 }

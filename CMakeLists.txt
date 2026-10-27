@@ -19,6 +19,7 @@ set(CPP_SOURCES
 set(CU_SOURCES
   src_cuda/allreduce_1drow.cu
   src_cuda/crt_cross_imag.cu
+  src_cuda/crt_diag_complex.cu
   src_cuda/crt_diag_real.cu
   src_cuda/crt_reconstruct_complex.cu
   src_cuda/crt_reconstruct_real.cu
@@ -26,7 +27,6 @@ set(CU_SOURCES
   src_cuda/fp_i63tp_dequantize.cu
   src_cuda/gram_evd.cu
   src_cuda/hyacin_potrfp.cu
-  src_cuda/i32_rem_accum.cu
   src_cuda/limbs_cross_imag.cu
   src_cuda/limbs_cross_real.cu
   src_cuda/limbs_diag.cu
@@ -35,7 +35,6 @@ set(CU_SOURCES
   src_cuda/quantize_crt_complex.cu
   src_cuda/quantize_crt_real.cu
   src_cuda/quantize_limbs.cu
-  src_cuda/zero_point.cu
 )
 
 set_source_files_properties(${CPP_SOURCES} PROPERTIES COMPILE_OPTIONS 
