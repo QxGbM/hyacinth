@@ -102,7 +102,7 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle) {
   handle->JacobiSVDSweeps = ((env_str = get_env("HYACIN_JACOBI_SVD_SWEEPS")) == "") ? HYACIN_DEFAULT_JACOBI_SVD_SWEEPS : std::stoi(env_str);
 
   if (!(handle->HandleOwnedResource & HANDLE_OWNS_CUDA_STREAM))
-  { cudaStreamCreateWithFlags(&handle->cudaStream, cudaStreamNonBlocking); handle->HandleOwnedResource |= HANDLE_OWNS_CUDA_STREAM; }
+  { cudaStreamCreateWithFlags(&handle->cudaStream, cudaStreamDefault); handle->HandleOwnedResource |= HANDLE_OWNS_CUDA_STREAM; }
   if (!(handle->HandleOwnedResource & HANDLE_OWNS_CUBLAS))
   { cublasCreate(&handle->cublasHandle); handle->HandleOwnedResource |= HANDLE_OWNS_CUBLAS; }
   if (!(handle->HandleOwnedResource & HANDLE_OWNS_CUSOLVER))
