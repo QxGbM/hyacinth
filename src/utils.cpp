@@ -32,7 +32,7 @@
 #endif
 
 #ifndef HYACIN_DEFAULT_CREATE_TIMER
-#define HYACIN_DEFAULT_CREATE_TIMER 1
+#define HYACIN_DEFAULT_CREATE_TIMER 0
 #endif
 
 const std::vector<int32_t> f64_capable_sm_list({ 80, 90, 100, 107 }); // sm80,sm90,sm100,sm107
