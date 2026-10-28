@@ -10,16 +10,16 @@ struct complex_float4;
 
 namespace internal::Cholesky {
 
-  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t N, double* A, int32_t lda, int32_t* jpiv, double* dev_work, int32_t* r);
-  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t N, float* A, int32_t lda, int32_t* jpiv, float* dev_work, int32_t* r);
-  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t N, double2* A, int32_t lda, int32_t* jpiv, double2* dev_work, int32_t* r);
-  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t N, float3* A, int32_t lda, int32_t* jpiv, float3* dev_work, int32_t* r);
-  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t N, float4* A, int32_t lda, int32_t* jpiv, float4* dev_work, int32_t* r);
-  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t N, cuDoubleComplex* A, int32_t lda, int32_t* jpiv, double* dev_work, int32_t* r);
-  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t N, cuComplex* A, int32_t lda, int32_t* jpiv, float* dev_work, int32_t* r);
-  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t N, complex_double2* A, int32_t lda, int32_t* jpiv, double2* dev_work, int32_t* r);
-  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t N, complex_float3* A, int32_t lda, int32_t* jpiv, float3* dev_work, int32_t* r);
-  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t N, complex_float4* A, int32_t lda, int32_t* jpiv, float4* dev_work, int32_t* r);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t N, double* A, int32_t lda, int32_t* jpiv, double* dev_work, int32_t* r, void* logger);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t N, float* A, int32_t lda, int32_t* jpiv, float* dev_work, int32_t* r, void* logger);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t N, double2* A, int32_t lda, int32_t* jpiv, double2* dev_work, int32_t* r, void* logger);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t N, float3* A, int32_t lda, int32_t* jpiv, float3* dev_work, int32_t* r, void* logger);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t N, float4* A, int32_t lda, int32_t* jpiv, float4* dev_work, int32_t* r, void* logger);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t N, cuDoubleComplex* A, int32_t lda, int32_t* jpiv, double* dev_work, int32_t* r, void* logger);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t N, cuComplex* A, int32_t lda, int32_t* jpiv, float* dev_work, int32_t* r, void* logger);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t N, complex_double2* A, int32_t lda, int32_t* jpiv, double2* dev_work, int32_t* r, void* logger);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t N, complex_float3* A, int32_t lda, int32_t* jpiv, float3* dev_work, int32_t* r, void* logger);
+  int32_t potrfp(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t N, complex_float4* A, int32_t lda, int32_t* jpiv, float4* dev_work, int32_t* r, void* logger);
 
 };
 
@@ -98,7 +98,7 @@ namespace internal {
   void scatter_matcopy(cudaStream_t stream, cublasHandle_t handle, char mode, int32_t M, int32_t N, const complex_float3* A, int32_t lda, __half2* B, int32_t ldb, const int32_t* jpiv = nullptr);
   void scatter_matcopy(cudaStream_t stream, cublasHandle_t handle, char mode, int32_t M, int32_t N, const complex_float4* A, int32_t lda, __half2* B, int32_t ldb, const int32_t* jpiv = nullptr);
 
-  std::pair<int32_t, int32_t> gram_algorithm(char& alg, int32_t K, int32_t N, int32_t u, int32_t Complex, int32_t segmentK, double batch_penalty);
+  std::pair<int32_t, int32_t> gram_algorithm(char& alg, int32_t K, int32_t u, int32_t Complex, int32_t segmentK, double batch_penalty);
   void matmul_cf16(cudaStream_t stream, cublasHandle_t handle, cudaMemPool_t mempool, char opA, int32_t M, int32_t N, int32_t K, const __half2* A, int32_t lda, const __half2* B, int32_t ldb, __half2* C, int32_t ldc);
 
 };

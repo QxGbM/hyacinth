@@ -34,8 +34,8 @@ __global__ void limbs_cross_real_kernel(int64_t N, const int32_t* __restrict__ X
       if constexpr(1 < orderA) { a[1] = uint64_t(0); }
       if constexpr(2 < orderA) { a[2] = uint64_t(0); }
     }
-    accumulate<sft, orderX>(a, &X[y + (x * N)], strideX);
-    accumulate<sft, orderX>(a, &X[x + (y * N)], strideX);
+    accumulate<sft, orderX>(a, &X[y + (x * ldx)], strideX);
+    accumulate<sft, orderX>(a, &X[x + (y * ldx)], strideX);
     if constexpr(0 < orderA) { *A = a[0]; }
     if constexpr(1 < orderA) { *(A += strideA) = a[1]; }
     if constexpr(2 < orderA) { *(A += strideA) = a[2]; }

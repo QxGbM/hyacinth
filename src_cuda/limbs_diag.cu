@@ -34,7 +34,7 @@ __global__ void limbs_diag_real_kernel(int64_t N, const int32_t* __restrict__ X,
       if constexpr(1 < orderA) { a[1] = uint64_t(0); }
       if constexpr(2 < orderA) { a[2] = uint64_t(0); }
     }
-    accumulate_diag<orderX>(a, &X[y + (x * N)], strideX);
+    accumulate_diag<orderX>(a, &X[y + (x * ldx)], strideX);
     if constexpr(0 < orderA) { *A = a[0]; }
     if constexpr(1 < orderA) { *(A += strideA) = a[1]; }
     if constexpr(2 < orderA) { *(A += strideA) = a[2]; }

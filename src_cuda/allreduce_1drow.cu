@@ -72,7 +72,7 @@ static __device__ __forceinline__ void conv_u38(uint64_t (&a)[5]) {
 }
 
 template <int32_t op> __global__ void limbs_convert_kernel(int64_t N, uint64_t* __restrict__ A, uint64_t* __restrict__ E) {
-  int64_t i = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x);
+  int64_t i = (int64_t(blockIdx.x) << 7) + int64_t(threadIdx.x);
   if (i < N) {
     constexpr int32_t LimbCount_lis[] = { 2, 3, 4, 4, 5, 6, 2, 3, 4, 4, 5, 6 };
     constexpr int32_t LimbCount = LimbCount_lis[op];
@@ -123,7 +123,7 @@ template <int32_t op> __global__ void limbs_accum_kernel(int64_t N, uint64_t* __
   }
 }
 
-template <int32_t op> static inline void conv_reduction(cudaStream_t stream, uint64_t N, uint64_t* A, uint64_t lenA, uint64_t* E, uint64_t lenE, ncclComm_t col_comm) {
+template <int32_t op> static inline void conv_reduction(cudaStream_t stream, uint64_t N, uint64_t* A, uint64_t lenA, uint64_t* E, uint64_t lenE, ncclComm_t col_comm, void* logger) {
   constexpr int32_t block_threads = 128;
   uint32_t grid = uint32_t((N + uint64_t(127)) >> 7);
   limbs_convert_kernel<op> <<< grid, block_threads, 0, stream >>> (int64_t(N), A, E);
@@ -132,6 +132,7 @@ template <int32_t op> static inline void conv_reduction(cudaStream_t stream, uin
   ncclAllReduce(E, E, lenE, ncclUint64, ncclSum, col_comm, stream);
   ncclGroupEnd();
   limbs_accum_kernel<op> <<< grid, block_threads, 0, stream >>> (int64_t(N), A, E);
+  if (logger) { std::fprintf((FILE*)logger, "NCCL-AllReduce [Bytes=%llu]\n", (unsigned long long)((lenA + lenE) * uint64_t(sizeof(uint64_t)))); }
 }
 
 extern "C" void hyacinAllReduce1Drow(const hyacinHandle_t* handle, int32_t Complex, int32_t orderA, uint64_t N, uint64_t* A) {
@@ -146,18 +147,18 @@ extern "C" void hyacinAllReduce1Drow(const hyacinHandle_t* handle, int32_t Compl
   if (cudaSuccess != cudaMallocFromPoolAsync((void**)&devE, lenE * uint64_t(sizeof(uint64_t)), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Workspace allocation failed at All-reduce.");
 
-  if (Complex == 1 && orderA == 1 && LimbCount == 2) { conv_reduction<0>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm); } else
-  if (Complex == 1 && orderA == 2 && LimbCount == 3) { conv_reduction<1>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm); } else
-  if (Complex == 1 && orderA == 2 && LimbCount == 4) { conv_reduction<2>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm); } else
-  if (Complex == 1 && orderA == 3 && LimbCount == 4) { conv_reduction<3>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm); } else
-  if (Complex == 1 && orderA == 3 && LimbCount == 5) { conv_reduction<4>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm); } else
-  if (Complex == 1 && orderA == 3 && LimbCount == 6) { conv_reduction<5>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm); } else
-  if (Complex == 2 && orderA == 1 && LimbCount == 2) { conv_reduction<6>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm); } else
-  if (Complex == 2 && orderA == 2 && LimbCount == 3) { conv_reduction<7>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm); } else
-  if (Complex == 2 && orderA == 2 && LimbCount == 4) { conv_reduction<8>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm); } else
-  if (Complex == 2 && orderA == 3 && LimbCount == 4) { conv_reduction<9>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm); } else
-  if (Complex == 2 && orderA == 3 && LimbCount == 5) { conv_reduction<10>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm); } else
-  if (Complex == 2 && orderA == 3 && LimbCount == 6) { conv_reduction<11>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm); }
+  if (Complex == 1 && orderA == 1 && LimbCount == 2) { conv_reduction<0>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm, handle->logger); } else
+  if (Complex == 1 && orderA == 2 && LimbCount == 3) { conv_reduction<1>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm, handle->logger); } else
+  if (Complex == 1 && orderA == 2 && LimbCount == 4) { conv_reduction<2>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm, handle->logger); } else
+  if (Complex == 1 && orderA == 3 && LimbCount == 4) { conv_reduction<3>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm, handle->logger); } else
+  if (Complex == 1 && orderA == 3 && LimbCount == 5) { conv_reduction<4>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm, handle->logger); } else
+  if (Complex == 1 && orderA == 3 && LimbCount == 6) { conv_reduction<5>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm, handle->logger); } else
+  if (Complex == 2 && orderA == 1 && LimbCount == 2) { conv_reduction<6>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm, handle->logger); } else
+  if (Complex == 2 && orderA == 2 && LimbCount == 3) { conv_reduction<7>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm, handle->logger); } else
+  if (Complex == 2 && orderA == 2 && LimbCount == 4) { conv_reduction<8>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm, handle->logger); } else
+  if (Complex == 2 && orderA == 3 && LimbCount == 4) { conv_reduction<9>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm, handle->logger); } else
+  if (Complex == 2 && orderA == 3 && LimbCount == 5) { conv_reduction<10>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm, handle->logger); } else
+  if (Complex == 2 && orderA == 3 && LimbCount == 6) { conv_reduction<11>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm, handle->logger); }
   cudaFreeAsync(devE, handle->cudaStream);
 }
 
@@ -167,6 +168,7 @@ extern "C" void hyacinAllReduceVExp(const hyacinHandle_t* handle, uint64_t N, in
   int32_t comm_size; ncclCommCount(handle->ncclComm, &comm_size);
   if (comm_size == 1) { return; } else if (comm_size <= 0) { throw std::runtime_error("Invalid NCCL communicator at All-reduce"); }
   ncclAllReduce(vexp, vexp, N, ncclInt32, ncclMin, handle->ncclComm, handle->cudaStream);
+  if (handle->logger) { std::fprintf((FILE*)(handle->logger), "NCCL-AllReduce [Bytes=%llu]\n", (unsigned long long)(N * uint64_t(sizeof(int32_t)))); }
 }
 
 #else

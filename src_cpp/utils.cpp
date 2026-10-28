@@ -38,7 +38,7 @@
 const std::vector<int32_t> f64_capable_sm_list({ 80, 90, 100, 107 }); // sm80,sm90,sm100,sm107
 const std::vector<int32_t> limbs_u_list({ 7, 14, 22, 30, 38, 46, 54, 62, 70, 78, 86, 94 });
 
-std::pair<int32_t, int32_t> internal::gram_algorithm(char& alg, int32_t K, int32_t N, int32_t u, int32_t Complex, int32_t segmentK, double batch_penalty) {
+std::pair<int32_t, int32_t> internal::gram_algorithm(char& alg, int32_t K, int32_t u, int32_t Complex, int32_t segmentK, double batch_penalty) {
   u = std::max(0, u); K = std::max(1, K); int32_t crt_bits = (u + u + 1) + int32_t(std::ceil(std::log2(double(0 < segmentK ? std::min(K, segmentK) : K))));
   if (Complex && (alg == 'C' || alg == 'c')) {
     if (crt_bits <= U8CRT2M::range[24]) {
@@ -52,7 +52,7 @@ std::pair<int32_t, int32_t> internal::gram_algorithm(char& alg, int32_t K, int32
     } else { alg = 'C'; return std::make_pair(0, 0); }
   } else {
     int32_t orderA_limbs = 1 + std::distance(limbs_u_list.begin(), std::lower_bound(limbs_u_list.begin(), limbs_u_list.end(), u));
-    if (alg != 'L' && alg != 'l' && 3 < orderA_limbs && 512 <= N) {
+    if (alg != 'L' && alg != 'l' && 2 < orderA_limbs) {
       double cost_limbs = (batch_penalty * double(orderA_limbs) * 0.5) + double(uint32_t(orderA_limbs * (orderA_limbs - 1)) >> 1) + double(Complex ? orderA_limbs * orderA_limbs : 0);
       if (Complex && crt_bits <= U8CRT2M::range[24]) {
         int32_t orderA_crt = 1 + int32_t(std::distance(&U8CRT2M::range[0], std::lower_bound(&U8CRT2M::range[0], &U8CRT2M::range[25], crt_bits)));
@@ -122,6 +122,7 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle) {
   int32_t create_timer = ((env_str = get_env("HYACIN_CREATE_TIMER")) == "") ? HYACIN_DEFAULT_CREATE_TIMER : int32_t(env_str == "1" || env_str == "true" || env_str == "True");
   if (!(handle->HandleOwnedResource & HANDLE_OWNS_TIMER) && create_timer)
   { handle->timer = (new EventTimer()); handle->HandleOwnedResource |= HANDLE_OWNS_TIMER; }
+  env_str = get_env("HYACIN_VERBOSE"); if (env_str == "1" || env_str == "true" || env_str == "True") { handle->logger = stdout; }
 }
 
 extern "C" void hyacinDestroy(hyacinHandle_t* handle) {

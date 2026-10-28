@@ -35,8 +35,13 @@ __global__ void crt_extra_imag_kernel(int64_t N, const uint32_t* __restrict__ X,
     int64_t z = int64_t(blockIdx.z); X = &X[(z << 2) * strideX]; A = &A[y + int64_t(uint64_t((x + int64_t(1)) * x) >> 1) + ((z + int64_t(5)) * strideA)];
     constexpr int64_t panelsA = int64_t((orderX + 3) / 4);
     uchar4* AImag = &A[panelsA * strideA], r = *A, i; if constexpr(beta) { i = *AImag; } else { i = uchar4(); }
-    if (blockIdx.z) { accumulate_modular_imaginary<0, orderX, 24>(r, i, &X[y + (x * N)], strideX); accumulate_modular_imaginary<1, orderX, 24>(r, i, &X[x + (y * N)], strideX); } else
-    { accumulate_modular_imaginary<0, orderX, 20>(r, i, &X[y + (x * N)], strideX); accumulate_modular_imaginary<1, orderX, 20>(r, i, &X[x + (y * N)], strideX); }
+    if (blockIdx.z) {
+      accumulate_modular_imaginary<0, orderX, 24>(r, i, &X[y + (x * ldx)], strideX);
+      accumulate_modular_imaginary<1, orderX, 24>(r, i, &X[x + (y * ldx)], strideX);
+    } else {
+      accumulate_modular_imaginary<0, orderX, 20>(r, i, &X[y + (x * ldx)], strideX);
+      accumulate_modular_imaginary<1, orderX, 20>(r, i, &X[x + (y * ldx)], strideX);
+    }
     *A = r; *AImag = i;
   }
 }

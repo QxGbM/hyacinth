@@ -17,6 +17,7 @@ template <class T> static inline hyacinPrecision_t hyacin_prec() {
 
 template <class T> static inline
 int32_t interp_dispatcher(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, int32_t* jpvt, T* V, int32_t ldv, int64_t globalM) {
+  K = std::min(N, K); if (K <= 0) { return 0; }
   int32_t batchIter = handle->GramSegmentK <= 0 ? M : std::min(handle->GramSegmentK, M);
   hyacinPrecision_t Atype = hyacin_prec<T>(), Gtype; opA = opA == 't' ? 'T' : (opA == 'c' ? 'C' : opA);
   std::div_t divM = std::div(M, batchIter); int32_t batches = divM.quot + int32_t(0 < divM.rem), lastM = 0 < divM.rem ? divM.rem : batchIter;
@@ -54,6 +55,7 @@ int32_t interp_dispatcher(const hyacinHandle_t* handle, double epi, char opA, in
 
 template <class T, class R> static inline
 int32_t svd_dispatcher(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, R* S, T* V, int32_t ldv, int64_t globalM) {
+  K = std::min(N, K); if (K <= 0) { return 0; }
   int32_t batchIter = handle->GramSegmentK <= 0 ? M : std::min(handle->GramSegmentK, M);
   hyacinPrecision_t Atype = hyacin_prec<T>(), Gtype; opA = opA == 't' ? 'T' : (opA == 'c' ? 'C' : opA);
   std::div_t divM = std::div(M, batchIter); int32_t batches = divM.quot + int32_t(0 < divM.rem), lastM = 0 < divM.rem ? divM.rem : batchIter;
@@ -115,6 +117,7 @@ static inline void an_gemm(const hyacinHandle_t* handle, char opA, int32_t M, in
 
 template <class T, class R> static inline
 int32_t svd_segN_dispatcher(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, R* S, T* V, int32_t ldv, int64_t globalM) {
+  K = std::min(N, K); if (K <= 0) { return 0; }
   int32_t segments = 512 <= N ? int32_t(std::floor(std::sqrt(double(N) / double(K)))) : 1;
   if (segments <= 1) { return svd_dispatcher(handle, epi, opA, M, N, K, A, lda, S, V, ldv, globalM); }
   epi *= sqrt(0.5); std::div_t divN = std::div(N, segments); opA = opA == 't' ? 'T' : (opA == 'c' ? 'C' : opA);
@@ -128,7 +131,7 @@ int32_t svd_segN_dispatcher(const hyacinHandle_t* handle, double epi, char opA, 
   std::vector<int32_t> ranks_stage1;
   for (int32_t i = 0; i < segments; ++i) {
     int32_t cols = divN.quot + int32_t(i < divN.rem);
-    ranks_stage1.emplace_back(svd_dispatcher(handle, epi, opA, M, cols, std::min(M, cols), &A[locA], lda, S_stage1, &V_stage1[uint64_t(i) * V_stage1_stride], N_stage1, globalM));
+    ranks_stage1.emplace_back(svd_dispatcher(handle, epi, opA, M, cols, std::min(cols, M), &A[locA], lda, S_stage1, &V_stage1[uint64_t(i) * V_stage1_stride], N_stage1, globalM));
     if (transA) { locA += cols; } else { locA += int64_t(cols) * int64_t(lda); }
   }
 
@@ -143,6 +146,7 @@ int32_t svd_segN_dispatcher(const hyacinHandle_t* handle, double epi, char opA, 
     if (transA) { locA += cols; } else { locA += int64_t(cols) * int64_t(lda); } locA2 += int64_t(ranks_stage1[i]) * int64_t(M);
   }
 
+  K = std::min(N_stage2, K);
   T* V_stage2 = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&V_stage2, uint64_t(N_stage2) * uint64_t(K) * uint64_t(sizeof(T)), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Stage-2 allocation failed.");
   int32_t rank = svd_dispatcher(handle, epi, 'N', M, N_stage2, K, A_stage2, M, S, V_stage2, N_stage2, globalM);

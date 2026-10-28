@@ -111,7 +111,7 @@ template <char mode> static inline void gemm_accum_iters(cudaStream_t stream, cu
   } else { for (int32_t i = 0; i < orderA; ++i) { gemm_accum<mode>(stream, handle, M, N, K, i << 3, orderA, &A[int64_t(i) * strideA], &A[int64_t(orderA) * strideA], lda, beta || int32_t(0 < i), orderC, C, W); }}
 }
 
-template <int32_t Complex> static inline void i8herk_limbs(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, int8_t* A, int32_t lda, int32_t beta, int32_t orderC, uint64_t* C) {
+template <int32_t Complex> static inline void i8herk_limbs(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, int8_t* A, int32_t lda, int32_t beta, int32_t orderC, uint64_t* C, FILE* logger) {
   int32_t algnM = (M + 255) & (~255), algnN = (N + 63) & (~63), *scratch = nullptr;
   int64_t colsA = int64_t(N) * int64_t(orderA), strideA = int64_t(lda) * colsA;
   if (cudaSuccess != cudaMallocFromPoolAsync((void**)&scratch, uint64_t(algnN) * uint64_t(colsA) * uint64_t(sizeof(int32_t)), mempool, stream))
@@ -123,6 +123,8 @@ template <int32_t Complex> static inline void i8herk_limbs(cudaStream_t stream, 
   gemm_accum_iters<'R'>(stream, handle, algnN, N, algnM, orderA, A, lda, beta, orderC, C, scratch);
   if constexpr(Complex) { gemm_accum_iters<'I'>(stream, handle, algnN, N, algnM, orderA, &A[strideA], lda, beta, orderC, C, scratch); }
   cudaFreeAsync(scratch, stream);
+  if (logger) { if constexpr(Complex) { std::fprintf(logger, "I8I32-GEMM-COMPLEX [algo=TN,limbs] [M=%d] [N=%d] [K=%d] [Order=%d]\n", algnN, N, algnM, orderA); } else
+  { std::fprintf(logger, "I8I32-GEMM-REAL [algo=TN,limbs] [M=%d] [N=%d] [K=%d] [Order=%d]\n", algnN, N, algnM, orderA); }}
 }
 
 static inline void gemm_accum_crt_real(cudaStream_t stream, cublasHandle_t handle, int32_t M, int32_t N, int32_t K, int32_t orderA, const int8_t* A, int32_t lda, uint32_t* C, int32_t* W) {
@@ -215,7 +217,7 @@ template <char mode> static inline void gemm_accum_crt_cextra(cudaStream_t strea
   }
 }
 
-template <int32_t Complex> static inline void i8herk_crt(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, int8_t* A, int32_t lda, int32_t beta, int32_t orderC, uint64_t* C) {
+template <int32_t Complex> static inline void i8herk_crt(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t handle, int32_t M, int32_t N, int32_t orderA, int8_t* A, int32_t lda, int32_t beta, int32_t orderC, uint64_t* C, FILE* logger) {
   int32_t algnM = (M + 255) & (~255), algnN = (N + 63) & (~63);
   if constexpr(Complex) { 
     int64_t colsA = int64_t(N) * int64_t(orderA * 2 + std::max(orderA - U8CRT2M::len_2m_moduli, 0)), strideB = (int64_t(N) * int64_t(N) + int64_t(N)) / int64_t(2);
@@ -244,6 +246,8 @@ template <int32_t Complex> static inline void i8herk_crt(cudaStream_t stream, cu
     gemm_accum_crt_real(stream, handle, algnN, N, algnM, orderA, A, lda, B, scratch); cudaFreeAsync(scratch, stream); 
     internal::int8::reconstruct_real(stream, beta, strideB, orderA, B, orderC, C); cudaFreeAsync(B, stream);
   }
+  if (logger) { if constexpr(Complex) { std::fprintf(logger, "I8I32-GEMM-COMPLEX [algo=TN,crt] [M=%d] [N=%d] [K=%d] [Order=%d]\n", algnN, N, algnM, orderA); } else
+  { std::fprintf(logger, "I8I32-GEMM-REAL [algo=TN,crt] [M=%d] [N=%d] [K=%d] [Order=%d]\n", algnN, N, algnM, orderA); }}
 }
 
 template <class matrix_t> static inline void herk_dispatcher(const hyacinHandle_t* handle, int32_t M, int32_t N, const matrix_t* A, int32_t lda, int32_t u, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C) {
@@ -252,7 +256,7 @@ template <class matrix_t> static inline void herk_dispatcher(const hyacinHandle_
   cudaStream_t stream = handle->cudaStream; cudaMemPool_t mempool = handle->mempool; cublasHandle_t cublasH = handle->cublasHandle; 
   if (u < 0 && beta == 0) { cudaMemsetAsync(C, 0, uint64_t(N) * uint64_t(N + 1) * uint64_t(orderC) * elem, stream); return; }
 
-  char alg = handle->GramMatrixAlgorithm; std::pair<int32_t, int32_t> param = internal::gram_algorithm(alg, M, N, u + Complex, Complex, handle->TCGemmTargetK, handle->StrideBatchPerfPenalty);
+  char alg = handle->GramMatrixAlgorithm; std::pair<int32_t, int32_t> param = internal::gram_algorithm(alg, M, u + Complex, Complex, handle->TCGemmTargetK, handle->StrideBatchPerfPenalty);
   int32_t orderA = param.first, algnM = (M + 255) & (~255), algnN = (N + 63) & (~63); 
   if (alg == 'L') {
     uint64_t strideA = uint64_t(algnM) * uint64_t(N) * uint64_t(orderA), a_len = uint64_t(algnM) * uint64_t(algnN - N);
@@ -261,7 +265,7 @@ template <class matrix_t> static inline void herk_dispatcher(const hyacinHandle_
       throw std::runtime_error("Workspace (i8) allocation failed at Integer SY/HERK");
 
     internal::int8::quantize_limbs(stream, M, N, orderA, A, lda, vexp, W, algnM);
-    i8herk_limbs<Complex>(stream, mempool, cublasH, M, N, orderA, W, algnM, beta, orderC, C);
+    i8herk_limbs<Complex>(stream, mempool, cublasH, M, N, orderA, W, algnM, beta, orderC, C, (FILE*)handle->logger);
     cudaFreeAsync(W, stream);
   } else {
     int32_t segM = param.second;
@@ -273,7 +277,7 @@ template <class matrix_t> static inline void herk_dispatcher(const hyacinHandle_
     for (int32_t y = 0; y < M; y += segM) {
       int32_t rows = std::min(M - y, segM);
       internal::int8::quantize_crt(stream, rows, N, orderA, &A[y], lda, vexp, W, segM);
-      i8herk_crt<Complex>(stream, mempool, cublasH, rows, N, orderA, W, segM, beta, orderC, C); beta = 1;
+      i8herk_crt<Complex>(stream, mempool, cublasH, rows, N, orderA, W, segM, beta, orderC, C, (FILE*)handle->logger); beta = 1;
     }
     cudaFreeAsync(W, stream);
   }
@@ -288,7 +292,7 @@ template <class matrix_t> static inline void herk_batch_dispatcher(const hyacinH
 
   int32_t u_floor = Complex, u_ceil = Complex + u, M = (batches - 1) * segM + lastM; std::vector<std::pair<int32_t, int32_t>> limb_batches;
   while (u_floor <= u_ceil) {
-    char algo = handle->GramMatrixAlgorithm; std::pair<int32_t, int32_t> param = internal::gram_algorithm(algo, M, N, u_floor, Complex, handle->TCGemmTargetK, handle->StrideBatchPerfPenalty);
+    char algo = handle->GramMatrixAlgorithm; std::pair<int32_t, int32_t> param = internal::gram_algorithm(algo, M, u_floor, Complex, handle->TCGemmTargetK, handle->StrideBatchPerfPenalty);
     if (algo == 'L') { u_floor = 1 + param.second; limb_batches.emplace_back(param); } else { u_floor = 1 + u_ceil; }
   }
   std::vector<int32_t> segmentsU(batches); cudaMemcpyAsync(&segmentsU[0], segU, uint64_t(batches) * uint64_t(sizeof(int32_t)), cudaMemcpyDeviceToHost, stream);
@@ -303,7 +307,7 @@ template <class matrix_t> static inline void herk_batch_dispatcher(const hyacinH
   }
 
   int32_t ceil_batch_rows = batchRows.back(); char algo = handle->GramMatrixAlgorithm;
-  std::pair<int32_t, int32_t> ceil_batch = internal::gram_algorithm(algo, ceil_batch_rows, N, u_ceil, Complex, handle->TCGemmTargetK, handle->StrideBatchPerfPenalty);
+  std::pair<int32_t, int32_t> ceil_batch = internal::gram_algorithm(algo, ceil_batch_rows, u_ceil, Complex, handle->TCGemmTargetK, handle->StrideBatchPerfPenalty);
   if (algo == 'L') { limb_batches.emplace_back(ceil_batch); }
   int32_t algnN = (N + 63) & (~63), n_limb_batches = int32_t(limb_batches.size());
   for (int32_t b = 0; b < n_limb_batches; ++b) if (0 < batchRows[b]) {
@@ -321,7 +325,7 @@ template <class matrix_t> static inline void herk_batch_dispatcher(const hyacinH
       internal::int8::quantize_limbs(stream, rows, N, orderA, &A[rowsA], lda, vexp, &W[rowsW], algnM);
       rowsW += rows; i = i_end; while (i < batches && segmentsU[i] != b) { ++i; }
     }
-    i8herk_limbs<Complex>(stream, mempool, cublasH, rowsW, N, orderA, W, algnM, beta, orderC, C); beta = 1;
+    i8herk_limbs<Complex>(stream, mempool, cublasH, rowsW, N, orderA, W, algnM, beta, orderC, C, (FILE*)handle->logger); beta = 1;
     cudaFreeAsync(W, stream);
   }
 
@@ -340,17 +344,17 @@ template <class matrix_t> static inline void herk_batch_dispatcher(const hyacinH
       if (algnM < (rowsW + rows)) {
         int32_t seg1 = algnM - rowsW, seg2 = rows - seg1;
         if (0 < seg1) { internal::int8::quantize_crt(stream, seg1, N, orderA, &A[rowsA], lda, vexp, &W[rowsW], algnM); }
-        i8herk_crt<Complex>(stream, mempool, cublasH, algnM, N, orderA, W, algnM, beta, orderC, C); beta = 1;
+        i8herk_crt<Complex>(stream, mempool, cublasH, algnM, N, orderA, W, algnM, beta, orderC, C, (FILE*)handle->logger); beta = 1;
         while (algnM < seg2) {
           internal::int8::quantize_crt(stream, algnM, N, orderA, &A[rowsA + seg1], lda, vexp, W, algnM);
-          i8herk_crt<Complex>(stream, mempool, cublasH, algnM, N, orderA, W, algnM, beta, orderC, C); beta = 1;
+          i8herk_crt<Complex>(stream, mempool, cublasH, algnM, N, orderA, W, algnM, beta, orderC, C, (FILE*)handle->logger); beta = 1;
           seg1 += algnM; seg2 -= algnM;
         }
         if (0 < seg2) { internal::int8::quantize_crt(stream, seg2, N, orderA, &A[rowsA + seg1], lda, vexp, W, algnM); } rowsW = seg2;
       } else { internal::int8::quantize_crt(stream, rows, N, orderA, &A[rowsA], lda, vexp, &W[rowsW], algnM); rowsW += rows; }
       i = i_end; while (i < batches && segmentsU[i] != n_limb_batches) { ++i; }
     }
-    if (0 < rowsW) { i8herk_crt<Complex>(stream, mempool, cublasH, rowsW, N, orderA, W, algnM, beta, orderC, C); beta = 1; }
+    if (0 < rowsW) { i8herk_crt<Complex>(stream, mempool, cublasH, rowsW, N, orderA, W, algnM, beta, orderC, C, (FILE*)handle->logger); beta = 1; }
     cudaFreeAsync(W, stream);
   }
 }

@@ -47,7 +47,7 @@ typedef struct {
   cublasHandle_t cublasHandle;
   cusolverDnHandle_t cusolverHandle;
   cudaMemPool_t mempool;
-  void* timer, *pinnedWorkspace;
+  void* pinnedWorkspace, *timer, *logger;
 #ifndef NO_NCCL
   ncclComm_t ncclComm;
 #endif

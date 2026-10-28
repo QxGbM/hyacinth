@@ -39,8 +39,8 @@ __global__ void limbs_cross_imaginary_kernel(int64_t N, const int32_t* __restric
       if constexpr(0 < orderA) { r[0] = *A_in; } if constexpr(1 < orderA) { r[1] = *(A_in += strideA); } if constexpr(2 < orderA) { r[2] = *(A_in += strideA); }
       if constexpr(0 < orderA) { i[0] = uint64_t(0); } if constexpr(1 < orderA) { i[1] = uint64_t(0); } if constexpr(2 < orderA) { i[2] = uint64_t(0); }
     }
-    accumulate_complex<0, sft, orderX>(r, i, &X[y + (x * N)], strideX);
-    accumulate_complex<1, sft, orderX>(r, i, &X[x + (y * N)], strideX);
+    accumulate_complex<0, sft, orderX>(r, i, &X[y + (x * ldx)], strideX);
+    accumulate_complex<1, sft, orderX>(r, i, &X[x + (y * ldx)], strideX);
     if constexpr(0 < orderA) { *A = r[0]; } if constexpr(1 < orderA) { *(A += strideA) = r[1]; } if constexpr(2 < orderA) { *(A += strideA) = r[2]; }
     if constexpr(0 < orderA) { *(A += strideA) = i[0]; } if constexpr(1 < orderA) { *(A += strideA) = i[1]; } if constexpr(2 < orderA) { *(A += strideA) = i[2]; }
   }

@@ -36,11 +36,11 @@ __global__ void crt_rotate_kernel(int64_t N, const uint32_t* __restrict__ X, int
     constexpr int64_t panelsA = int64_t((orderX + 3) / 4);
     uchar4* AImag = &A[panelsA * strideA], r, i; if constexpr(beta) { r = *A; i = *AImag; } else { r = i = uchar4(); }
     switch (int32_t(blockIdx.z)) {
-      case 0: accumulate_modular_rotate<orderX, 0>(r, i, &X[y + (x * N)], &X[x + (y * N)], strideX); break;
-      case 1: accumulate_modular_rotate<orderX, 4>(r, i, &X[y + (x * N)], &X[x + (y * N)], strideX); break;
-      case 2: accumulate_modular_rotate<orderX, 8>(r, i, &X[y + (x * N)], &X[x + (y * N)], strideX); break;
-      case 3: accumulate_modular_rotate<orderX, 12>(r, i, &X[y + (x * N)], &X[x + (y * N)], strideX); break;
-      case 4: accumulate_modular_rotate<orderX, 16>(r, i, &X[y + (x * N)], &X[x + (y * N)], strideX); break;
+      case 0: accumulate_modular_rotate<orderX, 0>(r, i, &X[y + (x * ldx)], &X[x + (y * ldx)], strideX); break;
+      case 1: accumulate_modular_rotate<orderX, 4>(r, i, &X[y + (x * ldx)], &X[x + (y * ldx)], strideX); break;
+      case 2: accumulate_modular_rotate<orderX, 8>(r, i, &X[y + (x * ldx)], &X[x + (y * ldx)], strideX); break;
+      case 3: accumulate_modular_rotate<orderX, 12>(r, i, &X[y + (x * ldx)], &X[x + (y * ldx)], strideX); break;
+      case 4: accumulate_modular_rotate<orderX, 16>(r, i, &X[y + (x * ldx)], &X[x + (y * ldx)], strideX); break;
     }
     *A = r; *AImag = i;
   }
