@@ -253,8 +253,8 @@ template <int32_t Complex> static inline void i8herk_crt(cudaStream_t stream, cu
 template <class matrix_t> static inline void herk_dispatcher(const hyacinHandle_t* handle, int32_t M, int32_t N, const matrix_t* A, int32_t lda, int32_t u, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C) {
   constexpr int32_t Complex = int32_t(std::is_same_v<matrix_t, cuDoubleComplex> || std::is_same_v<matrix_t, cuComplex> || std::is_same_v<matrix_t, __half2>);
   constexpr uint64_t elem = uint64_t(Complex ? sizeof(uint64_t) : sizeof(uint32_t));
-  cudaStream_t stream = handle->cudaStream; cudaMemPool_t mempool = handle->mempool; cublasHandle_t cublasH = handle->cublasHandle; 
-  if (u < 0 && beta == 0) { cudaMemsetAsync(C, 0, uint64_t(N) * uint64_t(N + 1) * uint64_t(orderC) * elem, stream); return; }
+  cudaStream_t stream = handle->cudaStream; cudaMemPool_t mempool = handle->mempool; cublasHandle_t cublasH = handle->cublasHandle;
+  if ((M <= 0 || u < 0) && beta == 0) { cudaMemsetAsync(C, 0, uint64_t(N) * uint64_t(N + 1) * uint64_t(orderC) * elem, stream); return; }
 
   char alg = handle->GramMatrixAlgorithm; std::pair<int32_t, int32_t> param = internal::gram_algorithm(alg, M, u + Complex, Complex, handle->TCGemmTargetK, handle->StrideBatchPerfPenalty);
   int32_t orderA = param.first, algnM = (M + 255) & (~255), algnN = (N + 63) & (~63); 
@@ -360,10 +360,10 @@ template <class matrix_t> static inline void herk_batch_dispatcher(const hyacinH
 }
 
 extern "C" void hyacinXherkBatch(const hyacinHandle_t* handle, int32_t batches, int32_t segM, int32_t lastM, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t u, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C) {
-  if (batches <= 0 || N <= 0 || orderC <= 0) { return; }
+  if (N <= 0 || orderC <= 0) { return; }
   Timer::register_distribute_kernel(handle->cudaStream, handle->timer);
   
-  if (batches == 1) switch (Atype) {
+  if (batches <= 1) switch (Atype) {
     case HYACIN_F64: herk_dispatcher(handle, lastM, N, (const double*)A, lda, u, vexp, beta, orderC, C); return;
     case HYACIN_F32: herk_dispatcher(handle, lastM, N, (const float*)A, lda, u, vexp, beta, orderC, C); return;
     case HYACIN_F16: herk_dispatcher(handle, lastM, N, (const __half*)A, lda, u, vexp, beta, orderC, C); return;

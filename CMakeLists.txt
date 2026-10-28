@@ -10,32 +10,32 @@ project("hyacin" LANGUAGES CXX CUDA)
 find_package(CUDAToolkit REQUIRED)
 
 set(CPP_SOURCES
-  src_cpp/gram_id.cpp
-  src_cpp/hyacin_herk.cpp
-  src_cpp/lra.cpp
-  src_cpp/utils.cpp
+  src/gram_id.cpp
+  src/hyacin_herk.cpp
+  src/lra.cpp
+  src/utils.cpp
 )
 
 set(CU_SOURCES
-  src_cuda/allreduce_1drow.cu
-  src_cuda/crt_diag_real.cu
-  src_cuda/crt_extra_imag.cu
-  src_cuda/crt_extra_real.cu
-  src_cuda/crt_reconstruct_complex.cu
-  src_cuda/crt_reconstruct_real.cu
-  src_cuda/crt_rotate.cu
-  src_cuda/fp_exponent.cu
-  src_cuda/fp_i63tp_dequantize.cu
-  src_cuda/gram_evd.cu
-  src_cuda/hyacin_potrfp.cu
-  src_cuda/limbs_cross_imag.cu
-  src_cuda/limbs_cross_real.cu
-  src_cuda/limbs_diag.cu
-  src_cuda/matcopy.cu
-  src_cuda/matmul_fp16_complex.cu
-  src_cuda/quantize_crt_complex.cu
-  src_cuda/quantize_crt_real.cu
-  src_cuda/quantize_limbs.cu
+  src/allreduce_1drow.cu
+  src/crt_diag_real.cu
+  src/crt_extra_imag.cu
+  src/crt_extra_real.cu
+  src/crt_reconstruct_complex.cu
+  src/crt_reconstruct_real.cu
+  src/crt_rotate.cu
+  src/fp_exponent.cu
+  src/fp_i63tp_dequantize.cu
+  src/gram_evd.cu
+  src/hyacin_potrfp.cu
+  src/limbs_cross_imag.cu
+  src/limbs_cross_real.cu
+  src/limbs_diag.cu
+  src/matcopy.cu
+  src/matmul_fp16_complex.cu
+  src/quantize_crt_complex.cu
+  src/quantize_crt_real.cu
+  src/quantize_limbs.cu
 )
 
 set_source_files_properties(${CPP_SOURCES} PROPERTIES COMPILE_OPTIONS 

@@ -20,7 +20,7 @@ int32_t interp_dispatcher(const hyacinHandle_t* handle, double epi, char opA, in
   K = std::min(N, K); if (K <= 0) { return 0; }
   int32_t batchIter = handle->GramSegmentK <= 0 ? M : std::min(handle->GramSegmentK, M);
   hyacinPrecision_t Atype = hyacin_prec<T>(), Gtype; opA = opA == 't' ? 'T' : (opA == 'c' ? 'C' : opA);
-  std::div_t divM = std::div(M, batchIter); int32_t batches = divM.quot + int32_t(0 < divM.rem), lastM = 0 < divM.rem ? divM.rem : batchIter;
+  std::div_t divM = std::div(M, std::max(1, batchIter)); int32_t batches = divM.quot + int32_t(0 < divM.rem), lastM = 0 < divM.rem ? divM.rem : batchIter;
   int32_t* vexp = nullptr, u, cPanels, lPanels, gElemBytes; uint64_t strideC;
   if (cudaSuccess != cudaMallocFromPoolAsync((void**)&vexp, uint64_t(batches + 1) * uint64_t(N) * uint64_t(sizeof(int32_t)), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Exponent vector allocation failed");
@@ -58,7 +58,7 @@ int32_t svd_dispatcher(const hyacinHandle_t* handle, double epi, char opA, int32
   K = std::min(N, K); if (K <= 0) { return 0; }
   int32_t batchIter = handle->GramSegmentK <= 0 ? M : std::min(handle->GramSegmentK, M);
   hyacinPrecision_t Atype = hyacin_prec<T>(), Gtype; opA = opA == 't' ? 'T' : (opA == 'c' ? 'C' : opA);
-  std::div_t divM = std::div(M, batchIter); int32_t batches = divM.quot + int32_t(0 < divM.rem), lastM = 0 < divM.rem ? divM.rem : batchIter;
+  std::div_t divM = std::div(M, std::max(1, batchIter)); int32_t batches = divM.quot + int32_t(0 < divM.rem), lastM = 0 < divM.rem ? divM.rem : batchIter;
   int32_t* vexp = nullptr, u, cPanels, lPanels, gElemBytes; uint64_t strideC;
   if (cudaSuccess != cudaMallocFromPoolAsync((void**)&vexp, uint64_t(batches + 1) * uint64_t(N) * uint64_t(sizeof(int32_t)), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Exponent vector allocation failed");
@@ -121,7 +121,7 @@ int32_t svd_segN_dispatcher(const hyacinHandle_t* handle, double epi, char opA, 
   int32_t segments = 512 <= N ? int32_t(std::floor(std::sqrt(double(N) / double(K)))) : 1;
   if (segments <= 1) { return svd_dispatcher(handle, epi, opA, M, N, K, A, lda, S, V, ldv, globalM); }
   epi *= sqrt(0.5); std::div_t divN = std::div(N, segments); opA = opA == 't' ? 'T' : (opA == 'c' ? 'C' : opA);
-  int32_t N_stage1 = divN.quot + int32_t(0 < divN.rem); uint64_t V_stage1_stride = uint64_t(N_stage1) * uint64_t(std::min(N_stage1, M));
+  int32_t N_stage1 = divN.quot + int32_t(0 < divN.rem); uint64_t V_stage1_stride = uint64_t(N_stage1) * uint64_t(N_stage1);
   T* V_stage1 = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&V_stage1, V_stage1_stride * uint64_t(segments) * sizeof(T), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Stage-1 allocation failed.");
   R* S_stage1 = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&S_stage1, uint64_t(N_stage1) * uint64_t(sizeof(R)), handle->mempool, handle->cudaStream))
@@ -131,7 +131,7 @@ int32_t svd_segN_dispatcher(const hyacinHandle_t* handle, double epi, char opA, 
   std::vector<int32_t> ranks_stage1;
   for (int32_t i = 0; i < segments; ++i) {
     int32_t cols = divN.quot + int32_t(i < divN.rem);
-    ranks_stage1.emplace_back(svd_dispatcher(handle, epi, opA, M, cols, std::min(cols, M), &A[locA], lda, S_stage1, &V_stage1[uint64_t(i) * V_stage1_stride], N_stage1, globalM));
+    ranks_stage1.emplace_back(svd_dispatcher(handle, epi, opA, M, cols, cols, &A[locA], lda, S_stage1, &V_stage1[uint64_t(i) * V_stage1_stride], N_stage1, globalM));
     if (transA) { locA += cols; } else { locA += int64_t(cols) * int64_t(lda); }
   }
 
@@ -140,7 +140,7 @@ int32_t svd_segN_dispatcher(const hyacinHandle_t* handle, double epi, char opA, 
   T* A_stage2 = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&A_stage2, uint64_t(M) * uint64_t(N_stage2) * uint64_t(sizeof(T)), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Stage-2 allocation failed.");
   int64_t locA2 = (locA = int64_t(0));
-  for (int32_t i = 0; i < segments; ++i) {
+  if (0 < M) for (int32_t i = 0; i < segments; ++i) {
     int32_t cols = divN.quot + int32_t(i < divN.rem);
     an_gemm(handle, opA, M, ranks_stage1[i], cols, &A[locA], lda, &V_stage1[uint64_t(i) * V_stage1_stride], N_stage1, &A_stage2[locA2], M);
     if (transA) { locA += cols; } else { locA += int64_t(cols) * int64_t(lda); } locA2 += int64_t(ranks_stage1[i]) * int64_t(M);
