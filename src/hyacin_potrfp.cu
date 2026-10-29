@@ -266,7 +266,7 @@ __global__ void potrf_iter_kernel(int32_t iterN, int32_t N, matrix_t* __restrict
 
 template <char mode, class real_t, class matrix_t>
 __global__ void matrix_fill_upper_to_full(matrix_t* __restrict__ A, int64_t lda) {
-  int64_t y = (int64_t(blockIdx.x) << 9) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
+  int64_t y = (int64_t(blockIdx.x) << 7) + int64_t(threadIdx.x), x = int64_t(blockIdx.y);
   bool pred; if constexpr(mode == 'U') { pred = y < x; } else if constexpr(mode == 'L') { pred = x < y; } else { pred = false; }
   if (pred) { A[x + y * lda] = conj<real_t>(A[y + x * lda]); }
 }
@@ -296,10 +296,11 @@ template <class real_t, class matrix_t> static inline void write_log(double epi,
 
 template <class idx_t, class real_t, class matrix_t>
 static inline int32_t potrfp_dispatcher(cudaStream_t stream, char fillmode, double epi, int32_t K, int32_t N, matrix_t* A, int64_t lda, int32_t* jpiv, real_t* D, int32_t* rank, void* logger) {
+  constexpr int32_t grid_blocks = 2048, block_threads = 128;
   if (fillmode == 'U' || fillmode == 'u')
-    matrix_fill_upper_to_full<'U', real_t> <<< dim3(uint32_t(N + 511) >> 9, uint32_t(N)), 512, 0, stream >>> (A, lda);
+    matrix_fill_upper_to_full<'U', real_t> <<< dim3(uint32_t(N + 127) >> 7, uint32_t(N)), block_threads, 0, stream >>> (A, lda);
   else if (fillmode == 'L' || fillmode == 'l')
-    matrix_fill_upper_to_full<'L', real_t> <<< dim3(uint32_t(N + 511) >> 9, uint32_t(N)), 512, 0, stream >>> (A, lda);
+    matrix_fill_upper_to_full<'L', real_t> <<< dim3(uint32_t(N + 127) >> 7, uint32_t(N)), block_threads, 0, stream >>> (A, lda);
 
   real_t epi_f; int32_t iters = (K == N) ? 1 : (N - K);
   if constexpr(std::is_same_v<real_t, double>) { epi_f = epi; } else
@@ -309,7 +310,6 @@ static inline int32_t potrfp_dispatcher(cudaStream_t stream, char fillmode, doub
   if constexpr(std::is_same_v<real_t, float4>) { float e0 = float(epi); double epi2 = epi - double(e0); float e1 = float(epi2); epi_f = make_float4(e0, e1, epi2 - double(e1), 0.f); } else
   { epi_f = real_t(); }
 
-  constexpr int32_t grid_blocks = 2048, block_threads = 128;
   int32_t device_sms = *rank, maxBlocksPerSM = 0;
   cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, potrf_init_kernel<block_threads, real_t, matrix_t, idx_t>, block_threads, 0);
   int32_t grid = std::min(std::min(grid_blocks, device_sms * maxBlocksPerSM), (N + block_threads - 1) / block_threads);

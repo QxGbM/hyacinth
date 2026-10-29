@@ -48,7 +48,7 @@ __global__ void crt_extra_imag_kernel(int64_t N, const uint32_t* __restrict__ X,
 
 template <int32_t orderX> static inline void crt_extra_imag(cudaStream_t stream, int32_t beta, int32_t N, const int32_t* X, int32_t ldx, uint32_t* A) {
   constexpr int32_t block_threads = 128;
-  dim3 grid(uint32_t(N + 127) >> 7, uint32_t(N), uint32_t((orderX - 17) / 4));
+  dim3 grid(uint32_t(N + 127) >> 7, uint32_t(N), uint32_t((orderX - U8CRT2M::len_2m_moduli + 3) / 4));
   int64_t N64 = int64_t(N), ldx64 = int64_t(ldx), strideX = ldx64 * N64, strideA = (N64 + (N64 * N64)) / int64_t(2);
   if (beta) { crt_extra_imag_kernel<orderX, 1> <<< grid, block_threads, 0, stream >>> (N64, (uint32_t*)X, ldx64, strideX, (uchar4*)A, strideA); } else
   { crt_extra_imag_kernel<orderX, 0> <<< grid, block_threads, 0, stream >>> (N64, (uint32_t*)X, ldx64, strideX, (uchar4*)A, strideA); }
