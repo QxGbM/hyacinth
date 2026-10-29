@@ -29,15 +29,13 @@ typedef struct {
   int32_t GramSegmentK, TCGemmTargetK;
 
   /* Spectral parameters */
-  /* ENV{HYACIN_GRAM_SVD_EPI_CORR}: Epsilon multiplier for SVD Preconditioning, eps_precond = eps_requested * GramSVDEpiCorrection; Default: 0.5 */
   /* ENV{HYACIN_QUANTIZE_BITS_CORR}: Extra quantization resolution, add this many bits to the estimated quantization resolution; Default: 7 */
-  /* ENV{HYACIN_JACOBI_SVD_SWEEPS}: Maximum Jacobi iteration number, set to 0 to select the bidiagonalization-based SVD backend instead of Jacobi SVD; Default: 5; */
+  /* ENV{HYACIN_JACOBI_SVD_SWEEPS}: Maximum Jacobi iteration number, set to 0 to select the bidiagonalization-based SVD backend instead of Jacobi SVD; Default: 3; */
   /* Tuning guide:
     (1) Insufficient quantization resolution may contaminate the small-eigenvalue spectrum of the Gram matrix, causing excessive rank retention, expensive downstream factorization, or numerical failure.
     (2) We therefore recommend a modest positive resolution margin, with Gram algorithm set to CRT or auto.
-    (3) Usually, 2-3 Jacobi Sweeps produce basis with excellent quality, 1 Jacobi Sweep is usable with slightly worse error bound. 
+    (3) Usually, 2-3 Jacobi Sweeps produce basis with excellent quality and same rank as GESVD, and 1 Jacobi Sweep risks truncating to larger rank. 
     (4) We prioritize bidiagonalization over Jacobi on low-FP64 GPUs, setting ENV{HYACIN_JACOBI_SVD_SWEEPS} negative will override this behavior, and its absolute value is used as sweeps instead. */
-  double GramSVDEpiCorrection;
   int32_t QuantizeBitCorrection, JacobiSVDSweeps;
 
   /* Device parameters */
@@ -67,7 +65,7 @@ void hyacinDestroy(
 
 int32_t hyacinInterpolateFit(
   const hyacinHandle_t* handle,
-  double epi,
+  double eps,
   char opA,
   int32_t M, // Rows of matrix op(A)
   int32_t N, // Cols of matrix op(A), Rows of matrix V, length of jpvt
@@ -79,11 +77,11 @@ int32_t hyacinInterpolateFit(
   int32_t ldv,
   int64_t globalM, // Total rows of op(A) if distributed
   hyacinPrecision_t ComputeType
-); // returns rank, either K or epi is reached
+); // returns rank, either K or eps is reached
 
 int32_t hyacinTsvdFit(
   const hyacinHandle_t* handle,
-  double epi,
+  double eps,
   char opA,
   int32_t M, // Rows of matrix op(A)
   int32_t N, // Cols of matrix op(A), Rows of matrix V
@@ -95,11 +93,11 @@ int32_t hyacinTsvdFit(
   int32_t ldv,
   int64_t globalM, // Total rows of op(A) if distributed
   hyacinPrecision_t ComputeType
-); // returns rank, either K or epi is reached
+); // returns rank, either K or eps is reached
 
 int32_t hyacinTsvdFitSegmentN(
   const hyacinHandle_t* handle,
-  double epi,
+  double eps,
   char opA,
   int32_t M, // Rows of matrix op(A)
   int32_t N, // Cols of matrix op(A), Rows of matrix V
@@ -111,11 +109,11 @@ int32_t hyacinTsvdFitSegmentN(
   int32_t ldv,
   int64_t globalM, // Total rows of op(A) if distributed
   hyacinPrecision_t ComputeType
-); // returns rank, either K or epi is reached
+); // returns rank, either K or eps is reached
 
 void hyacinXherkBatchInit(
   const hyacinHandle_t* handle,
-  double epi,
+  double eps,
   uint64_t M,
   int32_t N,
   hyacinPrecision_t Atype,
@@ -179,7 +177,7 @@ void hyacinXdequantize(
 int32_t hyacinXGevd(
   const hyacinHandle_t* handle,
   char fillmode,
-  double epi,
+  double eps,
   int32_t N,
   int32_t K,
   hyacinPrecision_t Atype,
@@ -194,7 +192,7 @@ int32_t hyacinXGevd(
 int32_t hyacinXGinterp(
   const hyacinHandle_t* handle,
   char fillmode,
-  double epi,
+  double eps,
   int32_t N,
   int32_t K,
   hyacinPrecision_t Atype,

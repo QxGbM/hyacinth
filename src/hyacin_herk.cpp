@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <stdexcept>
 
-extern "C" void hyacinXherkBatchInit(const hyacinHandle_t* handle, double epi, uint64_t M, int32_t N, hyacinPrecision_t Atype, int32_t* uA, int32_t* cPanels, int32_t* lPanels, uint64_t* stride) {
+extern "C" void hyacinXherkBatchInit(const hyacinHandle_t* handle, double eps, uint64_t M, int32_t N, hyacinPrecision_t Atype, int32_t* uA, int32_t* cPanels, int32_t* lPanels, uint64_t* stride) {
   if (stride) { uint64_t N64 = uint64_t(std::max(0, N)); *stride = (N64 * N64 + N64) >> 1; }
   if (uA != nullptr || cPanels != nullptr || lPanels != nullptr) {
     constexpr hyacinPrecision_t real_type[]{ HYACIN_F64, HYACIN_F64, HYACIN_F32, HYACIN_F32, HYACIN_F16, HYACIN_F16, HYACIN_DD, HYACIN_DD, HYACIN_TF, HYACIN_TF, HYACIN_QF, HYACIN_QF };
@@ -14,8 +14,8 @@ extern "C" void hyacinXherkBatchInit(const hyacinHandle_t* handle, double epi, u
     constexpr int32_t u_practical_limit = 80; // u <= 80 to satisfy implementation assumptions
 
     if (uint64_t(1) < M) { --M; M |= M >> 1; M |= M >> 2; M |= M >> 4; M |= M >> 8; M |= M >> 16; M |= M >> 32; ++M; } else { M = uint64_t(1); }
-    int32_t exp_epi; double frac = std::frexp(std::abs(epi), &exp_epi);
-    int32_t u = std::clamp(int32_t(frac == 0.5) - exp_epi, 0, type_mantissa[int32_t(Atype)]);
+    int32_t exp_eps; double frac = std::frexp(std::abs(eps), &exp_eps);
+    int32_t u = std::clamp(int32_t(frac == 0.5) - exp_eps, 0, type_mantissa[int32_t(Atype)]);
     int32_t Complex = int32_t(Atype != real_type[int32_t(Atype)]), u_corr = std::max(-1, std::min(u_practical_limit, handle->QuantizeBitCorrection + u));
     if (uA) { *uA = u_corr; } if (cPanels) { *cPanels = 1 + Complex; }
     if (lPanels) {

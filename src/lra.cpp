@@ -16,7 +16,7 @@ template <class T> static inline hyacinPrecision_t hyacin_prec() {
 }
 
 template <class T> static inline
-int32_t interp_dispatcher(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, int32_t* jpvt, T* V, int32_t ldv, int64_t globalM) {
+int32_t interp_dispatcher(const hyacinHandle_t* handle, double eps, char opA, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, int32_t* jpvt, T* V, int32_t ldv, int64_t globalM) {
   K = std::min(N, K); if (K <= 0) { return 0; }
   int32_t batchIter = handle->GramSegmentK <= 0 ? M : std::min(handle->GramSegmentK, M);
   hyacinPrecision_t Atype = hyacin_prec<T>(), Gtype; opA = opA == 't' ? 'T' : (opA == 'c' ? 'C' : opA);
@@ -24,7 +24,7 @@ int32_t interp_dispatcher(const hyacinHandle_t* handle, double epi, char opA, in
   int32_t* vexp = nullptr, u, cPanels, lPanels, gElemBytes; uint64_t strideC;
   if (cudaSuccess != cudaMallocFromPoolAsync((void**)&vexp, uint64_t(batches + 1) * uint64_t(N) * uint64_t(sizeof(int32_t)), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Exponent vector allocation failed");
-  hyacinXherkBatchInit(handle, epi, globalM, N, Atype, &u, &cPanels, &lPanels, &strideC);
+  hyacinXherkBatchInit(handle, eps, globalM, N, Atype, &u, &cPanels, &lPanels, &strideC);
   uint64_t* C = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&C, uint64_t(cPanels) * uint64_t(lPanels) * strideC * uint64_t(sizeof(uint64_t)), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Accumulator allocation failed.");
 
@@ -49,12 +49,12 @@ int32_t interp_dispatcher(const hyacinHandle_t* handle, double epi, char opA, in
   hyacinXdequantize(handle, N, lPanels, C, vexp, Gtype, G, N);
   cudaFreeAsync(vexp, handle->cudaStream); cudaFreeAsync(C, handle->cudaStream);
 
-  int32_t rank = hyacinXGinterp(handle, 'A', epi, N, K, Atype, V, ldv, jpvt, Gtype, G, N);
+  int32_t rank = hyacinXGinterp(handle, 'A', eps, N, K, Atype, V, ldv, jpvt, Gtype, G, N);
   cudaFreeAsync(G, handle->cudaStream); return rank;
 }
 
 template <class T, class R> static inline
-int32_t svd_dispatcher(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, R* S, T* V, int32_t ldv, int64_t globalM) {
+int32_t svd_dispatcher(const hyacinHandle_t* handle, double eps, char opA, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, R* S, T* V, int32_t ldv, int64_t globalM) {
   K = std::min(N, K); if (K <= 0) { return 0; }
   int32_t batchIter = handle->GramSegmentK <= 0 ? M : std::min(handle->GramSegmentK, M);
   hyacinPrecision_t Atype = hyacin_prec<T>(), Gtype; opA = opA == 't' ? 'T' : (opA == 'c' ? 'C' : opA);
@@ -62,7 +62,7 @@ int32_t svd_dispatcher(const hyacinHandle_t* handle, double epi, char opA, int32
   int32_t* vexp = nullptr, u, cPanels, lPanels, gElemBytes; uint64_t strideC;
   if (cudaSuccess != cudaMallocFromPoolAsync((void**)&vexp, uint64_t(batches + 1) * uint64_t(N) * uint64_t(sizeof(int32_t)), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Exponent vector allocation failed");
-  hyacinXherkBatchInit(handle, epi, globalM, N, Atype, &u, &cPanels, &lPanels, &strideC);
+  hyacinXherkBatchInit(handle, eps, globalM, N, Atype, &u, &cPanels, &lPanels, &strideC);
   uint64_t* C = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&C, uint64_t(cPanels) * uint64_t(lPanels) * strideC * uint64_t(sizeof(uint64_t)), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Accumulator allocation failed.");
   
@@ -87,7 +87,7 @@ int32_t svd_dispatcher(const hyacinHandle_t* handle, double epi, char opA, int32
   hyacinXdequantize(handle, N, lPanels, C, vexp, Gtype, G, N);
   cudaFreeAsync(vexp, handle->cudaStream); cudaFreeAsync(C, handle->cudaStream);
 
-  int32_t rank = hyacinXGevd(handle, 'A', epi, N, K, Atype, V, ldv, S, Gtype, G, N);
+  int32_t rank = hyacinXGevd(handle, 'A', eps, N, K, Atype, V, ldv, S, Gtype, G, N);
   cudaFreeAsync(G, handle->cudaStream); return rank;
 }
 
@@ -116,11 +116,11 @@ static inline void an_gemm(const hyacinHandle_t* handle, char opA, int32_t M, in
 }
 
 template <class T, class R> static inline
-int32_t svd_segN_dispatcher(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, R* S, T* V, int32_t ldv, int64_t globalM) {
+int32_t svd_segN_dispatcher(const hyacinHandle_t* handle, double eps, char opA, int32_t M, int32_t N, int32_t K, const T* A, int32_t lda, R* S, T* V, int32_t ldv, int64_t globalM) {
   K = std::min(N, K); if (K <= 0) { return 0; }
   int32_t segments = 512 <= N ? int32_t(std::floor(std::sqrt(double(N) / double(K)))) : 1;
-  if (segments <= 1) { return svd_dispatcher(handle, epi, opA, M, N, K, A, lda, S, V, ldv, globalM); }
-  epi *= sqrt(0.5); std::div_t divN = std::div(N, segments); opA = opA == 't' ? 'T' : (opA == 'c' ? 'C' : opA);
+  if (segments <= 1) { return svd_dispatcher(handle, eps, opA, M, N, K, A, lda, S, V, ldv, globalM); }
+  eps *= sqrt(0.5); std::div_t divN = std::div(N, segments); opA = opA == 't' ? 'T' : (opA == 'c' ? 'C' : opA);
   int32_t N_stage1 = divN.quot + int32_t(0 < divN.rem); uint64_t V_stage1_stride = uint64_t(N_stage1) * uint64_t(N_stage1);
   T* V_stage1 = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&V_stage1, V_stage1_stride * uint64_t(segments) * sizeof(T), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Stage-1 allocation failed.");
@@ -131,7 +131,7 @@ int32_t svd_segN_dispatcher(const hyacinHandle_t* handle, double epi, char opA, 
   std::vector<int32_t> ranks_stage1;
   for (int32_t i = 0; i < segments; ++i) {
     int32_t cols = divN.quot + int32_t(i < divN.rem);
-    ranks_stage1.emplace_back(svd_dispatcher(handle, epi, opA, M, cols, cols, &A[locA], lda, S_stage1, &V_stage1[uint64_t(i) * V_stage1_stride], N_stage1, globalM));
+    ranks_stage1.emplace_back(svd_dispatcher(handle, eps, opA, M, cols, cols, &A[locA], lda, S_stage1, &V_stage1[uint64_t(i) * V_stage1_stride], N_stage1, globalM));
     if (transA) { locA += cols; } else { locA += int64_t(cols) * int64_t(lda); }
   }
 
@@ -149,7 +149,7 @@ int32_t svd_segN_dispatcher(const hyacinHandle_t* handle, double epi, char opA, 
   K = std::min(N_stage2, K);
   T* V_stage2 = nullptr; if (cudaSuccess != cudaMallocFromPoolAsync((void**)&V_stage2, uint64_t(N_stage2) * uint64_t(K) * uint64_t(sizeof(T)), handle->mempool, handle->cudaStream))
     throw std::runtime_error("Stage-2 allocation failed.");
-  int32_t rank = svd_dispatcher(handle, epi, 'N', M, N_stage2, K, A_stage2, M, S, V_stage2, N_stage2, globalM);
+  int32_t rank = svd_dispatcher(handle, eps, 'N', M, N_stage2, K, A_stage2, M, S, V_stage2, N_stage2, globalM);
   cudaFreeAsync(A_stage2, handle->cudaStream);
 
   int32_t row = 0, rowV = 0;
@@ -220,38 +220,38 @@ double check_answer(const hyacinHandle_t* handle, char opA, int32_t M, int32_t N
   } return err;
 }
 
-extern "C" int32_t hyacinInterpolateFit(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const void* A, int32_t lda, int32_t* jpvt, void* V, int32_t ldv, int64_t globalM, hyacinPrecision_t ComputeType) {
+extern "C" int32_t hyacinInterpolateFit(const hyacinHandle_t* handle, double eps, char opA, int32_t M, int32_t N, int32_t K, const void* A, int32_t lda, int32_t* jpvt, void* V, int32_t ldv, int64_t globalM, hyacinPrecision_t ComputeType) {
   globalM = globalM <= int64_t(0) ? int64_t(M) : globalM; switch (ComputeType) {
-    case HYACIN_F64: return interp_dispatcher(handle, epi, opA, M, N, K, (const double*)A, lda, jpvt, (double*)V, ldv, globalM);
-    case HYACIN_F32: return interp_dispatcher(handle, epi, opA, M, N, K, (const float*)A, lda, jpvt, (float*)V, ldv, globalM);
-    case HYACIN_F16: return interp_dispatcher(handle, epi, opA, M, N, K, (const __half*)A, lda, jpvt, (__half*)V, ldv, globalM);
-    case HYACIN_F64_COMPLEX: return interp_dispatcher(handle, epi, opA, M, N, K, (const cuDoubleComplex*)A, lda, jpvt, (cuDoubleComplex*)V, ldv, globalM);
-    case HYACIN_F32_COMPLEX: return interp_dispatcher(handle, epi, opA, M, N, K, (const cuComplex*)A, lda, jpvt, (cuComplex*)V, ldv, globalM);
-    case HYACIN_F16_COMPLEX: return interp_dispatcher(handle, epi, opA, M, N, K, (const __half2*)A, lda, jpvt, (__half2*)V, ldv, globalM);
+    case HYACIN_F64: return interp_dispatcher(handle, eps, opA, M, N, K, (const double*)A, lda, jpvt, (double*)V, ldv, globalM);
+    case HYACIN_F32: return interp_dispatcher(handle, eps, opA, M, N, K, (const float*)A, lda, jpvt, (float*)V, ldv, globalM);
+    case HYACIN_F16: return interp_dispatcher(handle, eps, opA, M, N, K, (const __half*)A, lda, jpvt, (__half*)V, ldv, globalM);
+    case HYACIN_F64_COMPLEX: return interp_dispatcher(handle, eps, opA, M, N, K, (const cuDoubleComplex*)A, lda, jpvt, (cuDoubleComplex*)V, ldv, globalM);
+    case HYACIN_F32_COMPLEX: return interp_dispatcher(handle, eps, opA, M, N, K, (const cuComplex*)A, lda, jpvt, (cuComplex*)V, ldv, globalM);
+    case HYACIN_F16_COMPLEX: return interp_dispatcher(handle, eps, opA, M, N, K, (const __half2*)A, lda, jpvt, (__half2*)V, ldv, globalM);
     default: return 0;
   }
 }
 
-extern "C" int32_t hyacinTsvdFit(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const void* A, int32_t lda, void* S, void* V, int32_t ldv, int64_t globalM, hyacinPrecision_t ComputeType) {
+extern "C" int32_t hyacinTsvdFit(const hyacinHandle_t* handle, double eps, char opA, int32_t M, int32_t N, int32_t K, const void* A, int32_t lda, void* S, void* V, int32_t ldv, int64_t globalM, hyacinPrecision_t ComputeType) {
   globalM = globalM <= int64_t(0) ? int64_t(M) : globalM; switch (ComputeType) {
-    case HYACIN_F64: return svd_dispatcher(handle, epi, opA, M, N, K, (const double*)A, lda, (double*)S, (double*)V, ldv, globalM);
-    case HYACIN_F32: return svd_dispatcher(handle, epi, opA, M, N, K, (const float*)A, lda, (float*)S, (float*)V, ldv, globalM);
-    case HYACIN_F16: return svd_dispatcher(handle, epi, opA, M, N, K, (const __half*)A, lda, (__half*)S, (__half*)V, ldv, globalM);
-    case HYACIN_F64_COMPLEX: return svd_dispatcher(handle, epi, opA, M, N, K, (const cuDoubleComplex*)A, lda, (double*)S, (cuDoubleComplex*)V, ldv, globalM);
-    case HYACIN_F32_COMPLEX: return svd_dispatcher(handle, epi, opA, M, N, K, (const cuComplex*)A, lda, (float*)S, (cuComplex*)V, ldv, globalM);
-    case HYACIN_F16_COMPLEX: return svd_dispatcher(handle, epi, opA, M, N, K, (const __half2*)A, lda, (__half*)S, (__half2*)V, ldv, globalM);
+    case HYACIN_F64: return svd_dispatcher(handle, eps, opA, M, N, K, (const double*)A, lda, (double*)S, (double*)V, ldv, globalM);
+    case HYACIN_F32: return svd_dispatcher(handle, eps, opA, M, N, K, (const float*)A, lda, (float*)S, (float*)V, ldv, globalM);
+    case HYACIN_F16: return svd_dispatcher(handle, eps, opA, M, N, K, (const __half*)A, lda, (__half*)S, (__half*)V, ldv, globalM);
+    case HYACIN_F64_COMPLEX: return svd_dispatcher(handle, eps, opA, M, N, K, (const cuDoubleComplex*)A, lda, (double*)S, (cuDoubleComplex*)V, ldv, globalM);
+    case HYACIN_F32_COMPLEX: return svd_dispatcher(handle, eps, opA, M, N, K, (const cuComplex*)A, lda, (float*)S, (cuComplex*)V, ldv, globalM);
+    case HYACIN_F16_COMPLEX: return svd_dispatcher(handle, eps, opA, M, N, K, (const __half2*)A, lda, (__half*)S, (__half2*)V, ldv, globalM);
     default: return 0;
   }
 }
 
-extern "C" int32_t hyacinTsvdFitSegmentN(const hyacinHandle_t* handle, double epi, char opA, int32_t M, int32_t N, int32_t K, const void* A, int32_t lda, void* S, void* V, int32_t ldv, int64_t globalM, hyacinPrecision_t ComputeType) {
+extern "C" int32_t hyacinTsvdFitSegmentN(const hyacinHandle_t* handle, double eps, char opA, int32_t M, int32_t N, int32_t K, const void* A, int32_t lda, void* S, void* V, int32_t ldv, int64_t globalM, hyacinPrecision_t ComputeType) {
   globalM = globalM <= int64_t(0) ? int64_t(M) : globalM; switch (ComputeType) {
-    case HYACIN_F64: return svd_segN_dispatcher(handle, epi, opA, M, N, K, (const double*)A, lda, (double*)S, (double*)V, ldv, globalM);
-    case HYACIN_F32: return svd_segN_dispatcher(handle, epi, opA, M, N, K, (const float*)A, lda, (float*)S, (float*)V, ldv, globalM);
-    case HYACIN_F16: return svd_segN_dispatcher(handle, epi, opA, M, N, K, (const __half*)A, lda, (__half*)S, (__half*)V, ldv, globalM);
-    case HYACIN_F64_COMPLEX: return svd_segN_dispatcher(handle, epi, opA, M, N, K, (const cuDoubleComplex*)A, lda, (double*)S, (cuDoubleComplex*)V, ldv, globalM);
-    case HYACIN_F32_COMPLEX: return svd_segN_dispatcher(handle, epi, opA, M, N, K, (const cuComplex*)A, lda, (float*)S, (cuComplex*)V, ldv, globalM);
-    case HYACIN_F16_COMPLEX: return svd_segN_dispatcher(handle, epi, opA, M, N, K, (const __half2*)A, lda, (__half*)S, (__half2*)V, ldv, globalM);
+    case HYACIN_F64: return svd_segN_dispatcher(handle, eps, opA, M, N, K, (const double*)A, lda, (double*)S, (double*)V, ldv, globalM);
+    case HYACIN_F32: return svd_segN_dispatcher(handle, eps, opA, M, N, K, (const float*)A, lda, (float*)S, (float*)V, ldv, globalM);
+    case HYACIN_F16: return svd_segN_dispatcher(handle, eps, opA, M, N, K, (const __half*)A, lda, (__half*)S, (__half*)V, ldv, globalM);
+    case HYACIN_F64_COMPLEX: return svd_segN_dispatcher(handle, eps, opA, M, N, K, (const cuDoubleComplex*)A, lda, (double*)S, (cuDoubleComplex*)V, ldv, globalM);
+    case HYACIN_F32_COMPLEX: return svd_segN_dispatcher(handle, eps, opA, M, N, K, (const cuComplex*)A, lda, (float*)S, (cuComplex*)V, ldv, globalM);
+    case HYACIN_F16_COMPLEX: return svd_segN_dispatcher(handle, eps, opA, M, N, K, (const __half2*)A, lda, (__half*)S, (__half2*)V, ldv, globalM);
     default: return 0;
   }
 }

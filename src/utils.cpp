@@ -21,14 +21,11 @@
 #endif
 
 /* Spectral parameters */
-#ifndef HYACIN_DEFAULT_GRAM_SVD_EPI_CORR
-#define HYACIN_DEFAULT_GRAM_SVD_EPI_CORR 0.5
-#endif
 #ifndef HYACIN_DEFAULT_QUANTIZE_BITS_CORR
 #define HYACIN_DEFAULT_QUANTIZE_BITS_CORR 7
 #endif
 #ifndef HYACIN_DEFAULT_JACOBI_SVD_SWEEPS
-#define HYACIN_DEFAULT_JACOBI_SVD_SWEEPS 5
+#define HYACIN_DEFAULT_JACOBI_SVD_SWEEPS 3
 #endif
 
 #ifndef HYACIN_DEFAULT_CREATE_TIMER
@@ -97,7 +94,6 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle) {
   handle->GramSegmentK = ((env_str = get_env("HYACIN_GRAM_SEGMENT_K")) == "") ? HYACIN_DEFAULT_GRAM_SEGMENT_K : std::stoi(env_str);
   handle->TCGemmTargetK = ((env_str = get_env("HYACIN_TCGEMM_TARGET_K")) == "") ? HYACIN_DEFAULT_TCGEMM_SEGMENT_K : std::stoi(env_str);
 
-  handle->GramSVDEpiCorrection = ((env_str = get_env("HYACIN_GRAM_SVD_EPI_CORR")) == "") ? HYACIN_DEFAULT_GRAM_SVD_EPI_CORR : std::stod(env_str);
   handle->QuantizeBitCorrection = ((env_str = get_env("HYACIN_QUANTIZE_BITS_CORR")) == "") ? HYACIN_DEFAULT_QUANTIZE_BITS_CORR : std::stoi(env_str);
   handle->JacobiSVDSweeps = ((env_str = get_env("HYACIN_JACOBI_SVD_SWEEPS")) == "") ? HYACIN_DEFAULT_JACOBI_SVD_SWEEPS : std::stoi(env_str);
 
@@ -112,7 +108,7 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle) {
     cudaMemPoolCreate(&handle->mempool, &props); handle->HandleOwnedResource |= HANDLE_OWNS_MEMPOOL;
   }
   if (!(handle->HandleOwnedResource & HANDLE_OWNS_PINNED_WORK))
-  { cudaMallocHost(&handle->pinnedWorkspace, sizeof(int32_t)); handle->HandleOwnedResource |= HANDLE_OWNS_PINNED_WORK; }
+  { cudaMallocHost(&handle->pinnedWorkspace, sizeof(int4)); handle->HandleOwnedResource |= HANDLE_OWNS_PINNED_WORK; }
 
   uint64_t threshold = std::numeric_limits<uint64_t>::max();
   cudaMemPoolSetAttribute(handle->mempool, cudaMemPoolAttrReleaseThreshold, &threshold);
