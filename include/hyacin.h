@@ -4,7 +4,7 @@
 #include <cublas_v2.h>
 #include <cusolverDn.h>
 
-#ifndef NO_NCCL
+#ifndef HYACIN_BUILD_NO_NCCL
 #include <nccl.h>
 #endif
 
@@ -46,7 +46,7 @@ typedef struct {
   cusolverDnHandle_t cusolverHandle;
   cudaMemPool_t mempool;
   void* pinnedWorkspace, *timer, *logger;
-#ifndef NO_NCCL
+#ifndef HYACIN_BUILD_NO_NCCL
   ncclComm_t ncclComm;
 #endif
 } hyacinHandle_t; // Expect initialization to all zero before calling hyacinCreate()

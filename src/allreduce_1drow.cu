@@ -1,6 +1,9 @@
 
 #include <hyacin.h>
-#ifndef NO_NCCL
+#ifdef HYACIN_BUILD_NO_NCCL
+extern "C" void hyacinAllReduce1Drow(const hyacinHandle_t*, int32_t, int32_t, uint64_t, uint64_t*) {}
+extern "C" void hyacinAllReduceVExp(const hyacinHandle_t*, uint64_t, int32_t*) {}
+#else
 
 #include <internal.hpp>
 #include <ext_arith.hpp>
@@ -171,7 +174,4 @@ extern "C" void hyacinAllReduceVExp(const hyacinHandle_t* handle, uint64_t N, in
   if (handle->logger) { std::fprintf((FILE*)(handle->logger), "NCCL-AllReduce [Bytes=%llu]\n", (unsigned long long)(N * uint64_t(sizeof(int32_t)))); }
 }
 
-#else
-extern "C" void hyacinAllReduce1Drow(const hyacinHandle_t*, int32_t, int32_t, uint64_t, uint64_t*) {}
-extern "C" void hyacinAllReduceVExp(const hyacinHandle_t*, uint64_t, int32_t*) {}
 #endif

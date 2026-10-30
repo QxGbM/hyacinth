@@ -13,7 +13,7 @@ The distributed functionality has a 1-D row-cyclic Gram matrix formulation.
 
 (0) Before compiling, modify `CMakeLists.txt` if needed:
 
-`set(CMAKE_CUDA_ARCHITECTURES "80;86;89;90a;100a;103;120;121")`: List of SM architectures
+`set(CMAKE_CUDA_ARCHITECTURES "80;86;89;90a;100a;103a;120;121a")`: List of SM architectures
 
 `option(USE_NCCL "Enable NCCL backend" ON)`: ON/OFF if NCCL is not available on the system for a single-GPU build
 

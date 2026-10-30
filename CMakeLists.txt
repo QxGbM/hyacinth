@@ -2,10 +2,15 @@ cmake_minimum_required (VERSION 3.18)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_CUDA_ARCHITECTURES "80;86;89;90a;100a;103;120;121")
-
 option(USE_NCCL "Enable NCCL backend" ON)
+
+if(NOT DEFINED CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+  set(CMAKE_CUDA_ARCHITECTURES "80;86;89;90a;100a;103a;120;121a")
+endif()
+
 project("hyacin" LANGUAGES CXX CUDA)
 find_package(CUDAToolkit REQUIRED)
 
@@ -72,7 +77,7 @@ if(USE_NCCL)
   endif()
 else()
   message(STATUS "NCCL: Disabled")
-  target_compile_definitions(hyacin PUBLIC "NO_NCCL")
+  target_compile_definitions(hyacin PUBLIC "HYACIN_BUILD_NO_NCCL")
 endif()
 
 message(STATUS "Will install to: ${CMAKE_INSTALL_PREFIX}")
