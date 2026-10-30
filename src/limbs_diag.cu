@@ -42,56 +42,56 @@ __global__ void limbs_diag_real_kernel(int64_t N, const int32_t* __restrict__ X,
 }
 
 template <int32_t orderA, int32_t orderX>
-static inline void limbs_diag(cudaStream_t stream, int32_t beta, int32_t N, const int32_t* X, int32_t ldx, uint64_t* A) {
+static inline void limbs_diag(cudaStream_t stream, int32_t beta, int32_t N, const int32_t* X, int32_t ldx, int64_t strideX, uint64_t* A) {
   constexpr int32_t block_threads = 128;
   dim3 grid(uint32_t(N + 127) >> 7, uint32_t(N), uint32_t(1));
-  int64_t N64 = int64_t(N), ldx64 = int64_t(ldx), strideX = ldx64 * N64, strideA = (N64 + (N64 * N64)) / int64_t(2);
+  int64_t N64 = int64_t(N), ldx64 = int64_t(ldx), strideA = (N64 + (N64 * N64)) / int64_t(2);
   if (beta) { limbs_diag_real_kernel<orderA, orderX, 1> <<< grid, block_threads, 0, stream >>> (N64, X, ldx64, strideX, A, strideA); } else
   { limbs_diag_real_kernel<orderA, orderX, 0> <<< grid, block_threads, 0, stream >>> (N64, X, ldx64, strideX, A, strideA); }
 }
 
-void internal::int8::accumulate_limbs_diag(cudaStream_t stream, int32_t beta, int32_t N, int32_t orderX, const int32_t* X, int32_t ldx, int32_t orderA, uint64_t* A) {
+void internal::int8::accumulate_limbs_diag(cudaStream_t stream, int32_t beta, int32_t N, int32_t orderX, const int32_t* X, int32_t ldx, int64_t strideX, int32_t orderA, uint64_t* A) {
   if (orderA == 1) switch (orderX) {
-    case 1: limbs_diag<1, 1>(stream, beta, N, X, ldx, A); return;
-    case 2: limbs_diag<1, 2>(stream, beta, N, X, ldx, A); return;
-    case 3: limbs_diag<1, 3>(stream, beta, N, X, ldx, A); return;
-    case 4: limbs_diag<1, 4>(stream, beta, N, X, ldx, A); return;
-    case 5: limbs_diag<1, 5>(stream, beta, N, X, ldx, A); return;
-    case 6: limbs_diag<1, 6>(stream, beta, N, X, ldx, A); return;
-    case 7: limbs_diag<1, 7>(stream, beta, N, X, ldx, A); return;
-    case 8: limbs_diag<1, 8>(stream, beta, N, X, ldx, A); return;
-    case 9: limbs_diag<1, 9>(stream, beta, N, X, ldx, A); return;
-    case 10: limbs_diag<1, 10>(stream, beta, N, X, ldx, A); return;
-    case 11: limbs_diag<1, 11>(stream, beta, N, X, ldx, A); return;
-    case 12: limbs_diag<1, 12>(stream, beta, N, X, ldx, A); return;
+    case 1: limbs_diag<1, 1>(stream, beta, N, X, ldx, strideX, A); return;
+    case 2: limbs_diag<1, 2>(stream, beta, N, X, ldx, strideX, A); return;
+    case 3: limbs_diag<1, 3>(stream, beta, N, X, ldx, strideX, A); return;
+    case 4: limbs_diag<1, 4>(stream, beta, N, X, ldx, strideX, A); return;
+    case 5: limbs_diag<1, 5>(stream, beta, N, X, ldx, strideX, A); return;
+    case 6: limbs_diag<1, 6>(stream, beta, N, X, ldx, strideX, A); return;
+    case 7: limbs_diag<1, 7>(stream, beta, N, X, ldx, strideX, A); return;
+    case 8: limbs_diag<1, 8>(stream, beta, N, X, ldx, strideX, A); return;
+    case 9: limbs_diag<1, 9>(stream, beta, N, X, ldx, strideX, A); return;
+    case 10: limbs_diag<1, 10>(stream, beta, N, X, ldx, strideX, A); return;
+    case 11: limbs_diag<1, 11>(stream, beta, N, X, ldx, strideX, A); return;
+    case 12: limbs_diag<1, 12>(stream, beta, N, X, ldx, strideX, A); return;
     default: return;
   } else if (orderA == 2) switch (orderX) {
-    case 1: limbs_diag<2, 1>(stream, beta, N, X, ldx, A); return;
-    case 2: limbs_diag<2, 2>(stream, beta, N, X, ldx, A); return;
-    case 3: limbs_diag<2, 3>(stream, beta, N, X, ldx, A); return;
-    case 4: limbs_diag<2, 4>(stream, beta, N, X, ldx, A); return;
-    case 5: limbs_diag<2, 5>(stream, beta, N, X, ldx, A); return;
-    case 6: limbs_diag<2, 6>(stream, beta, N, X, ldx, A); return;
-    case 7: limbs_diag<2, 7>(stream, beta, N, X, ldx, A); return;
-    case 8: limbs_diag<2, 8>(stream, beta, N, X, ldx, A); return;
-    case 9: limbs_diag<2, 9>(stream, beta, N, X, ldx, A); return;
-    case 10: limbs_diag<2, 10>(stream, beta, N, X, ldx, A); return;
-    case 11: limbs_diag<2, 11>(stream, beta, N, X, ldx, A); return;
-    case 12: limbs_diag<2, 12>(stream, beta, N, X, ldx, A); return;
+    case 1: limbs_diag<2, 1>(stream, beta, N, X, ldx, strideX, A); return;
+    case 2: limbs_diag<2, 2>(stream, beta, N, X, ldx, strideX, A); return;
+    case 3: limbs_diag<2, 3>(stream, beta, N, X, ldx, strideX, A); return;
+    case 4: limbs_diag<2, 4>(stream, beta, N, X, ldx, strideX, A); return;
+    case 5: limbs_diag<2, 5>(stream, beta, N, X, ldx, strideX, A); return;
+    case 6: limbs_diag<2, 6>(stream, beta, N, X, ldx, strideX, A); return;
+    case 7: limbs_diag<2, 7>(stream, beta, N, X, ldx, strideX, A); return;
+    case 8: limbs_diag<2, 8>(stream, beta, N, X, ldx, strideX, A); return;
+    case 9: limbs_diag<2, 9>(stream, beta, N, X, ldx, strideX, A); return;
+    case 10: limbs_diag<2, 10>(stream, beta, N, X, ldx, strideX, A); return;
+    case 11: limbs_diag<2, 11>(stream, beta, N, X, ldx, strideX, A); return;
+    case 12: limbs_diag<2, 12>(stream, beta, N, X, ldx, strideX, A); return;
     default: return;
   } else if (orderA == 3) switch (orderX) {
-    case 1: limbs_diag<3, 1>(stream, beta, N, X, ldx, A); return;
-    case 2: limbs_diag<3, 2>(stream, beta, N, X, ldx, A); return;
-    case 3: limbs_diag<3, 3>(stream, beta, N, X, ldx, A); return;
-    case 4: limbs_diag<3, 4>(stream, beta, N, X, ldx, A); return;
-    case 5: limbs_diag<3, 5>(stream, beta, N, X, ldx, A); return;
-    case 6: limbs_diag<3, 6>(stream, beta, N, X, ldx, A); return;
-    case 7: limbs_diag<3, 7>(stream, beta, N, X, ldx, A); return;
-    case 8: limbs_diag<3, 8>(stream, beta, N, X, ldx, A); return;
-    case 9: limbs_diag<3, 9>(stream, beta, N, X, ldx, A); return;
-    case 10: limbs_diag<3, 10>(stream, beta, N, X, ldx, A); return;
-    case 11: limbs_diag<3, 11>(stream, beta, N, X, ldx, A); return;
-    case 12: limbs_diag<3, 12>(stream, beta, N, X, ldx, A); return;
+    case 1: limbs_diag<3, 1>(stream, beta, N, X, ldx, strideX, A); return;
+    case 2: limbs_diag<3, 2>(stream, beta, N, X, ldx, strideX, A); return;
+    case 3: limbs_diag<3, 3>(stream, beta, N, X, ldx, strideX, A); return;
+    case 4: limbs_diag<3, 4>(stream, beta, N, X, ldx, strideX, A); return;
+    case 5: limbs_diag<3, 5>(stream, beta, N, X, ldx, strideX, A); return;
+    case 6: limbs_diag<3, 6>(stream, beta, N, X, ldx, strideX, A); return;
+    case 7: limbs_diag<3, 7>(stream, beta, N, X, ldx, strideX, A); return;
+    case 8: limbs_diag<3, 8>(stream, beta, N, X, ldx, strideX, A); return;
+    case 9: limbs_diag<3, 9>(stream, beta, N, X, ldx, strideX, A); return;
+    case 10: limbs_diag<3, 10>(stream, beta, N, X, ldx, strideX, A); return;
+    case 11: limbs_diag<3, 11>(stream, beta, N, X, ldx, strideX, A); return;
+    case 12: limbs_diag<3, 12>(stream, beta, N, X, ldx, strideX, A); return;
     default: return;
   }
 }

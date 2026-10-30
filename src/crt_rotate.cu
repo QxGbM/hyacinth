@@ -46,41 +46,41 @@ __global__ void crt_rotate_kernel(int64_t N, const uint32_t* __restrict__ X, int
   }
 }
 
-template <int32_t orderX> static inline void crt_rotate(cudaStream_t stream, int32_t beta, int32_t N, const int32_t* X, int32_t ldx, uint32_t* A) {
+template <int32_t orderX> static inline void crt_rotate(cudaStream_t stream, int32_t beta, int32_t N, const int32_t* X, int32_t ldx, int64_t strideX, uint32_t* A) {
   constexpr int32_t block_threads = 128;
   dim3 grid(uint32_t(N + 127) >> 7, uint32_t(N), uint32_t((std::min(U8CRT2M::len_2m_moduli, orderX) + 3) / 4));
-  int64_t N64 = int64_t(N), ldx64 = int64_t(ldx), strideX = ldx64 * N64, strideA = (N64 + (N64 * N64)) / int64_t(2);
+  int64_t N64 = int64_t(N), ldx64 = int64_t(ldx), strideA = (N64 + (N64 * N64)) / int64_t(2);
   if (beta) { crt_rotate_kernel<orderX, 1> <<< grid, block_threads, 0, stream >>> (N64, (uint32_t*)X, ldx64, strideX, (uchar4*)A, strideA); } else
   { crt_rotate_kernel<orderX, 0> <<< grid, block_threads, 0, stream >>> (N64, (uint32_t*)X, ldx64, strideX, (uchar4*)A, strideA); }
 }
 
-void internal::int8::accumulate_crt_rotate(cudaStream_t stream, int32_t beta, int32_t N, int32_t orderX, const int32_t* X, int32_t ldx, uint32_t* A) {
+void internal::int8::accumulate_crt_rotate(cudaStream_t stream, int32_t beta, int32_t N, int32_t orderX, const int32_t* X, int32_t ldx, int64_t strideX, uint32_t* A) {
   switch (orderX) {
-    case 1: crt_rotate<1>(stream, beta, N, X, ldx, A); return;
-    case 2: crt_rotate<2>(stream, beta, N, X, ldx, A); return;
-    case 3: crt_rotate<3>(stream, beta, N, X, ldx, A); return;
-    case 4: crt_rotate<4>(stream, beta, N, X, ldx, A); return;
-    case 5: crt_rotate<5>(stream, beta, N, X, ldx, A); return;
-    case 6: crt_rotate<6>(stream, beta, N, X, ldx, A); return;
-    case 7: crt_rotate<7>(stream, beta, N, X, ldx, A); return;
-    case 8: crt_rotate<8>(stream, beta, N, X, ldx, A); return;
-    case 9: crt_rotate<9>(stream, beta, N, X, ldx, A); return;
-    case 10: crt_rotate<10>(stream, beta, N, X, ldx, A); return;
-    case 11: crt_rotate<11>(stream, beta, N, X, ldx, A); return;
-    case 12: crt_rotate<12>(stream, beta, N, X, ldx, A); return;
-    case 13: crt_rotate<13>(stream, beta, N, X, ldx, A); return;
-    case 14: crt_rotate<14>(stream, beta, N, X, ldx, A); return;
-    case 15: crt_rotate<15>(stream, beta, N, X, ldx, A); return;
-    case 16: crt_rotate<16>(stream, beta, N, X, ldx, A); return;
-    case 17: crt_rotate<17>(stream, beta, N, X, ldx, A); return;
-    case 18: crt_rotate<18>(stream, beta, N, X, ldx, A); return;
-    case 19: crt_rotate<19>(stream, beta, N, X, ldx, A); return;
-    case 20: crt_rotate<20>(stream, beta, N, X, ldx, A); return;
-    case 21: crt_rotate<21>(stream, beta, N, X, ldx, A); return;
-    case 22: crt_rotate<22>(stream, beta, N, X, ldx, A); return;
-    case 23: crt_rotate<23>(stream, beta, N, X, ldx, A); return;
-    case 24: crt_rotate<24>(stream, beta, N, X, ldx, A); return;
-    case 25: crt_rotate<25>(stream, beta, N, X, ldx, A); return;
+    case 1: crt_rotate<1>(stream, beta, N, X, ldx, strideX, A); return;
+    case 2: crt_rotate<2>(stream, beta, N, X, ldx, strideX, A); return;
+    case 3: crt_rotate<3>(stream, beta, N, X, ldx, strideX, A); return;
+    case 4: crt_rotate<4>(stream, beta, N, X, ldx, strideX, A); return;
+    case 5: crt_rotate<5>(stream, beta, N, X, ldx, strideX, A); return;
+    case 6: crt_rotate<6>(stream, beta, N, X, ldx, strideX, A); return;
+    case 7: crt_rotate<7>(stream, beta, N, X, ldx, strideX, A); return;
+    case 8: crt_rotate<8>(stream, beta, N, X, ldx, strideX, A); return;
+    case 9: crt_rotate<9>(stream, beta, N, X, ldx, strideX, A); return;
+    case 10: crt_rotate<10>(stream, beta, N, X, ldx, strideX, A); return;
+    case 11: crt_rotate<11>(stream, beta, N, X, ldx, strideX, A); return;
+    case 12: crt_rotate<12>(stream, beta, N, X, ldx, strideX, A); return;
+    case 13: crt_rotate<13>(stream, beta, N, X, ldx, strideX, A); return;
+    case 14: crt_rotate<14>(stream, beta, N, X, ldx, strideX, A); return;
+    case 15: crt_rotate<15>(stream, beta, N, X, ldx, strideX, A); return;
+    case 16: crt_rotate<16>(stream, beta, N, X, ldx, strideX, A); return;
+    case 17: crt_rotate<17>(stream, beta, N, X, ldx, strideX, A); return;
+    case 18: crt_rotate<18>(stream, beta, N, X, ldx, strideX, A); return;
+    case 19: crt_rotate<19>(stream, beta, N, X, ldx, strideX, A); return;
+    case 20: crt_rotate<20>(stream, beta, N, X, ldx, strideX, A); return;
+    case 21: crt_rotate<21>(stream, beta, N, X, ldx, strideX, A); return;
+    case 22: crt_rotate<22>(stream, beta, N, X, ldx, strideX, A); return;
+    case 23: crt_rotate<23>(stream, beta, N, X, ldx, strideX, A); return;
+    case 24: crt_rotate<24>(stream, beta, N, X, ldx, strideX, A); return;
+    case 25: crt_rotate<25>(stream, beta, N, X, ldx, strideX, A); return;
     default: return;
   }
 }
