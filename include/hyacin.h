@@ -30,13 +30,14 @@ typedef struct {
 
   /* Spectral parameters */
   /* ENV{HYACIN_QUANTIZE_BITS_CORR}: Extra quantization resolution, add this many bits to the estimated quantization resolution; Default: 7 */
+  /* ENV{HYACIN_QRCP_TRUNCATE_RANK}: Truncate rank at column-pivoting QR, set to 0 will disable rank truncation to use full matrix R for SVD; Default: 1; */
   /* ENV{HYACIN_JACOBI_SVD_SWEEPS}: Maximum Jacobi iteration number, set to 0 to select the bidiagonalization-based SVD backend instead of Jacobi SVD; Default: 3; */
   /* Tuning guide:
     (1) Insufficient quantization resolution may contaminate the small-eigenvalue spectrum of the Gram matrix, causing excessive rank retention, expensive downstream factorization, or numerical failure.
     (2) We therefore recommend a modest positive resolution margin, with Gram algorithm set to CRT or auto.
     (3) Usually, 2-3 Jacobi Sweeps produce basis with excellent quality and same rank as GESVD, and 1 Jacobi Sweep risks truncating to larger rank. 
     (4) We prioritize bidiagonalization over Jacobi on low-FP64 GPUs, setting ENV{HYACIN_JACOBI_SVD_SWEEPS} negative will override this behavior, and its absolute value is used as sweeps instead. */
-  int32_t QuantizeBitCorrection, JacobiSVDSweeps;
+  int32_t QuantizeBitCorrection, QRCPTruncateRank, JacobiSVDSweeps;
 
   /* Device parameters */
   int32_t DeviceID, DeviceSMs, DeviceIsF64Capable;

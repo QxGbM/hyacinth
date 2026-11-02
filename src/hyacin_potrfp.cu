@@ -213,7 +213,7 @@ template <class real_t, class matrix_t> struct add_fl {
 };
 
 template <int32_t BLOCK_THREADS, class real_t, class matrix_t, class idx_t>
-__global__ void potrf_iter_kernel(int32_t iterN, int32_t N, matrix_t* __restrict__ A, int64_t lda, int32_t* __restrict__ jpiv, real_t* __restrict__ D, idx_t* __restrict__ work, int4* __restrict__ out) {
+__global__ void potrf_iter_kernel(int32_t iterN, int32_t N, matrix_t* __restrict__ A, int64_t lda, int32_t* __restrict__ jpiv, real_t* __restrict__ D, idx_t* __restrict__ work, int32_t* __restrict__ out) {
   __shared__ idx_t r; __shared__ double e; __shared__ bool p; idx_max<real_t, idx_t> cmp_max; 
   __shared__ typename cub::BlockReduce<matrix_t, BLOCK_THREADS>::TempStorage temp_gemv;
   __shared__ typename cub::BlockReduce<idx_t, BLOCK_THREADS>::TempStorage temp_reduce;
@@ -269,7 +269,7 @@ __global__ void potrf_iter_kernel(int32_t iterN, int32_t N, matrix_t* __restrict
     cooperative_groups::this_thread_block().sync();
   }
 
-  if (tid == 0) { *out = make_int4(M + int32_t(N == 1), __double2loint(r.trace), __double2hiint(r.trace), 0); }
+  if (tid == 0) { *out = M + int32_t(N == 1); }
 }
 
 template <char mode, class real_t, class matrix_t>
@@ -279,31 +279,31 @@ __global__ void matrix_fill_upper_to_full(matrix_t* __restrict__ A, int64_t lda)
   if (pred) { A[x + y * lda] = conj<real_t>(A[y + x * lda]); }
 }
 
-template <class real_t, class matrix_t> static inline void write_log(double eps, int32_t K, int32_t N, int32_t rank, double trace, FILE* logger) { if (logger) {
+template <class real_t, class matrix_t> static inline void write_log(double eps, int32_t K, int32_t N, int32_t rank, FILE* logger) { if (logger) {
   if constexpr(std::is_same_v<real_t, double> && std::is_same_v<matrix_t, real_t>)
-  { std::fprintf(logger, "POTRFP-FP64 [eps=%.1le] [N=%d] [K=%d] [Cholesky-rank=%d] [Residual^2=%le]\n", eps, N, K, rank, trace); } else
+  { std::fprintf(logger, "POTRFP-FP64 [eps=%.1le] [N=%d] [K=%d] [Cholesky-rank=%d]\n", eps, N, K, rank); } else
   if constexpr(std::is_same_v<real_t, float> && std::is_same_v<matrix_t, real_t>)
-  { std::fprintf(logger, "POTRFP-FP32 [eps=%.1le] [N=%d] [K=%d] [Cholesky-rank=%d] [Residual^2=%le]\n", eps, N, K, rank, trace); } else
+  { std::fprintf(logger, "POTRFP-FP32 [eps=%.1le] [N=%d] [K=%d] [Cholesky-rank=%d]\n", eps, N, K, rank); } else
   if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, real_t>)
-  { std::fprintf(logger, "POTRFP-FP128-DD [eps=%.1le] [N=%d] [K=%d] [Cholesky-rank=%d] [Residual^2=%le]\n", eps, N, K, rank, trace); } else
+  { std::fprintf(logger, "POTRFP-FP128-DD [eps=%.1le] [N=%d] [K=%d] [Cholesky-rank=%d]\n", eps, N, K, rank); } else
   if constexpr(std::is_same_v<real_t, float3> && std::is_same_v<matrix_t, real_t>)
-  { std::fprintf(logger, "POTRFP-FP96-TF [eps=%.1le] [N=%d] [K=%d] [Cholesky-rank=%d] [Residual^2=%le]\n", eps, N, K, rank, trace); } else
+  { std::fprintf(logger, "POTRFP-FP96-TF [eps=%.1le] [N=%d] [K=%d] [Cholesky-rank=%d]\n", eps, N, K, rank); } else
   if constexpr(std::is_same_v<real_t, float4> && std::is_same_v<matrix_t, real_t>)
-  { std::fprintf(logger, "POTRFP-FP128-QF [eps=%.1le] [N=%d] [K=%d] [Cholesky-rank=%d] [Residual^2=%le]\n", eps, N, K, rank, trace); } else
+  { std::fprintf(logger, "POTRFP-FP128-QF [eps=%.1le] [N=%d] [K=%d] [Cholesky-rank=%d]\n", eps, N, K, rank); } else
   if constexpr(std::is_same_v<real_t, double> && std::is_same_v<matrix_t, cuDoubleComplex>)
-  { std::fprintf(logger, "POTRFP-FP64-COMPLEX [eps=%.1le] [N=%d] [K=%d] [Cholesky-rank=%d] [Residual^2=%le]\n", eps, N, K, rank, trace); } else
+  { std::fprintf(logger, "POTRFP-FP64-COMPLEX [eps=%.1le] [N=%d] [K=%d] [Cholesky-rank=%d]\n", eps, N, K, rank); } else
   if constexpr(std::is_same_v<real_t, float> && std::is_same_v<matrix_t, cuComplex>)
-  { std::fprintf(logger, "POTRFP-FP32-COMPLEX [eps=%.1le] [N=%d] [K=%d] [Cholesky-rank=%d] [Residual^2=%le]\n", eps, N, K, rank, trace); } else
+  { std::fprintf(logger, "POTRFP-FP32-COMPLEX [eps=%.1le] [N=%d] [K=%d] [Cholesky-rank=%d]\n", eps, N, K, rank); } else
   if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, complex_double2>)
-  { std::fprintf(logger, "POTRFP-FP128-DD-COMPLEX [eps=%.1le] [N=%d] [K=%d] [Cholesky-rank=%d] [Residual^2=%le]\n", eps, N, K, rank, trace); } else
+  { std::fprintf(logger, "POTRFP-FP128-DD-COMPLEX [eps=%.1le] [N=%d] [K=%d] [Cholesky-rank=%d]\n", eps, N, K, rank); } else
   if constexpr(std::is_same_v<real_t, float3> && std::is_same_v<matrix_t, complex_float3>)
-  { std::fprintf(logger, "POTRFP-FP96-TF-COMPLEX [eps=%.1le] [N=%d] [K=%d] [Cholesky-rank=%d] [Residual^2=%le]\n", eps, N, K, rank, trace); } else
+  { std::fprintf(logger, "POTRFP-FP96-TF-COMPLEX [eps=%.1le] [N=%d] [K=%d] [Cholesky-rank=%d]\n", eps, N, K, rank); } else
   if constexpr(std::is_same_v<real_t, float4> && std::is_same_v<matrix_t, complex_float4>)
-  { std::fprintf(logger, "POTRFP-FP128-QF-COMPLEX [eps=%.1le] [N=%d] [K=%d] [Cholesky-rank=%d] [Residual^2=%le]\n", eps, N, K, rank, trace); }
+  { std::fprintf(logger, "POTRFP-FP128-QF-COMPLEX [eps=%.1le] [N=%d] [K=%d] [Cholesky-rank=%d]\n", eps, N, K, rank); }
 }}
 
 template <class idx_t, class real_t, class matrix_t>
-static inline std::pair<int32_t, double> potrfp_dispatcher(cudaStream_t stream, char fillmode, double eps, int32_t K, int32_t N, matrix_t* A, int64_t lda, int32_t* jpiv, real_t* D, int32_t* rank, void* logger) {
+static inline int32_t potrfp_dispatcher(cudaStream_t stream, char fillmode, double eps, int32_t K, int32_t N, matrix_t* A, int64_t lda, int32_t* jpiv, real_t* D, int32_t* rank, void* logger) {
   constexpr int32_t grid_blocks = 2048, block_threads = 128;
   if (fillmode == 'U' || fillmode == 'u')
     matrix_fill_upper_to_full<'U', real_t> <<< dim3(uint32_t(N + 127) >> 7, uint32_t(N)), block_threads, 0, stream >>> (A, lda);
@@ -317,7 +317,7 @@ static inline std::pair<int32_t, double> potrfp_dispatcher(cudaStream_t stream, 
   double eps2 = eps * eps; void* initArgs[]{ &eps2, &N, &A, &lda_p1, &jpiv, &diag, &D };
   cudaLaunchCooperativeKernel(potrf_init_kernel<block_threads, real_t, matrix_t, idx_t>, grid, block_threads, initArgs, 0, stream);
 
-  int32_t iters = (K == N) ? 1 : (N - K); double trace = 0.0;
+  int32_t iters = (K == N) ? 1 : (N - K);
   if (iters < N) {
     cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, potrf_iter_kernel<block_threads, real_t, matrix_t, idx_t>, block_threads, 0);
     grid = std::min(std::min(grid_blocks, device_sms * maxBlocksPerSM), N);
@@ -325,32 +325,32 @@ static inline std::pair<int32_t, double> potrfp_dispatcher(cudaStream_t stream, 
     cudaLaunchCooperativeKernel(potrf_iter_kernel<block_threads, real_t, matrix_t, idx_t>, grid, block_threads, kernelArgs, 0, stream);
   } else { iters = int32_t(N == 1); }
 
-  cudaStreamSynchronize(stream); iters = rank[0]; std::memcpy(&trace, &rank[1], sizeof(double));
-  write_log<real_t, matrix_t>(eps, K, N, iters, trace, (FILE*)logger);
-  return std::make_pair(iters, trace);
+  cudaStreamSynchronize(stream); iters = rank[0];
+  write_log<real_t, matrix_t>(eps, K, N, iters, (FILE*)logger);
+  return iters;
 }
 
 namespace internal::Cholesky {
 
-  std::pair<int32_t, double> potrfp(cudaStream_t stream, char fillmode, double eps, int32_t K, int32_t N, double* A, int32_t lda, int32_t* jpiv, double* dev_work, int32_t* r, void* logger)
+  int32_t potrfp(cudaStream_t stream, char fillmode, double eps, int32_t K, int32_t N, double* A, int32_t lda, int32_t* jpiv, double* dev_work, int32_t* r, void* logger)
   { return potrfp_dispatcher<double_idx>(stream, fillmode, eps, K, N, A, lda, jpiv, dev_work, r, logger); }
-  std::pair<int32_t, double> potrfp(cudaStream_t stream, char fillmode, double eps, int32_t K, int32_t N, float* A, int32_t lda, int32_t* jpiv, float* dev_work, int32_t* r, void* logger)
+  int32_t potrfp(cudaStream_t stream, char fillmode, double eps, int32_t K, int32_t N, float* A, int32_t lda, int32_t* jpiv, float* dev_work, int32_t* r, void* logger)
   { return potrfp_dispatcher<float_idx>(stream, fillmode, eps, K, N, A, lda, jpiv, dev_work, r, logger); }
-  std::pair<int32_t, double> potrfp(cudaStream_t stream, char fillmode, double eps, int32_t K, int32_t N, double2* A, int32_t lda, int32_t* jpiv, double2* dev_work, int32_t* r, void* logger)
+  int32_t potrfp(cudaStream_t stream, char fillmode, double eps, int32_t K, int32_t N, double2* A, int32_t lda, int32_t* jpiv, double2* dev_work, int32_t* r, void* logger)
   { return potrfp_dispatcher<double2_idx>(stream, fillmode, eps, K, N, A, lda, jpiv, dev_work, r, logger); }
-  std::pair<int32_t, double> potrfp(cudaStream_t stream, char fillmode, double eps, int32_t K, int32_t N, float3* A, int32_t lda, int32_t* jpiv, float3* dev_work, int32_t* r, void* logger)
+  int32_t potrfp(cudaStream_t stream, char fillmode, double eps, int32_t K, int32_t N, float3* A, int32_t lda, int32_t* jpiv, float3* dev_work, int32_t* r, void* logger)
   { return potrfp_dispatcher<float3_idx>(stream, fillmode, eps, K, N, A, lda, jpiv, dev_work, r, logger); }
-  std::pair<int32_t, double> potrfp(cudaStream_t stream, char fillmode, double eps, int32_t K, int32_t N, float4* A, int32_t lda, int32_t* jpiv, float4* dev_work, int32_t* r, void* logger)
+  int32_t potrfp(cudaStream_t stream, char fillmode, double eps, int32_t K, int32_t N, float4* A, int32_t lda, int32_t* jpiv, float4* dev_work, int32_t* r, void* logger)
   { return potrfp_dispatcher<float4_idx>(stream, fillmode, eps, K, N, A, lda, jpiv, dev_work, r, logger); }
-  std::pair<int32_t, double> potrfp(cudaStream_t stream, char fillmode, double eps, int32_t K, int32_t N, cuDoubleComplex* A, int32_t lda, int32_t* jpiv, double* dev_work, int32_t* r, void* logger)
+  int32_t potrfp(cudaStream_t stream, char fillmode, double eps, int32_t K, int32_t N, cuDoubleComplex* A, int32_t lda, int32_t* jpiv, double* dev_work, int32_t* r, void* logger)
   { return potrfp_dispatcher<double_idx>(stream, fillmode, eps, K, N, A, lda, jpiv, dev_work, r, logger); }
-  std::pair<int32_t, double> potrfp(cudaStream_t stream, char fillmode, double eps, int32_t K, int32_t N, cuComplex* A, int32_t lda, int32_t* jpiv, float* dev_work, int32_t* r, void* logger)
+  int32_t potrfp(cudaStream_t stream, char fillmode, double eps, int32_t K, int32_t N, cuComplex* A, int32_t lda, int32_t* jpiv, float* dev_work, int32_t* r, void* logger)
   { return potrfp_dispatcher<float_idx>(stream, fillmode, eps, K, N, A, lda, jpiv, dev_work, r, logger); }
-  std::pair<int32_t, double> potrfp(cudaStream_t stream, char fillmode, double eps, int32_t K, int32_t N, complex_double2* A, int32_t lda, int32_t* jpiv, double2* dev_work, int32_t* r, void* logger)
+  int32_t potrfp(cudaStream_t stream, char fillmode, double eps, int32_t K, int32_t N, complex_double2* A, int32_t lda, int32_t* jpiv, double2* dev_work, int32_t* r, void* logger)
   { return potrfp_dispatcher<double2_idx>(stream, fillmode, eps, K, N, A, lda, jpiv, dev_work, r, logger); }
-  std::pair<int32_t, double> potrfp(cudaStream_t stream, char fillmode, double eps, int32_t K, int32_t N, complex_float3* A, int32_t lda, int32_t* jpiv, float3* dev_work, int32_t* r, void* logger)
+  int32_t potrfp(cudaStream_t stream, char fillmode, double eps, int32_t K, int32_t N, complex_float3* A, int32_t lda, int32_t* jpiv, float3* dev_work, int32_t* r, void* logger)
   { return potrfp_dispatcher<float3_idx>(stream, fillmode, eps, K, N, A, lda, jpiv, dev_work, r, logger); }
-  std::pair<int32_t, double> potrfp(cudaStream_t stream, char fillmode, double eps, int32_t K, int32_t N, complex_float4* A, int32_t lda, int32_t* jpiv, float4* dev_work, int32_t* r, void* logger)
+  int32_t potrfp(cudaStream_t stream, char fillmode, double eps, int32_t K, int32_t N, complex_float4* A, int32_t lda, int32_t* jpiv, float4* dev_work, int32_t* r, void* logger)
   { return potrfp_dispatcher<float4_idx>(stream, fillmode, eps, K, N, A, lda, jpiv, dev_work, r, logger); }
 
 };

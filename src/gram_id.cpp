@@ -36,7 +36,7 @@ static inline int32_t interp(cudaStream_t stream, cudaMemPool_t mempool, cublasH
     throw std::runtime_error("Workspace allocation failed at Interpolative decomposition.");
 
   constexpr double machine_eps = double(std::numeric_limits<real_t>::epsilon()); eps = std::clamp(std::abs(eps), machine_eps, 1.);
-  K = internal::Cholesky::potrfp(stream, fillmode, eps, K, N, G, ldg, jpiv, potrf_work, r_ptr, logger).first;
+  K = internal::Cholesky::potrfp(stream, fillmode, eps, K, N, G, ldg, jpiv, potrf_work, r_ptr, logger);
   cudaFreeAsync(potrf_work, stream);
   if (K == N) { internal::scatter_matcopy(stream, handle, 'I', N, N, (const Xtype*)nullptr, N, X, ldx, jpiv); } else
   if (0 < K) {
