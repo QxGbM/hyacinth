@@ -7,8 +7,8 @@ extern "C" void hyacinAllReduceVExp(const hyacinHandle_t*, uint64_t, int32_t*) {
 
 #include <internal.hpp>
 #include <ext_arith.hpp>
-#include <cassert>
 #include <cstdio>
+#define NCCL_CHECK(call) do { ncclResult_t err = (call); assert(err == ncclSuccess); } while(0)
 
 template <int32_t hi_bits> static __device__ __forceinline__ uint64_t sign_bits(uint64_t a) noexcept {
   static_assert(0 <= hi_bits && hi_bits <= 64);
@@ -131,10 +131,10 @@ template <int32_t op> static inline void conv_reduction(cudaStream_t stream, uin
   constexpr int32_t block_threads = 128;
   uint32_t grid = uint32_t((N + uint64_t(127)) >> 7);
   limbs_convert_kernel<op> <<< grid, block_threads, 0, stream >>> (int64_t(N), A, E);
-  assert(ncclSuccess == ncclGroupStart());
-  assert(ncclSuccess == ncclAllReduce(A, A, lenA, ncclUint64, ncclSum, col_comm, stream));
-  assert(ncclSuccess == ncclAllReduce(E, E, lenE, ncclUint64, ncclSum, col_comm, stream));
-  assert(ncclSuccess == ncclGroupEnd());
+  NCCL_CHECK(ncclGroupStart());
+  NCCL_CHECK(ncclAllReduce(A, A, lenA, ncclUint64, ncclSum, col_comm, stream));
+  NCCL_CHECK(ncclAllReduce(E, E, lenE, ncclUint64, ncclSum, col_comm, stream));
+  NCCL_CHECK(ncclGroupEnd());
   limbs_accum_kernel<op> <<< grid, block_threads, 0, stream >>> (int64_t(N), A, E);
   if (logger) { std::fprintf((FILE*)logger, "NCCL-AllReduce [Bytes=%llu]\n", (unsigned long long)((lenA + lenE) * uint64_t(sizeof(uint64_t)))); }
 }
@@ -142,13 +142,13 @@ template <int32_t op> static inline void conv_reduction(cudaStream_t stream, uin
 extern "C" void hyacinAllReduce1Drow(const hyacinHandle_t* handle, int32_t Complex, int32_t orderA, uint64_t N, uint64_t* A) {
   if (Complex <= 0 || orderA <= 0 || N == uint64_t(0) || handle->ncclComm == nullptr) { return; }
   Timer::register_comm(handle->cudaStream, handle->timer);
-  int32_t comm_size; assert(ncclSuccess == ncclCommCount(handle->ncclComm, &comm_size));
+  int32_t comm_size; NCCL_CHECK(ncclCommCount(handle->ncclComm, &comm_size));
   if (comm_size == 1) { return; } else { assert(0 < comm_size); }
 
   int32_t LimbCount = orderA + 1 + int32_t(orderA == 2 && 1048576 < comm_size) + int32_t(orderA == 3 && 32768 < comm_size) + int32_t(orderA == 3 && 33554432 < comm_size);
   uint64_t lenA = uint64_t(Complex) * uint64_t(orderA) * N, lenE = uint64_t(Complex) * uint64_t(LimbCount - orderA) * N;
   uint64_t* devE = nullptr;
-  assert(cudaSuccess == cudaMallocFromPoolAsync((void**)&devE, lenE * uint64_t(sizeof(uint64_t)), handle->mempool, handle->cudaStream));
+  CUDA_CHECK(cudaMallocFromPoolAsync((void**)&devE, lenE * uint64_t(sizeof(uint64_t)), handle->mempool, handle->cudaStream));
 
   if (Complex == 1 && orderA == 1 && LimbCount == 2) { conv_reduction<0>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm, handle->logger); } else
   if (Complex == 1 && orderA == 2 && LimbCount == 3) { conv_reduction<1>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm, handle->logger); } else
@@ -162,15 +162,15 @@ extern "C" void hyacinAllReduce1Drow(const hyacinHandle_t* handle, int32_t Compl
   if (Complex == 2 && orderA == 3 && LimbCount == 4) { conv_reduction<9>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm, handle->logger); } else
   if (Complex == 2 && orderA == 3 && LimbCount == 5) { conv_reduction<10>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm, handle->logger); } else
   if (Complex == 2 && orderA == 3 && LimbCount == 6) { conv_reduction<11>(handle->cudaStream, N, A, lenA, devE, lenE, handle->ncclComm, handle->logger); }
-  assert(cudaSuccess == cudaFreeAsync(devE, handle->cudaStream));
+  CUDA_CHECK(cudaFreeAsync(devE, handle->cudaStream));
 }
 
 extern "C" void hyacinAllReduceVExp(const hyacinHandle_t* handle, uint64_t N, int32_t* vexp) {
   if (N == uint64_t(0) || handle->ncclComm == nullptr) { return; }
   Timer::register_comm(handle->cudaStream, handle->timer);
-  int32_t comm_size; assert(ncclSuccess == ncclCommCount(handle->ncclComm, &comm_size));
+  int32_t comm_size; NCCL_CHECK(ncclCommCount(handle->ncclComm, &comm_size));
   if (comm_size == 1) { return; } else { assert(0 < comm_size); }
-  assert(ncclSuccess == ncclAllReduce(vexp, vexp, N, ncclInt32, ncclMin, handle->ncclComm, handle->cudaStream));
+  NCCL_CHECK(ncclAllReduce(vexp, vexp, N, ncclInt32, ncclMin, handle->ncclComm, handle->cudaStream));
   if (handle->logger) { std::fprintf((FILE*)(handle->logger), "NCCL-AllReduce [Bytes=%llu]\n", (unsigned long long)(N * uint64_t(sizeof(int32_t)))); }
 }
 

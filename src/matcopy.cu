@@ -2,7 +2,6 @@
 #include <internal.hpp>
 #include <ext_arith.hpp>
 #include <cooperative_groups.h>
-#include <cassert>
 
 template<class T, class S> static __device__ __forceinline__ T conv(S a) noexcept {
   constexpr bool ext_cf = std::is_same_v<S, complex_double2> || std::is_same_v<S, complex_float3> || std::is_same_v<S, complex_float4>;
@@ -66,33 +65,33 @@ static inline void matcopy_dispatcher(cudaStream_t stream, cublasHandle_t handle
   } else if (mode == 'U') { cvcpy_kernel<'U'> <<< dim3(uint32_t((uint64_t(M64) + uint64_t(127)) >> 7), uint32_t(N)), 128, 0, stream >>> (M64, A, lda64, B, ldb64); } else
   if (mode == 'C') {
     if constexpr(std::is_same_v<Atype, double> && std::is_same_v<Btype, double>)
-    { double one = 1., zero = 0.; assert(CUBLAS_STATUS_SUCCESS == cublasDgeam(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb)); } else
+    { double one = 1., zero = 0.; CUBLAS_CHECK(cublasDgeam(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb)); } else
     if constexpr(std::is_same_v<Atype, float> && std::is_same_v<Btype, float>)
-    { float one = 1.f, zero = 0.f; assert(CUBLAS_STATUS_SUCCESS == cublasSgeam(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb)); } else
+    { float one = 1.f, zero = 0.f; CUBLAS_CHECK(cublasSgeam(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb)); } else
     if constexpr(std::is_same_v<Atype, cuDoubleComplex> && std::is_same_v<Btype, cuDoubleComplex>)
-    { cuDoubleComplex one = make_cuDoubleComplex(1., 0.), zero = make_cuDoubleComplex(0., 0.); assert(CUBLAS_STATUS_SUCCESS == cublasZgeam(handle, CUBLAS_OP_C, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb)); } else
+    { cuDoubleComplex one = make_cuDoubleComplex(1., 0.), zero = make_cuDoubleComplex(0., 0.); CUBLAS_CHECK(cublasZgeam(handle, CUBLAS_OP_C, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb)); } else
     if constexpr(std::is_same_v<Atype, cuComplex> && std::is_same_v<Btype, cuComplex>)
-    { cuComplex one = make_cuComplex(1.f, 0.f), zero = make_cuComplex(0.f, 0.f); assert(CUBLAS_STATUS_SUCCESS == cublasCgeam(handle, CUBLAS_OP_C, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb)); } else
+    { cuComplex one = make_cuComplex(1.f, 0.f), zero = make_cuComplex(0.f, 0.f); CUBLAS_CHECK(cublasCgeam(handle, CUBLAS_OP_C, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb)); } else
     { cvcpy_transpose_kernel<'C'> <<< dim3(uint32_t((uint64_t(M64) + uint64_t(15)) >> 4), uint32_t((uint64_t(N64) + uint64_t(15)) >> 4)), dim3(16, 16), 0, stream >>> (M64, N64, A, lda64, B, ldb64); }
   } else if (mode == 'T') {
     if constexpr(std::is_same_v<Atype, double> && std::is_same_v<Btype, double>)
-    { double one = 1., zero = 0.; assert(CUBLAS_STATUS_SUCCESS == cublasDgeam(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb)); } else
+    { double one = 1., zero = 0.; CUBLAS_CHECK(cublasDgeam(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb)); } else
     if constexpr(std::is_same_v<Atype, float> && std::is_same_v<Btype, float>)
-    { float one = 1.f, zero = 0.f; assert(CUBLAS_STATUS_SUCCESS == cublasSgeam(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb)); } else
+    { float one = 1.f, zero = 0.f; CUBLAS_CHECK(cublasSgeam(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb)); } else
     if constexpr(std::is_same_v<Atype, cuDoubleComplex> && std::is_same_v<Btype, cuDoubleComplex>)
-    { cuDoubleComplex one = make_cuDoubleComplex(1., 0.), zero = make_cuDoubleComplex(0., 0.); assert(CUBLAS_STATUS_SUCCESS == cublasZgeam(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb)); } else
+    { cuDoubleComplex one = make_cuDoubleComplex(1., 0.), zero = make_cuDoubleComplex(0., 0.); CUBLAS_CHECK(cublasZgeam(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb)); } else
     if constexpr(std::is_same_v<Atype, cuComplex> && std::is_same_v<Btype, cuComplex>)
-    { cuComplex one = make_cuComplex(1.f, 0.f), zero = make_cuComplex(0.f, 0.f); assert(CUBLAS_STATUS_SUCCESS == cublasCgeam(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb)); } else
+    { cuComplex one = make_cuComplex(1.f, 0.f), zero = make_cuComplex(0.f, 0.f); CUBLAS_CHECK(cublasCgeam(handle, CUBLAS_OP_T, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb)); } else
     { cvcpy_transpose_kernel<'T'> <<< dim3(uint32_t((uint64_t(M64) + uint64_t(15)) >> 4), uint32_t((uint64_t(N64) + uint64_t(15)) >> 4)), dim3(16, 16), 0, stream >>> (M64, N64, A, lda64, B, ldb64); }
   } else {
     if constexpr(std::is_same_v<Atype, double> && std::is_same_v<Btype, double>)
-    { double one = 1., zero = 0.; assert(CUBLAS_STATUS_SUCCESS == cublasDgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb)); } else
+    { double one = 1., zero = 0.; CUBLAS_CHECK(cublasDgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb)); } else
     if constexpr(std::is_same_v<Atype, float> && std::is_same_v<Btype, float>)
-    { float one = 1.f, zero = 0.f; assert(CUBLAS_STATUS_SUCCESS == cublasSgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb)); } else
+    { float one = 1.f, zero = 0.f; CUBLAS_CHECK(cublasSgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb)); } else
     if constexpr(std::is_same_v<Atype, cuDoubleComplex> && std::is_same_v<Btype, cuDoubleComplex>)
-    { cuDoubleComplex one = make_cuDoubleComplex(1., 0.), zero = make_cuDoubleComplex(0., 0.); assert(CUBLAS_STATUS_SUCCESS == cublasZgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb)); } else
+    { cuDoubleComplex one = make_cuDoubleComplex(1., 0.), zero = make_cuDoubleComplex(0., 0.); CUBLAS_CHECK(cublasZgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb)); } else
     if constexpr(std::is_same_v<Atype, cuComplex> && std::is_same_v<Btype, cuComplex>)
-    { cuComplex one = make_cuComplex(1.f, 0.f), zero = make_cuComplex(0.f, 0.f); assert(CUBLAS_STATUS_SUCCESS == cublasCgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb)); } else
+    { cuComplex one = make_cuComplex(1.f, 0.f), zero = make_cuComplex(0.f, 0.f); CUBLAS_CHECK(cublasCgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, &one, A, lda, &zero, B, ldb, B, ldb)); } else
     { cvcpy_kernel<'A'> <<< dim3(uint32_t((uint64_t(M64) + uint64_t(127)) >> 7), uint32_t(N)), 128, 0, stream >>> (M64, A, lda64, B, ldb64); }
   }
 }

@@ -3,7 +3,6 @@
 #include <ext_arith.hpp>
 #include <cub/cub.cuh>
 #include <cooperative_groups.h>
-#include <cassert>
 
 static __device__ __forceinline__ double2 operator+(const double2& a, const double2& b) noexcept { return device::add(a, b); }
 static __device__ __forceinline__ double2 operator-(const double2& a, const double2& b) noexcept { double s, e; device::two_sum(a.x, -b.x, s, e); return device::renormalize(make_double2(s, (a.y - b.y) + e)); }
@@ -312,21 +311,21 @@ static inline int32_t potrfp_dispatcher(cudaStream_t stream, char fillmode, doub
     matrix_fill_upper_to_full<'L', real_t> <<< dim3(uint32_t(N + 127) >> 7, uint32_t(N)), block_threads, 0, stream >>> (A, lda);
 
   int32_t device_sms = *rank, maxBlocksPerSM = 0;
-  assert(cudaSuccess == cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, potrf_init_kernel<block_threads, real_t, matrix_t, idx_t>, block_threads, 0));
+  CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, potrf_init_kernel<block_threads, real_t, matrix_t, idx_t>, block_threads, 0));
   int32_t grid = std::min(std::min(grid_blocks, device_sms * maxBlocksPerSM), (N + block_threads - 1) / block_threads);
   uint8_t* diag = &((uint8_t*)D)[98304]; int64_t lda_p1 = lda + int64_t(1);
   double eps2 = eps * eps; void* initArgs[]{ &eps2, &N, &A, &lda_p1, &jpiv, &diag, &D };
-  assert(cudaSuccess == cudaLaunchCooperativeKernel(potrf_init_kernel<block_threads, real_t, matrix_t, idx_t>, grid, block_threads, initArgs, 0, stream));
+  CUDA_CHECK(cudaLaunchCooperativeKernel(potrf_init_kernel<block_threads, real_t, matrix_t, idx_t>, grid, block_threads, initArgs, 0, stream));
 
   int32_t iters = (K == N) ? 1 : (N - K);
   if (iters < N) {
-    assert(cudaSuccess == cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, potrf_iter_kernel<block_threads, real_t, matrix_t, idx_t>, block_threads, 0));
+    CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, potrf_iter_kernel<block_threads, real_t, matrix_t, idx_t>, block_threads, 0));
     grid = std::min(std::min(grid_blocks, device_sms * maxBlocksPerSM), N);
     void* kernelArgs[]{ &iters, &N, &A, &lda, &jpiv, &diag, &D, &rank };
-    assert(cudaSuccess == cudaLaunchCooperativeKernel(potrf_iter_kernel<block_threads, real_t, matrix_t, idx_t>, grid, block_threads, kernelArgs, 0, stream));
+    CUDA_CHECK(cudaLaunchCooperativeKernel(potrf_iter_kernel<block_threads, real_t, matrix_t, idx_t>, grid, block_threads, kernelArgs, 0, stream));
   } else { iters = int32_t(N == 1); }
 
-  assert(cudaSuccess == cudaStreamSynchronize(stream)); iters = rank[0];
+  CUDA_CHECK(cudaStreamSynchronize(stream)); iters = rank[0];
   write_log<real_t, matrix_t>(eps, K, N, iters, (FILE*)logger);
   return iters;
 }

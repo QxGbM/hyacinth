@@ -5,7 +5,6 @@
 #include <cub/cub.cuh>
 #include <algorithm>
 #include <limits>
-#include <cassert>
 
 static inline cusolverStatus_t Xgesvj_bufferSize(cusolverDnHandle_t handle, int32_t m, int32_t n, const double* A, int32_t lda, const double* S, const double* U, int32_t ldu, const double* V, int32_t ldv, int32_t* lwork, gesvdjInfo_t params)
 { return cusolverDnDgesvdj_bufferSize(handle, CUSOLVER_EIG_MODE_VECTOR, 1, m, n, A, lda, S, U, ldu, V, ldv, lwork, params); }
@@ -99,46 +98,46 @@ static inline int32_t tsvd(cudaStream_t stream, cudaMemPool_t mempool, cublasHan
   using real_t = typename std::conditional_t<std::is_same_v<matrix_t, cuDoubleComplex>, double, std::conditional_t<std::is_same_v<matrix_t, cuComplex>, float, matrix_t>>;
 
   int32_t* jpiv = nullptr; Rtype* potrf_work = nullptr;
-  assert(cudaSuccess == cudaMallocFromPoolAsync((void**)&jpiv, uint64_t(N) * uint64_t(sizeof(int32_t)), mempool, stream));
-  assert(cudaSuccess == cudaMallocFromPoolAsync((void**)&potrf_work, uint64_t(98304) + uint64_t(N) * uint64_t(sizeof(Rtype)), mempool, stream));
+  CUDA_CHECK(cudaMallocFromPoolAsync((void**)&jpiv, uint64_t(N) * uint64_t(sizeof(int32_t)), mempool, stream));
+  CUDA_CHECK(cudaMallocFromPoolAsync((void**)&potrf_work, uint64_t(98304) + uint64_t(N) * uint64_t(sizeof(Rtype)), mempool, stream));
 
   constexpr double machine_eps = double(std::numeric_limits<real_t>::epsilon()); eps = std::clamp(std::abs(eps), machine_eps, 1.);
   int32_t rank = internal::Cholesky::potrfp(stream, fillmode, lrqr ? eps : 0., N, N, G, ldg, jpiv, potrf_work, r_ptr, logger);
-  assert(cudaSuccess == cudaFreeAsync(potrf_work, stream));
+  CUDA_CHECK(cudaFreeAsync(potrf_work, stream));
   if (0 < rank) {
     matrix_t* A = nullptr, *U = nullptr; real_t* sigma = nullptr;
-    assert(cudaSuccess == cudaMallocFromPoolAsync((void**)&A, uint64_t(N) * uint64_t(rank) * uint64_t(sizeof(matrix_t)), mempool, stream));
-    internal::scatter_matcopy(stream, cublasH, 'U', rank, N, G, ldg, A, N, jpiv); assert(cudaSuccess == cudaFreeAsync(jpiv, stream)); 
-    assert(cudaSuccess == cudaMallocFromPoolAsync((void**)&sigma, uint64_t(rank) * uint64_t(sizeof(real_t)), mempool, stream));
-    assert(cudaSuccess == cudaMallocFromPoolAsync((void**)&U, uint64_t(N) * uint64_t(rank) * uint64_t(sizeof(matrix_t)), mempool, stream));
+    CUDA_CHECK(cudaMallocFromPoolAsync((void**)&A, uint64_t(N) * uint64_t(rank) * uint64_t(sizeof(matrix_t)), mempool, stream));
+    internal::scatter_matcopy(stream, cublasH, 'U', rank, N, G, ldg, A, N, jpiv); CUDA_CHECK(cudaFreeAsync(jpiv, stream)); 
+    CUDA_CHECK(cudaMallocFromPoolAsync((void**)&sigma, uint64_t(rank) * uint64_t(sizeof(real_t)), mempool, stream));
+    CUDA_CHECK(cudaMallocFromPoolAsync((void**)&U, uint64_t(N) * uint64_t(rank) * uint64_t(sizeof(matrix_t)), mempool, stream));
 
     if (0 < sweeps) {
-      matrix_t* V = nullptr; assert(cudaSuccess == cudaMallocFromPoolAsync((void**)&V, uint64_t(rank) * uint64_t(rank) * uint64_t(sizeof(matrix_t)), mempool, stream));
-      gesvdjInfo_t gesvdj_params = nullptr; assert(CUSOLVER_STATUS_SUCCESS == cusolverDnCreateGesvdjInfo(&gesvdj_params));
-      assert(CUSOLVER_STATUS_SUCCESS == cusolverDnXgesvdjSetTolerance(gesvdj_params, machine_eps));
-      assert(CUSOLVER_STATUS_SUCCESS == cusolverDnXgesvdjSetMaxSweeps(gesvdj_params, sweeps));
-      int32_t lwork = 0; assert(CUSOLVER_STATUS_SUCCESS == Xgesvj_bufferSize(cusolverH, N, rank, A, N, sigma, U, N, V, rank, &lwork, gesvdj_params));
-      matrix_t* workspaceOnDevice = nullptr; assert(cudaSuccess == cudaMallocFromPoolAsync((void**)&workspaceOnDevice, uint64_t(lwork) * uint64_t(sizeof(matrix_t)), mempool, stream));
-      assert(CUSOLVER_STATUS_SUCCESS == Xgesvj(cusolverH, N, rank, A, N, sigma, U, N, V, rank, workspaceOnDevice, lwork, gesvdj_params));
-      assert(cudaSuccess == cudaFreeAsync(V, stream));
-      assert(cudaSuccess == cudaFreeAsync(workspaceOnDevice, stream));
-      assert(CUSOLVER_STATUS_SUCCESS == cusolverDnDestroyGesvdjInfo(gesvdj_params));
+      matrix_t* V = nullptr; CUDA_CHECK(cudaMallocFromPoolAsync((void**)&V, uint64_t(rank) * uint64_t(rank) * uint64_t(sizeof(matrix_t)), mempool, stream));
+      gesvdjInfo_t gesvdj_params = nullptr; CUSOLVER_CHECK(cusolverDnCreateGesvdjInfo(&gesvdj_params));
+      CUSOLVER_CHECK(cusolverDnXgesvdjSetTolerance(gesvdj_params, machine_eps));
+      CUSOLVER_CHECK(cusolverDnXgesvdjSetMaxSweeps(gesvdj_params, sweeps));
+      int32_t lwork = 0; CUSOLVER_CHECK(Xgesvj_bufferSize(cusolverH, N, rank, A, N, sigma, U, N, V, rank, &lwork, gesvdj_params));
+      matrix_t* workspaceOnDevice = nullptr; CUDA_CHECK(cudaMallocFromPoolAsync((void**)&workspaceOnDevice, uint64_t(lwork) * uint64_t(sizeof(matrix_t)), mempool, stream));
+      CUSOLVER_CHECK(Xgesvj(cusolverH, N, rank, A, N, sigma, U, N, V, rank, workspaceOnDevice, lwork, gesvdj_params));
+      CUDA_CHECK(cudaFreeAsync(V, stream));
+      CUDA_CHECK(cudaFreeAsync(workspaceOnDevice, stream));
+      CUSOLVER_CHECK(cusolverDnDestroyGesvdjInfo(gesvdj_params));
     } else {
-      int32_t lwork = 0; assert(CUSOLVER_STATUS_SUCCESS == Xgesvd_bufferSize<matrix_t>(cusolverH, N, rank, &lwork));
-      matrix_t* workspaceOnDevice = nullptr; assert(cudaSuccess == cudaMallocFromPoolAsync((void**)&workspaceOnDevice, uint64_t(lwork) * uint64_t(sizeof(matrix_t)) + uint64_t(rank) * uint64_t(sizeof(real_t)), mempool, stream));
-      assert(CUSOLVER_STATUS_SUCCESS == Xgesvd(cusolverH, N, rank, A, N, sigma, U, N, workspaceOnDevice, lwork, (real_t*)(&workspaceOnDevice[lwork])));
-      assert(cudaSuccess == cudaFreeAsync(workspaceOnDevice, stream));
+      int32_t lwork = 0; CUSOLVER_CHECK(Xgesvd_bufferSize<matrix_t>(cusolverH, N, rank, &lwork));
+      matrix_t* workspaceOnDevice = nullptr; CUDA_CHECK(cudaMallocFromPoolAsync((void**)&workspaceOnDevice, uint64_t(lwork) * uint64_t(sizeof(matrix_t)) + uint64_t(rank) * uint64_t(sizeof(real_t)), mempool, stream));
+      CUSOLVER_CHECK(Xgesvd(cusolverH, N, rank, A, N, sigma, U, N, workspaceOnDevice, lwork, (real_t*)(&workspaceOnDevice[lwork])));
+      CUDA_CHECK(cudaFreeAsync(workspaceOnDevice, stream));
     }
 
-    double* dnrm = nullptr; assert(cudaSuccess == cudaMallocFromPoolAsync((void**)&dnrm, uint64_t(std::max(K, rank)) * uint64_t(sizeof(double)), mempool, stream));
-    assert(cudaSuccess == cudaFreeAsync(A, stream)); find_srank_kernel<512> <<< 1, 512, 0, stream >>> (std::pow(eps, 2), rank, K, sigma, S, r_ptr, dnrm);
-    assert(cudaSuccess == cudaStreamSynchronize(stream)); rank = std::min(rank, *r_ptr);
-    assert(cudaSuccess == cudaFreeAsync(sigma, stream));
-    assert(cudaSuccess == cudaFreeAsync(dnrm, stream));
+    double* dnrm = nullptr; CUDA_CHECK(cudaMallocFromPoolAsync((void**)&dnrm, uint64_t(std::max(K, rank)) * uint64_t(sizeof(double)), mempool, stream));
+    CUDA_CHECK(cudaFreeAsync(A, stream)); find_srank_kernel<512> <<< 1, 512, 0, stream >>> (std::pow(eps, 2), rank, K, sigma, S, r_ptr, dnrm);
+    CUDA_CHECK(cudaStreamSynchronize(stream)); rank = std::min(rank, *r_ptr);
+    CUDA_CHECK(cudaFreeAsync(sigma, stream));
+    CUDA_CHECK(cudaFreeAsync(dnrm, stream));
     internal::scatter_matcopy(stream, cublasH, 'A', N, rank, U, N, X, ldx);
-    assert(cudaSuccess == cudaFreeAsync(U, stream));
+    CUDA_CHECK(cudaFreeAsync(U, stream));
     write_log<matrix_t>(eps, N, rank, K, sweeps, *r_ptr, (FILE*)logger); 
-  } else { assert(cudaSuccess == cudaFreeAsync(jpiv, stream)); }
+  } else { CUDA_CHECK(cudaFreeAsync(jpiv, stream)); }
   return rank;
 }
 

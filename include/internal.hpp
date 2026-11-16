@@ -107,3 +107,8 @@ namespace Timer {
   void register_replicate_kernel(cudaStream_t stream, void* timer);
   void register_comm(cudaStream_t stream, void* timer);
 };
+
+#include <cassert>
+#define CUDA_CHECK(call) do { cudaError_t err = (call); assert(err == cudaSuccess); } while(0)
+#define CUBLAS_CHECK(call) do { cublasStatus_t err = (call); assert(err == CUBLAS_STATUS_SUCCESS); } while(0)
+#define CUSOLVER_CHECK(call) do { cusolverStatus_t err = (call); assert(err == CUSOLVER_STATUS_SUCCESS); } while(0)

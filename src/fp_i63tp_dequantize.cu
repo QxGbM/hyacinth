@@ -38,7 +38,7 @@ extern "C" void hyacinXdequantizeInit(const hyacinHandle_t* handle, int32_t N, i
     case 3: gram_range_kernel<block_threads, 3> <<< 1, block_threads, 0, handle->cudaStream >>> (N, C, strideC, vexp, e_ptr); break;
     default: break;
   }
-  cudaStreamSynchronize(handle->cudaStream);
+  CUDA_CHECK(cudaStreamSynchronize(handle->cudaStream));
   constexpr hyacinPrecision_t real_type[]{ HYACIN_F64, HYACIN_F64, HYACIN_F32, HYACIN_F32, HYACIN_F16, HYACIN_F16, HYACIN_DD, HYACIN_DD, HYACIN_TF, HYACIN_TF, HYACIN_QF, HYACIN_QF };
   constexpr int32_t type_mantissa[]{ 52, 52, 23, 23, 10, 10, 105, 105, 71, 71, 95, 95 };
   constexpr int32_t type_bytes[]{ sizeof(double), sizeof(cuDoubleComplex), sizeof(float), sizeof(cuComplex), sizeof(__half), sizeof(__half2),

@@ -3,7 +3,6 @@
 #include <internal.hpp>
 #include <algorithm>
 #include <limits>
-#include <cassert>
 #include <cstdio>
 
 static inline cublasStatus_t ltrsm(cublasHandle_t handle, int32_t M, int32_t N, double* R, int32_t ldr)
@@ -33,19 +32,19 @@ static inline int32_t interp(cudaStream_t stream, cudaMemPool_t mempool, cublasH
   using real_t = typename std::conditional_t<std::is_same_v<matrix_t, cuDoubleComplex>, double, std::conditional_t<std::is_same_v<matrix_t, cuComplex>, float, matrix_t>>;
 
   Rtype* potrf_work = nullptr;
-  assert(cudaSuccess == cudaMallocFromPoolAsync((void**)&potrf_work, uint64_t(98304) + uint64_t(N) * uint64_t(sizeof(Rtype)), mempool, stream));
+  CUDA_CHECK(cudaMallocFromPoolAsync((void**)&potrf_work, uint64_t(98304) + uint64_t(N) * uint64_t(sizeof(Rtype)), mempool, stream));
 
   constexpr double machine_eps = double(std::numeric_limits<real_t>::epsilon()); eps = std::clamp(std::abs(eps), machine_eps, 1.);
   K = internal::Cholesky::potrfp(stream, fillmode, eps, K, N, G, ldg, jpiv, potrf_work, r_ptr, logger);
-  assert(cudaSuccess == cudaFreeAsync(potrf_work, stream));
+  CUDA_CHECK(cudaFreeAsync(potrf_work, stream));
   if (K == N) { internal::scatter_matcopy(stream, handle, 'I', N, N, (const Xtype*)nullptr, N, X, ldx, jpiv); } else
   if (0 < K) {
     matrix_t* B = nullptr;
-    assert(cudaSuccess == cudaMallocFromPoolAsync((void**)&B, uint64_t(N) * uint64_t(K) * uint64_t(sizeof(Xtype)), mempool, stream));
+    CUDA_CHECK(cudaMallocFromPoolAsync((void**)&B, uint64_t(N) * uint64_t(K) * uint64_t(sizeof(Xtype)), mempool, stream));
     internal::scatter_matcopy(stream, handle, 'U', K, N, G, ldg, B, K);
-    assert(CUBLAS_STATUS_SUCCESS == ltrsm(handle, K, N - K, B, K));
+    CUBLAS_CHECK(ltrsm(handle, K, N - K, B, K));
     internal::scatter_matcopy(stream, handle, 'I', K, N, B, K, X, ldx, jpiv);
-    assert(cudaSuccess == cudaFreeAsync(B, stream));
+    CUDA_CHECK(cudaFreeAsync(B, stream));
     write_log<matrix_t>(K, N - K, (FILE*)logger);
   }
   return K;
