@@ -3,16 +3,17 @@
 #include <ext_arith.hpp>
 #include <cub/cub.cuh>
 #include <cooperative_groups.h>
+#include <cassert>
 
-static __device__ __forceinline__ double2 operator+(const double2& a, const double2& b) { return device::add(a, b); }
-static __device__ __forceinline__ double2 operator-(const double2& a, const double2& b) { double s, e; device::two_sum(a.x, -b.x, s, e); return device::renormalize(make_double2(s, (a.y - b.y) + e)); }
-static __device__ __forceinline__ float3 operator+(const float3& a, const float3& b) { return device::add(a, b); }
-static __device__ __forceinline__ float3 operator-(const float3& a, const float3& b) {
+static __device__ __forceinline__ double2 operator+(const double2& a, const double2& b) noexcept { return device::add(a, b); }
+static __device__ __forceinline__ double2 operator-(const double2& a, const double2& b) noexcept { double s, e; device::two_sum(a.x, -b.x, s, e); return device::renormalize(make_double2(s, (a.y - b.y) + e)); }
+static __device__ __forceinline__ float3 operator+(const float3& a, const float3& b) noexcept { return device::add(a, b); }
+static __device__ __forceinline__ float3 operator-(const float3& a, const float3& b) noexcept {
   float2 s, e; device::two_sum(a.x, a.y, -b.x, -b.y, s.x, s.y, e.x, e.y); device::two_sum(s.y, e.x, s.y, e.x);
   return device::renormalize(make_float3(s.x, s.y, (a.z - b.z) + (e.x + e.y)));
 }
-static __device__ __forceinline__ float4 operator+(const float4& a, const float4& b) { return device::add(a, b); }
-static __device__ __forceinline__ float4 operator-(const float4& a, const float4& b) {
+static __device__ __forceinline__ float4 operator+(const float4& a, const float4& b) noexcept { return device::add(a, b); }
+static __device__ __forceinline__ float4 operator-(const float4& a, const float4& b) noexcept {
   float3 s, e;
   device::two_sum(a.x, a.y, a.z, -b.x, -b.y, -b.z, s.x, s.y, s.z, e.x, e.y, e.z);
   device::two_sum(s.y, s.z, e.x, e.y, s.y, s.z, e.x, e.y);
@@ -20,14 +21,14 @@ static __device__ __forceinline__ float4 operator-(const float4& a, const float4
   return device::renormalize(make_float4(s.x, s.y, s.z, (a.w - b.w) + (e.x + e.y + e.z)));
 }
 
-static __device__ __forceinline__ double2 operator*(const double2& a, const double2& b) { double p = a.x * b.x; return device::renormalize(make_double2(p, fma(a.x, b.y, a.y * b.x) + fma(a.x, b.x, -p))); }
-static __device__ __forceinline__ float3 operator*(const float3& a, const float3& b) {
+static __device__ __forceinline__ double2 operator*(const double2& a, const double2& b) noexcept { double p = a.x * b.x; return device::renormalize(make_double2(p, fma(a.x, b.y, a.y * b.x) + fma(a.x, b.x, -p))); }
+static __device__ __forceinline__ float3 operator*(const float3& a, const float3& b) noexcept {
   float r0 = a.x * b.x, r1 = a.x * b.y, p = a.y * b.x, e = fmaf(a.x, b.x, -r0);
   float r2 = fmaf(a.z, b.x, fmaf(a.y, b.y, fmaf(a.x, b.z, fmaf(a.x, b.y, -r1) + fmaf(a.y, b.x, -p))));
   device::two_sum(r1, e, r1, e); device::two_sum(r1, p, r1, p);
   return device::renormalize(make_float3(r0, r1, r2 + e + p));
 }
-static __device__ __forceinline__ float4 operator*(const float4& a, const float4& b) {
+static __device__ __forceinline__ float4 operator*(const float4& a, const float4& b) noexcept {
   float r0 = a.x * b.x, r1 = fmaf(a.x, b.x, -r0), r2 = a.y * b.y;
   float r3 = fmaf(a.w, b.x, fmaf(a.z, b.y, fmaf(a.y, b.z, fmaf(a.x, b.w, fmaf(a.y, b.y, -r2)))));
 
@@ -38,12 +39,12 @@ static __device__ __forceinline__ float4 operator*(const float4& a, const float4
   return device::renormalize(make_float4(r0, r1, r2, r3 + p0 + p1 + p2 + p3 + e0 + e1 + e2 + e3));
 }
 
-static __device__ __forceinline__ double2 sqr(const double2& a) { double p = a.x * a.x; return device::renormalize(make_double2(p, fma(a.x + a.x, a.y, fma(a.x, a.x, -p)))); }
-static __device__ __forceinline__ float3 sqr(const float3& a) {
+static __device__ __forceinline__ double2 sqr(const double2& a) noexcept { double p = a.x * a.x; return device::renormalize(make_double2(p, fma(a.x + a.x, a.y, fma(a.x, a.x, -p)))); }
+static __device__ __forceinline__ float3 sqr(const float3& a) noexcept {
   float a1 = a.x + a.x, r0 = a.x * a.x, r1 = a.y * a1, e = fmaf(a.x, a.x, -r0), r2 = fmaf(a.y, a.y, fmaf(a1, a.z, fmaf(a.y, a1, -r1)));
   device::two_sum(r1, e, r1, e); return device::renormalize(make_float3(r0, r1, r2 + e));
 }
-static __device__ __forceinline__ float4 sqr(const float4& a) {
+static __device__ __forceinline__ float4 sqr(const float4& a) noexcept {
   float r0 = a.x * a.x, r2 = a.y * a.y, r1 = fmaf(a.x, a.x, -r0);
   float a1 = a.x + a.x, r3 = fmaf(a.w, a1, fmaf(a.z, a.y + a.y, fmaf(a.y, a.y, -r2)));
 
@@ -52,34 +53,34 @@ static __device__ __forceinline__ float4 sqr(const float4& a) {
   return device::renormalize(make_float4(r0, r1, r2, r3 + p0 + p1 + e0 + e1));
 }
 
-static __device__ __forceinline__ double sqrt_fl(double& r) { double x = sqrt(r); r = 1. / x; return x; }
-static __device__ __forceinline__ float sqrt_fl(float& r) { float x = sqrtf(r); r = 1.f / x; return x; }
+static __device__ __forceinline__ double sqrt_fl(double& r) noexcept { double x = sqrt(r); r = 1. / x; return x; }
+static __device__ __forceinline__ float sqrt_fl(float& r) noexcept { float x = sqrtf(r); r = 1.f / x; return x; }
 
-static __device__ __forceinline__ double2 increment(const double2& x) { double2 y = device::renormalize(make_double2(1.5, x.x)); y.y += x.y; return y; }
-static __device__ __forceinline__ double2 sqrt_fl(double2& r) {
+static __device__ __forceinline__ double2 increment(const double2& x) noexcept { double2 y = device::renormalize(make_double2(1.5, x.x)); y.y += x.y; return y; }
+static __device__ __forceinline__ double2 sqrt_fl(double2& r) noexcept {
   int32_t e; double2 rx = make_double2(frexp(rsqrt(r.x), &e), 0.);
   int32_t e2 = e + e - 1; double2 x = make_double2(scalbn(-r.x, e2), scalbn(-r.y, e2));
   rx = rx * increment(x * sqr(rx)); rx = rx * increment(x * sqr(rx));
   x = r; return x * (r = make_double2(scalbn(rx.x, e), scalbn(rx.y, e)));
 }
 
-static __device__ __forceinline__ float3 increment(const float3& x) { float3 y = device::renormalize(make_float3(1.5f, x.x, x.y)); y.z += x.z; return y; }
-static __device__ __forceinline__ float3 sqrt_fl(float3& r) {
+static __device__ __forceinline__ float3 increment(const float3& x) noexcept { float3 y = device::renormalize(make_float3(1.5f, x.x, x.y)); y.z += x.z; return y; }
+static __device__ __forceinline__ float3 sqrt_fl(float3& r) noexcept {
   int32_t e; float3 rx = make_float3(frexpf(rsqrtf(r.x), &e), 0.f, 0.f);
   int32_t e2 = e + e - 1; float3 x = make_float3(scalbnf(-r.x, e2), scalbnf(-r.y, e2), scalbnf(-r.z, e2));
   rx = rx * increment(x * sqr(rx)); rx = rx * increment(x * sqr(rx)); rx = rx * increment(x * sqr(rx));
   x = r; return x * (r = make_float3(scalbnf(rx.x, e), scalbnf(rx.y, e), scalbnf(rx.z, e)));
 }
 
-static __device__ __forceinline__ float4 increment(const float4& x) { float4 y = device::renormalize(make_float4(1.5f, x.x, x.y, x.z)); y.w += x.w; return y; }
-static __device__ __forceinline__ float4 sqrt_fl(float4& r) {
+static __device__ __forceinline__ float4 increment(const float4& x) noexcept { float4 y = device::renormalize(make_float4(1.5f, x.x, x.y, x.z)); y.w += x.w; return y; }
+static __device__ __forceinline__ float4 sqrt_fl(float4& r) noexcept {
   int32_t e; float4 rx = make_float4(frexpf(rsqrtf(r.x), &e), 0.f, 0.f, 0.f);
   int32_t e2 = e + e - 1; float4 x = make_float4(scalbnf(-r.x, e2), scalbnf(-r.y, e2), scalbnf(-r.z, e2), scalbnf(-r.w, e2));
   rx = rx * increment(x * sqr(rx)); rx = rx * increment(x * sqr(rx)); rx = rx * increment(x * sqr(rx));
   x = r; return x * (r = make_float4(scalbnf(rx.x, e), scalbnf(rx.y, e), scalbnf(rx.z, e), scalbnf(rx.w, e)));
 }
 
-template <class matrix_t, class real_t> static __device__ __forceinline__ matrix_t ext(const real_t& x) {
+template <class matrix_t, class real_t> static __device__ __forceinline__ matrix_t ext(const real_t& x) noexcept {
   if constexpr(std::is_same_v<real_t, double> && std::is_same_v<matrix_t, cuDoubleComplex>) { return make_cuDoubleComplex(x, 0.); } else
   if constexpr(std::is_same_v<real_t, float> && std::is_same_v<matrix_t, cuComplex>) { return make_cuComplex(x, 0.f); } else
   if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, complex_double2>) { return device::make_complex_double2(x, make_double2(0., 0.)); } else
@@ -88,7 +89,7 @@ template <class matrix_t, class real_t> static __device__ __forceinline__ matrix
   { return x; }
 }
 
-template <class real_t> static __device__ __forceinline__ double to_double(const real_t& x) {
+template <class real_t> static __device__ __forceinline__ double to_double(const real_t& x) noexcept {
   if constexpr(std::is_same_v<real_t, double>) { return x; } else
   if constexpr(std::is_same_v<real_t, float>) { return double(x); } else
   if constexpr(std::is_same_v<real_t, double2>) { return x.x; } else
@@ -97,12 +98,12 @@ template <class real_t> static __device__ __forceinline__ double to_double(const
   { return 0.; }
 }
 
-static __device__ __forceinline__ bool cmp_fl(const double& a, const double& b) { return a < b; }
-static __device__ __forceinline__ bool cmp_fl(const float& a, const float& b) { return a < b; }
-static __device__ __forceinline__ bool cmp_fl(const double2& a, const double2& b) { bool l1 = a.x < b.x, l2 = a.y < b.y, p1 = a.x == b.x; return l1 || (p1 && l2); }
-static __device__ __forceinline__ bool cmp_fl(const float3& a, const float3& b)
+static __device__ __forceinline__ bool cmp_fl(const double& a, const double& b) noexcept { return a < b; }
+static __device__ __forceinline__ bool cmp_fl(const float& a, const float& b) noexcept { return a < b; }
+static __device__ __forceinline__ bool cmp_fl(const double2& a, const double2& b) noexcept { bool l1 = a.x < b.x, l2 = a.y < b.y, p1 = a.x == b.x; return l1 || (p1 && l2); }
+static __device__ __forceinline__ bool cmp_fl(const float3& a, const float3& b) noexcept
 { bool l1 = a.x < b.x, l2 = a.y < b.y, l3 = a.z < b.z, p1 = a.x == b.x, p2 = p1 && (a.y == b.y); return l1 || (p1 && l2) || (p2 && l3); }
-static __device__ __forceinline__ bool cmp_fl(const float4& a, const float4& b)
+static __device__ __forceinline__ bool cmp_fl(const float4& a, const float4& b) noexcept
 { bool l1 = a.x < b.x, l2 = a.y < b.y, l3 = a.z < b.z, l4 = a.w < b.w, p1 = a.x == b.x, p2 = p1 && (a.y == b.y), p3 = p2 && (a.z == b.z); return l1 || (p1 && l2) || (p2 && l3) || (p3 && l4); }
 
 struct __align__(8) float_idx { double trace; float real; int32_t idx; };
@@ -111,9 +112,9 @@ struct __align__(16) double2_idx { double2 real; double trace; int32_t idx; };
 struct __align__(8) float3_idx { double trace; float3 real; int32_t idx; };
 struct __align__(16) float4_idx { float4 real; double trace; int32_t idx; };
 template <class real_t, class idx_t> struct idx_max {
-  __device__ __forceinline__ idx_t operator()(idx_t a, const real_t& x, const int32_t i)
+  __device__ __forceinline__ idx_t operator()(idx_t a, const real_t& x, const int32_t i) noexcept
   { bool p = cmp_fl(a.real, x); a.idx = p ? i : a.idx; a.real = p ? x : a.real; a.trace += to_double(x); return a; }
-  __device__ __forceinline__ idx_t operator()(idx_t a, idx_t b)
+  __device__ __forceinline__ idx_t operator()(idx_t a, idx_t b) noexcept
   { bool p = cmp_fl(a.real, b.real); a.idx = p ? b.idx : a.idx; a.real = p ? b.real : a.real; a.trace += b.trace; return a; }
 };
 
@@ -149,7 +150,7 @@ __global__ void potrf_init_kernel(double eps, int32_t N, matrix_t* __restrict__ 
   }
 }
 
-template <class real_t, class matrix_t> static __device__ __forceinline__ matrix_t fma_fl(const matrix_t& a, const matrix_t& b, const matrix_t& c) {
+template <class real_t, class matrix_t> static __device__ __forceinline__ matrix_t fma_fl(const matrix_t& a, const matrix_t& b, const matrix_t& c) noexcept {
   if constexpr(std::is_same_v<real_t, double> && std::is_same_v<matrix_t, double>) { return fma(-a, b, c); } else
   if constexpr(std::is_same_v<real_t, float> && std::is_same_v<matrix_t, float>) { return fmaf(-a, b, c); } else
   if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, double2>) { return c - (a * b); } else
@@ -171,23 +172,23 @@ template <class real_t, class matrix_t> static __device__ __forceinline__ matrix
   } else { return matrix_t(); }
 }
 
-static __device__ __forceinline__ double process_diag(double& d, const double& r, const double c) { double rc = r * c; d = fma(-rc, rc, d); return rc; }
-static __device__ __forceinline__ float process_diag(float& d, const float& r, const float c) { float rc = r * c; d = fmaf(-rc, rc, d); return rc; }
-static __device__ __forceinline__ double2 process_diag(double2& d, const double2& r, const double2 c) { double2 rc = r * c; d = d - sqr(rc); return rc; }
-static __device__ __forceinline__ float3 process_diag(float3& d, const float3& r, const float3 c) { float3 rc = r * c; d = d - sqr(rc); return rc; }
-static __device__ __forceinline__ float4 process_diag(float4& d, const float4& r, const float4 c) { float4 rc = r * c; d = d - sqr(rc); return rc; }
-static __device__ __forceinline__ cuDoubleComplex process_diag(double& d, const double& r, const cuDoubleComplex c)
+static __device__ __forceinline__ double process_diag(double& d, const double& r, const double c) noexcept { double rc = r * c; d = fma(-rc, rc, d); return rc; }
+static __device__ __forceinline__ float process_diag(float& d, const float& r, const float c) noexcept { float rc = r * c; d = fmaf(-rc, rc, d); return rc; }
+static __device__ __forceinline__ double2 process_diag(double2& d, const double2& r, const double2 c) noexcept { double2 rc = r * c; d = d - sqr(rc); return rc; }
+static __device__ __forceinline__ float3 process_diag(float3& d, const float3& r, const float3 c) noexcept { float3 rc = r * c; d = d - sqr(rc); return rc; }
+static __device__ __forceinline__ float4 process_diag(float4& d, const float4& r, const float4 c) noexcept { float4 rc = r * c; d = d - sqr(rc); return rc; }
+static __device__ __forceinline__ cuDoubleComplex process_diag(double& d, const double& r, const cuDoubleComplex c) noexcept
 { cuDoubleComplex rc = make_cuDoubleComplex(r * c.x, -r * c.y); d = fma(-rc.x, rc.x, fma(-rc.y, rc.y, d)); return rc; }
-static __device__ __forceinline__ cuComplex process_diag(float& d, const float& r, const cuComplex c)
+static __device__ __forceinline__ cuComplex process_diag(float& d, const float& r, const cuComplex c) noexcept
 { cuComplex rc = make_cuComplex(r * c.x, -r * c.y); d = fmaf(-rc.x, rc.x, fmaf(-rc.y, rc.y, d)); return rc; }
-static __device__ __forceinline__ complex_double2 process_diag(double2& d, const double2& r, const complex_double2 c)
+static __device__ __forceinline__ complex_double2 process_diag(double2& d, const double2& r, const complex_double2 c) noexcept
 { complex_double2 rc = device::make_complex_double2(r * c.real, r * make_double2(-c.imag.x, -c.imag.y)); d = d - (sqr(rc.real) + sqr(rc.imag)); return rc; }
-static __device__ __forceinline__ complex_float3 process_diag(float3& d, const float3& r, const complex_float3 c)
+static __device__ __forceinline__ complex_float3 process_diag(float3& d, const float3& r, const complex_float3 c) noexcept
 { complex_float3 rc = device::make_complex_float3(r * c.real, r * make_float3(-c.imag.x, -c.imag.y, -c.imag.z)); d = d - (sqr(rc.real) + sqr(rc.imag)); return rc; }
-static __device__ __forceinline__ complex_float4 process_diag(float4& d, const float4& r, const complex_float4 c)
+static __device__ __forceinline__ complex_float4 process_diag(float4& d, const float4& r, const complex_float4 c) noexcept
 { complex_float4 rc = device::make_complex_float4(r * c.real, r * make_float4(-c.imag.x, -c.imag.y, -c.imag.z, -c.imag.w)); d = d - (sqr(rc.real) + sqr(rc.imag)); return rc; }
 
-template <class real_t, class matrix_t> static __device__ __forceinline__ matrix_t conj(const matrix_t& a) {
+template <class real_t, class matrix_t> static __device__ __forceinline__ matrix_t conj(const matrix_t& a) noexcept {
   if constexpr(std::is_same_v<real_t, double> && std::is_same_v<matrix_t, cuDoubleComplex>) { return make_cuDoubleComplex(a.x, -a.y); } else
   if constexpr(std::is_same_v<real_t, float> && std::is_same_v<matrix_t, cuComplex>) { return make_cuComplex(a.x, -a.y); } else
   if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, complex_double2>) { return device::make_complex_double2(a.real, make_double2(-a.imag.x, -a.imag.y)); } else
@@ -197,7 +198,7 @@ template <class real_t, class matrix_t> static __device__ __forceinline__ matrix
 }
 
 template <class real_t, class matrix_t> struct add_fl {
-  __device__ __forceinline__ matrix_t operator()(const matrix_t& a, const matrix_t& b) {
+  __device__ __forceinline__ matrix_t operator()(const matrix_t& a, const matrix_t& b) noexcept {
     if constexpr(std::is_same_v<real_t, double> && std::is_same_v<matrix_t, double>) { return a + b; } else
     if constexpr(std::is_same_v<real_t, float> && std::is_same_v<matrix_t, float>) { return a + b; } else
     if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, double2>) { return a + b; } else
@@ -311,21 +312,21 @@ static inline int32_t potrfp_dispatcher(cudaStream_t stream, char fillmode, doub
     matrix_fill_upper_to_full<'L', real_t> <<< dim3(uint32_t(N + 127) >> 7, uint32_t(N)), block_threads, 0, stream >>> (A, lda);
 
   int32_t device_sms = *rank, maxBlocksPerSM = 0;
-  cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, potrf_init_kernel<block_threads, real_t, matrix_t, idx_t>, block_threads, 0);
+  assert(cudaSuccess == cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, potrf_init_kernel<block_threads, real_t, matrix_t, idx_t>, block_threads, 0));
   int32_t grid = std::min(std::min(grid_blocks, device_sms * maxBlocksPerSM), (N + block_threads - 1) / block_threads);
   uint8_t* diag = &((uint8_t*)D)[98304]; int64_t lda_p1 = lda + int64_t(1);
   double eps2 = eps * eps; void* initArgs[]{ &eps2, &N, &A, &lda_p1, &jpiv, &diag, &D };
-  cudaLaunchCooperativeKernel(potrf_init_kernel<block_threads, real_t, matrix_t, idx_t>, grid, block_threads, initArgs, 0, stream);
+  assert(cudaSuccess == cudaLaunchCooperativeKernel(potrf_init_kernel<block_threads, real_t, matrix_t, idx_t>, grid, block_threads, initArgs, 0, stream));
 
   int32_t iters = (K == N) ? 1 : (N - K);
   if (iters < N) {
-    cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, potrf_iter_kernel<block_threads, real_t, matrix_t, idx_t>, block_threads, 0);
+    assert(cudaSuccess == cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxBlocksPerSM, potrf_iter_kernel<block_threads, real_t, matrix_t, idx_t>, block_threads, 0));
     grid = std::min(std::min(grid_blocks, device_sms * maxBlocksPerSM), N);
     void* kernelArgs[]{ &iters, &N, &A, &lda, &jpiv, &diag, &D, &rank };
-    cudaLaunchCooperativeKernel(potrf_iter_kernel<block_threads, real_t, matrix_t, idx_t>, grid, block_threads, kernelArgs, 0, stream);
+    assert(cudaSuccess == cudaLaunchCooperativeKernel(potrf_iter_kernel<block_threads, real_t, matrix_t, idx_t>, grid, block_threads, kernelArgs, 0, stream));
   } else { iters = int32_t(N == 1); }
 
-  cudaStreamSynchronize(stream); iters = rank[0];
+  assert(cudaSuccess == cudaStreamSynchronize(stream)); iters = rank[0];
   write_log<real_t, matrix_t>(eps, K, N, iters, (FILE*)logger);
   return iters;
 }

@@ -4,30 +4,29 @@
 
 constexpr int32_t int_max = std::numeric_limits<int32_t>::max();
 constexpr uint64_t i63 = std::numeric_limits<uint64_t>::max() >> 1;
-template <int32_t ORDER> static __device__ __forceinline__ void write_zeros(int8_t* A, int64_t strideA) {
+template <int32_t ORDER> static __device__ __forceinline__ void write_zeros(int8_t* A, int64_t strideA) noexcept {
   constexpr int8_t zero = int8_t(0);
   if constexpr(0 < ORDER) { *A = zero; }
   #pragma unroll
   for (int32_t i = 1; i < ORDER; ++i) { *(A += strideA) = zero; }
 }
 
-static __device__ __forceinline__ void round_i95(const double& x, int32_t expon, uint64_t& lo, uint32_t& hi) {
+static __device__ __forceinline__ void round_i95(const double& x, int32_t expon, uint64_t& lo, uint32_t& hi) noexcept {
   uint32_t e = uint32_t(__viaddmax_s32(ilogb(x), expon - 62, 0));
   uint64_t i = uint64_t(llrint(scalbn(x, expon - int32_t(e))));
   lo = (i << e) & i63; hi = ((-uint32_t(i >> 63)) << (uint32_t(1) + e)) | uint32_t(i >> (uint32_t(63) - e));
 }
 
-static __device__ __forceinline__ void round_i95(const float& x, int32_t expon, uint64_t& lo, uint32_t& hi) {
+static __device__ __forceinline__ void round_i95(const float& x, int32_t expon, uint64_t& lo, uint32_t& hi) noexcept {
   uint32_t e = uint32_t(__viaddmax_s32(ilogbf(x), expon - 62, 0));
   uint64_t i = uint64_t(llrintf(scalbnf(x, expon - int32_t(e))));
   lo = (i << e) & i63; hi = ((-uint32_t(i >> 63)) << (uint32_t(1) + e)) | uint32_t(i >> (uint32_t(63) - e));
 }
 
-static __device__ __forceinline__ void round_i95(const __half& x, int32_t expon, uint64_t& lo, uint32_t& hi) {
-  round_i95(__half2float(x), expon, lo, hi);
-}
+static __device__ __forceinline__ void round_i95(const __half& x, int32_t expon, uint64_t& lo, uint32_t& hi) noexcept
+{ round_i95(__half2float(x), expon, lo, hi); }
 
-template <int32_t ORDER> static __device__ __forceinline__ int8_t* quantize_i8(const uint64_t& lo, const uint32_t& hi, int8_t* A, int64_t strideA) {
+template <int32_t ORDER> static __device__ __forceinline__ int8_t* quantize_i8(const uint64_t& lo, const uint32_t& hi, int8_t* A, int64_t strideA) noexcept {
   uint32_t a;
   if constexpr(0 < ORDER) { a = uint8_t(lo); *A = int8_t(a); } else { return A; }
   if constexpr(1 < ORDER) { a = (a >> 8) + ((a >> 7) & uint32_t(1)) + uint8_t(lo >> 8); *(A += strideA) = int8_t(a); }

@@ -3,16 +3,17 @@
 #include <internal.hpp>
 #include <algorithm>
 #include <limits>
-#include <stdexcept>
+#include <cassert>
+#include <cstdio>
 
-static inline void ltrsm(cublasHandle_t handle, int32_t M, int32_t N, double* R, int32_t ldr)
-{ double one = 1.; cublasDtrsm(handle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, M, N, &one, R, ldr, &R[int64_t(M) * int64_t(ldr)], ldr); }
-static inline void ltrsm(cublasHandle_t handle, int32_t M, int32_t N, float* R, int32_t ldr)
-{ float one = 1.f; cublasStrsm(handle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, M, N, &one, R, ldr, &R[int64_t(M) * int64_t(ldr)], ldr); }
-static inline void ltrsm(cublasHandle_t handle, int32_t M, int32_t N, cuDoubleComplex* R, int32_t ldr)
-{ cuDoubleComplex one = make_cuDoubleComplex(1., 0.); cublasZtrsm(handle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, M, N, &one, R, ldr, &R[int64_t(M) * int64_t(ldr)], ldr); }
-static inline void ltrsm(cublasHandle_t handle, int32_t M, int32_t N, cuComplex* R, int32_t ldr)
-{ cuComplex one = make_cuComplex(1.f, 0.f); cublasCtrsm(handle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, M, N, &one, R, ldr, &R[int64_t(M) * int64_t(ldr)], ldr); }
+static inline cublasStatus_t ltrsm(cublasHandle_t handle, int32_t M, int32_t N, double* R, int32_t ldr)
+{ double one = 1.; return cublasDtrsm(handle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, M, N, &one, R, ldr, &R[int64_t(M) * int64_t(ldr)], ldr); }
+static inline cublasStatus_t ltrsm(cublasHandle_t handle, int32_t M, int32_t N, float* R, int32_t ldr)
+{ float one = 1.f; return cublasStrsm(handle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, M, N, &one, R, ldr, &R[int64_t(M) * int64_t(ldr)], ldr); }
+static inline cublasStatus_t ltrsm(cublasHandle_t handle, int32_t M, int32_t N, cuDoubleComplex* R, int32_t ldr)
+{ cuDoubleComplex one = make_cuDoubleComplex(1., 0.); return cublasZtrsm(handle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, M, N, &one, R, ldr, &R[int64_t(M) * int64_t(ldr)], ldr); }
+static inline cublasStatus_t ltrsm(cublasHandle_t handle, int32_t M, int32_t N, cuComplex* R, int32_t ldr)
+{ cuComplex one = make_cuComplex(1.f, 0.f); return cublasCtrsm(handle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, M, N, &one, R, ldr, &R[int64_t(M) * int64_t(ldr)], ldr); }
 
 template <class matrix_t> static inline void write_log(int32_t M, int32_t N, FILE* logger) { if (logger) {
   if constexpr(std::is_same_v<matrix_t, double>)
@@ -32,22 +33,20 @@ static inline int32_t interp(cudaStream_t stream, cudaMemPool_t mempool, cublasH
   using real_t = typename std::conditional_t<std::is_same_v<matrix_t, cuDoubleComplex>, double, std::conditional_t<std::is_same_v<matrix_t, cuComplex>, float, matrix_t>>;
 
   Rtype* potrf_work = nullptr;
-  if (cudaSuccess != cudaMallocFromPoolAsync((void**)&potrf_work, uint64_t(98304) + uint64_t(N) * uint64_t(sizeof(Rtype)), mempool, stream))
-    throw std::runtime_error("Workspace allocation failed at Interpolative decomposition.");
+  assert(cudaSuccess == cudaMallocFromPoolAsync((void**)&potrf_work, uint64_t(98304) + uint64_t(N) * uint64_t(sizeof(Rtype)), mempool, stream));
 
   constexpr double machine_eps = double(std::numeric_limits<real_t>::epsilon()); eps = std::clamp(std::abs(eps), machine_eps, 1.);
   K = internal::Cholesky::potrfp(stream, fillmode, eps, K, N, G, ldg, jpiv, potrf_work, r_ptr, logger);
-  cudaFreeAsync(potrf_work, stream);
+  assert(cudaSuccess == cudaFreeAsync(potrf_work, stream));
   if (K == N) { internal::scatter_matcopy(stream, handle, 'I', N, N, (const Xtype*)nullptr, N, X, ldx, jpiv); } else
   if (0 < K) {
     matrix_t* B = nullptr;
-    if (cudaSuccess != cudaMallocFromPoolAsync((void**)&B, uint64_t(N) * uint64_t(K) * uint64_t(sizeof(Xtype)), mempool, stream))
-      throw std::runtime_error("Workspace allocation failed at Interpolative decomposition.");
-
+    assert(cudaSuccess == cudaMallocFromPoolAsync((void**)&B, uint64_t(N) * uint64_t(K) * uint64_t(sizeof(Xtype)), mempool, stream));
     internal::scatter_matcopy(stream, handle, 'U', K, N, G, ldg, B, K);
-    ltrsm(handle, K, N - K, B, K); write_log<matrix_t>(K, N - K, (FILE*)logger);
+    assert(CUBLAS_STATUS_SUCCESS == ltrsm(handle, K, N - K, B, K));
     internal::scatter_matcopy(stream, handle, 'I', K, N, B, K, X, ldx, jpiv);
-    cudaFreeAsync(B, stream);
+    assert(cudaSuccess == cudaFreeAsync(B, stream));
+    write_log<matrix_t>(K, N - K, (FILE*)logger);
   }
   return K;
 }

@@ -3,24 +3,23 @@
 #include <internal.hpp>
 #include <cub/cub.cuh>
 #include <limits>
-#include <stdexcept>
 
 constexpr int32_t int_max = std::numeric_limits<int32_t>::max();
 constexpr int32_t int_min = std::numeric_limits<int32_t>::min();
 constexpr double f64_min = std::numeric_limits<double>::min();
 constexpr float f32_min = std::numeric_limits<float>::min();
-static __device__ __forceinline__ double _abs(double a) { return fabs(a); }
-static __device__ __forceinline__ float _abs(float a) { return fabsf(a); }
-static __device__ __forceinline__ float _abs(__half a) { return __half2float(__habs(a)); }
+static __device__ __forceinline__ double _abs(double a) noexcept { return fabs(a); }
+static __device__ __forceinline__ float _abs(float a) noexcept { return fabsf(a); }
+static __device__ __forceinline__ float _abs(__half a) noexcept { return __half2float(__habs(a)); }
 
 struct _max {
-  __device__ __forceinline__ double operator()(double a, double b) { return fmax(a, b); }
-  __device__ __forceinline__ float operator()(float a, float b) { return fmaxf(a, b); }
-  __device__ __forceinline__ int32_t operator()(int32_t a, int32_t b) { return max(a, b); }
+  __device__ __forceinline__ double operator()(double a, double b) noexcept { return fmax(a, b); }
+  __device__ __forceinline__ float operator()(float a, float b) noexcept { return fmaxf(a, b); }
+  __device__ __forceinline__ int32_t operator()(int32_t a, int32_t b) noexcept { return max(a, b); }
 };
 
-static __device__ __forceinline__ int32_t float_frexp(double a) { if (a < f64_min) { return int_max; } else { int32_t x; frexp(a, &x); return x; }}
-static __device__ __forceinline__ int32_t float_frexp(float a) { if (a < f32_min) { return int_max; } else { int32_t x; frexpf(a, &x); return x; }}
+static __device__ __forceinline__ int32_t float_frexp(double a) noexcept { if (a < f64_min) { return int_max; } else { int32_t x; frexp(a, &x); return x; }}
+static __device__ __forceinline__ int32_t float_frexp(float a) noexcept { if (a < f32_min) { return int_max; } else { int32_t x; frexpf(a, &x); return x; }}
 __global__ void vector_exponent_init_kernel(int32_t N, int32_t* __restrict__ vexp) { int32_t i = (int32_t(blockIdx.x) << 7) + int32_t(threadIdx.x); if (i < N) { vexp[i] = int_max; }}
 
 template <int32_t BLOCK_THREADS, class matrix_t> __global__ void vector_exponent_batch_kernel(int32_t segM, int32_t lastM, const matrix_t* __restrict__ A, int64_t lda, int32_t u, int32_t* __restrict__ mexp) {

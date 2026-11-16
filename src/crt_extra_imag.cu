@@ -4,7 +4,7 @@
 #include <crt_constants.hpp>
 
 template<int32_t sign, int32_t orderX, int32_t x>
-static __device__ __forceinline__ void accumulate_modular_imaginary(uchar4& r, uchar4& i, const uint32_t* X, int64_t strideX) {
+static __device__ __forceinline__ void accumulate_modular_imaginary(uchar4& r, uchar4& i, const uint32_t* X, int64_t strideX) noexcept {
   if constexpr(x < orderX) {
     constexpr uint32_t mo = U8CRT2M::mo[x], mul = mo - uint32_t(1), s = sign ? mul : 1;
     uint32_t a = *X;

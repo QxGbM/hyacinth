@@ -3,7 +3,7 @@
 #include <ext_arith.hpp>
 
 template<int32_t sft, int32_t orderX, int32_t orderA>
-static __device__ __forceinline__ void accumulate(uint64_t (&a)[orderA], const int32_t* X, int64_t strideX) {
+static __device__ __forceinline__ void accumulate(uint64_t (&a)[orderA], const int32_t* X, int64_t strideX) noexcept {
   if constexpr(0 < orderX) { device::add_shifted<sft>(a, int64_t(*X)); }
   if constexpr(1 < orderX) { device::add_shifted<sft + 8>(a, int64_t(*(X += strideX))); }
   if constexpr(2 < orderX) { device::add_shifted<sft + 16>(a, int64_t(*(X += strideX))); }

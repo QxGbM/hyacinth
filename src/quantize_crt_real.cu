@@ -6,36 +6,35 @@
 
 constexpr int32_t int_max = std::numeric_limits<int32_t>::max();
 constexpr uint32_t i31 = std::numeric_limits<uint32_t>::max() >> 1;
-template <int32_t ORDER> static __device__ __forceinline__ void write_zeros(int8_t* A, int64_t strideA) {
+template <int32_t ORDER> static __device__ __forceinline__ void write_zeros(int8_t* A, int64_t strideA) noexcept {
   constexpr int8_t zero = int8_t(0);
   if constexpr(0 < ORDER) { *A = zero; }
   #pragma unroll
   for (int32_t i = 1; i < ORDER; ++i) { *(A += strideA) = zero; }
 }
 
-static __device__ __forceinline__ uint3 round_i95(const double& x, int32_t expon) {
+static __device__ __forceinline__ uint3 round_i95(const double& x, int32_t expon) noexcept {
   uint32_t e = uint32_t(__viaddmax_s32(ilogb(x), expon - 62, 0));
   uint64_t i = uint64_t(llrint(scalbn(x, expon - int32_t(e)))), q0 = i << e;
   return uint3({ uint32_t(q0), uint32_t(q0 >> 32) & i31, ((-uint32_t(i >> 63)) << (uint32_t(1) + e)) | uint32_t(i >> (uint32_t(63) - e)) });
 }
 
-static __device__ __forceinline__ uint3 round_i95(const float& x, int32_t expon) {
+static __device__ __forceinline__ uint3 round_i95(const float& x, int32_t expon) noexcept {
   uint32_t e = uint32_t(__viaddmax_s32(ilogbf(x), expon - 62, 0));
   uint64_t i = uint64_t(llrintf(scalbnf(x, expon - int32_t(e)))), q0 = i << e;
   return uint3({ uint32_t(q0), uint32_t(q0 >> 32) & i31, ((-uint32_t(i >> 63)) << (uint32_t(1) + e)) | uint32_t(i >> (uint32_t(63) - e)) });
 }
 
-static __device__ __forceinline__ uint3 round_i95(const __half& x, int32_t expon) {
-  return round_i95(__half2float(x), expon);
-}
+static __device__ __forceinline__ uint3 round_i95(const __half& x, int32_t expon) noexcept
+{ return round_i95(__half2float(x), expon); }
 
-template <int32_t x> static __device__ __forceinline__ int8_t* remainder(const uint3& rl, int8_t* A, int64_t strideA) {
+template <int32_t x> static __device__ __forceinline__ int8_t* remainder(const uint3& rl, int8_t* A, int64_t strideA) noexcept {
   constexpr uint32_t MO = U8CRT::mo[x], R32 = U8CRT::rem_e32[x], R63 = U8CRT::rem_e63[x], minus_MO = -MO;
   uint32_t r = device::barrett_reduc<MO>(device::mulx_reduc<0, uint32_t(1), MO>(rl.x) + device::mulx_reduc<0, R32, MO>(rl.y) + device::mulx_reduc<1, R63, MO>(rl.z));
   *A = int8_t(r + ((-uint32_t(127u < r)) & minus_MO)); return &A[strideA];
 }
 
-template <int32_t ORDER> static __device__ __forceinline__ void quantize_i8(const uint3& rl, int8_t* A, int64_t strideA) {
+template <int32_t ORDER> static __device__ __forceinline__ void quantize_i8(const uint3& rl, int8_t* A, int64_t strideA) noexcept {
   if constexpr(0 < ORDER) { A = remainder<0>(rl, A, strideA); }
   if constexpr(1 < ORDER) { A = remainder<1>(rl, A, strideA); }
   if constexpr(2 < ORDER) { A = remainder<2>(rl, A, strideA); }

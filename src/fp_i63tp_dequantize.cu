@@ -5,7 +5,7 @@
 #include <cub/cub.cuh>
 #include <limits>
 
-template <int32_t orderA> static __device__ __forceinline__ int32_t iexp(const uint64_t* A, int64_t strideA) {
+template <int32_t orderA> static __device__ __forceinline__ int32_t iexp(const uint64_t* A, int64_t strideA) noexcept {
   int32_t e = 64 - int32_t(__clzll(*A));
   if constexpr(1 < orderA) { int32_t e_nxt = 127 - int32_t(__clzll(*(A += strideA))); e = 63 < e_nxt ? e_nxt : e; }
   if constexpr(2 < orderA) { int32_t e_nxt = 190 - int32_t(__clzll(*(A += strideA))); e = 126 < e_nxt ? e_nxt : e; }
@@ -14,7 +14,7 @@ template <int32_t orderA> static __device__ __forceinline__ int32_t iexp(const u
 
 constexpr int32_t int_min = std::numeric_limits<int32_t>::min();
 constexpr int32_t int_max = std::numeric_limits<int32_t>::max();
-struct _max_i2 {  __device__ __forceinline__ int2 operator()(int2 a, int2 b) { return a.x == b.x ? make_int2(a.x, max(a.y, b.y)) : (a.x < b.x ? b : a); }};
+struct _max_i2 {  __device__ __forceinline__ int2 operator()(int2 a, int2 b) noexcept { return a.x == b.x ? make_int2(a.x, max(a.y, b.y)) : (a.x < b.x ? b : a); }};
 template <int32_t BLOCK_THREADS, int32_t orderA> __global__ void gram_range_kernel(int32_t N, const uint64_t* __restrict__ A, int64_t strideA, const int32_t* __restrict__ vexp, int32_t* __restrict__ e) {
   __shared__ typename cub::BlockReduce<int2, BLOCK_THREADS>::TempStorage temp_reduce;
   int2 threadA = make_int2(int_min, 0); _max_i2 cmp;

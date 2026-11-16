@@ -4,7 +4,7 @@
 #include <crt_constants.hpp>
 
 template<int32_t orderX, int32_t x>
-static __device__ __forceinline__ void accumulate_modular(uchar4& a, const uint32_t* X, int64_t strideX) {
+static __device__ __forceinline__ void accumulate_modular(uchar4& a, const uint32_t* X, int64_t strideX) noexcept {
   if constexpr(x < orderX) { constexpr uint32_t mo = U8CRT::mo[x]; a.x = uint8_t(device::barrett_reduc<mo>(uint32_t(a.x) + device::mulx_reduc<1, 1, mo>(*X))); }
   if constexpr(x + 1 < orderX) { constexpr uint32_t mo = U8CRT::mo[x + 1]; a.y = uint8_t(device::barrett_reduc<mo>(uint32_t(a.y) + device::mulx_reduc<1, 1, mo>(*(X += strideX)))); }
   if constexpr(x + 2 < orderX) { constexpr uint32_t mo = U8CRT::mo[x + 2]; a.z = uint8_t(device::barrett_reduc<mo>(uint32_t(a.z) + device::mulx_reduc<1, 1, mo>(*(X += strideX)))); }

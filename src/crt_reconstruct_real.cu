@@ -3,8 +3,8 @@
 #include <ext_arith.hpp>
 #include <crt_constants.hpp>
 
-template <int64_t x> static __device__ __forceinline__ int64_t i32_i64_prod(int32_t y) { return x * int64_t(y); }
-template <int32_t orderX, int32_t x, int32_t orderA> static __device__ __forceinline__ void add_pd(uint64_t (&a)[orderA], uint32_t i) {
+template <int64_t x> static __device__ __forceinline__ int64_t i32_i64_prod(int32_t y) noexcept { return x * int64_t(y); }
+template <int32_t orderX, int32_t x, int32_t orderA> static __device__ __forceinline__ void add_pd(uint64_t (&a)[orderA], uint32_t i) noexcept {
   using U8CRT::mo, U8CRT::Constants;
   constexpr int32_t x4 = x * 4; constexpr uint32_t mask_8bits = 0xffu, mask_32bits = 0xffffffffu;
   if constexpr(x < orderX) {
@@ -38,7 +38,7 @@ template <int32_t orderX, int32_t x, int32_t orderA> static __device__ __forcein
   }
 }
 
-template <int32_t beta, int32_t orderOut, int32_t orderA> static __device__ __forceinline__ void write_a(uint64_t (&a)[orderA], uint64_t* out, int64_t stride) {
+template <int32_t beta, int32_t orderOut, int32_t orderA> static __device__ __forceinline__ void write_a(uint64_t (&a)[orderA], uint64_t* out, int64_t stride) noexcept {
   if constexpr(beta) {
     const uint64_t* A_in = out;
     if constexpr(0 < orderOut) { device::add_shifted<0>(a, int64_t(*A_in)); }

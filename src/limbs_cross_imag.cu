@@ -3,13 +3,13 @@
 #include <ext_arith.hpp>
 
 template<int32_t sign, int32_t sft, int32_t orderA>
-static __device__ __forceinline__ void accumulate_single(uint64_t (&r)[orderA], uint64_t (&i)[orderA], int32_t X) {
+static __device__ __forceinline__ void accumulate_single(uint64_t (&r)[orderA], uint64_t (&i)[orderA], int32_t X) noexcept {
   if constexpr(sign) { device::add_shifted<sft>(r, int64_t(-X)); device::add_shifted<sft>(i, int64_t(-X)); } else
   { device::add_shifted<sft>(r, int64_t(-X)); device::add_shifted<sft>(i, int64_t(X)); }
 }
 
 template<int32_t sign, int32_t sft, int32_t orderX, int32_t orderA>
-static __device__ __forceinline__ void accumulate_complex(uint64_t (&r)[orderA], uint64_t (&i)[orderA], const int32_t* X, int64_t strideX) {
+static __device__ __forceinline__ void accumulate_complex(uint64_t (&r)[orderA], uint64_t (&i)[orderA], const int32_t* X, int64_t strideX) noexcept {
   if constexpr(0 < orderX) { accumulate_single<sign, sft>(r, i, *X); }
   if constexpr(1 < orderX) { accumulate_single<sign, sft + 8>(r, i, *(X += strideX)); }
   if constexpr(2 < orderX) { accumulate_single<sign, sft + 16>(r, i, *(X += strideX)); }

@@ -44,9 +44,9 @@ set(CU_SOURCES
 )
 
 set_source_files_properties(${CPP_SOURCES} PROPERTIES COMPILE_OPTIONS 
-  "-march=native;-Wall;-Wextra;-fexceptions")
+  "-Wall;-Wextra;-fexceptions")
 set_source_files_properties(${CU_SOURCES} PROPERTIES COMPILE_OPTIONS 
-  "-Xcompiler=-march=native;-Xcompiler=-Wall;-Xcompiler=-Wextra;-Xcompiler=-fexceptions;--use_fast_math")
+  "-Xcompiler=-Wall;-Xcompiler=-Wextra;-Xcompiler=-fexceptions;--use_fast_math")
 
 add_library(hyacin SHARED ${CPP_SOURCES} ${CU_SOURCES})
 target_include_directories(hyacin PUBLIC
