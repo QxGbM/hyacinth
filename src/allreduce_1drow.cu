@@ -8,7 +8,11 @@ extern "C" void hyacinAllReduceVExp(const hyacinHandle_t*, uint64_t, int32_t*) {
 #include <internal.hpp>
 #include <ext_arith.hpp>
 #include <cstdio>
+#ifndef NDEBUG
 #define NCCL_CHECK(call) do { ncclResult_t err = (call); assert(err == ncclSuccess); } while(0)
+#else
+#define NCCL_CHECK(call) (call)
+#endif
 
 template <int32_t hi_bits> static __device__ __forceinline__ uint64_t sign_bits(uint64_t a) noexcept {
   static_assert(0 <= hi_bits && hi_bits <= 64);

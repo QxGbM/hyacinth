@@ -10,7 +10,7 @@ if(NOT DEFINED CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-  set(CMAKE_CUDA_ARCHITECTURES "80;86;89;90a;100a;103a;120;121a")
+  set(CMAKE_CUDA_ARCHITECTURES "80;86;89;90a;100a;103a;120a;121a")
 endif()
 
 project("hyacin" LANGUAGES CXX CUDA)
@@ -45,10 +45,8 @@ set(CU_SOURCES
   src/quantize_limbs.cu
 )
 
-set_source_files_properties(${CPP_SOURCES} PROPERTIES COMPILE_OPTIONS 
-  "-Wall;-Wextra;-fexceptions")
-set_source_files_properties(${CU_SOURCES} PROPERTIES COMPILE_OPTIONS 
-  "-Xcompiler=-Wall;-Xcompiler=-Wextra;-Xcompiler=-fexceptions;--use_fast_math")
+set_source_files_properties(${CPP_SOURCES} PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra;-Werror;-Wfatal-errors")
+set_source_files_properties(${CU_SOURCES} PROPERTIES COMPILE_OPTIONS "-Werror=all-warnings;--use_fast_math;-Xptxas=--warn-on-spills")
 
 add_library(hyacin SHARED ${CPP_SOURCES} ${CU_SOURCES})
 target_include_directories(hyacin PUBLIC
@@ -60,22 +58,12 @@ if(USE_NCCL)
   find_library(NCCL_LIBRARIES NAMES nccl HINTS ENV NCCL_PATH ENV LD_LIBRARY_PATH ENV LIBRARY_PATH PATH_SUFFIXES lib lib64)
 
   if (NCCL_INCLUDE_DIRS AND NCCL_LIBRARIES)
-    message(STATUS "USE NCCL: ENV")
-  else()
-    find_package(PkgConfig QUIET)
-    if(PkgConfig_FOUND)
-      message(STATUS "USE NCCL: PkgConfig")
-      pkg_check_modules(NCCL QUIET nccl)
-    endif()
-  endif()
-
-  if (NCCL_INCLUDE_DIRS AND NCCL_LIBRARIES)
     message(STATUS "Found NCCL include: ${NCCL_INCLUDE_DIRS}")
     message(STATUS "Found NCCL library: ${NCCL_LIBRARIES}")
     target_include_directories(hyacin PUBLIC ${NCCL_INCLUDE_DIRS})
     target_link_libraries(hyacin PUBLIC ${NCCL_LIBRARIES})
   else()
-    message(FATAL_ERROR "NCCL requested but not found.")
+    message(FATAL_ERROR "NCCL not found.")
   endif()
 else()
   message(STATUS "NCCL: Disabled")
