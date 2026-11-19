@@ -5,7 +5,6 @@
 #include <vector>
 #include <algorithm>
 #include <string>
-#include <cassert>
 
 /* Performance parameters */
 #ifndef HYACIN_DEFAULT_GRAM_ALGORITHM
@@ -62,16 +61,16 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle) {
   CUDA_CHECK(cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, handle->DeviceID));
   handle->DeviceIsF64Capable = int32_t(f64_capable_sm_list.end() != std::find(f64_capable_sm_list.begin(), f64_capable_sm_list.end(), 10 * major + minor));
 
-  auto get_env = [](const std::string& key) { const char* val = std::getenv(key.c_str()); return val ? std::string(val) : std::string(""); };
   std::string env_str;
-  handle->GramMatrixAlgorithm = ((env_str = get_env("HYACIN_GRAM_ALGORITHM")) == "") ? HYACIN_DEFAULT_GRAM_ALGORITHM : env_str[0];
-  handle->StrideBatchPerfPenalty = ((env_str = get_env("HYACIN_STRIDE_BATCH_PERF_PENALTY")) == "") ? HYACIN_DEFAULT_STRIDE_BATCH_PERF_PENALTY : std::stod(env_str);
-  handle->GramSegmentK = ((env_str = get_env("HYACIN_GRAM_SEGMENT_K")) == "") ? HYACIN_DEFAULT_GRAM_SEGMENT_K : std::stoi(env_str);
-  handle->TCGemmTargetK = ((env_str = get_env("HYACIN_TCGEMM_TARGET_K")) == "") ? HYACIN_DEFAULT_TCGEMM_SEGMENT_K : std::stoi(env_str);
+  auto get_env = [&](const std::string& key) { const char* val = std::getenv(key.c_str()); if (val) { env_str = std::string(val); return true; } else return false; };
+  handle->GramMatrixAlgorithm = get_env("HYACIN_GRAM_ALGORITHM") ? env_str[0] : HYACIN_DEFAULT_GRAM_ALGORITHM;
+  handle->StrideBatchPerfPenalty = get_env("HYACIN_STRIDE_BATCH_PERF_PENALTY") ? std::stod(env_str) : HYACIN_DEFAULT_STRIDE_BATCH_PERF_PENALTY;
+  handle->GramSegmentK = get_env("HYACIN_GRAM_SEGMENT_K") ? std::stoi(env_str) : HYACIN_DEFAULT_GRAM_SEGMENT_K;
+  handle->TCGemmTargetK = get_env("HYACIN_TCGEMM_TARGET_K") ? std::stoi(env_str) : HYACIN_DEFAULT_TCGEMM_SEGMENT_K;
 
-  handle->QuantizeBitCorrection = ((env_str = get_env("HYACIN_QUANTIZE_BITS_CORR")) == "") ? HYACIN_DEFAULT_QUANTIZE_BITS_CORR : std::stoi(env_str);
-  handle->QRCPTruncateRank = ((env_str = get_env("HYACIN_QRCP_TRUNCATE_RANK")) == "") ? HYACIN_DEFAULT_QRCP_TRUNCATE_RANK : std::stoi(env_str);
-  handle->JacobiSVDSweeps = ((env_str = get_env("HYACIN_JACOBI_SVD_SWEEPS")) == "") ? HYACIN_DEFAULT_JACOBI_SVD_SWEEPS : std::stoi(env_str);
+  handle->QuantizeBitCorrection = get_env("HYACIN_QUANTIZE_BITS_CORR") ? std::stoi(env_str) : HYACIN_DEFAULT_QUANTIZE_BITS_CORR;
+  handle->QRCPTruncateRank = get_env("HYACIN_QRCP_TRUNCATE_RANK") ? std::stoi(env_str) : HYACIN_DEFAULT_QRCP_TRUNCATE_RANK;
+  handle->JacobiSVDSweeps = get_env("HYACIN_JACOBI_SVD_SWEEPS") ? std::stoi(env_str) : HYACIN_DEFAULT_JACOBI_SVD_SWEEPS;
 
   if (handle_is_null(handle->cudaStream))
   { CUDA_CHECK(cudaStreamCreateWithFlags(&handle->cudaStream, cudaStreamDefault)); handle->HandleOwnedResource |= HANDLE_OWNS_CUDA_STREAM; }
@@ -87,10 +86,10 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle) {
   if (handle->pinnedWorkspace == nullptr)
   { CUDA_CHECK(cudaMallocHost(&handle->pinnedWorkspace, sizeof(int32_t))); handle->HandleOwnedResource |= HANDLE_OWNS_PINNED_WORK; }
 
-  int32_t create_timer = ((env_str = get_env("HYACIN_CREATE_TIMER")) == "") ? HYACIN_DEFAULT_CREATE_TIMER : int32_t(env_str == "1" || env_str == "true" || env_str == "True");
-  if (create_timer && (handle->timer == nullptr))
-  { handle->timer = (new EventTimer()); handle->HandleOwnedResource |= HANDLE_OWNS_TIMER; }
-  env_str = get_env("HYACIN_VERBOSE"); if (env_str == "1" || env_str == "true" || env_str == "True") { handle->logger = stdout; }
+  int32_t create_timer = get_env("HYACIN_CREATE_TIMER") ? int32_t(env_str == "1" || env_str == "true" || env_str == "True") : HYACIN_DEFAULT_CREATE_TIMER;
+  if (create_timer && (handle->timer == nullptr)) { handle->timer = (new EventTimer()); handle->HandleOwnedResource |= HANDLE_OWNS_TIMER; }
+  int32_t verbose_out = get_env("HYACIN_VERBOSE") ? int32_t(env_str == "1" || env_str == "true" || env_str == "True") : 0;
+  if (verbose_out && (handle->logger == nullptr)) { handle->logger = stdout; }
 }
 
 extern "C" void hyacinDestroy(hyacinHandle_t* handle) {
