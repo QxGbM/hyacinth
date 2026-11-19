@@ -50,6 +50,11 @@ constexpr uint32_t HANDLE_OWNS_MEMPOOL = 0x8;
 constexpr uint32_t HANDLE_OWNS_PINNED_WORK = 0x10;
 constexpr uint32_t HANDLE_OWNS_TIMER = 0x20;
 
+template <class T> static inline bool handle_is_null(const T& handle) {
+  const unsigned char* bytes = reinterpret_cast<const unsigned char*>(&handle);
+  return std::all_of(bytes, &bytes[sizeof(T)], [](unsigned char byte) { constexpr unsigned char zero = 0; return byte == zero; });
+}
+
 extern "C" void hyacinCreate(hyacinHandle_t* handle) {
   CUDA_CHECK(cudaGetDevice(&handle->DeviceID)); int32_t major, minor;
   CUDA_CHECK(cudaDeviceGetAttribute(&handle->DeviceSMs, cudaDevAttrMultiProcessorCount, handle->DeviceID));
@@ -68,35 +73,31 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle) {
   handle->QRCPTruncateRank = ((env_str = get_env("HYACIN_QRCP_TRUNCATE_RANK")) == "") ? HYACIN_DEFAULT_QRCP_TRUNCATE_RANK : std::stoi(env_str);
   handle->JacobiSVDSweeps = ((env_str = get_env("HYACIN_JACOBI_SVD_SWEEPS")) == "") ? HYACIN_DEFAULT_JACOBI_SVD_SWEEPS : std::stoi(env_str);
 
-  if (!(handle->HandleOwnedResource & HANDLE_OWNS_CUDA_STREAM))
+  if (handle_is_null(handle->cudaStream))
   { CUDA_CHECK(cudaStreamCreateWithFlags(&handle->cudaStream, cudaStreamDefault)); handle->HandleOwnedResource |= HANDLE_OWNS_CUDA_STREAM; }
-  if (!(handle->HandleOwnedResource & HANDLE_OWNS_CUBLAS))
-  { CUBLAS_CHECK(cublasCreate(&handle->cublasHandle)); handle->HandleOwnedResource |= HANDLE_OWNS_CUBLAS; }
-  if (!(handle->HandleOwnedResource & HANDLE_OWNS_CUSOLVER))
-  { CUSOLVER_CHECK(cusolverDnCreate(&handle->cusolverHandle)); handle->HandleOwnedResource |= HANDLE_OWNS_CUSOLVER; }
-  if (!(handle->HandleOwnedResource & HANDLE_OWNS_MEMPOOL)) {
+  if (handle_is_null(handle->cublasHandle))
+  { CUBLAS_CHECK(cublasCreate(&handle->cublasHandle)); CUBLAS_CHECK(cublasSetStream(handle->cublasHandle, handle->cudaStream)); handle->HandleOwnedResource |= HANDLE_OWNS_CUBLAS; }
+  if (handle_is_null(handle->cusolverHandle))
+  { CUSOLVER_CHECK(cusolverDnCreate(&handle->cusolverHandle)); CUSOLVER_CHECK(cusolverDnSetStream(handle->cusolverHandle, handle->cudaStream)); handle->HandleOwnedResource |= HANDLE_OWNS_CUSOLVER; }
+  if (handle_is_null(handle->mempool)) {
     cudaMemPoolProps props{}; props.location.id = handle->DeviceID; props.allocType = cudaMemAllocationTypePinned; props.location.type = cudaMemLocationTypeDevice;
-    CUDA_CHECK(cudaMemPoolCreate(&handle->mempool, &props)); handle->HandleOwnedResource |= HANDLE_OWNS_MEMPOOL;
+    CUDA_CHECK(cudaMemPoolCreate(&handle->mempool, &props)); uint64_t threshold = std::numeric_limits<uint64_t>::max();
+    CUDA_CHECK(cudaMemPoolSetAttribute(handle->mempool, cudaMemPoolAttrReleaseThreshold, &threshold)); handle->HandleOwnedResource |= HANDLE_OWNS_MEMPOOL;
   }
-  if (!(handle->HandleOwnedResource & HANDLE_OWNS_PINNED_WORK))
+  if (handle->pinnedWorkspace == nullptr)
   { CUDA_CHECK(cudaMallocHost(&handle->pinnedWorkspace, sizeof(int32_t))); handle->HandleOwnedResource |= HANDLE_OWNS_PINNED_WORK; }
 
-  uint64_t threshold = std::numeric_limits<uint64_t>::max();
-  CUDA_CHECK(cudaMemPoolSetAttribute(handle->mempool, cudaMemPoolAttrReleaseThreshold, &threshold));
-  CUBLAS_CHECK(cublasSetStream(handle->cublasHandle, handle->cudaStream));
-  CUSOLVER_CHECK(cusolverDnSetStream(handle->cusolverHandle, handle->cudaStream));
-
   int32_t create_timer = ((env_str = get_env("HYACIN_CREATE_TIMER")) == "") ? HYACIN_DEFAULT_CREATE_TIMER : int32_t(env_str == "1" || env_str == "true" || env_str == "True");
-  if (!(handle->HandleOwnedResource & HANDLE_OWNS_TIMER) && create_timer)
+  if (create_timer && (handle->timer == nullptr))
   { handle->timer = (new EventTimer()); handle->HandleOwnedResource |= HANDLE_OWNS_TIMER; }
   env_str = get_env("HYACIN_VERBOSE"); if (env_str == "1" || env_str == "true" || env_str == "True") { handle->logger = stdout; }
 }
 
 extern "C" void hyacinDestroy(hyacinHandle_t* handle) {
-  if ((handle->HandleOwnedResource & HANDLE_OWNS_CUDA_STREAM) && (handle->cudaStream != nullptr)) { CUDA_CHECK(cudaStreamDestroy(handle->cudaStream)); }
-  if ((handle->HandleOwnedResource & HANDLE_OWNS_CUBLAS) && (handle->cublasHandle != nullptr)) { CUBLAS_CHECK(cublasDestroy(handle->cublasHandle)); }
-  if ((handle->HandleOwnedResource & HANDLE_OWNS_CUSOLVER) && (handle->cusolverHandle != nullptr)) { CUSOLVER_CHECK(cusolverDnDestroy(handle->cusolverHandle)); }
-  if ((handle->HandleOwnedResource & HANDLE_OWNS_MEMPOOL) && (handle->mempool != nullptr)) { CUDA_CHECK(cudaMemPoolDestroy(handle->mempool)); }
+  if ((handle->HandleOwnedResource & HANDLE_OWNS_CUDA_STREAM) && (!handle_is_null(handle->cudaStream))) { CUDA_CHECK(cudaStreamDestroy(handle->cudaStream)); }
+  if ((handle->HandleOwnedResource & HANDLE_OWNS_CUBLAS) && (!handle_is_null(handle->cublasHandle))) { CUBLAS_CHECK(cublasDestroy(handle->cublasHandle)); }
+  if ((handle->HandleOwnedResource & HANDLE_OWNS_CUSOLVER) && (!handle_is_null(handle->cusolverHandle))) { CUSOLVER_CHECK(cusolverDnDestroy(handle->cusolverHandle)); }
+  if ((handle->HandleOwnedResource & HANDLE_OWNS_MEMPOOL) && (!handle_is_null(handle->mempool))) { CUDA_CHECK(cudaMemPoolDestroy(handle->mempool)); }
   if ((handle->HandleOwnedResource & HANDLE_OWNS_PINNED_WORK) && (handle->pinnedWorkspace != nullptr)) { CUDA_CHECK(cudaFreeHost(handle->pinnedWorkspace)); }
   if ((handle->HandleOwnedResource & HANDLE_OWNS_TIMER) && (handle->timer != nullptr)) { delete (EventTimer*)(handle->timer); }
   std::memset(handle, 0, sizeof(hyacinHandle_t));
