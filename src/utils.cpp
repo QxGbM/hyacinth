@@ -42,12 +42,11 @@ struct EventTimer {
   segment lastSegment = segment::none;
 };
 
-constexpr uint32_t HANDLE_OWNS_CUDA_STREAM = 0x1;
-constexpr uint32_t HANDLE_OWNS_CUBLAS = 0x2;
-constexpr uint32_t HANDLE_OWNS_CUSOLVER = 0x4;
-constexpr uint32_t HANDLE_OWNS_MEMPOOL = 0x8;
-constexpr uint32_t HANDLE_OWNS_PINNED_WORK = 0x10;
-constexpr uint32_t HANDLE_OWNS_TIMER = 0x20;
+constexpr uint32_t HANDLE_OWNS_CUBLAS = 0x1;
+constexpr uint32_t HANDLE_OWNS_CUSOLVER = 0x2;
+constexpr uint32_t HANDLE_OWNS_MEMPOOL = 0x4;
+constexpr uint32_t HANDLE_OWNS_PINNED_WORK = 0x8;
+constexpr uint32_t HANDLE_OWNS_TIMER = 0x10;
 
 template <class T> static inline bool handle_is_null(const T& handle) {
   const unsigned char* bytes = reinterpret_cast<const unsigned char*>(&handle);
@@ -72,8 +71,6 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle) {
   handle->QRCPTruncateRank = get_env("HYACIN_QRCP_TRUNCATE_RANK") ? std::stoi(env_str) : HYACIN_DEFAULT_QRCP_TRUNCATE_RANK;
   handle->JacobiSVDSweeps = get_env("HYACIN_JACOBI_SVD_SWEEPS") ? std::stoi(env_str) : HYACIN_DEFAULT_JACOBI_SVD_SWEEPS;
 
-  if (handle_is_null(handle->cudaStream))
-  { CUDA_CHECK(cudaStreamCreateWithFlags(&handle->cudaStream, cudaStreamDefault)); handle->HandleOwnedResource |= HANDLE_OWNS_CUDA_STREAM; }
   if (handle_is_null(handle->cublasHandle))
   { CUBLAS_CHECK(cublasCreate(&handle->cublasHandle)); CUBLAS_CHECK(cublasSetStream(handle->cublasHandle, handle->cudaStream)); handle->HandleOwnedResource |= HANDLE_OWNS_CUBLAS; }
   if (handle_is_null(handle->cusolverHandle))
@@ -93,7 +90,6 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle) {
 }
 
 extern "C" void hyacinDestroy(hyacinHandle_t* handle) {
-  if ((handle->HandleOwnedResource & HANDLE_OWNS_CUDA_STREAM) && (!handle_is_null(handle->cudaStream))) { CUDA_CHECK(cudaStreamDestroy(handle->cudaStream)); }
   if ((handle->HandleOwnedResource & HANDLE_OWNS_CUBLAS) && (!handle_is_null(handle->cublasHandle))) { CUBLAS_CHECK(cublasDestroy(handle->cublasHandle)); }
   if ((handle->HandleOwnedResource & HANDLE_OWNS_CUSOLVER) && (!handle_is_null(handle->cusolverHandle))) { CUSOLVER_CHECK(cusolverDnDestroy(handle->cusolverHandle)); }
   if ((handle->HandleOwnedResource & HANDLE_OWNS_MEMPOOL) && (!handle_is_null(handle->mempool))) { CUDA_CHECK(cudaMemPoolDestroy(handle->mempool)); }
