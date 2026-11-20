@@ -1,6 +1,5 @@
 
 #include <internal.hpp>
-#include <ext_arith.hpp>
 
 template<int32_t sft, int32_t orderX, int32_t orderA>
 static __device__ __forceinline__ void accumulate(uint64_t (&a)[orderA], const int32_t* X, int64_t strideX) noexcept {

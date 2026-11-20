@@ -1,5 +1,5 @@
 #pragma once
-#include <cstdint>
+#include <stdint.h>
 namespace U8CRT {
 
   template <int32_t Moduli> struct Constants;

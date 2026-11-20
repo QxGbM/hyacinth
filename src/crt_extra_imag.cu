@@ -1,6 +1,5 @@
 
 #include <internal.hpp>
-#include <ext_arith.hpp>
 #include <crt_constants.hpp>
 
 template<int32_t sign, int32_t orderX, int32_t x>

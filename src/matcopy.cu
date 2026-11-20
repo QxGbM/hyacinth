@@ -1,6 +1,5 @@
 
 #include <internal.hpp>
-#include <ext_arith.hpp>
 #include <cooperative_groups.h>
 
 template<class T, class S> static __device__ __forceinline__ T conv(S a) noexcept {

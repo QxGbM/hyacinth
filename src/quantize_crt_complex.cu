@@ -1,6 +1,5 @@
 
 #include <internal.hpp>
-#include <ext_arith.hpp>
 #include <crt_constants.hpp>
 #include <limits>
 

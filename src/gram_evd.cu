@@ -92,7 +92,7 @@ template <class matrix_t> static inline void write_log(double eps, int32_t M, in
 }}
 
 template <class Rtype, class Xtype, class Stype, class Gtype>
-static inline int32_t tsvd(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, char fillmode, double eps, int32_t lrqr, int32_t sweeps, int32_t N, int32_t K, Xtype* X, int32_t ldx, Stype* S, Gtype* G, int32_t ldg, int32_t* r_ptr, void* logger) {
+static inline int32_t tsvd(cudaStream_t stream, cudaMemPool_t mempool, cublasHandle_t cublasH, cusolverDnHandle_t cusolverH, double eps, int32_t lrqr, int32_t sweeps, int32_t N, int32_t K, Xtype* X, int32_t ldx, Stype* S, Gtype* G, int32_t ldg, int32_t* r_ptr, void* logger) {
   using matrix_t = typename std::conditional_t<std::is_same_v<Xtype, cuDoubleComplex> || std::is_same_v<Xtype, cuComplex> || std::is_same_v<Xtype, __half2>,
     std::conditional_t<std::is_same_v<Xtype, cuDoubleComplex>, cuDoubleComplex, cuComplex>, std::conditional_t<std::is_same_v<Xtype, double>, double, float>>;
   using real_t = typename std::conditional_t<std::is_same_v<matrix_t, cuDoubleComplex>, double, std::conditional_t<std::is_same_v<matrix_t, cuComplex>, float, matrix_t>>;
@@ -102,7 +102,7 @@ static inline int32_t tsvd(cudaStream_t stream, cudaMemPool_t mempool, cublasHan
   CUDA_CHECK(cudaMallocFromPoolAsync((void**)&potrf_work, uint64_t(98304) + uint64_t(N) * uint64_t(sizeof(Rtype)), mempool, stream));
 
   constexpr double machine_eps = double(std::numeric_limits<real_t>::epsilon()); eps = std::clamp(std::abs(eps), machine_eps, 1.);
-  int32_t rank = internal::Cholesky::potrfp(stream, fillmode, lrqr ? eps : 0., N, N, G, ldg, jpiv, potrf_work, r_ptr, logger);
+  int32_t rank = internal::Cholesky::potrfp(stream, lrqr ? eps : 0., N, N, G, ldg, jpiv, potrf_work, r_ptr, logger);
   CUDA_CHECK(cudaFreeAsync(potrf_work, stream));
   if (0 < rank) {
     matrix_t* A = nullptr, *U = nullptr; real_t* sigma = nullptr;
@@ -141,54 +141,54 @@ static inline int32_t tsvd(cudaStream_t stream, cudaMemPool_t mempool, cublasHan
   return rank;
 }
 
-extern "C" int32_t hyacinXGevd(const hyacinHandle_t* handle, char fillmode, double eps, int32_t N, int32_t K, hyacinPrecision_t Atype, void* X, int32_t ldx, void* S, hyacinPrecision_t Gtype, void* G, int32_t ldg) {
+extern "C" int32_t hyacinXGevd(const hyacinHandle_t* handle, double eps, int32_t N, int32_t K, hyacinPrecision_t Atype, void* X, int32_t ldx, void* S, hyacinPrecision_t Gtype, void* G, int32_t ldg) {
   if (N <= 0) { return 0; } K = K <= 0 ? N : std::min(N, K);
-  cudaStream_t stream = handle->cudaStream; Timer::register_replicate_kernel(stream, handle->timer);
+  cudaStream_t stream = handle->cudaStream; internal::timer::register_replicate_kernel(stream, handle->timer);
   cudaMemPool_t mempool = handle->mempool; cublasHandle_t cublasH = handle->cublasHandle; cusolverDnHandle_t cusolverH = handle->cusolverHandle;
   int32_t *r_ptr = (int32_t*)handle->pinnedWorkspace, lrqr = handle->QRCPTruncateRank; *r_ptr = handle->DeviceSMs;
   int32_t prefer_jacobi = std::abs(handle->JacobiSVDSweeps), prefer_bidiag = std::abs(std::min(0, handle->JacobiSVDSweeps));
   int32_t sweeps_f32 = lrqr ? prefer_jacobi : prefer_bidiag, sweeps_f64 = (lrqr && handle->DeviceIsF64Capable) ? prefer_jacobi : prefer_bidiag;
   if (Atype == HYACIN_F64) switch (Gtype) {
-    case HYACIN_F64: return tsvd<double>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f64, N, K, (double*)X, ldx, (double*)S, (double*)G, ldg, r_ptr, handle->logger);
-    case HYACIN_F32: return tsvd<float>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f64, N, K, (double*)X, ldx, (double*)S, (float*)G, ldg, r_ptr, handle->logger);
-    case HYACIN_DD: return tsvd<double2>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f64, N, K, (double*)X, ldx, (double*)S, (double2*)G, ldg, r_ptr, handle->logger);
-    case HYACIN_TF: return tsvd<float3>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f64, N, K, (double*)X, ldx, (double*)S, (float3*)G, ldg, r_ptr, handle->logger);
-    case HYACIN_QF: return tsvd<float4>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f64, N, K, (double*)X, ldx, (double*)S, (float4*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_F64: return tsvd<double>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f64, N, K, (double*)X, ldx, (double*)S, (double*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_F32: return tsvd<float>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f64, N, K, (double*)X, ldx, (double*)S, (float*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_DD: return tsvd<double2>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f64, N, K, (double*)X, ldx, (double*)S, (double2*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_TF: return tsvd<float3>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f64, N, K, (double*)X, ldx, (double*)S, (float3*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_QF: return tsvd<float4>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f64, N, K, (double*)X, ldx, (double*)S, (float4*)G, ldg, r_ptr, handle->logger);
     default: return 0;
   } else if (Atype == HYACIN_F32) switch (Gtype) {
-    case HYACIN_F64: return tsvd<double>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f32, N, K, (float*)X, ldx, (float*)S, (double*)G, ldg, r_ptr, handle->logger);
-    case HYACIN_F32: return tsvd<float>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f32, N, K, (float*)X, ldx, (float*)S, (float*)G, ldg, r_ptr, handle->logger);
-    case HYACIN_DD: return tsvd<double2>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f32, N, K, (float*)X, ldx, (float*)S, (double2*)G, ldg, r_ptr, handle->logger);
-    case HYACIN_TF: return tsvd<float3>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f32, N, K, (float*)X, ldx, (float*)S, (float3*)G, ldg, r_ptr, handle->logger);
-    case HYACIN_QF: return tsvd<float4>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f32, N, K, (float*)X, ldx, (float*)S, (float4*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_F64: return tsvd<double>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f32, N, K, (float*)X, ldx, (float*)S, (double*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_F32: return tsvd<float>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f32, N, K, (float*)X, ldx, (float*)S, (float*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_DD: return tsvd<double2>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f32, N, K, (float*)X, ldx, (float*)S, (double2*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_TF: return tsvd<float3>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f32, N, K, (float*)X, ldx, (float*)S, (float3*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_QF: return tsvd<float4>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f32, N, K, (float*)X, ldx, (float*)S, (float4*)G, ldg, r_ptr, handle->logger);
     default: return 0;
   } else if (Atype == HYACIN_F16) switch (Gtype) {
-    case HYACIN_F64: return tsvd<double>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f32, N, K, (__half*)X, ldx, (__half*)S, (double*)G, ldg, r_ptr, handle->logger);
-    case HYACIN_F32: return tsvd<float>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f32, N, K, (__half*)X, ldx, (__half*)S, (float*)G, ldg, r_ptr, handle->logger);
-    case HYACIN_DD: return tsvd<double2>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f32, N, K, (__half*)X, ldx, (__half*)S, (double2*)G, ldg, r_ptr, handle->logger);
-    case HYACIN_TF: return tsvd<float3>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f32, N, K, (__half*)X, ldx, (__half*)S, (float3*)G, ldg, r_ptr, handle->logger);
-    case HYACIN_QF: return tsvd<float4>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f32, N, K, (__half*)X, ldx, (__half*)S, (float4*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_F64: return tsvd<double>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f32, N, K, (__half*)X, ldx, (__half*)S, (double*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_F32: return tsvd<float>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f32, N, K, (__half*)X, ldx, (__half*)S, (float*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_DD: return tsvd<double2>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f32, N, K, (__half*)X, ldx, (__half*)S, (double2*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_TF: return tsvd<float3>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f32, N, K, (__half*)X, ldx, (__half*)S, (float3*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_QF: return tsvd<float4>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f32, N, K, (__half*)X, ldx, (__half*)S, (float4*)G, ldg, r_ptr, handle->logger);
     default: return 0;
   } else if (Atype == HYACIN_F64_COMPLEX) switch (Gtype) {
-    case HYACIN_F64_COMPLEX: return tsvd<double>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f64, N, K, (cuDoubleComplex*)X, ldx, (double*)S, (cuDoubleComplex*)G, ldg, r_ptr, handle->logger);
-    case HYACIN_F32_COMPLEX: return tsvd<float>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f64, N, K, (cuDoubleComplex*)X, ldx, (double*)S, (cuComplex*)G, ldg, r_ptr, handle->logger);
-    case HYACIN_DD_COMPLEX: return tsvd<double2>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f64, N, K, (cuDoubleComplex*)X, ldx, (double*)S, (complex_double2*)G, ldg, r_ptr, handle->logger);
-    case HYACIN_TF_COMPLEX: return tsvd<float3>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f64, N, K, (cuDoubleComplex*)X, ldx, (double*)S, (complex_float3*)G, ldg, r_ptr, handle->logger);
-    case HYACIN_QF_COMPLEX: return tsvd<float4>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f64, N, K, (cuDoubleComplex*)X, ldx, (double*)S, (complex_float4*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_F64_COMPLEX: return tsvd<double>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f64, N, K, (cuDoubleComplex*)X, ldx, (double*)S, (cuDoubleComplex*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_F32_COMPLEX: return tsvd<float>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f64, N, K, (cuDoubleComplex*)X, ldx, (double*)S, (cuComplex*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_DD_COMPLEX: return tsvd<double2>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f64, N, K, (cuDoubleComplex*)X, ldx, (double*)S, (complex_double2*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_TF_COMPLEX: return tsvd<float3>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f64, N, K, (cuDoubleComplex*)X, ldx, (double*)S, (complex_float3*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_QF_COMPLEX: return tsvd<float4>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f64, N, K, (cuDoubleComplex*)X, ldx, (double*)S, (complex_float4*)G, ldg, r_ptr, handle->logger);
     default: return 0;
   } else if (Atype == HYACIN_F32_COMPLEX) switch (Gtype) {
-    case HYACIN_F64_COMPLEX: return tsvd<double>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f32, N, K, (cuComplex*)X, ldx, (float*)S, (cuDoubleComplex*)G, ldg, r_ptr, handle->logger);
-    case HYACIN_F32_COMPLEX: return tsvd<float>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f32, N, K, (cuComplex*)X, ldx, (float*)S, (cuComplex*)G, ldg, r_ptr, handle->logger);
-    case HYACIN_DD_COMPLEX: return tsvd<double2>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f32, N, K, (cuComplex*)X, ldx, (float*)S, (complex_double2*)G, ldg, r_ptr, handle->logger);
-    case HYACIN_TF_COMPLEX: return tsvd<float3>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f32, N, K, (cuComplex*)X, ldx, (float*)S, (complex_float3*)G, ldg, r_ptr, handle->logger);
-    case HYACIN_QF_COMPLEX: return tsvd<float4>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f32, N, K, (cuComplex*)X, ldx, (float*)S, (complex_float4*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_F64_COMPLEX: return tsvd<double>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f32, N, K, (cuComplex*)X, ldx, (float*)S, (cuDoubleComplex*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_F32_COMPLEX: return tsvd<float>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f32, N, K, (cuComplex*)X, ldx, (float*)S, (cuComplex*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_DD_COMPLEX: return tsvd<double2>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f32, N, K, (cuComplex*)X, ldx, (float*)S, (complex_double2*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_TF_COMPLEX: return tsvd<float3>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f32, N, K, (cuComplex*)X, ldx, (float*)S, (complex_float3*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_QF_COMPLEX: return tsvd<float4>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f32, N, K, (cuComplex*)X, ldx, (float*)S, (complex_float4*)G, ldg, r_ptr, handle->logger);
     default: return 0;
   } else if (Atype == HYACIN_F16_COMPLEX) switch (Gtype) {
-    case HYACIN_F64_COMPLEX: return tsvd<double>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f32, N, K, (__half2*)X, ldx, (__half*)S, (cuDoubleComplex*)G, ldg, r_ptr, handle->logger);
-    case HYACIN_F32_COMPLEX: return tsvd<float>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f32, N, K, (__half2*)X, ldx, (__half*)S, (cuComplex*)G, ldg, r_ptr, handle->logger);
-    case HYACIN_DD_COMPLEX: return tsvd<double2>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f32, N, K, (__half2*)X, ldx, (__half*)S, (complex_double2*)G, ldg, r_ptr, handle->logger);
-    case HYACIN_TF_COMPLEX: return tsvd<float3>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f32, N, K, (__half2*)X, ldx, (__half*)S, (complex_float3*)G, ldg, r_ptr, handle->logger);
-    case HYACIN_QF_COMPLEX: return tsvd<float4>(stream, mempool, cublasH, cusolverH, fillmode, eps, lrqr, sweeps_f32, N, K, (__half2*)X, ldx, (__half*)S, (complex_float4*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_F64_COMPLEX: return tsvd<double>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f32, N, K, (__half2*)X, ldx, (__half*)S, (cuDoubleComplex*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_F32_COMPLEX: return tsvd<float>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f32, N, K, (__half2*)X, ldx, (__half*)S, (cuComplex*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_DD_COMPLEX: return tsvd<double2>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f32, N, K, (__half2*)X, ldx, (__half*)S, (complex_double2*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_TF_COMPLEX: return tsvd<float3>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f32, N, K, (__half2*)X, ldx, (__half*)S, (complex_float3*)G, ldg, r_ptr, handle->logger);
+    case HYACIN_QF_COMPLEX: return tsvd<float4>(stream, mempool, cublasH, cusolverH, eps, lrqr, sweeps_f32, N, K, (__half2*)X, ldx, (__half*)S, (complex_float4*)G, ldg, r_ptr, handle->logger);
     default: return 0;
   } else { return 0; }
 }

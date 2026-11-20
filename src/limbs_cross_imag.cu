@@ -1,6 +1,5 @@
 
 #include <internal.hpp>
-#include <ext_arith.hpp>
 
 template<int32_t sign, int32_t sft, int32_t orderA>
 static __device__ __forceinline__ void accumulate_single(uint64_t (&r)[orderA], uint64_t (&i)[orderA], int32_t X) noexcept {

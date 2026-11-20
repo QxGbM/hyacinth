@@ -48,7 +48,7 @@ if all_ok:
   rem_e32 = [(1 << 32) % m for m in moduli_real]
   rem_e63 = [(1 << 63) % m for m in moduli_real]
 
-  print("#pragma once\n#include <cstdint>\nnamespace U8CRT {\n")
+  print("#pragma once\n#include <stdint.h>\nnamespace U8CRT {\n")
   print("  template <int32_t Moduli> struct Constants;")
   print(f"  constexpr uint16_t range[{len(moduli_real)}] =" + " { " + ", ".join(f"{m}" for m in ranges) + " };")
   print(f"  constexpr uint16_t mo[{len(moduli_real)}] =" + " { " + ", ".join(f"{m}" for m in moduli_real) + " };")

@@ -385,7 +385,7 @@ template <class matrix_t> static inline void herk_batch_dispatcher(const hyacinH
 
 extern "C" void hyacinXherkBatch(const hyacinHandle_t* handle, int32_t batches, int32_t segM, int32_t lastM, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t u, const int32_t* vexp, int32_t beta, int32_t orderC, uint64_t* C) {
   if (N <= 0 || orderC <= 0) { return; }
-  Timer::register_distribute_kernel(handle->cudaStream, handle->timer);
+  internal::timer::register_distribute_kernel(handle->cudaStream, handle->timer);
   
   if (batches <= 1) switch (Atype) {
     case HYACIN_F64: herk_dispatcher(handle, lastM, N, (const double*)A, lda, u, vexp, beta, orderC, C); return;

@@ -1,6 +1,5 @@
 
 #include <internal.hpp>
-#include <ext_arith.hpp>
 #include <crt_constants.hpp>
 
 template <int64_t x> static __device__ __forceinline__ int64_t i32_i64_prod(int32_t y) noexcept { return x * int64_t(y); }

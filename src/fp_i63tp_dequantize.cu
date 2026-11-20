@@ -1,7 +1,6 @@
 
 #include <hyacin.h>
 #include <internal.hpp>
-#include <ext_arith.hpp>
 #include <cub/cub.cuh>
 #include <limits>
 
@@ -29,7 +28,7 @@ template <int32_t BLOCK_THREADS, int32_t orderA> __global__ void gram_range_kern
 
 extern "C" void hyacinXdequantizeInit(const hyacinHandle_t* handle, int32_t N, int32_t orderC, const uint64_t* C, const int32_t* vexp, hyacinPrecision_t Atype, hyacinPrecision_t* Gtype, int32_t* gElemBytes) {
   if (N <= 0 && (Gtype != nullptr || gElemBytes != nullptr)) { return; }
-  Timer::register_replicate_kernel(handle->cudaStream, handle->timer);
+  internal::timer::register_replicate_kernel(handle->cudaStream, handle->timer);
   constexpr int32_t block_threads = 512;
   int64_t strideC = (int64_t(N) * int64_t(N) + int64_t(N)) / int64_t(2); int32_t *e_ptr = (int32_t*)handle->pinnedWorkspace;
   switch (orderC) {
@@ -103,9 +102,9 @@ template <int32_t orderA, class real_t, class matrix_t> static __device__ __forc
     if constexpr(0 < orderA) { i[0] = *(A += stride); } if constexpr(1 < orderA) { i[1] = *(A += stride); } if constexpr(2 < orderA) { i[2] = *(A += stride); }
     if constexpr(std::is_same_v<matrix_t, cuDoubleComplex>) { return make_cuDoubleComplex(conv_a63_f64(r, e), conv_a63_f64(i, e)); } else
     if constexpr(std::is_same_v<matrix_t, cuComplex>) { return make_cuComplex(float(conv_a63_f64(r, e)), float(conv_a63_f64(i, e))); } else
-    if constexpr(std::is_same_v<matrix_t, complex_double2>) { return device::make_complex_double2(conv_a63_dd(r, e), conv_a63_dd(i, e)); } else
-    if constexpr(std::is_same_v<matrix_t, complex_float3>) { return device::make_complex_float3(conv_a63_tf(r, e), conv_a63_tf(i, e)); } else
-    if constexpr(std::is_same_v<matrix_t, complex_float4>) { return device::make_complex_float4(conv_a63_qf(r, e), conv_a63_qf(i, e)); } else
+    if constexpr(std::is_same_v<matrix_t, complex_double2>) { return complex_double2{ conv_a63_dd(r, e), conv_a63_dd(i, e) }; } else
+    if constexpr(std::is_same_v<matrix_t, complex_float3>) { return complex_float3{ conv_a63_tf(r, e), conv_a63_tf(i, e) }; } else
+    if constexpr(std::is_same_v<matrix_t, complex_float4>) { return complex_float4{ conv_a63_qf(r, e), conv_a63_qf(i, e) }; } else
     { return matrix_t(); }
   }
 }
@@ -113,9 +112,9 @@ template <int32_t orderA, class real_t, class matrix_t> static __device__ __forc
 template <class real_t, class matrix_t> static __device__ __forceinline__ matrix_t conj(const matrix_t& a) {
   if constexpr(std::is_same_v<real_t, double> && std::is_same_v<matrix_t, cuDoubleComplex>) { return make_cuDoubleComplex(a.x, -a.y); } else
   if constexpr(std::is_same_v<real_t, float> && std::is_same_v<matrix_t, cuComplex>) { return make_cuComplex(a.x, -a.y); } else
-  if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, complex_double2>) { return device::make_complex_double2(a.real, make_double2(-a.imag.x, -a.imag.y)); } else
-  if constexpr(std::is_same_v<real_t, float3> && std::is_same_v<matrix_t, complex_float3>) { return device::make_complex_float3(a.real, make_float3(-a.imag.x, -a.imag.y, -a.imag.z)); } else
-  if constexpr(std::is_same_v<real_t, float4> && std::is_same_v<matrix_t, complex_float4>) { return device::make_complex_float4(a.real, make_float4(-a.imag.x, -a.imag.y, -a.imag.z, -a.imag.w)); } else
+  if constexpr(std::is_same_v<real_t, double2> && std::is_same_v<matrix_t, complex_double2>) { return complex_double2{ a.real, make_double2(-a.imag.x, -a.imag.y) }; } else
+  if constexpr(std::is_same_v<real_t, float3> && std::is_same_v<matrix_t, complex_float3>) { return complex_float3{ a.real, make_float3(-a.imag.x, -a.imag.y, -a.imag.z) }; } else
+  if constexpr(std::is_same_v<real_t, float4> && std::is_same_v<matrix_t, complex_float4>) { return complex_float4{ a.real, make_float4(-a.imag.x, -a.imag.y, -a.imag.z, -a.imag.w) }; } else
   { return a; }
 }
 
@@ -143,7 +142,7 @@ template<class real_t, class matrix_t> static inline void tp_deq_dispatcher(cuda
 
 extern "C" void hyacinXdequantize(const hyacinHandle_t* handle, int32_t N, int32_t orderC, const uint64_t* C, const int32_t* vexp, hyacinPrecision_t Gtype, void* G, int32_t ldg) {
   if (N <= 0) { return; }
-  Timer::register_replicate_kernel(handle->cudaStream, handle->timer);
+  internal::timer::register_replicate_kernel(handle->cudaStream, handle->timer);
   switch (Gtype) {
     case HYACIN_F64: tp_deq_dispatcher<double>(handle->cudaStream, N, orderC, C, vexp, (double*)G, ldg); return;
     case HYACIN_F32: tp_deq_dispatcher<float>(handle->cudaStream, N, orderC, C, vexp, (float*)G, ldg); return;

@@ -36,10 +36,10 @@
 #endif
 
 const std::vector<int32_t> f64_capable_sm_list({ 80, 90, 100, 107 }); // sm80,sm90,sm100,sm107
-enum class segment : unsigned char { none, dist_kernel, rep_kernel, comm };
+enum class segment : unsigned char { untimed, dist_kernel, rep_kernel, comm };
 struct EventTimer {
   std::vector<std::pair<segment, cudaEvent_t>> events;
-  segment lastSegment = segment::none;
+  segment lastSegment = segment::untimed;
 };
 
 constexpr uint32_t HANDLE_OWNS_CUBLAS = 0x1;
@@ -106,9 +106,10 @@ template <segment seg> static inline void register_event(cudaStream_t stream, Ev
   }
 }
 
-void Timer::register_distribute_kernel(cudaStream_t stream, void* timer) { register_event<segment::dist_kernel>(stream, (EventTimer*)timer); }
-void Timer::register_replicate_kernel(cudaStream_t stream, void* timer) { register_event<segment::rep_kernel>(stream, (EventTimer*)timer); }
-void Timer::register_comm(cudaStream_t stream, void* timer) { register_event<segment::comm>(stream, (EventTimer*)timer); }
+void internal::timer::register_distribute_kernel(cudaStream_t stream, void* timer) { register_event<segment::dist_kernel>(stream, (EventTimer*)timer); }
+void internal::timer::register_replicate_kernel(cudaStream_t stream, void* timer) { register_event<segment::rep_kernel>(stream, (EventTimer*)timer); }
+void internal::timer::register_comm(cudaStream_t stream, void* timer) { register_event<segment::comm>(stream, (EventTimer*)timer); }
+void internal::timer::register_untimed(cudaStream_t stream, void* timer) { register_event<segment::untimed>(stream, (EventTimer*)timer); }
 
 extern "C" void hyacinSync_TimerSegments(const hyacinHandle_t* handle, double* eventMs, int32_t lenMs) {
   if (handle->timer == nullptr) { CUDA_CHECK(cudaStreamSynchronize(handle->cudaStream)); return; }
@@ -134,5 +135,5 @@ extern "C" void hyacinSync_TimerSegments(const hyacinHandle_t* handle, double* e
       if (req == 'C' || req == 'c') { eventMs[i] = c_time; } else { eventMs[i] = 0.; }
     }
   }
-  for (auto [seg, event] : t->events) { CUDA_CHECK(cudaEventDestroy(event)); } t->events.clear(); t->lastSegment = segment::none;
+  for (auto [seg, event] : t->events) { CUDA_CHECK(cudaEventDestroy(event)); } t->events.clear(); t->lastSegment = segment::untimed;
 }

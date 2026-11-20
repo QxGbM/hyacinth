@@ -177,7 +177,6 @@ void hyacinXdequantize(
 
 int32_t hyacinXGevd(
   const hyacinHandle_t* handle,
-  char fillmode,
   double eps,
   int32_t N,
   int32_t K,
@@ -192,7 +191,6 @@ int32_t hyacinXGevd(
 
 int32_t hyacinXGinterp(
   const hyacinHandle_t* handle,
-  char fillmode,
   double eps,
   int32_t N,
   int32_t K,

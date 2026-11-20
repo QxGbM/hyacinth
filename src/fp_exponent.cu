@@ -52,7 +52,7 @@ template<class matrix_t> static inline void vector_exponents_dispatcher(cudaStre
 
 extern "C" void hyacinXquantizeScaleBatch(const hyacinHandle_t* handle, int32_t batches, int32_t segM, int32_t lastM, int32_t N, hyacinPrecision_t Atype, const void* A, int32_t lda, int32_t uA, int32_t* vexp) {
   if (N <= 0) { return; }
-  Timer::register_distribute_kernel(handle->cudaStream, handle->timer);
+  internal::timer::register_distribute_kernel(handle->cudaStream, handle->timer);
   switch (Atype) {
     case HYACIN_F64: vector_exponents_dispatcher(handle->cudaStream, batches, segM, lastM, N, (const double*)A, lda, uA, vexp); return;
     case HYACIN_F32: vector_exponents_dispatcher(handle->cudaStream, batches, segM, lastM, N, (const float*)A, lda, uA, vexp); return;

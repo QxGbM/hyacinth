@@ -6,7 +6,6 @@ extern "C" void hyacinAllReduceVExp(const hyacinHandle_t*, uint64_t, int32_t*) {
 #else
 
 #include <internal.hpp>
-#include <ext_arith.hpp>
 #include <cstdio>
 #ifndef NDEBUG
 #define NCCL_CHECK(call) do { ncclResult_t err = (call); assert(err == ncclSuccess); } while(0)
@@ -145,7 +144,7 @@ template <int32_t op> static inline void conv_reduction(cudaStream_t stream, uin
 
 extern "C" void hyacinAllReduce1Drow(const hyacinHandle_t* handle, int32_t Complex, int32_t orderA, uint64_t N, uint64_t* A) {
   if (Complex <= 0 || orderA <= 0 || N == uint64_t(0) || handle->ncclComm == nullptr) { return; }
-  Timer::register_comm(handle->cudaStream, handle->timer);
+  internal::timer::register_comm(handle->cudaStream, handle->timer);
   int32_t comm_size; NCCL_CHECK(ncclCommCount(handle->ncclComm, &comm_size));
   if (comm_size == 1) { return; } else { assert(0 < comm_size); }
 
@@ -171,7 +170,7 @@ extern "C" void hyacinAllReduce1Drow(const hyacinHandle_t* handle, int32_t Compl
 
 extern "C" void hyacinAllReduceVExp(const hyacinHandle_t* handle, uint64_t N, int32_t* vexp) {
   if (N == uint64_t(0) || handle->ncclComm == nullptr) { return; }
-  Timer::register_comm(handle->cudaStream, handle->timer);
+  internal::timer::register_comm(handle->cudaStream, handle->timer);
   int32_t comm_size; NCCL_CHECK(ncclCommCount(handle->ncclComm, &comm_size));
   if (comm_size == 1) { return; } else { assert(0 < comm_size); }
   NCCL_CHECK(ncclAllReduce(vexp, vexp, N, ncclInt32, ncclMin, handle->ncclComm, handle->cudaStream));

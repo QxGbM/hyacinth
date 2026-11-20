@@ -3,7 +3,7 @@
 #include <internal.hpp>
 #include <vector>
 #include <numeric>
-#include <cstdlib>
+#include <stdlib.h>
 
 template <class T> static inline hyacinPrecision_t hyacin_prec() {
   if constexpr(std::is_same_v<T, double>) { return HYACIN_F64; } else
@@ -45,7 +45,7 @@ int32_t interp_dispatcher(const hyacinHandle_t* handle, double eps, char opA, in
   hyacinXdequantize(handle, N, lPanels, C, vexp, Gtype, G, N);
   CUDA_CHECK(cudaFreeAsync(vexp, handle->cudaStream));
   CUDA_CHECK(cudaFreeAsync(C, handle->cudaStream));
-  int32_t rank = hyacinXGinterp(handle, 'A', eps, N, K, Atype, V, ldv, jpvt, Gtype, G, N);
+  int32_t rank = hyacinXGinterp(handle, eps, N, K, Atype, V, ldv, jpvt, Gtype, G, N);
   CUDA_CHECK(cudaFreeAsync(G, handle->cudaStream)); return rank;
 }
 
@@ -79,7 +79,7 @@ int32_t svd_dispatcher(const hyacinHandle_t* handle, double eps, char opA, int32
   hyacinXdequantize(handle, N, lPanels, C, vexp, Gtype, G, N);
   CUDA_CHECK(cudaFreeAsync(vexp, handle->cudaStream));
   CUDA_CHECK(cudaFreeAsync(C, handle->cudaStream));
-  int32_t rank = hyacinXGevd(handle, 'A', eps, N, K, Atype, V, ldv, S, Gtype, G, N);
+  int32_t rank = hyacinXGevd(handle, eps, N, K, Atype, V, ldv, S, Gtype, G, N);
   CUDA_CHECK(cudaFreeAsync(G, handle->cudaStream)); return rank;
 }
 
@@ -129,6 +129,7 @@ int32_t svd_segN_dispatcher(const hyacinHandle_t* handle, double eps, char opA, 
   int32_t N_stage2 = std::reduce(ranks_stage1.begin(), ranks_stage1.end());
   T* A_stage2 = nullptr; CUDA_CHECK(cudaMallocFromPoolAsync((void**)&A_stage2, uint64_t(M) * uint64_t(N_stage2) * uint64_t(sizeof(T)), handle->mempool, handle->cudaStream));
   int64_t locA2 = (locA = int64_t(0));
+  internal::timer::register_distribute_kernel(handle->cudaStream, handle->timer);
   if (0 < M) for (int32_t i = 0; i < segments; ++i) {
     int32_t cols = divN.quot + int32_t(i < divN.rem);
     an_gemm(handle, opA, M, ranks_stage1[i], cols, &A[locA], lda, &V_stage1[uint64_t(i) * V_stage1_stride], N_stage1, &A_stage2[locA2], M);
@@ -141,6 +142,7 @@ int32_t svd_segN_dispatcher(const hyacinHandle_t* handle, double eps, char opA, 
   CUDA_CHECK(cudaFreeAsync(A_stage2, handle->cudaStream));
 
   int32_t row = 0, rowV = 0;
+  internal::timer::register_replicate_kernel(handle->cudaStream, handle->timer);
   for (int32_t i = 0; i < segments; ++i) {
     int32_t cols = divN.quot + int32_t(i < divN.rem);
     an_gemm(handle, 'N', cols, rank, ranks_stage1[i], &V_stage1[uint64_t(i) * V_stage1_stride], N_stage1, &V_stage2[rowV], N_stage2, &V[row], ldv);
@@ -154,6 +156,7 @@ int32_t svd_segN_dispatcher(const hyacinHandle_t* handle, double eps, char opA, 
 template <class T> static inline
 double check_answer(const hyacinHandle_t* handle, char opA, int32_t M, int32_t N, int32_t rank, const T* V, int32_t ldv, const T* A, int32_t lda) {
   if (M <= 0 || N <= 0) { return 0.; }
+  internal::timer::register_untimed(handle->cudaStream, handle->timer);
   constexpr int32_t Complex = std::is_same_v<T, cuDoubleComplex> || std::is_same_v<T, cuComplex> || std::is_same_v<T, __half2>, block = 2048;
   using type = typename std::conditional_t<Complex, cuDoubleComplex, double>;
   opA = opA == 't' ? 'T' : (opA == 'c' ? 'C' : opA); bool transA = opA == 'T' || opA == 'C'; double err = 0.;
