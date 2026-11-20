@@ -104,7 +104,9 @@ static inline void an_gemm(const hyacinHandle_t* handle, char opA, int32_t M, in
   CUBLAS_CHECK(cublasGemmEx(handle->cublasHandle, opA == 'C' ? CUBLAS_OP_C : (opA == 'T' ? CUBLAS_OP_T : CUBLAS_OP_N), CUBLAS_OP_N, M, N, K, &one, A, CUDA_C_32F, lda, B, CUDA_C_32F, ldb, &zero, C, CUDA_C_32F, ldc, CUBLAS_COMPUTE_32F_EMULATED_16BFX9, CUBLAS_GEMM_DEFAULT));
 }
 static inline void an_gemm(const hyacinHandle_t* handle, char opA, int32_t M, int32_t N, int32_t K, const __half2* A, int32_t lda, const __half2* B, int32_t ldb, __half2* C, int32_t ldc) {
-  internal::matmul_cf16(handle->cudaStream, handle->cublasHandle, handle->mempool, opA, M, N, K, A, lda, B, ldb, C, ldc);
+  if (opA == 'C') { internal::matmul_cf16_cn(handle->cudaStream, handle->cublasHandle, handle->mempool, M, N, K, A, lda, B, ldb, C, ldc); } else
+  if (opA == 'T') { internal::matmul_cf16_tn(handle->cudaStream, handle->cublasHandle, handle->mempool, M, N, K, A, lda, B, ldb, C, ldc); } else
+  { internal::matmul_cf16_nn(handle->cudaStream, handle->cublasHandle, handle->mempool, M, N, K, A, lda, B, ldb, C, ldc); }
 }
 
 template <class T, class R> static inline
