@@ -31,10 +31,10 @@ void internal::matmul_cf16_cn(cudaStream_t stream, cublasHandle_t handle, cudaMe
   int32_t N_mul2 = N + N;
   for (int32_t i = 0; i < M; i += block) {
     int32_t rows = std::min(M - i, block);
-    cf16_to_planar_kernel<1> <<< dim3(uint32_t(algnK + 127) >> 7, uint32_t(rows)), 128, 0, stream >>> (K64, &A[int64_t(i) * lda64], lda64, matA, algnK, strideA);
+    cf16_to_planar_kernel<1> <<< dim3(uint32_t(algnK + 127) >> 7, uint32_t(rows)), 128, 0, stream >>> (K64, &A[int64_t(i) * lda64], lda64, matA, algnK64, strideA);
     CUBLAS_CHECK(cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, rows, N_mul2, algnK, &one, matA, CUDA_R_16F, algnK, &matB[strideB], CUDA_R_16F, algnK, &zero, matC, CUDA_R_16F, block, CUBLAS_COMPUTE_16F, CUBLAS_GEMM_DEFAULT));
     CUBLAS_CHECK(cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, rows, N_mul2, algnK, &one, &matA[strideA], CUDA_R_16F, algnK, matB, CUDA_R_16F, algnK, &one, matC, CUDA_R_16F, block, CUBLAS_COMPUTE_16F, CUBLAS_GEMM_DEFAULT));
-    planar_to_cf16_kernel <<< dim3(uint32_t(rows + 127) >> 7, uint32_t(N)), 128, 0, stream >>> (int64_t(rows), matC, block, strideC, &C[int64_t(i)], ldc64);
+    planar_to_cf16_kernel <<< dim3(uint32_t(rows + 127) >> 7, uint32_t(N)), 128, 0, stream >>> (int64_t(rows), matC, int64_t(block), strideC, &C[i], ldc64);
   }
   CUDA_CHECK(cudaFreeAsync(matA, stream));
   CUDA_CHECK(cudaFreeAsync(matB, stream));
@@ -54,10 +54,10 @@ void internal::matmul_cf16_tn(cudaStream_t stream, cublasHandle_t handle, cudaMe
   int32_t N_mul2 = N + N;
   for (int32_t i = 0; i < M; i += block) {
     int32_t rows = std::min(M - i, block);
-    cf16_to_planar_kernel<0> <<< dim3(uint32_t(algnK + 127) >> 7, uint32_t(rows)), 128, 0, stream >>> (K64, &A[int64_t(i) * lda64], lda64, matA, algnK, strideA);
+    cf16_to_planar_kernel<0> <<< dim3(uint32_t(algnK + 127) >> 7, uint32_t(rows)), 128, 0, stream >>> (K64, &A[int64_t(i) * lda64], lda64, matA, algnK64, strideA);
     CUBLAS_CHECK(cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, rows, N_mul2, algnK, &one, matA, CUDA_R_16F, algnK, &matB[strideB], CUDA_R_16F, algnK, &zero, matC, CUDA_R_16F, block, CUBLAS_COMPUTE_16F, CUBLAS_GEMM_DEFAULT));
     CUBLAS_CHECK(cublasGemmEx(handle, CUBLAS_OP_T, CUBLAS_OP_N, rows, N_mul2, algnK, &one, &matA[strideA], CUDA_R_16F, algnK, matB, CUDA_R_16F, algnK, &one, matC, CUDA_R_16F, block, CUBLAS_COMPUTE_16F, CUBLAS_GEMM_DEFAULT));
-    planar_to_cf16_kernel <<< dim3(uint32_t(rows + 127) >> 7, uint32_t(N)), 128, 0, stream >>> (int64_t(rows), matC, block, strideC, &C[int64_t(i)], ldc64);
+    planar_to_cf16_kernel <<< dim3(uint32_t(rows + 127) >> 7, uint32_t(N)), 128, 0, stream >>> (int64_t(rows), matC, int64_t(block), strideC, &C[i], ldc64);
   }
   CUDA_CHECK(cudaFreeAsync(matA, stream));
   CUDA_CHECK(cudaFreeAsync(matB, stream));
@@ -78,10 +78,10 @@ void internal::matmul_cf16_nn(cudaStream_t stream, cublasHandle_t handle, cudaMe
   int32_t N_mul2 = N + N;
   for (int32_t i = 0; i < M; i += block) {
     int32_t rows = std::min(M - i, block);
-    cf16_to_planar_kernel<0> <<< dim3(uint32_t(rows + 127) >> 7, uint32_t(K)), 128, 0, stream >>> (int64_t(rows), &A[int64_t(i)], lda64, matA, block, strideA);
+    cf16_to_planar_kernel<0> <<< dim3(uint32_t(rows + 127) >> 7, uint32_t(K)), 128, 0, stream >>> (int64_t(rows), &A[i], lda64, matA, int64_t(block), strideA);
     CUBLAS_CHECK(cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_N, rows, N_mul2, algnK, &one, matA, CUDA_R_16F, block, &matB[strideB], CUDA_R_16F, algnK, &zero, matC, CUDA_R_16F, block, CUBLAS_COMPUTE_16F, CUBLAS_GEMM_DEFAULT));
     CUBLAS_CHECK(cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_N, rows, N_mul2, algnK, &one, &matA[strideA], CUDA_R_16F, block, matB, CUDA_R_16F, algnK, &one, matC, CUDA_R_16F, block, CUBLAS_COMPUTE_16F, CUBLAS_GEMM_DEFAULT));
-    planar_to_cf16_kernel <<< dim3(uint32_t(rows + 127) >> 7, uint32_t(N)), 128, 0, stream >>> (int64_t(rows), matC, block, strideC, &C[int64_t(i)], ldc64);
+    planar_to_cf16_kernel <<< dim3(uint32_t(rows + 127) >> 7, uint32_t(N)), 128, 0, stream >>> (int64_t(rows), matC, int64_t(block), strideC, &C[i], ldc64);
   }
   CUDA_CHECK(cudaFreeAsync(matA, stream));
   CUDA_CHECK(cudaFreeAsync(matB, stream));
