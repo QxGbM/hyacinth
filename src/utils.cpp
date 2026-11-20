@@ -90,11 +90,13 @@ extern "C" void hyacinCreate(hyacinHandle_t* handle) {
 }
 
 extern "C" void hyacinDestroy(hyacinHandle_t* handle) {
+  CUDA_CHECK(cudaDeviceSynchronize());
   if ((handle->HandleOwnedResource & HANDLE_OWNS_CUBLAS) && (!handle_is_null(handle->cublasHandle))) { CUBLAS_CHECK(cublasDestroy(handle->cublasHandle)); }
   if ((handle->HandleOwnedResource & HANDLE_OWNS_CUSOLVER) && (!handle_is_null(handle->cusolverHandle))) { CUSOLVER_CHECK(cusolverDnDestroy(handle->cusolverHandle)); }
   if ((handle->HandleOwnedResource & HANDLE_OWNS_MEMPOOL) && (!handle_is_null(handle->mempool))) { CUDA_CHECK(cudaMemPoolDestroy(handle->mempool)); }
   if ((handle->HandleOwnedResource & HANDLE_OWNS_PINNED_WORK) && (handle->pinnedWorkspace != nullptr)) { CUDA_CHECK(cudaFreeHost(handle->pinnedWorkspace)); }
-  if ((handle->HandleOwnedResource & HANDLE_OWNS_TIMER) && (handle->timer != nullptr)) { delete (EventTimer*)(handle->timer); }
+  if ((handle->HandleOwnedResource & HANDLE_OWNS_TIMER) && (handle->timer != nullptr))
+  { for (auto [seg, event] : ((EventTimer*)(handle->timer))->events) { CUDA_CHECK(cudaEventDestroy(event)); } delete (EventTimer*)(handle->timer); }
   std::memset(handle, 0, sizeof(hyacinHandle_t));
 }
 
